@@ -1,0 +1,2611 @@
+{
+  "schema": 1,
+  "images": [
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "pypa/setuptools_scm",
+      "source": "jierun/sweb.eval.x86_64.pypa_1776_setuptools_scm-106:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "pypa/setuptools_scm",
+      "potential_task_rows": 10,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-bench Multilingual"
+      ],
+      "source": "swebench/sweb.eval.x86_64.vuejs_1776_core-11589:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "family": "SWE-bench Multilingual",
+          "level": "upstream_task_image",
+          "revision": "61366953049fd63a7dff54f67193bf39f5d1cde6",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-bench Multilingual",
+      "base_kind": "project",
+      "base_group": "vuejs_1776_core",
+      "potential_task_rows": 5,
+      "source_compressed_bytes": 1094821209,
+      "metadata_preflight_required": false,
+      "pin_required_before_build": false,
+      "pinned_source": "docker.io/swebench/sweb.eval.x86_64.vuejs_1776_core-11589@sha256:42fd109ba2a74e907977d6bbf2222566d499233c97208b7a2da8e4b68ce198f3"
+    },
+    {
+      "families": [
+        "SWE-bench Verified"
+      ],
+      "source": "swebench/sweb.eval.x86_64.sympy_1776_sympy-11618:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "family": "SWE-bench Verified",
+          "level": "upstream_task_image",
+          "revision": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-bench Verified",
+      "base_kind": "project",
+      "base_group": "sympy_1776_sympy",
+      "potential_task_rows": 75,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "google/go-safeweb",
+      "source": "docker.io/swerebenchv2/google-go-safeweb:114-0e40cd4",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "google/go-safeweb",
+      "potential_task_rows": 13,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/jsvine__pdfplumber.02ff4313",
+      "source": "swebench/swesmith.x86_64.jsvine_1776_pdfplumber.02ff4313",
+      "task_rows": 261,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-py",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "77cab9055d42ab4a5c25c89a8f937096db13558e",
+          "task_rows": 261
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.jsvine_1776_pdfplumber.02ff4313",
+      "potential_task_rows": 261,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "repobee/repobee",
+      "source": "jierun/sweb.eval.x86_64.repobee_1776_repobee-1272:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "repobee/repobee",
+      "potential_task_rows": 10,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-bench Multilingual"
+      ],
+      "source": "swebench/sweb.eval.x86_64.uutils_1776_coreutils-6377:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "family": "SWE-bench Multilingual",
+          "level": "upstream_task_image",
+          "revision": "61366953049fd63a7dff54f67193bf39f5d1cde6",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-bench Multilingual",
+      "base_kind": "project",
+      "base_group": "uutils_1776_coreutils",
+      "potential_task_rows": 5,
+      "source_compressed_bytes": 1140789779,
+      "metadata_preflight_required": false,
+      "pin_required_before_build": false,
+      "pinned_source": "docker.io/swebench/sweb.eval.x86_64.uutils_1776_coreutils-6377@sha256:bd0c897981cea73fada6ab3a7cbde21f2cbbed3131a27edee57582f0d19d4f48"
+    },
+    {
+      "families": [
+        "SWE-bench Verified"
+      ],
+      "source": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-10323:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "family": "SWE-bench Verified",
+          "level": "upstream_task_image",
+          "revision": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-bench Verified",
+      "base_kind": "project",
+      "base_group": "sphinx-doc_1776_sphinx",
+      "potential_task_rows": 44,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "neogeny/TatSu",
+      "source": "docker.io/swerebenchv2/neogeny-tatsu:101-0b8b135",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "neogeny/TatSu",
+      "potential_task_rows": 13,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/serde-rs__json.cd55b5a0",
+      "source": "swebench/swesmith.x86_64.serde-rs_1776_json.cd55b5a0",
+      "task_rows": 261,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-rs",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "1ae20d63edd611309d86133466247e3a9723a27d",
+          "task_rows": 261
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.serde-rs_1776_json.cd55b5a0",
+      "potential_task_rows": 261,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "tox-dev/tox",
+      "source": "jierun/sweb.eval.x86_64.tox-dev_1776_tox-1043:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "tox-dev/tox",
+      "potential_task_rows": 10,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-bench Verified"
+      ],
+      "source": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-10908:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "family": "SWE-bench Verified",
+          "level": "upstream_task_image",
+          "revision": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-bench Verified",
+      "base_kind": "project",
+      "base_group": "scikit-learn_1776_scikit-learn",
+      "potential_task_rows": 32,
+      "source_compressed_bytes": 1473765596,
+      "metadata_preflight_required": false,
+      "pin_required_before_build": false,
+      "pinned_source": "docker.io/swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-10908@sha256:f3903e9da732f6d69540bd41a61e13b856d97dd54da060fee9fafab3a3c84116"
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "nix-community/nixpkgs-fmt",
+      "source": "docker.io/swerebenchv2/nix-community-nixpkgs-fmt:108-865cd3c",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "nix-community/nixpkgs-fmt",
+      "potential_task_rows": 13,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/apache__calcite.84e35baf",
+      "source": "swebench/swesmith.x86_64.apache_1776_calcite.84e35baf",
+      "task_rows": 260,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-java",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "1172df9919a8232e066562dfdb6e0193156de0c4",
+          "task_rows": 260
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.apache_1776_calcite.84e35baf",
+      "potential_task_rows": 260,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "ucfopen/canvasapi",
+      "source": "jierun/sweb.eval.x86_64.ucfopen_1776_canvasapi-127:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "ucfopen/canvasapi",
+      "potential_task_rows": 10,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-bench Verified"
+      ],
+      "source": "swebench/sweb.eval.x86_64.pydata_1776_xarray-7229:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "family": "SWE-bench Verified",
+          "level": "upstream_task_image",
+          "revision": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-bench Verified",
+      "base_kind": "project",
+      "base_group": "pydata_1776_xarray",
+      "potential_task_rows": 22,
+      "source_compressed_bytes": 1901585444,
+      "metadata_preflight_required": false,
+      "pin_required_before_build": false,
+      "pinned_source": "docker.io/swebench/sweb.eval.x86_64.pydata_1776_xarray-7229@sha256:99d38e6b07da20fcc875c0a1379aead8392a5976018b6052f2f330b6400ff740"
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "PHPOffice/PhpSpreadsheet",
+      "source": "docker.io/swerebenchv2/phpoffice-phpspreadsheet:4073-1b68270",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "PHPOffice/PhpSpreadsheet",
+      "potential_task_rows": 13,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/ariga__atlas.1afaaba2",
+      "source": "swebench/swesmith.x86_64.ariga_1776_atlas.1afaaba2",
+      "task_rows": 260,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-go",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015",
+          "task_rows": 260
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.ariga_1776_atlas.1afaaba2",
+      "potential_task_rows": 260,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "wright-group/WrightTools",
+      "source": "jierun/sweb.eval.x86_64.wright-group_1776_wrighttools-1075:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "wright-group/WrightTools",
+      "potential_task_rows": 10,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-bench Verified"
+      ],
+      "source": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-5809:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "family": "SWE-bench Verified",
+          "level": "upstream_task_image",
+          "revision": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-bench Verified",
+      "base_kind": "project",
+      "base_group": "pytest-dev_1776_pytest",
+      "potential_task_rows": 19,
+      "source_compressed_bytes": 1024072299,
+      "metadata_preflight_required": false,
+      "pin_required_before_build": false,
+      "pinned_source": "docker.io/swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-5809@sha256:fbe0fd2a8794df1e5502fd0b2c82a98fe0a6a51f39414c2c38bb69a0b3c405b9"
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "quora/pyanalyze",
+      "source": "docker.io/swerebenchv2/quora-pyanalyze:344-75bc07a",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "quora/pyanalyze",
+      "potential_task_rows": 13,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/django-money__django-money.835c1ab8",
+      "source": "swebench/swesmith.x86_64.django-money_1776_django-money.835c1ab8",
+      "task_rows": 256,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-py",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "77cab9055d42ab4a5c25c89a8f937096db13558e",
+          "task_rows": 256
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.django-money_1776_django-money.835c1ab8",
+      "potential_task_rows": 256,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "cekit/cekit",
+      "source": "jierun/sweb.eval.x86_64.cekit_1776_cekit-416:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "cekit/cekit",
+      "potential_task_rows": 9,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-bench Verified"
+      ],
+      "source": "swebench/sweb.eval.x86_64.pylint-dev_1776_pylint-8898:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "family": "SWE-bench Verified",
+          "level": "upstream_task_image",
+          "revision": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-bench Verified",
+      "base_kind": "project",
+      "base_group": "pylint-dev_1776_pylint",
+      "potential_task_rows": 10,
+      "source_compressed_bytes": 1043399619,
+      "metadata_preflight_required": false,
+      "pin_required_before_build": false,
+      "pinned_source": "docker.io/swebench/sweb.eval.x86_64.pylint-dev_1776_pylint-8898@sha256:6a3950d518eac34eff08f89136006c94526afc1cdf2b34d1a4d8f598faa4eaea"
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "raml-org/raml-java-parser",
+      "source": "docker.io/swerebenchv2/raml-org-raml-java-parser:155-117232a",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "raml-org/raml-java-parser",
+      "potential_task_rows": 13,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/zxing__zxing.50799640",
+      "source": "swebench/swesmith.x86_64.zxing_1776_zxing.50799640",
+      "task_rows": 254,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-java",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "1172df9919a8232e066562dfdb6e0193156de0c4",
+          "task_rows": 254
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.zxing_1776_zxing.50799640",
+      "potential_task_rows": 254,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "cwacek/python-jsonschema-objects",
+      "source": "jierun/sweb.eval.x86_64.cwacek_1776_python-jsonschema-objects-139:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "cwacek/python-jsonschema-objects",
+      "potential_task_rows": 9,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-bench Verified"
+      ],
+      "source": "swebench/sweb.eval.x86_64.psf_1776_requests-1724:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "family": "SWE-bench Verified",
+          "level": "upstream_task_image",
+          "revision": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-bench Verified",
+      "base_kind": "project",
+      "base_group": "psf_1776_requests",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": 955788034,
+      "metadata_preflight_required": false,
+      "pin_required_before_build": false,
+      "pinned_source": "docker.io/swebench/sweb.eval.x86_64.psf_1776_requests-1724@sha256:68aba6258f3947d076a805d1f162c7ac5d7f055774ea05de9e73f2f5cc0ed59d"
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "vyperlang/vyper",
+      "source": "docker.io/swerebenchv2/vyperlang-vyper:2871-42a372e",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "vyperlang/vyper",
+      "potential_task_rows": 13,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/Tencent__ncnn.a64aa7ff",
+      "source": "swebench/swesmith.x86_64.tencent_1776_ncnn.a64aa7ff",
+      "task_rows": 251,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-cpp",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "b1554a5f12603c825f9b48b361b9b97032347e48",
+          "task_rows": 251
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.tencent_1776_ncnn.a64aa7ff",
+      "potential_task_rows": 251,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "DCC-Lab/RayTracing",
+      "source": "jierun/sweb.eval.x86_64.dcc-lab_1776_raytracing-135:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "DCC-Lab/RayTracing",
+      "potential_task_rows": 9,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-bench Verified"
+      ],
+      "source": "swebench/sweb.eval.x86_64.mwaskom_1776_seaborn-3069:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "family": "SWE-bench Verified",
+          "level": "upstream_task_image",
+          "revision": "86723674f04e4209ac479d0fb75d9d9f44b4377e",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-bench Verified",
+      "base_kind": "project",
+      "base_group": "mwaskom_1776_seaborn",
+      "potential_task_rows": 2,
+      "source_compressed_bytes": 1291606701,
+      "metadata_preflight_required": false,
+      "pin_required_before_build": false,
+      "pinned_source": "docker.io/swebench/sweb.eval.x86_64.mwaskom_1776_seaborn-3069@sha256:7c6493e599d30fac87d2e45fd90ad1bbe755d878afdd3f366c41acbb80780aec"
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "moment/luxon",
+      "source": "docker.io/swerebenchv2/moment-luxon:1225-6b47f20",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "moment/luxon",
+      "potential_task_rows": 12,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/apache__pulsar.c51346fa",
+      "source": "swebench/swesmith.x86_64.apache_1776_pulsar.c51346fa",
+      "task_rows": 249,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-java",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "1172df9919a8232e066562dfdb6e0193156de0c4",
+          "task_rows": 249
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.apache_1776_pulsar.c51346fa",
+      "potential_task_rows": 249,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "idaholab/MontePy",
+      "source": "jierun/sweb.eval.x86_64.idaholab_1776_montepy-360:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "idaholab/MontePy",
+      "potential_task_rows": 9,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "peak/s5cmd",
+      "source": "docker.io/swerebenchv2/peak-s5cmd:128-7d70158",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "peak/s5cmd",
+      "potential_task_rows": 12,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/diffplug__spotless.8e776ec8",
+      "source": "swebench/swesmith.x86_64.diffplug_1776_spotless.8e776ec8",
+      "task_rows": 249,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-java",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "1172df9919a8232e066562dfdb6e0193156de0c4",
+          "task_rows": 249
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.diffplug_1776_spotless.8e776ec8",
+      "potential_task_rows": 249,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "joke2k/django-environ",
+      "source": "jierun/sweb.eval.x86_64.joke2k_1776_django-environ-163:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "joke2k/django-environ",
+      "potential_task_rows": 9,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "Python-Markdown/markdown",
+      "source": "docker.io/swerebenchv2/python-markdown-markdown:1007-611cf6d",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "Python-Markdown/markdown",
+      "potential_task_rows": 12,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/gawel__pyquery.811cd048",
+      "source": "swebench/swesmith.x86_64.gawel_1776_pyquery.811cd048",
+      "task_rows": 249,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-py",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "77cab9055d42ab4a5c25c89a8f937096db13558e",
+          "task_rows": 249
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.gawel_1776_pyquery.811cd048",
+      "potential_task_rows": 249,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "jupyter/nbgrader",
+      "source": "jierun/sweb.eval.x86_64.jupyter_1776_nbgrader-1019:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "jupyter/nbgrader",
+      "potential_task_rows": 9,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "raphlinus/pulldown-cmark",
+      "source": "docker.io/swerebenchv2/raphlinus-pulldown-cmark:676-4867dbb",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "raphlinus/pulldown-cmark",
+      "potential_task_rows": 12,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/alecthomas__voluptuous.a7a55f83",
+      "source": "swebench/swesmith.x86_64.alecthomas_1776_voluptuous.a7a55f83",
+      "task_rows": 248,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-py",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "77cab9055d42ab4a5c25c89a8f937096db13558e",
+          "task_rows": 248
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.alecthomas_1776_voluptuous.a7a55f83",
+      "potential_task_rows": 248,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "nipy/nipype",
+      "source": "jierun/sweb.eval.x86_64.nipy_1776_nipype-2019:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "nipy/nipype",
+      "potential_task_rows": 9,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "ResearchObject/ro-crate-py",
+      "source": "docker.io/swerebenchv2/researchobject-ro-crate-py:102-b866890",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "ResearchObject/ro-crate-py",
+      "potential_task_rows": 12,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/caolan__async.23dbf76a",
+      "source": "swebench/swesmith.x86_64.caolan_1776_async.23dbf76a",
+      "task_rows": 233,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-js",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4",
+          "task_rows": 233
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.caolan_1776_async.23dbf76a",
+      "potential_task_rows": 233,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "PMEAL/OpenPNM",
+      "source": "jierun/sweb.eval.x86_64.pmeal_1776_openpnm-1702:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "PMEAL/OpenPNM",
+      "potential_task_rows": 9,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "segmentio/parquet-go",
+      "source": "docker.io/swerebenchv2/segmentio-parquet-go:277-88f1992",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "segmentio/parquet-go",
+      "potential_task_rows": 12,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/arp242__goatcounter.854b1dd2",
+      "source": "swebench/swesmith.x86_64.arp242_1776_goatcounter.854b1dd2",
+      "task_rows": 232,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-go",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015",
+          "task_rows": 232
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.arp242_1776_goatcounter.854b1dd2",
+      "potential_task_rows": 232,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "twisted/twisted",
+      "source": "jierun/sweb.eval.x86_64.twisted_1776_twisted-12022:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "twisted/twisted",
+      "potential_task_rows": 9,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "shepmaster/snafu",
+      "source": "docker.io/swerebenchv2/shepmaster-snafu:107-63a2377",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "shepmaster/snafu",
+      "potential_task_rows": 12,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/killme2008__aviatorscript.231198d3",
+      "source": "swebench/swesmith.x86_64.killme2008_1776_aviatorscript.231198d3",
+      "task_rows": 232,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-java",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "1172df9919a8232e066562dfdb6e0193156de0c4",
+          "task_rows": 232
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.killme2008_1776_aviatorscript.231198d3",
+      "potential_task_rows": 232,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "agronholm/anyio",
+      "source": "jierun/sweb.eval.x86_64.agronholm_1776_anyio-273:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "agronholm/anyio",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "urlaubsverwaltung/urlaubsverwaltung",
+      "source": "docker.io/swerebenchv2/urlaubsverwaltung-urlaubsverwaltung:4311-0e04f34",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "urlaubsverwaltung/urlaubsverwaltung",
+      "potential_task_rows": 12,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/Redocly__redoc.d41fd46f",
+      "source": "swebench/swesmith.x86_64.redocly_1776_redoc.d41fd46f",
+      "task_rows": 231,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-ts",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "c243d86f112d01b8507d311af912668aa1d74449",
+          "task_rows": 231
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.redocly_1776_redoc.d41fd46f",
+      "potential_task_rows": 231,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "Azure/azure-cli",
+      "source": "jierun/sweb.eval.x86_64.azure_1776_azure-cli-1423:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "Azure/azure-cli",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "wtforms/wtforms",
+      "source": "docker.io/swerebenchv2/wtforms-wtforms:548-caeb39a",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "wtforms/wtforms",
+      "potential_task_rows": 12,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/alibaba__Sentinel.222670e6",
+      "source": "swebench/swesmith.x86_64.alibaba_1776_sentinel.222670e6",
+      "task_rows": 229,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-java",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "1172df9919a8232e066562dfdb6e0193156de0c4",
+          "task_rows": 229
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.alibaba_1776_sentinel.222670e6",
+      "potential_task_rows": 229,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "beetbox/beets",
+      "source": "jierun/sweb.eval.x86_64.beetbox_1776_beets-2775:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "beetbox/beets",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "decorators-squad/eo-yaml",
+      "source": "docker.io/swerebenchv2/decorators-squad-eo-yaml:184-6d3ae10",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "decorators-squad/eo-yaml",
+      "potential_task_rows": 11,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/enzymejs__enzyme.61e1b47c",
+      "source": "swebench/swesmith.x86_64.enzymejs_1776_enzyme.61e1b47c",
+      "task_rows": 228,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-js",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "d6aeb41ba9fb045c39e1c6d2322a8f08ee31cef4",
+          "task_rows": 228
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.enzymejs_1776_enzyme.61e1b47c",
+      "potential_task_rows": 228,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "dwavesystems/dimod",
+      "source": "jierun/sweb.eval.x86_64.dwavesystems_1776_dimod-171:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "dwavesystems/dimod",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "elastic/curator",
+      "source": "docker.io/swerebenchv2/elastic-curator:1019-cdd84b8",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "elastic/curator",
+      "potential_task_rows": 11,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/strapi__strapi.e5b87a54",
+      "source": "swebench/swesmith.x86_64.strapi_1776_strapi.e5b87a54",
+      "task_rows": 225,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-ts",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "c243d86f112d01b8507d311af912668aa1d74449",
+          "task_rows": 225
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.strapi_1776_strapi.e5b87a54",
+      "potential_task_rows": 225,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "Fatal1ty/mashumaro",
+      "source": "jierun/sweb.eval.x86_64.fatal1ty_1776_mashumaro-116:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "Fatal1ty/mashumaro",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "jlongster/prettier",
+      "source": "docker.io/swerebenchv2/jlongster-prettier:101-b37e8c4",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "jlongster/prettier",
+      "potential_task_rows": 11,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/ContentSquare__chproxy.a9364c8b",
+      "source": "swebench/swesmith.x86_64.contentsquare_1776_chproxy.a9364c8b",
+      "task_rows": 224,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-go",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015",
+          "task_rows": 224
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.contentsquare_1776_chproxy.a9364c8b",
+      "potential_task_rows": 224,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "horejsek/python-fastjsonschema",
+      "source": "jierun/sweb.eval.x86_64.horejsek_1776_python-fastjsonschema-112:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "horejsek/python-fastjsonschema",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "NeurodataWithoutBorders/pynwb",
+      "source": "docker.io/swerebenchv2/neurodatawithoutborders-pynwb:1410-9f58cb4",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "NeurodataWithoutBorders/pynwb",
+      "potential_task_rows": 11,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/pyutils__line_profiler.a646bf0f",
+      "source": "swebench/swesmith.x86_64.pyutils_1776_line_profiler.a646bf0f",
+      "task_rows": 223,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-py",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "77cab9055d42ab4a5c25c89a8f937096db13558e",
+          "task_rows": 223
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.pyutils_1776_line_profiler.a646bf0f",
+      "potential_task_rows": 223,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "hynek/structlog",
+      "source": "jierun/sweb.eval.x86_64.hynek_1776_structlog-117:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "hynek/structlog",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "pinojs/pino",
+      "source": "docker.io/swerebenchv2/pinojs-pino:1503-90e728e",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "pinojs/pino",
+      "potential_task_rows": 11,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/hamba__avro.ec06b38c",
+      "source": "swebench/swesmith.x86_64.hamba_1776_avro.ec06b38c",
+      "task_rows": 219,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-go",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015",
+          "task_rows": 219
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.hamba_1776_avro.ec06b38c",
+      "potential_task_rows": 219,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "keras-team/keras-nlp",
+      "source": "jierun/sweb.eval.x86_64.keras-team_1776_keras-nlp-310:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "keras-team/keras-nlp",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "PyCQA/docformatter",
+      "source": "docker.io/swerebenchv2/pycqa-docformatter:104-b108a20",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "PyCQA/docformatter",
+      "potential_task_rows": 11,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/mgechev__revive.03e81029",
+      "source": "swebench/swesmith.x86_64.mgechev_1776_revive.03e81029",
+      "task_rows": 219,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-go",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "d2f6ecc2cf8ae1af00fc790801bbacfa2913e015",
+          "task_rows": 219
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.mgechev_1776_revive.03e81029",
+      "potential_task_rows": 219,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "KIT-IAI/pyWATTS",
+      "source": "jierun/sweb.eval.x86_64.kit-iai_1776_pywatts-108:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "KIT-IAI/pyWATTS",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "theacodes/nox",
+      "source": "docker.io/swerebenchv2/theacodes-nox:140-f918c89",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "theacodes/nox",
+      "potential_task_rows": 11,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/rust-itertools__itertools.041c733c",
+      "source": "swebench/swesmith.x86_64.rust-itertools_1776_itertools.041c733c",
+      "task_rows": 219,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-rs",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "1ae20d63edd611309d86133466247e3a9723a27d",
+          "task_rows": 219
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.rust-itertools_1776_itertools.041c733c",
+      "potential_task_rows": 219,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "NCAS-CMS/cfdm",
+      "source": "jierun/sweb.eval.x86_64.ncas-cms_1776_cfdm-158:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "NCAS-CMS/cfdm",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "tipsy/javalin",
+      "source": "docker.io/swerebenchv2/tipsy-javalin:1090-344a8a9",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "tipsy/javalin",
+      "potential_task_rows": 11,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/chardet__chardet.9630f238",
+      "source": "swebench/swesmith.x86_64.chardet_1776_chardet.9630f238",
+      "task_rows": 215,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-py",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "77cab9055d42ab4a5c25c89a8f937096db13558e",
+          "task_rows": 215
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.chardet_1776_chardet.9630f238",
+      "potential_task_rows": 215,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "NeurodataWithoutBorders/pynwb",
+      "source": "jierun/sweb.eval.x86_64.neurodatawithoutborders_1776_pynwb-1975:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "NeurodataWithoutBorders/pynwb",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "userfront/userfront-core",
+      "source": "docker.io/swerebenchv2/userfront-userfront-core:111-068a51a",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "userfront/userfront-core",
+      "potential_task_rows": 11,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/ueberdosis__tiptap.2d6de06c",
+      "source": "swebench/swesmith.x86_64.ueberdosis_1776_tiptap.2d6de06c",
+      "task_rows": 215,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-ts",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "c243d86f112d01b8507d311af912668aa1d74449",
+          "task_rows": 215
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.ueberdosis_1776_tiptap.2d6de06c",
+      "potential_task_rows": 215,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "NREL/hescore-hpxml",
+      "source": "jierun/sweb.eval.x86_64.nrel_1776_hescore-hpxml-103:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "NREL/hescore-hpxml",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "weaveworks/eksctl",
+      "source": "docker.io/swerebenchv2/weaveworks-eksctl:1705-3de5b3f",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "weaveworks/eksctl",
+      "potential_task_rows": 11,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/Col-E__Recaf.2a93d630",
+      "source": "swebench/swesmith.x86_64.col-e_1776_recaf.2a93d630",
+      "task_rows": 213,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-java",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "1172df9919a8232e066562dfdb6e0193156de0c4",
+          "task_rows": 213
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.col-e_1776_recaf.2a93d630",
+      "potential_task_rows": 213,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "oasis-open/cti-python-stix2",
+      "source": "jierun/sweb.eval.x86_64.oasis-open_1776_cti-python-stix2-145:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "oasis-open/cti-python-stix2",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "adobe/elixir-styler",
+      "source": "docker.io/swerebenchv2/adobe-elixir-styler:16-74114e4",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "adobe/elixir-styler",
+      "potential_task_rows": 10,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/cisco__openh264.cf568c83",
+      "source": "swebench/swesmith.x86_64.cisco_1776_openh264.cf568c83",
+      "task_rows": 211,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-cpp",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "b1554a5f12603c825f9b48b361b9b97032347e48",
+          "task_rows": 211
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.cisco_1776_openh264.cf568c83",
+      "potential_task_rows": 211,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "pdm-project/pdm",
+      "source": "jierun/sweb.eval.x86_64.pdm-project_1776_pdm-1676:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "pdm-project/pdm",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "BlueBrain/nexus",
+      "source": "docker.io/swerebenchv2/bluebrain-nexus:4745-4d4871a",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "BlueBrain/nexus",
+      "potential_task_rows": 10,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/msiemens__tinydb.10644a0e",
+      "source": "swebench/swesmith.x86_64.msiemens_1776_tinydb.10644a0e",
+      "task_rows": 209,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-py",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "77cab9055d42ab4a5c25c89a8f937096db13558e",
+          "task_rows": 209
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.msiemens_1776_tinydb.10644a0e",
+      "potential_task_rows": 209,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "robotframework/SeleniumLibrary",
+      "source": "jierun/sweb.eval.x86_64.robotframework_1776_seleniumlibrary-1201:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "robotframework/SeleniumLibrary",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "cogent3/cogent3",
+      "source": "docker.io/swerebenchv2/cogent3-cogent3:1001-3f2fe2f",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "cogent3/cogent3",
+      "potential_task_rows": 10,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/reactor__reactor-core.2198701c",
+      "source": "swebench/swesmith.x86_64.reactor_1776_reactor-core.2198701c",
+      "task_rows": 208,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-java",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "1172df9919a8232e066562dfdb6e0193156de0c4",
+          "task_rows": 208
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.reactor_1776_reactor-core.2198701c",
+      "potential_task_rows": 208,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "Shopify/shopify_python_api",
+      "source": "jierun/sweb.eval.x86_64.shopify_1776_shopify_python_api-110:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "Shopify/shopify_python_api",
+      "potential_task_rows": 8,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "jeremydaly/dynamodb-toolbox",
+      "source": "docker.io/swerebenchv2/jeremydaly-dynamodb-toolbox:229-67ca511",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "jeremydaly/dynamodb-toolbox",
+      "potential_task_rows": 10,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/foambubble__foam.2cac8162",
+      "source": "swebench/swesmith.x86_64.foambubble_1776_foam.2cac8162",
+      "task_rows": 206,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-ts",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "c243d86f112d01b8507d311af912668aa1d74449",
+          "task_rows": 206
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.foambubble_1776_foam.2cac8162",
+      "potential_task_rows": 206,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "canonical/operator",
+      "source": "jierun/sweb.eval.x86_64.canonical_1776_operator-1000:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "canonical/operator",
+      "potential_task_rows": 7,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "jhump/protoreflect",
+      "source": "docker.io/swerebenchv2/jhump-protoreflect:272-c47b58f",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "jhump/protoreflect",
+      "potential_task_rows": 10,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/rubik__radon.54b88e58",
+      "source": "swebench/swesmith.x86_64.rubik_1776_radon.54b88e58",
+      "task_rows": 205,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-py",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "77cab9055d42ab4a5c25c89a8f937096db13558e",
+          "task_rows": 205
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.rubik_1776_radon.54b88e58",
+      "potential_task_rows": 205,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-Lego"
+      ],
+      "repository": "fatiando/pooch",
+      "source": "jierun/sweb.eval.x86_64.fatiando_1776_pooch-138:latest",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-Lego-Real-Data-Verified",
+          "family": "SWE-Lego",
+          "level": "upstream_task_image",
+          "revision": "8b0d2bed6f04ef571ca04abebf737ea23cbceaf3",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-Lego",
+      "base_kind": "project",
+      "base_group": "fatiando/pooch",
+      "potential_task_rows": 7,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-rebench v2"
+      ],
+      "repository": "jimhester/lintr",
+      "source": "docker.io/swerebenchv2/jimhester-lintr:1119-31b79cb",
+      "task_rows": 1,
+      "uses": [
+        {
+          "dataset": "PrimeIntellect/SWE-rebench-V2-Filtered-Verified",
+          "family": "SWE-rebench v2",
+          "level": "upstream_task_image",
+          "revision": "03cc767ee33126b7fc7890ad57047e9dd6914cca",
+          "task_rows": 1
+        }
+      ],
+      "selection_family": "SWE-rebench v2",
+      "base_kind": "project",
+      "base_group": "jimhester/lintr",
+      "potential_task_rows": 10,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    },
+    {
+      "families": [
+        "SWE-smith"
+      ],
+      "preparation": "swesmith-v1",
+      "repository": "swesmith/Haivision__srt.ce54b5ea",
+      "source": "swebench/swesmith.x86_64.haivision_1776_srt.ce54b5ea",
+      "task_rows": 201,
+      "uses": [
+        {
+          "dataset": "SWE-bench/SWE-smith-cpp",
+          "family": "SWE-smith",
+          "level": "upstream_task_image",
+          "revision": "b1554a5f12603c825f9b48b361b9b97032347e48",
+          "task_rows": 201
+        }
+      ],
+      "selection_family": "SWE-smith",
+      "base_kind": "environment",
+      "base_group": "swebench/swesmith.x86_64.haivision_1776_srt.ce54b5ea",
+      "potential_task_rows": 201,
+      "source_compressed_bytes": null,
+      "metadata_preflight_required": true,
+      "pin_required_before_build": true
+    }
+  ],
+  "summary": {
+    "existing_groups": {
+      "MultiSWE": 43,
+      "OpenThoughts TBLite": 16,
+      "R2E-Gym": 10,
+      "SWE-Lego": 62,
+      "SWE-bench Multilingual": 39,
+      "SWE-bench Verified": 4,
+      "SWE-rebench v2": 63,
+      "SWE-smith": 103,
+      "ScaleSWE": 712,
+      "Senior SWE-Bench": 13,
+      "Terminal-Bench 2": 89,
+      "Terminal-Lego": 73
+    },
+    "externally_assigned_groups": {
+      "ScaleSWE": 414
+    },
+    "missing_admissible_groups": {
+      "SWE-Lego": 1434,
+      "SWE-bench Multilingual": 2,
+      "SWE-bench Verified": 8,
+      "SWE-rebench v2": 1827,
+      "SWE-smith": 346
+    },
+    "selected_groups": {
+      "SWE-Lego": 32,
+      "SWE-bench Multilingual": 2,
+      "SWE-bench Verified": 8,
+      "SWE-rebench v2": 32,
+      "SWE-smith": 32
+    },
+    "deferred_groups": [
+      {
+        "family": "SWE-smith",
+        "kind": "environment",
+        "group": "swebench/swesmith.x86_64.project-monai_1776_monai.a09c1f08",
+        "reason": "all known sources exceed compressed input bound"
+      }
+    ]
+  },
+  "scope": "One example per missing project or exact environment. Fanout is potential, not readiness."
+}

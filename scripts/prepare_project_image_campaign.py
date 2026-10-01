@@ -71,6 +71,8 @@ def main():
     parser.add_argument('--seed-max-delta-mib', type=int, default=256,
                         help='larger one-time project seeds; task deltas retain the 256 MiB bound')
     parser.add_argument('--dependency-index', type=Path, help='qualified cross-project dependency bases for new seeds')
+    parser.add_argument('--seeds-only', action='store_true',
+                        help='expand project bases without proceeding to per-task preparation')
     args = parser.parse_args()
     if (not 1 <= args.workers <= 8 or not 1 <= args.seed_max_delta_mib <= 1024
             or min(args.growth_limit_gib, args.free_floor_gib) < 1):
@@ -104,7 +106,8 @@ def main():
             if plan.get('schema') != 1:
                 raise ValueError('unsupported exclusion plan')
             excluded.update(row['source'] for row in plan['images'])
-        for phase in ('seeds', 'tasks'):
+        phases = ('seeds',) if args.seeds_only else ('seeds', 'tasks')
+        for phase in phases:
             root = args.root / phase
             if phase == 'seeds':
                 plan = seed_plan(inventory, catalogs, args.fallback_anchor_source, excluded)
@@ -129,7 +132,7 @@ def main():
                 catalogs.append(json.loads((root / 'catalog.json').read_text()))
             else:
                 save(root / 'catalog.json', {'schema': 1, 'images': {}})
-        outcomes = [r for phase in ('seeds', 'tasks')
+        outcomes = [r for phase in phases
                     for r in json.loads((args.root / phase / 'catalog.json').read_text())['images'].values()]
         save(args.root / 'progress.json', {'phase': 'finished', 'counts': {
             status: sum(r['status'] == status for r in outcomes) for status in ('ready', 'failed', 'deferred')},

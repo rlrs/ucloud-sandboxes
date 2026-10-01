@@ -69,9 +69,26 @@ def pack(roots, output):
             resolved = validated(source, row['resolved'])
             receipts[source, resolved['reference']] = {'source': source, 'resolved': resolved}
         for path in sorted((root / 'work').glob('*/resolved.json')):
-            identity = json.loads((path.parent / 'identity.json').read_text())
+            identity_path = path.parent / 'identity.json'
+            if not identity_path.exists():
+                identity_path = path.parent / 'selection-request.json'
+            if not identity_path.exists():
+                incomplete += 1
+                continue
+            identity = json.loads(identity_path.read_text())
             source = identity['source']
             resolved = validated(source, json.loads(path.read_text()))
+            receipts[source, resolved['reference']] = {'source': source, 'resolved': resolved}
+        for path in sorted((root / 'work').glob('*/selection-source.json')):
+            request_path = path.parent / 'selection-request.json'
+            if not request_path.exists():
+                incomplete += 1
+                continue
+            identity = json.loads(request_path.read_text())
+            source = identity['source']
+            resolved = validated(source, json.loads(path.read_text()))
+            if identity.get('pinned_source') and registry_parts(identity['pinned_source']) != registry_parts(resolved['reference']):
+                raise ValueError('selection receipt differs from requested pin')
             receipts[source, resolved['reference']] = {'source': source, 'resolved': resolved}
     payload = {'schema': 1, 'receipts': [receipts[key] for key in sorted(receipts)]}
     raw = json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()

@@ -24,6 +24,8 @@ def save(path, value):
 def job_compression_level(work, requested):
     """Old jobs keep their byte identity even if a resumed queue changes policy."""
     identity = work / 'identity.json'
+    if not identity.exists():
+        identity = work / 'selection-request.json'
     level = json.loads(identity.read_text()).get('compression_level', 9) if identity.exists() else requested
     if type(level) is not int or not 1 <= level <= 9:
         raise ValueError('invalid saved delta compression level')
@@ -55,6 +57,7 @@ def main():
     parser.add_argument('--compression-level', type=int, choices=range(1, 10), default=9,
                         help='new jobs only; existing jobs preserve their recorded compression')
     parser.add_argument('--record-source-index', action='store_true')
+    parser.add_argument('--dependency-index', type=Path)
     parser.add_argument('--max-delta-mib', type=int, default=256)
     args = parser.parse_args()
     if (not 1 <= args.workers <= 8 or not 1 <= args.max_delta_mib <= 1024
@@ -90,7 +93,7 @@ def main():
             path = root / 'results' / (key + '.json')
             if path.exists():
                 row = json.loads(path.read_text())
-                if row['source'] != item['source'] or row['anchor'] != item['anchor']:
+                if row['source'] != item['source'] or row.get('requested_anchor', row['anchor']) != item['anchor']:
                     raise ValueError('result belongs to another preparation')
                 results[item['source']] = row
                 if (retry_delta_bound(row, root / 'work' / key, args.max_delta_mib)
@@ -138,6 +141,8 @@ def main():
                 command.append('--retry-recorded-failures')
             if args.record_source_index:
                 command.append('--record-source-index')
+            if args.dependency_index:
+                command.extend(['--dependency-index', str(args.dependency_index)])
             log_path = root / 'work' / (key + '.log')
             try:
                 with log_path.open('w') as output:

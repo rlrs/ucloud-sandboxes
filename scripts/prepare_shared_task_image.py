@@ -149,7 +149,7 @@ def read_flat_index(path, layer):
     return deserialize(payload['entries'])
 
 
-def cached_anchor(client, repository, layer, cache, scratch, *, source_path=None):
+def cached_anchor(client, repository, layer, cache, scratch, *, source_path=None, source_index_path=None):
     cache.mkdir(parents=True, exist_ok=True)
     key = layer['digest'].split(':')[1]
     with (cache / (key + '.lock')).open('a') as lock:
@@ -157,6 +157,10 @@ def cached_anchor(client, repository, layer, cache, scratch, *, source_path=None
         path = cache / (key + '.json.gz')
         if path.exists():
             return read_flat_index(path, layer)
+        if source_index_path is not None:
+            index = read_flat_index(source_index_path, layer)
+            write_flat_index(path, layer, index)
+            return index
         blob = source_path or scratch / 'anchor.tar.gz'
         if source_path is None:
             with client.open_blob(repository, layer['digest']) as stream:
@@ -241,6 +245,7 @@ def main():
     parser.add_argument('--filesystem-exports', type=Path, help='protected offline exports for multi-layer source qualification')
     parser.add_argument('--anchor-filesystem-source', help='pinned original flat source of a qualified compact anchor')
     parser.add_argument('--record-source-index', action='store_true', help='save authenticated flat metadata for alternate-anchor cost analysis')
+    parser.add_argument('--dependency-index', type=Path, help='immutable index of qualified cross-project bases; new jobs only')
     parser.add_argument('--gateway', required=True)
     parser.add_argument('--sdk-wheel', type=Path, required=True)
     parser.add_argument('--config', type=Path, default=Path('/etc/ucloud-sandboxes/deployment.json'))
@@ -262,14 +267,16 @@ def main():
     args.root.mkdir(parents=True, exist_ok=True)
     with (args.root / 'prepare.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        identity_path, resolved_path = args.root / 'identity.json', args.root / 'resolved.json'
-        identity = source_identity(args.source, args.anchor, args.pinned_source, args.export_inputs,
-                                   args.compression_level, args.anchor_filesystem_source)
-        if identity_path.exists() and resolved_path.exists() and json.loads(identity_path.read_text()) == identity:
-            resolved = json.loads(resolved_path.read_text())
-            old_key = hashlib.sha256(encode({**identity, 'source': resolved['reference']})).hexdigest()
-            remove_abandoned_inputs(args.root, old_key)
-        prepare(args)
+        from select_shared_dependencies import dependency_selection
+        with dependency_selection(args):
+            identity_path, resolved_path = args.root / 'identity.json', args.root / 'resolved.json'
+            identity = source_identity(args.source, args.anchor, args.pinned_source, args.export_inputs,
+                                       args.compression_level, args.anchor_filesystem_source)
+            if identity_path.exists() and resolved_path.exists() and json.loads(identity_path.read_text()) == identity:
+                resolved = json.loads(resolved_path.read_text())
+                old_key = hashlib.sha256(encode({**identity, 'source': resolved['reference']})).hexdigest()
+                remove_abandoned_inputs(args.root, old_key)
+            prepare(args)
 
 
 def prepare(args):
@@ -332,13 +339,23 @@ def prepare(args):
         raise ValueError('work directory belongs to another source')
     save(identity_path, identity)
     resolved_path = args.root / 'resolved.json'
+    verified_input = getattr(args, '_verified_source_input', None)
     if resolved_path.exists():
         resolved = json.loads(resolved_path.read_text())
+    elif verified_input:
+        resolved = verified_input[2]
+        save(resolved_path, resolved)
+    elif getattr(args, '_dependency_source_metadata', None):
+        resolved = args._dependency_source_metadata
+        save(resolved_path, resolved)
     else:
         resolved = SourceResolver(c.control_state_file().parent / 'image-pool-locks', max_wait_seconds=60)(args.pinned_source or args.source)
         save(resolved_path, resolved)
     if args.pinned_source and registry_parts(resolved['reference']) != registry_parts(args.pinned_source):
         raise ValueError('resolved source differs from requested immutable pin')
+    if (getattr(args, '_dependency_selection', None)
+            and resolved['reference'] != args._dependency_selection['source_reference']):
+        raise ValueError('resolved source differs from recorded dependency selection')
     manifest_bytes = resolved['manifest_json'].encode()
     if 'sha256:' + hashlib.sha256(manifest_bytes).hexdigest() != resolved['reference'].split('@')[1]:
         raise ValueError('resolved source manifest identity mismatch')
@@ -365,10 +382,16 @@ def prepare(args):
         validate_filesystem_export(args.export_inputs['anchor'], args.anchor, anchor_manifest, anchor_config)
         validate_filesystem_export(args.export_inputs['target'], resolved['reference'], target_manifest, target_config)
     anchor_filesystem = None
+    selected_anchor = getattr(args, '_dependency_selection', {}).get('chosen', {})
     if args.anchor_filesystem_source:
         anchor_receipt = args.root / 'anchor-resolved.json'
         if anchor_receipt.exists():
             anchor_filesystem = json.loads(anchor_receipt.read_text())
+        elif selected_anchor.get('resolved_path'):
+            from cache_source_receipts import validated
+            anchor_filesystem = validated(args.anchor_filesystem_source,
+                                          json.loads(Path(selected_anchor['resolved_path']).read_text()))
+            save(anchor_receipt, anchor_filesystem)
         else:
             anchor_filesystem = SourceResolver(c.control_state_file().parent / 'image-pool-locks', max_wait_seconds=60)(args.anchor_filesystem_source)
             save(anchor_receipt, anchor_filesystem)
@@ -390,19 +413,24 @@ def prepare(args):
         else:
             if anchor_filesystem:
                 anchor_host, original_repo, _ = registry_parts(anchor_filesystem['reference'])
-                anchor_index = cached_anchor(PublicLayerReader(anchor_host), original_repo, anchor_layer, args.anchor_cache, scratch)
+                anchor_index = cached_anchor(PublicLayerReader(anchor_host), original_repo, anchor_layer, args.anchor_cache, scratch,
+                                             source_index_path=Path(selected_anchor['index_path']) if selected_anchor else None)
             else:
                 anchor_index = cached_anchor(registry.client, anchor_repo, anchor_layer, args.anchor_cache, scratch)
             host, source_repo, _ = registry_parts(resolved['reference'])
             endpoint = 'registry-1.docker.io' if host == 'docker.io' else host
             url = f'https://{endpoint}/v2/{source_repo}/blobs/{target_layer["digest"]}'
             opener = request.build_opener(PublicBlobRedirect()).open
-            blob = scratch / 'target.tar.gz'
-            with opener(request.Request(url, headers=public_registry_headers(host, source_repo)), timeout=120) as stream:
-                copy_verified(stream, blob, target_layer)
+            blob = verified_input[0] if verified_input else scratch / 'target.tar.gz'
+            if not verified_input:
+                with opener(request.Request(url, headers=public_registry_headers(host, source_repo)), timeout=120) as stream:
+                    copy_verified(stream, blob, target_layer)
             input_digest = target_layer['digest']
-        with verified_tar(blob, input_digest) as stream:
-            target_index = index_flat_tar(stream)
+        if verified_input:
+            target_index = verified_input[1]
+        else:
+            with verified_tar(blob, input_digest) as stream:
+                target_index = index_flat_tar(stream)
         if args.record_source_index:
             write_flat_index(args.root / 'source-index.json.gz', target_layer, target_index)
         plan = plan_flat_delta(anchor_index, target_index)
@@ -553,6 +581,14 @@ def prepare(args):
                   'seconds': time.monotonic() - started, 'artifact_reused': artifact_reused, 'timings': build.get('timings', {})}
         if args.anchor_filesystem_source:
             result['anchor_filesystem_source'] = args.anchor_filesystem_source
+        if getattr(args, '_dependency_selection', None):
+            selection = args._dependency_selection
+            result['requested_anchor'] = selection['request']['anchor']
+            result['dependency_selection'] = {k: selection[k] for k in ('previous_changed_bytes', 'selected_changed_bytes')}
+            if not selection['chosen'].get('original'):
+                result.update(anchor_source=selection['chosen']['source'],
+                              anchor_source_reference=selection['chosen']['source_reference'],
+                              anchor_strategy='shared_dependencies')
         if args.family:
             result['families'] = args.family
         save(args.root / 'catalog.json', {'schema': 1, 'images': {args.source: result}})

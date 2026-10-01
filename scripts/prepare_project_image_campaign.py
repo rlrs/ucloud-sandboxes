@@ -70,6 +70,7 @@ def main():
     parser.add_argument('--compression-level', type=int, choices=range(1, 10), default=6)
     parser.add_argument('--seed-max-delta-mib', type=int, default=256,
                         help='larger one-time project seeds; task deltas retain the 256 MiB bound')
+    parser.add_argument('--dependency-index', type=Path, help='qualified cross-project dependency bases for new seeds')
     args = parser.parse_args()
     if (not 1 <= args.workers <= 8 or not 1 <= args.seed_max_delta_mib <= 1024
             or min(args.growth_limit_gib, args.free_floor_gib) < 1):
@@ -121,6 +122,8 @@ def main():
                        '--retry-failed']
                 if phase == 'seeds':
                     cmd.extend(['--record-source-index', '--max-delta-mib', str(args.seed_max_delta_mib)])
+                    if args.dependency_index:
+                        cmd.extend(['--dependency-index', str(args.dependency_index)])
                 print(json.dumps({'phase': phase, 'planned': len(plan['images'])}), flush=True)
                 subprocess.run(cmd, check=True)
                 catalogs.append(json.loads((root / 'catalog.json').read_text()))

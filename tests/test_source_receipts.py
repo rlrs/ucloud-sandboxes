@@ -10,6 +10,18 @@ from cache_source_receipts import hydrate, load, pack, select, validated
 
 
 class SourceReceiptTests(unittest.TestCase):
+    def test_archives_dependency_preflight_even_before_build_identity_exists(self):
+        source = 'example/source:latest'
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            work = root/'work'/hashlib.sha256(source.encode()).hexdigest()
+            work.mkdir(parents=True)
+            (work/'selection-request.json').write_text(json.dumps({'source': source}))
+            (work/'selection-source.json').write_text(json.dumps(self.receipt()))
+            bundle = root/'metadata.json.gz'
+            self.assertEqual(pack([root], bundle)['receipts'], 1)
+            self.assertEqual(load(bundle)[source][self.receipt()['reference']], validated(source, self.receipt()))
+
     def receipt(self):
         config = json.dumps({'os': 'linux', 'architecture': 'amd64', 'rootfs': {'diff_ids': ['sha256:' + 'a' * 64]},
                              'config': {'OnBuild': ['RUN required-step']}})

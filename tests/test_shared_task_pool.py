@@ -13,6 +13,20 @@ import prepare_shared_task_pool as pool
 
 
 class SharedTaskPoolTests(unittest.TestCase):
+    def test_selected_dependency_anchor_is_preserved_on_pool_resume(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root/'plan.json').write_text(json.dumps({'schema': 1, 'images': [{'source': 'task', 'anchor': 'fallback'}]}))
+            (root/'results').mkdir()
+            key = hashlib.sha256(b'task').hexdigest()
+            row = {'source': 'task', 'anchor': 'selected', 'requested_anchor': 'fallback',
+                   'status': 'ready', 'qualification': {'equivalent': True}}
+            (root/'results'/f'{key}.json').write_text(json.dumps(row))
+            catalog, invoked = self.run_pool(root, 16, lambda *a, **kw: self.fail('unexpected rebuild'))
+            invoked.assert_not_called()
+            self.assertEqual(catalog['images']['task'], row)
+
     def test_larger_seed_limit_only_retries_measured_deltas_that_fit(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

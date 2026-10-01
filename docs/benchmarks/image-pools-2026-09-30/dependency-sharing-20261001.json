@@ -1,0 +1,45 @@
+{
+  "observed_date_utc": "2026-10-01",
+  "index": {
+    "anchors": 488,
+    "fingerprints": 417772,
+    "bytes": 48635904
+  },
+  "images": [
+    {
+      "source": "aweaiteam/scaleswe:mhostetter_galois_pr108",
+      "filesystem_entries": 48225,
+      "equivalent": true,
+      "differences": 0,
+      "previous_changed_bytes": 1354483230,
+      "selected_changed_bytes": 815706474,
+      "original_compressed_bytes": 1092688183,
+      "delta_compressed_bytes": 506599725,
+      "erofs_bytes_built": 616353792,
+      "groups_reused": 2,
+      "create_seconds": 1.4532341010053642,
+      "new_import_build": false
+    },
+    {
+      "source": "aweaiteam/scaleswe:openeemeter_eeweather_pr10",
+      "filesystem_entries": 82562,
+      "equivalent": true,
+      "differences": 0,
+      "previous_changed_bytes": 1242236254,
+      "selected_changed_bytes": 831790097,
+      "original_compressed_bytes": 933186970,
+      "delta_compressed_bytes": 394943768,
+      "erofs_bytes_built": 555941888,
+      "groups_reused": 2,
+      "create_seconds": 1.3643039129965473,
+      "new_import_build": false
+    }
+  ],
+  "scope": "Two deliberately selected previously oversized sources, not a random corpus estimate. Existing anchors retained. Logical delta savings against the generic fallback; compressed savings compare with original flat source layers, not a built fallback delta. Full runtime-contract filesystem qualification plus normal source-alias create/exec checks.",
+  "volume": {
+    "provider_size_before": 3500,
+    "provider_size_after": 4000,
+    "filesystem_bytes_after": 4226407653376,
+    "free_floor_gib": 500
+  }
+}

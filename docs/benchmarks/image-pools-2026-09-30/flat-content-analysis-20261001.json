@@ -1,0 +1,294 @@
+[
+  {
+    "source": "aweaiteam/scaleswe:cunla_fakeredis-py_pr112",
+    "source_compressed_bytes": 649070428,
+    "regular_bytes_by_difference": {
+      "metadata only": 22676850,
+      "content found somewhere in anchor": 1183713652,
+      "identical": 1144837828,
+      "new path": 373548038,
+      "different content": 7430828
+    },
+    "total_bytes_by_category": {
+      "usr system/runtime": 1015787089,
+      "Python installed packages": 380116185,
+      "package/download caches": 130577235,
+      "var/lib": 7961652,
+      "git history": 6815282,
+      "root/.local": 5479903,
+      "workspace/fakeredis-py": 565016,
+      "var/log": 319280
+    },
+    "changed_bytes_by_category": {
+      "Python installed packages": 273629687,
+      "package/download caches": 116831857,
+      "git history": 6815282,
+      "root/.local": 5442304,
+      "workspace/fakeredis-py": 565016,
+      "usr system/runtime": 371552,
+      "etc/apt": 18,
+      ".dockerenv": 0
+    },
+    "largest_changed_files": [
+      {
+        "path": "root/.cache/pypoetry/virtualenvs/fakeredis-OHG5J9se-py3.11/lib/python3.11/site-packages/74cdc94b2b24dafac2a2__mypyc.cpython-311-x86_64-linux-gnu.so",
+        "bytes": 47840240,
+        "difference": "new path"
+      },
+      {
+        "path": "usr/local/lib/python3.11/site-packages/4c842c94c09923bae9e4__mypyc.cpython-311-x86_64-linux-gnu.so",
+        "bytes": 32665816,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pypoetry/cache/repositories/_default_cache/_http/b/7/4/e/e/b74ee18b88992cd87b841e66d53b6e41091def324ba9d289792c74ba",
+        "bytes": 18070087,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pypoetry/artifacts/b8/09/20/f77eb00ca2e88738a53cd607c0142a149d193f4f47a3e5ae310405d5fb/mypy-0.991-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "bytes": 18068884,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/d/6/c/e/e/d6cee1be027584be68549acf8d78db2a0cbb902dbe1504e4151f8c33.body",
+        "bytes": 13436933,
+        "difference": "new path"
+      },
+      {
+        "path": "usr/local/lib/python3.11/site-packages/cryptography/hazmat/bindings/_rust.abi3.so",
+        "bytes": 12955672,
+        "difference": "new path"
+      },
+      {
+        "path": "usr/local/lib/python3.11/site-packages/zstandard/_cffi.cpython-311-x86_64-linux-gnu.so",
+        "bytes": 12135008,
+        "difference": "new path"
+      },
+      {
+        "path": "usr/local/lib/python3.11/site-packages/zstandard/backend_c.cpython-311-x86_64-linux-gnu.so",
+        "bytes": 11614400,
+        "difference": "new path"
+      }
+    ]
+  },
+  {
+    "source": "aweaiteam/scaleswe:qiskit-community_qiskit-ionq_pr102",
+    "source_compressed_bytes": 740235641,
+    "regular_bytes_by_difference": {
+      "metadata only": 3660045,
+      "content found somewhere in anchor": 1150128773,
+      "identical": 1144837828,
+      "different content": 1983414,
+      "new path": 638243816
+    },
+    "total_bytes_by_category": {
+      "usr system/runtime": 1015645083,
+      "Python installed packages": 582950760,
+      "package/download caches": 178697782,
+      "var/lib": 7961652,
+      "git history": 1928347,
+      "var/log": 319280,
+      "workspace/qiskit-ionq": 312698,
+      "etc/ImageMagick-6": 243630
+    },
+    "changed_bytes_by_category": {
+      "Python installed packages": 476464262,
+      "package/download caches": 164952404,
+      "git history": 1928347,
+      "workspace/qiskit-ionq": 312698,
+      "usr system/runtime": 229546,
+      "etc/apt": 18,
+      ".dockerenv": 0,
+      "dev/console": 0
+    },
+    "largest_changed_files": [
+      {
+        "path": "usr/local/lib/python3.11/site-packages/symengine.libs/libflint-b75bea04.so.15.0.1",
+        "bytes": 63975664,
+        "difference": "new path"
+      },
+      {
+        "path": "usr/local/lib/python3.11/site-packages/symengine/lib/symengine_wrapper.cpython-311-x86_64-linux-gnu.so",
+        "bytes": 51285024,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/5/3/f/a/0/53fa0dd2a6feaa4acf9597cd5cb747a0853f9b1d1322581f9abb65fb.body",
+        "bytes": 50397966,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/9/8/4/1/2/98412ee4cecb88413d2a06af33d88c238fc47475e911c495e2b21049.body",
+        "bytes": 38647438,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/2/b/2/f/c/2b2fc6cb8c4fce71bf31af6f3cf1db6087e46c9493178e33a0a3fc34.body",
+        "bytes": 35899798,
+        "difference": "new path"
+      },
+      {
+        "path": "usr/local/lib/python3.11/site-packages/numpy.libs/libscipy_openblas64_-fdde5778.so",
+        "bytes": 25034001,
+        "difference": "new path"
+      },
+      {
+        "path": "usr/local/lib/python3.11/site-packages/scipy.libs/libscipy_openblas-b75cc656.so",
+        "bytes": 24817849,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/4/4/9/3/4/4493462a41a59272e7bb56d7826a03dff0a5bebfc8902ee8d622efab.body",
+        "bytes": 16646871,
+        "difference": "new path"
+      }
+    ]
+  },
+  {
+    "source": "aweaiteam/scaleswe:pipecat-ai_pipecat-flows_pr102",
+    "source_compressed_bytes": 783352056,
+    "regular_bytes_by_difference": {
+      "metadata only": 3747259,
+      "content found somewhere in anchor": 1157840124,
+      "identical": 1141743807,
+      "new path": 705350394,
+      "different content": 4799339
+    },
+    "total_bytes_by_category": {
+      "usr system/runtime": 1015639138,
+      "Python installed packages": 637263743,
+      "package/download caches": 172610408,
+      "git history": 19457650,
+      "var/lib": 7961652,
+      "workspace/pipecat-flows": 1479427,
+      "var/log": 319280,
+      "etc/ImageMagick-6": 243630
+    },
+    "changed_bytes_by_category": {
+      "Python installed packages": 533870806,
+      "package/download caches": 158865030,
+      "git history": 19457650,
+      "workspace/pipecat-flows": 1479427,
+      "usr system/runtime": 224061,
+      "etc/apt": 18,
+      ".dockerenv": 0,
+      "dev/console": 0
+    },
+    "largest_changed_files": [
+      {
+        "path": "usr/local/lib/python3.11/site-packages/llvmlite/binding/libllvmlite.so",
+        "bytes": 132875504,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/2/f/4/a/2/2f4a20d4bdbb5417445c9d343dc2d84576cb50a89011df816f0cf819.body",
+        "bytes": 42361858,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/2/b/2/f/c/2b2fc6cb8c4fce71bf31af6f3cf1db6087e46c9493178e33a0a3fc34.body",
+        "bytes": 35899798,
+        "difference": "new path"
+      },
+      {
+        "path": "usr/local/lib/python3.11/site-packages/numpy.libs/libscipy_openblas64_-56d6093b.so",
+        "bytes": 25021457,
+        "difference": "new path"
+      },
+      {
+        "path": "usr/local/lib/python3.11/site-packages/scipy.libs/libscipy_openblas-b75cc656.so",
+        "bytes": 24817849,
+        "difference": "new path"
+      },
+      {
+        "path": "workspace/pipecat-flows/.git/objects/pack/pack-4874b1b02488a78a726e289d435e0cca0b1251ef.pack",
+        "bytes": 19228870,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/f/d/6/6/8/fd668242515e9797a5f99e144ff4ced465f15aa8c472fd3d310574db.body",
+        "bytes": 16821570,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/4/4/9/3/4/4493462a41a59272e7bb56d7826a03dff0a5bebfc8902ee8d622efab.body",
+        "bytes": 16646871,
+        "difference": "new path"
+      }
+    ]
+  },
+  {
+    "source": "aweaiteam/scaleswe:iterative_dvc-render_pr107",
+    "source_compressed_bytes": 601220281,
+    "regular_bytes_by_difference": {
+      "metadata only": 16282935,
+      "content found somewhere in anchor": 1159957585,
+      "identical": 1141743807,
+      "new path": 300750281,
+      "different content": 5245024
+    },
+    "total_bytes_by_category": {
+      "usr system/runtime": 1015731392,
+      "Python installed packages": 329683511,
+      "package/download caches": 106655938,
+      "var/lib": 7961652,
+      "git history": 2653929,
+      "var/log": 319280,
+      "etc/ImageMagick-6": 243630,
+      "etc/ssl": 228923
+    },
+    "changed_bytes_by_category": {
+      "Python installed packages": 226290574,
+      "package/download caches": 92910560,
+      "git history": 2653929,
+      "usr system/runtime": 316315,
+      "workspace/dvc-render": 106844,
+      "etc/apt": 18,
+      ".dockerenv": 0,
+      "dev/console": 0
+    },
+    "largest_changed_files": [
+      {
+        "path": "usr/local/lib/python3.11/site-packages/numpy.libs/libscipy_openblas64_-fdde5778.so",
+        "bytes": 25034001,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/4/4/9/3/4/4493462a41a59272e7bb56d7826a03dff0a5bebfc8902ee8d622efab.body",
+        "bytes": 16646871,
+        "difference": "new path"
+      },
+      {
+        "path": "usr/local/lib/python3.11/site-packages/numpy/_core/_multiarray_umath.cpython-311-x86_64-linux-gnu.so",
+        "bytes": 10411849,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/5/b/b/d/2/5bbd24dd5440d36b646254699558769a338903f2264712532405affc.body",
+        "bytes": 8712614,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/8/d/d/5/6/8dd5698d91e05b504fc318252f441dd06d1a12d263bcd32bca9c079c.body",
+        "bytes": 8056702,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/b/7/a/d/e/b7ade871c9b5be28bac23887471cad3b72362d7f849033166b03ce39.body",
+        "bytes": 7034756,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/e/e/f/b/a/eefba745b4eee7b59d3d5cc914593552efc1928b7560ec8670490b03.body",
+        "bytes": 6426938,
+        "difference": "new path"
+      },
+      {
+        "path": "root/.cache/pip/http-v2/5/0/0/f/c/500fc05b4f3dab1d2b54ca59c49fe18e63771bbcdcc5705d6f0a8abb.body",
+        "bytes": 6005095,
+        "difference": "metadata only"
+      }
+    ]
+  }
+]

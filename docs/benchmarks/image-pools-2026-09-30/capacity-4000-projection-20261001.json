@@ -1,0 +1,153 @@
+{
+  "observed_at_utc": "2026-10-01T06:28:14.987182+00:00",
+  "changes": "Read-only measurements; no capacity resize or image deletion.",
+  "current_capacity_provider_units": 3500,
+  "hypothetical_capacity_provider_units": 4000,
+  "protected_free_bytes": 536870912000,
+  "additional_preparation_headroom_bytes": 623272123246,
+  "current_ready_sources": 2636,
+  "required_source_references": 35984,
+  "referenced_oci_and_erofs_bytes_in_source_and_foundation_catalogs": 2652385794097,
+  "source_cost_samples": {
+    "SWE-rebench v2": {
+      "total": 6272,
+      "ready": 63,
+      "exclusive_mean_mb": 2118.2063413650794,
+      "exclusive_p50_mb": 1807.648541,
+      "exclusive_p90_mb": 3079.639301
+    },
+    "SWE-Lego": {
+      "total": 4323,
+      "ready": 62,
+      "exclusive_mean_mb": 1661.1548652096774,
+      "exclusive_p50_mb": 1370.5764695,
+      "exclusive_p90_mb": 2490.65818
+    },
+    "MultiSWE": {
+      "total": 2232,
+      "ready": 60,
+      "exclusive_mean_mb": 756.2758049833334,
+      "exclusive_p50_mb": 448.8555545,
+      "exclusive_p90_mb": 1795.591173
+    },
+    "ScaleSWE": {
+      "total": 17202,
+      "ready": 1534,
+      "exclusive_mean_mb": 135.4653498904824,
+      "exclusive_p50_mb": 4.549858,
+      "exclusive_p90_mb": 235.9368
+    },
+    "R2E-Gym": {
+      "total": 4522,
+      "ready": 67,
+      "exclusive_mean_mb": 791.852559925373,
+      "exclusive_p50_mb": 849.639705,
+      "exclusive_p90_mb": 1032.442441
+    },
+    "OpenThoughts TBLite": {
+      "total": 16,
+      "ready": 16,
+      "exclusive_mean_mb": 172.69796875,
+      "exclusive_p50_mb": 92.4720635,
+      "exclusive_p90_mb": 496.425319
+    },
+    "Terminal-Lego": {
+      "total": 73,
+      "ready": 73,
+      "exclusive_mean_mb": 428.3768016712329,
+      "exclusive_p50_mb": 205.253812,
+      "exclusive_p90_mb": 785.776719
+    },
+    "Senior SWE-Bench": {
+      "total": 13,
+      "ready": 13,
+      "exclusive_mean_mb": 273.5179723076923,
+      "exclusive_p50_mb": 175.279272,
+      "exclusive_p90_mb": 429.05164
+    },
+    "SWE-bench Verified": {
+      "total": 500,
+      "ready": 274,
+      "exclusive_mean_mb": 426.0806701788321,
+      "exclusive_p50_mb": 211.095784,
+      "exclusive_p90_mb": 230.8952
+    },
+    "SWE-bench Multilingual": {
+      "total": 300,
+      "ready": 290,
+      "exclusive_mean_mb": 553.7283848344828,
+      "exclusive_p50_mb": 327.3106045,
+      "exclusive_p90_mb": 1053.930193
+    },
+    "Terminal-Bench 2": {
+      "total": 89,
+      "ready": 89,
+      "exclusive_mean_mb": 1125.060084764045,
+      "exclusive_p50_mb": 218.531395,
+      "exclusive_p90_mb": 1267.527765
+    },
+    "SWE-smith": {
+      "total": 450,
+      "ready": 103,
+      "exclusive_mean_mb": 1445.2405915339807,
+      "exclusive_p50_mb": 1170.379713,
+      "exclusive_p90_mb": 2204.564494
+    }
+  },
+  "compact_sample_marginal_bytes": {
+    "ScaleSWE": 32170000,
+    "R2E-Gym": 279290000
+  },
+  "scenarios": {
+    "remaining_source_mix_at_sample_costs": {
+      "weighted_additional_bytes_per_image": 728513230.7888471,
+      "additional_source_images": 855,
+      "resulting_total_ready_sources": 3491,
+      "assumptions": [
+        "All additional headroom goes to source images, not more foundations.",
+        "Remaining family proportions match remaining inventory.",
+        "ScaleSWE and R2E use observed compact sample means.",
+        "Other families use current image-exclusive blob means.",
+        "Small, nonrandom samples; NOT a validated corpus-wide forecast."
+      ]
+    },
+    "scale_existing_projects": {
+      "tasks_in_projects_with_a_ready_source": 15859,
+      "remaining_sources_in_those_projects": 14325,
+      "illustrative_bytes_at_32_17_mb_each": 460835250000,
+      "potential_total_ready_sources_if_these_all_qualify": 16961,
+      "assumptions": [
+        "No guarantee that later tasks retain the measured small delta mean.",
+        "Known original/compact anchors may exceed planner bounds or have incompatible source layouts.",
+        "This maximizes count by concentrating on ScaleSWE; it is not broad coverage."
+      ]
+    }
+  },
+  "foundation_prefix_task_rows": {
+    "OpenSWE": {
+      "ready": 36389,
+      "total": 36389,
+      "prefixes_ready": 11,
+      "prefixes_total": 11
+    },
+    "terminal-prefix": {
+      "ready": 9000,
+      "total": 12545,
+      "prefixes_ready": 2274,
+      "prefixes_total": 5804
+    },
+    "TMax": {
+      "ready": 7822,
+      "total": 9383,
+      "prefixes_ready": 1239,
+      "prefixes_total": 2786
+    }
+  },
+  "limitations": [
+    "Source-image coverage and cached recipe-prefix coverage are different denominators.",
+    "BIRD and NeMo were deferred and are not projected.",
+    "No final training image selection was supplied.",
+    "Extrapolations preserve currently retained data and assume no reclaim of older artifacts.",
+    "Filesystem overhead is scaled from observed 3500-unit volume geometry."
+  ]
+}

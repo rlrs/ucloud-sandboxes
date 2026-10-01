@@ -1,0 +1,17 @@
+{
+  "date_utc": "2026-10-01",
+  "retired_manifests": 2,
+  "replacement_checks_passed": 2,
+  "preserved_id_checks_passed": 3,
+  "max_preserved_id_create_seconds": 1.3957662619941402,
+  "new_import_builds": 0,
+  "physical_gc_run": false,
+  "reclaimed_bytes_claimed": 0,
+  "scope": "Retired one redundant ScaleSWE preparation and one .NET SDK experiment variant. Preserved another .NET variant referenced by frozen campaign inputs. No blobs, staging sources, EROFS components, environment roots or shared caches deleted. Retired IDs resolve to retained equivalent preparations; the preserved ID retains its original manifest.",
+  "sources": [
+    "aweaiteam/scaleswe:optimizely_python-sdk_pr102",
+    "mcr.microsoft.com/dotnet/sdk:8.0"
+  ],
+  "preserved_image_ids_as_replacement_aliases": 2,
+  "preserved_frozen_input_manifests": 1
+}

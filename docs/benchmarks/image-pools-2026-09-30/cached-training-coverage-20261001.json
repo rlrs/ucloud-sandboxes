@@ -1,0 +1,83 @@
+{
+  "observed_at_utc": "2026-10-01T07:27:20Z",
+  "families": {
+    "MultiSWE": {
+      "upstream_image_rows": 2232,
+      "upstream_image_rows_ready": 60
+    },
+    "OpenThoughts TBLite": {
+      "base_only_rows": 100,
+      "base_only_rows_ready": 100
+    },
+    "Terminal-Lego": {
+      "base_only_rows": 13825,
+      "base_only_rows_ready": 13825
+    },
+    "R2E-Gym": {
+      "upstream_image_rows": 4522,
+      "upstream_image_rows_ready": 67
+    },
+    "SWE-Lego": {
+      "upstream_image_rows": 4323,
+      "upstream_image_rows_ready": 62
+    },
+    "SWE-bench Multilingual": {
+      "upstream_image_rows": 300,
+      "upstream_image_rows_ready": 290
+    },
+    "SWE-bench Verified": {
+      "upstream_image_rows": 500,
+      "upstream_image_rows_ready": 274
+    },
+    "SWE-rebench v2": {
+      "upstream_image_rows": 6272,
+      "upstream_image_rows_ready": 63
+    },
+    "SWE-smith": {
+      "upstream_image_rows": 88130,
+      "upstream_image_rows_ready": 59879
+    },
+    "ScaleSWE": {
+      "upstream_image_rows": 17202,
+      "upstream_image_rows_ready": 1699
+    },
+    "Senior SWE-Bench": {
+      "base_only_rows": 50,
+      "base_only_rows_ready": 50
+    },
+    "Terminal-Bench 2": {
+      "upstream_image_rows": 89,
+      "upstream_image_rows_ready": 89
+    }
+  },
+  "training_image_candidates": 2054,
+  "training_candidate_families": {
+    "MultiSWE": {
+      "images": 60,
+      "task_rows": 60
+    },
+    "R2E-Gym": {
+      "images": 67,
+      "task_rows": 67
+    },
+    "SWE-Lego": {
+      "images": 62,
+      "task_rows": 62
+    },
+    "SWE-rebench v2": {
+      "images": 63,
+      "task_rows": 63
+    },
+    "SWE-smith": {
+      "images": 103,
+      "task_rows": 59879
+    },
+    "ScaleSWE": {
+      "images": 1699,
+      "task_rows": 1699
+    }
+  },
+  "pin_mismatches": 0,
+  "task_recipe_and_train_split_verified": false,
+  "scope": "Prepared upstream-image coverage, not full task readiness. SWE-smith requires exact enriched recipe matching; bases/foundations alone do not qualify remaining work."
+}

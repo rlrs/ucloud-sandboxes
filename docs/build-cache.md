@@ -154,3 +154,46 @@ Cache preparation and mount durations are retained as numeric `cache_prepare_ms`
 and `cache_mount_ms` in build `timings.phases`, including terminal history. These
 are subphases of `docker_build_and_push_ms`; do not add them to it. They survive
 truncated build log tails and do not depend on parsing Docker output.
+
+## Prepared image resolution
+
+The gateway automatically resolves bounded, uploaded build contexts against
+`prepared-images.sqlite3`, beside the configured image store. Preparation tools
+register successful source imports and validated foundations there. Existing
+receipts can be imported as the gateway service account with:
+
+```sh
+python scripts/register_prepared_images.py --config /etc/ucloud-sandboxes/deployment.json \
+  --catalog /path/to/source-pool/catalog.json --catalog /path/to/foundations/catalog.json
+```
+
+Clients submit their usual Dockerfile and context; no SDK update or rewritten
+client image database is required. Matching uses a literal source reference,
+exact dependency-prefix identity (including installer bytes), or the exact
+SWE-smith enrichment recipe. A different task image from the same project is
+never treated as equivalent. Prepared dependency snapshots retain the package
+versions captured during preparation, like a build cache; this does not promise
+fresh package-manager or Git results on every build.
+
+The gateway leases the chosen private digest and creates a deterministic derived
+context. The ordinary builder still handles admission, remaining instructions,
+output names and labels, publication, and status. Accepted submissions include
+additive `prepared` metadata (`kind`, `reference`, and foundation `key` when
+applicable). BuildKit remains the cache for remaining OCI operations; EROFS
+components remain the shared sandbox filesystem representation.
+
+Automatic matching currently covers source imports, TMax explicit/inline
+installers, OpenSWE Python foundations, and Terminal dependency prefixes. It
+conservatively skips build arguments, alternate Dockerfiles, nonempty ignore
+files, custom frontends, multiple stages, broad context copies, bind mounts,
+and contexts over the matching bounds (8 MiB file data, 1,024 entries). Unsupported
+recipes use ordinary building. The raw build API accepts `prepared_cache: "off"`
+to bypass this optimization.
+
+The original request fingerprint durably freezes both hits and misses, including
+across gateway restarts and catalog additions. A new image identity can select
+newly prepared work; retrying an existing request cannot silently change its
+context. The catalog contains metadata, not duplicate filesystem blobs. Back up
+its decision table with gateway state to preserve retry identities. Source and
+foundation entries can be reconstructed from preparation receipts. Keep those
+receipts, immutable source pins, and preparation inputs with the campaign.

@@ -591,6 +591,8 @@ def prepare(args):
                               anchor_strategy='shared_dependencies')
         if args.family:
             result['families'] = args.family
+        from ucloud_sandboxes.prepared_images import PreparedImageCatalog, catalog_path
+        PreparedImageCatalog(catalog_path(c.image_file())).register_source(result)
         save(args.root / 'catalog.json', {'schema': 1, 'images': {args.source: result}})
         print(json.dumps({k: result[k] for k in ('source', 'status', 'delta_compressed_bytes', 'original_compressed_bytes_not_retained', 'seconds')}), flush=True)
 

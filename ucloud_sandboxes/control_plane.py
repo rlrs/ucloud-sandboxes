@@ -4348,6 +4348,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             raw = dict(raw)
             raw["tag"] = spec.tag
             raw["push"] = push
+            prepared_resolution = None
+            prepared_catalog = getattr(self, "prepared_image_catalog", None)
+            if prepared_catalog is not None:
+                from .prepared_images import resolve_build
+                raw, prepared_resolution = resolve_build(
+                    prepared_catalog, self.build_context_store, raw, spec,
+                    protect=lambda reference: self._ensure_registry_image_lease(
+                        reference, _registry_operation_lease_owner("prepared-build", {
+                            "id": spec.id, "context": raw["context_archive_digest"],
+                        }), touch=True,
+                    ),
+                )
+                context_reference = uploaded_build_context_reference(raw, self.build_context_store)
             body = json.dumps(raw, separators=(",", ":")).encode("utf-8")
             with _builder_image_dispatch_lock(spec.id):
                 with self.telemetry.span(
@@ -4428,6 +4441,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         )
                         span.set_attribute("status_code", int(response.status))
                         response_payload = response.json()
+                        if prepared_resolution and 200 <= response.status < 300:
+                            response_payload["prepared"] = prepared_resolution
+                            response.body = json.dumps(response_payload).encode("utf-8")
                         raw_image = response_payload.get("image")
                         if isinstance(
                             raw_image, dict
@@ -7620,6 +7636,8 @@ def build_server(
     BoundHandler.image_build_metrics_seen = OrderedDict()
     BoundHandler.image_build_owners_lock = RLock()
     BoundHandler.build_context_store = build_context_store
+    from .prepared_images import PreparedImageCatalog, catalog_path
+    BoundHandler.prepared_image_catalog = PreparedImageCatalog(catalog_path(image_file))
     BoundHandler.metrics_store = metrics_store
     BoundHandler.build_history = build_history
     BoundHandler.registry_url = registry_url

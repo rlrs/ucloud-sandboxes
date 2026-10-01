@@ -99,3 +99,16 @@ class BaseExpansionTests(unittest.TestCase):
         self.assertEqual(shared['images'][0]['anchor_strategy'], 'shared_fallback')
         with self.assertRaisesRegex(ValueError, 'faithful original'):
             shared_sources({'images': rows}, {'images': {'anchor': self.ready(method='unqualified')}}, metadata, 'anchor')
+
+
+class StageDeferralTests(unittest.TestCase):
+    def test_continue_only_when_every_source_has_terminal_nonfailed_receipt(self):
+        from run_base_expansion import only_source_deferrals
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            plan = {'images': [{'source': 'a'}, {'source': 'b'}]}
+            for status, expected in [('deferred', True), ('ready', True), ('failed', False), ('building', False)]:
+                (root/'catalog.json').write_text(json.dumps({'images': {'a': {'status': 'ready'}, 'b': {'status': status}}}))
+                self.assertEqual(only_source_deferrals(root, plan), expected)
+            (root/'catalog.json').write_text(json.dumps({'images': {'a': {'status': 'ready'}}}))
+            self.assertFalse(only_source_deferrals(root, plan))

@@ -338,6 +338,8 @@ def main():
                      "retention_owner": owner, "validated": True, "validation": validation,
                      "smoke_seconds": time.monotonic() - started}
             image_store.upsert_if_changed(record)
+            from ucloud_sandboxes.prepared_images import PreparedImageCatalog, catalog_path
+            PreparedImageCatalog(catalog_path(config.image_file())).register_foundation(ready)
             print(json.dumps({"image": image_id, "status": "ready", "tasks": item["tasks"],
                               "erofs_bytes": sum(c.image_size for c in components)}), flush=True)
             return ready

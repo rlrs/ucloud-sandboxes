@@ -43,6 +43,14 @@ def stage_catalog(root, baseline, kind):
     save(path, value)
 
 
+def only_source_deferrals(work, plan):
+    """A completed bounded source stage may defer items without blocking prefixes."""
+    catalog = json.loads((work/'catalog.json').read_text())
+    rows = catalog.get('images', {})
+    selected = [rows.get(item['source'], {}) for item in plan['images']]
+    return bool(selected) and all(row.get('status') in {'ready', 'deferred'} for row in selected)
+
+
 def translated_growth_cap(baseline, old_baseline, cumulative_gib):
     cap = (baseline-old_baseline)//GIB+cumulative_gib
     if cap < 1:
@@ -173,7 +181,11 @@ def main():
             state['active_stage'] = name
             save(state_path, state)
             print(json.dumps({'stage': name, 'cumulative_growth_cap_gib': cap, 'planned': count}), flush=True)
-            subprocess.run(cmd, check=True)
+            result = subprocess.run(cmd, check=False)
+            if result.returncode:
+                if result.returncode != 1 or name != 'sources' or not only_source_deferrals(work, plan):
+                    raise subprocess.CalledProcessError(result.returncode, cmd)
+                state.setdefault('stages_with_deferrals', []).append(name)
             state['completed_stages'].append(name)
             save(state_path, state)
         if args.scale_campaign_root and 'scale-seeds' not in state['completed_stages']:

@@ -664,8 +664,8 @@ def main():
                     aliases.add(repository + separator + selector)
                 result["import_aliases"] = {alias: register_import_alias(image_store, record, alias)
                                             for alias in sorted(aliases)}
-                from ucloud_sandboxes.prepared_images import PreparedImageCatalog, catalog_path
-                PreparedImageCatalog(catalog_path(config.image_file())).register_source(result)
+                from ucloud_sandboxes.prepared_images import PreparedImageCatalog, catalog_path as prepared_catalog_path
+                PreparedImageCatalog(prepared_catalog_path(config.image_file())).register_source(result)
         except Exception as error:
             result = {**item, "status": "deferred" if str(error).startswith("deferred:") else "failed",
                       "error": str(error)[-1000:]}

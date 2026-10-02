@@ -1,0 +1,134 @@
+{"idx": 147, "rc": 0, "wall": 2.94, "cpu": 2.97, "manifest": {
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "config": {
+    "mediaType": "application/vnd.oci.image.config.v1+json",
+    "digest": "sha256:862e2a5837790dd3591d63e26b389c6b094c087bddf688c0a37de269b063bec0",
+    "size": 6753
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.oci.image.layer.nydus.blob.v1",
+      "digest": "sha256:2384ddbce34608f259adbdc21470da1359b2d5e61f8adaf3045810c03b2b5114",
+      "size": 31210118,
+      "annotations": {
+        "containerd.io/snapshot/nydus-blob": "true"
+      }
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.nydus.blob.v1",
+      "digest": "sha256:290ea06542b9b152ec00b44eda7c3b95151b9242fdb35697bedb139557e02bad",
+      "size": 3607094,
+      "annotations": {
+        "containerd.io/snapshot/nydus-blob": "true"
+      }
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.nydus.blob.v1",
+      "digest": "sha256:be191ba7df39e2fae4599b8c0ed5b5270558656ca5a696327825247343056417",
+      "size": 13480059,
+      "annotations": {
+        "containerd.io/snapshot/nydus-blob": "true"
+      }
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.nydus.blob.v1",
+      "digest": "sha256:c8c5385b5308e22b211ebf41af309bbfe2dc5d21b9d1ec39524ea25fcbac9629",
+      "size": 1466,
+      "annotations": {
+        "containerd.io/snapshot/nydus-blob": "true"
+      }
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.nydus.blob.v1",
+      "digest": "sha256:faff327ad0b93f391d6d81ef08d3ff7c0a9740cefcb788f9e8b6867c70d5c537",
+      "size": 1299,
+      "annotations": {
+        "containerd.io/snapshot/nydus-blob": "true"
+      }
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.nydus.blob.v1",
+      "digest": "sha256:8df3e2f0a8e0c9fc542bb9a04a7af3e161d0fb254e44a736952587becc1e8325",
+      "size": 2571736,
+      "annotations": {
+        "containerd.io/snapshot/nydus-blob": "true"
+      }
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.nydus.blob.v1",
+      "digest": "sha256:7561dc60895e79230127dec1184ab28db65727d0b4b11cf7182b826ac5435617",
+      "size": 3864493,
+      "annotations": {
+        "containerd.io/snapshot/nydus-blob": "true"
+      }
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.nydus.blob.v1",
+      "digest": "sha256:317e3f10d7e703d34c1c97baf3c630464b9f0263ffda8b229263762774737c4a",
+      "size": 1332,
+      "annotations": {
+        "containerd.io/snapshot/nydus-blob": "true"
+      }
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:dcadae4f7aaeb5921a8158ad728a9ca0cbfc3875f3199db3c60e9fc176683d11",
+      "size": 537824,
+      "annotations": {
+        "containerd.io/snapshot/nydus-bootstrap": "true",
+        "containerd.io/snapshot/nydus-fs-version": "6"
+      }
+    }
+  ],
+  "annotations": {
+    "containerd.io/snapshot/nydus-builder-version": "v2.4.5",
+    "containerd.io/snapshot/nydus-fs-version": "6",
+    "containerd.io/snapshot/nydus-source-digest": "sha256:359b882bd31a4c132d39fd0bda8d9e051795191af7af4b6b56a34102faecc309",
+    "containerd.io/snapshot/nydus-source-reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-70b97295964b9-b7a0fdc16e3a@sha256:359b882bd31a4c132d39fd0bda8d9e051795191af7af4b6b56a34102faecc309",
+    "org.ucloud.immutable-environment.v1": "sha256:ae6032b6721242de84e4b702c557e1d97b9733cdf3df70129b19d673d3abe0fb"
+  }
+}}
+{"idx": 42, "rc": 0, "wall": 24.90, "cpu": 32.60, "manifest": {
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "config": {
+    "mediaType": "application/vnd.oci.image.config.v1+json",
+    "digest": "sha256:cde128cc3aefca1c9bef429e353f381f13ccb7876c92cf2dd21e6ac9b764d5dc",
+    "size": 1077
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.oci.image.layer.nydus.blob.v1",
+      "digest": "sha256:c0d9191d2c5d24a576ffba2aa8315fd2cb2dc97f21c36b03de1dc2bbe21fdfd2",
+      "size": 474431452,
+      "annotations": {
+        "containerd.io/snapshot/nydus-blob": "true"
+      }
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.nydus.blob.v1",
+      "digest": "sha256:03e84be8508892b9a62920846017e8dfbb883cbaeaa349094c65d93d1d44fb30",
+      "size": 9941017,
+      "annotations": {
+        "containerd.io/snapshot/nydus-blob": "true"
+      }
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:5d8df8833a24e90489c32affc683fb1b2399d58d13a648f8ab9a3a20404bca5f",
+      "size": 3158693,
+      "annotations": {
+        "containerd.io/snapshot/nydus-bootstrap": "true",
+        "containerd.io/snapshot/nydus-fs-version": "6"
+      }
+    }
+  ],
+  "annotations": {
+    "containerd.io/snapshot/nydus-builder-version": "v2.4.5",
+    "containerd.io/snapshot/nydus-fs-version": "6",
+    "containerd.io/snapshot/nydus-source-digest": "sha256:6c106fd641620eace2f51acc58b9eece77bc136c5764e2365d095df1a5304b35",
+    "containerd.io/snapshot/nydus-source-reference": "10.42.0.2:5000/ucloud-managed/shared-task-39bf859a9cb625ba2f9f0092a7e1-054609606a14@sha256:6c106fd641620eace2f51acc58b9eece77bc136c5764e2365d095df1a5304b35",
+    "org.ucloud.immutable-environment.v1": "sha256:4adf688133040a5fb8c71ee9f305181b0b3c604dd4a035ab2b2f5455127dc232"
+  }
+}}

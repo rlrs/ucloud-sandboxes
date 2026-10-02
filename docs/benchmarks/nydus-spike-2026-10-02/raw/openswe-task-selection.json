@@ -1,0 +1,134 @@
+[
+ {
+  "task": "openswe--pandas-dev__pandas-49574",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-9032b856d86cc97b9deb1-ac06fb6c9598:latest@sha256:e6eaecd9fe71dbb65ca883e603f647a6bd6952ef7f55db6bc5c5a7dfc7cb5f0b"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-37152",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-9032b856d86cc97b9deb1-ac06fb6c9598:latest@sha256:e6eaecd9fe71dbb65ca883e603f647a6bd6952ef7f55db6bc5c5a7dfc7cb5f0b"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-56175",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-18905",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-3ca1c91e3fc3ae8f67e87-a88dcf2927d9:latest@sha256:ba7cc647802e8dadd7a8598fb02fb2e14b0cec28cd2bd9bac2f4577226521d22"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-20422",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-3ca1c91e3fc3ae8f67e87-a88dcf2927d9:latest@sha256:ba7cc647802e8dadd7a8598fb02fb2e14b0cec28cd2bd9bac2f4577226521d22"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-63232",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-22261",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-3ca1c91e3fc3ae8f67e87-a88dcf2927d9:latest@sha256:ba7cc647802e8dadd7a8598fb02fb2e14b0cec28cd2bd9bac2f4577226521d22"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-53060",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-f76865c684e04ed0c4429-4123d0f63a6a:latest@sha256:41b294c4bffc05983076fc5000123b30159d9f618d001d59a4e2adcd1da6c70b"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-19307",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-3ca1c91e3fc3ae8f67e87-a88dcf2927d9:latest@sha256:ba7cc647802e8dadd7a8598fb02fb2e14b0cec28cd2bd9bac2f4577226521d22"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-62428",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-35e4faa0d30e4ce979b8a-eb980cbd750b:latest@sha256:dfe383c27d77992c7b8bf9c0e1e17b38bb8a655acdcac5f30f870888775648b1"
+ },
+ {
+  "task": "openswe--duck-dynasty__duckbot-1203",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-f76865c684e04ed0c4429-4123d0f63a6a:latest@sha256:41b294c4bffc05983076fc5000123b30159d9f618d001d59a4e2adcd1da6c70b"
+ },
+ {
+  "task": "openswe--OasisLMF__OasisLMF-1406",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-24cb913a0a251d9580b0a-878f2b6c6ba1:latest@sha256:0d0a542ca085038ebe2be1ad73978abac8552a98d65ee1653f8205ccfdbbb6b6"
+ },
+ {
+  "task": "openswe--androguard__androguard-411",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-3ca1c91e3fc3ae8f67e87-a88dcf2927d9:latest@sha256:ba7cc647802e8dadd7a8598fb02fb2e14b0cec28cd2bd9bac2f4577226521d22"
+ },
+ {
+  "task": "openswe--newam__idasen-340",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-24cb913a0a251d9580b0a-878f2b6c6ba1:latest@sha256:0d0a542ca085038ebe2be1ad73978abac8552a98d65ee1653f8205ccfdbbb6b6"
+ },
+ {
+  "task": "openswe--mps-gmbh__hl7-parser-32",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c"
+ },
+ {
+  "task": "openswe--aiidateam__reentry-50",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c"
+ },
+ {
+  "task": "openswe--fake-useragent__fake-useragent-216",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-24cb913a0a251d9580b0a-878f2b6c6ba1:latest@sha256:0d0a542ca085038ebe2be1ad73978abac8552a98d65ee1653f8205ccfdbbb6b6"
+ },
+ {
+  "task": "openswe--ansys__pysherlock-311",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-24cb913a0a251d9580b0a-878f2b6c6ba1:latest@sha256:0d0a542ca085038ebe2be1ad73978abac8552a98d65ee1653f8205ccfdbbb6b6"
+ },
+ {
+  "task": "openswe--rustedpy__result-58",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c"
+ },
+ {
+  "task": "openswe--napari__napari-tiff-31",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c"
+ },
+ {
+  "task": "openswe--newam__idasen-340",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-24cb913a0a251d9580b0a-878f2b6c6ba1:latest@sha256:0d0a542ca085038ebe2be1ad73978abac8552a98d65ee1653f8205ccfdbbb6b6"
+ },
+ {
+  "task": "openswe--aiidateam__reentry-50",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c"
+ },
+ {
+  "task": "openswe--fake-useragent__fake-useragent-216",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-24cb913a0a251d9580b0a-878f2b6c6ba1:latest@sha256:0d0a542ca085038ebe2be1ad73978abac8552a98d65ee1653f8205ccfdbbb6b6"
+ },
+ {
+  "task": "openswe--ansys__pysherlock-311",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-24cb913a0a251d9580b0a-878f2b6c6ba1:latest@sha256:0d0a542ca085038ebe2be1ad73978abac8552a98d65ee1653f8205ccfdbbb6b6"
+ },
+ {
+  "task": "openswe--rustedpy__result-58",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-57061",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-54945",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-f76865c684e04ed0c4429-4123d0f63a6a:latest@sha256:41b294c4bffc05983076fc5000123b30159d9f618d001d59a4e2adcd1da6c70b"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-43447",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-9032b856d86cc97b9deb1-ac06fb6c9598:latest@sha256:e6eaecd9fe71dbb65ca883e603f647a6bd6952ef7f55db6bc5c5a7dfc7cb5f0b"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-41606",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-9032b856d86cc97b9deb1-ac06fb6c9598:latest@sha256:e6eaecd9fe71dbb65ca883e603f647a6bd6952ef7f55db6bc5c5a7dfc7cb5f0b"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-45083",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-9032b856d86cc97b9deb1-ac06fb6c9598:latest@sha256:e6eaecd9fe71dbb65ca883e603f647a6bd6952ef7f55db6bc5c5a7dfc7cb5f0b"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-45642",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-9032b856d86cc97b9deb1-ac06fb6c9598:latest@sha256:e6eaecd9fe71dbb65ca883e603f647a6bd6952ef7f55db6bc5c5a7dfc7cb5f0b"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-34736",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-9032b856d86cc97b9deb1-ac06fb6c9598:latest@sha256:e6eaecd9fe71dbb65ca883e603f647a6bd6952ef7f55db6bc5c5a7dfc7cb5f0b"
+ },
+ {
+  "task": "openswe--pandas-dev__pandas-21799",
+  "foundation": "10.42.0.2:5000/ucloud-managed/foundation-openswe-3ca1c91e3fc3ae8f67e87-a88dcf2927d9:latest@sha256:ba7cc647802e8dadd7a8598fb02fb2e14b0cec28cd2bd9bac2f4577226521d22"
+ }
+]

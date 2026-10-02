@@ -1,0 +1,109 @@
+[
+ {
+  "pos": 1,
+  "idx": 60,
+  "family": "SWE-Lego",
+  "image_blobs": 16,
+  "rebuilt_layers": null,
+  "layers_reused": 1,
+  "dict-1m_export_rc": 0,
+  "nodict-1m_export_rc": 0,
+  "files": 71679,
+  "differ": 0,
+  "eio": 0
+ },
+ {
+  "pos": 4,
+  "idx": 11,
+  "family": "ScaleSWE",
+  "image_blobs": 17,
+  "rebuilt_layers": null,
+  "layers_reused": 0,
+  "dict-1m_export_rc": 1,
+  "dict-1m_export_error": "failed to export RAFS filesystem as raw block device image\n\nCaused by:\n    Invalid argument (os error 22)",
+  "nodict-1m_export_rc": 0
+ },
+ {
+  "pos": 9,
+  "idx": 22,
+  "family": "ScaleSWE",
+  "image_blobs": 20,
+  "rebuilt_layers": null,
+  "layers_reused": 0,
+  "dict-1m_export_rc": 1,
+  "dict-1m_export_error": "failed to export RAFS filesystem as raw block device image\n\nCaused by:\n    Invalid argument (os error 22)",
+  "nodict-1m_export_rc": 0
+ },
+ {
+  "pos": 14,
+  "idx": 10,
+  "family": "ScaleSWE",
+  "image_blobs": 20,
+  "rebuilt_layers": null,
+  "layers_reused": 1,
+  "dict-1m_export_rc": 1,
+  "dict-1m_export_error": "failed to export RAFS filesystem as raw block device image\n\nCaused by:",
+  "nodict-1m_export_rc": 0
+ },
+ {
+  "pos": 20,
+  "idx": 12,
+  "family": "ScaleSWE",
+  "image_blobs": 22,
+  "rebuilt_layers": null,
+  "layers_reused": 1,
+  "dict-1m_export_rc": 1,
+  "dict-1m_export_error": "failed to export RAFS filesystem as raw block device image\n\nCaused by:",
+  "nodict-1m_export_rc": 0
+ },
+ {
+  "pos": 40,
+  "idx": 76,
+  "family": "R2E-Gym",
+  "image_blobs": 51,
+  "rebuilt_layers": null,
+  "layers_reused": 2,
+  "dict-1m_export_rc": 1,
+  "dict-1m_export_error": "failed to export RAFS filesystem as raw block device image\n\nCaused by:",
+  "nodict-1m_export_rc": 0
+ },
+ {
+  "pos": 80,
+  "idx": 97,
+  "family": "TMax",
+  "image_blobs": 28,
+  "rebuilt_layers": null,
+  "layers_reused": 1,
+  "dict-1m_export_rc": 0,
+  "nodict-1m_export_rc": 0,
+  "files": 12473,
+  "differ": 0,
+  "eio": 0
+ },
+ {
+  "pos": 120,
+  "idx": 73,
+  "family": "SWE-Lego",
+  "image_blobs": 76,
+  "rebuilt_layers": 15,
+  "layers_reused": 1,
+  "dict-1m_export_rc": 1,
+  "dict-1m_export_error": "failed to export RAFS filesystem as raw block device image\n\nCaused by:",
+  "nodict-1m_export_rc": 0
+ },
+ {
+  "pos": 176,
+  "idx": 47,
+  "family": "ScaleSWE",
+  "image_blobs": 58,
+  "rebuilt_layers": null,
+  "layers_reused": 1,
+  "dict-1m_export_rc": 1,
+  "dict-1m_export_error": "failed to export RAFS filesystem as raw block device image\n\nCaused by:",
+  "nodict-1m_export_rc": 0
+ },
+ {
+  "note": "pos 176 (idx 47) mounted through spike_nbd flat device: 2076 of 42138 regular files differ from the no-dict conversion and from today's EROFS; see hashdiff-047.json",
+  "root_cause": "merged dict.boot records blob a32d8fd3... with blocks=2230 (9.1 MB) while its chunk table reaches uncompressed offset 52.8 MB (real blob: 12946 blocks); later images built against the dict inherit truncated device sizes, so flat-address regions overlap"
+ }
+]

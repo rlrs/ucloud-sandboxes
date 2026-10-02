@@ -1,0 +1,2179 @@
+[
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:evergreen-ci_evergreen.py_pr102",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-fda6eadbde21590e265b90f35956-0a7347077a16:latest@sha256:68dff7b7d6c0ca23d158ebdd2ed68c136cb1f0f358bf3dc6b616217c7c7105c1",
+  "foundation_key": null,
+  "erofs_bytes": 1010708480,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:evergreen-ci_evergreen.py_pr120",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-c1d3ebf3bc2231309b92cb9ecbf3-03a7acdbb22e:latest@sha256:5cbb1d6e3164e9e1626a73bae9e6e55b807cfb389e3c947a51f663469c2d1672",
+  "foundation_key": null,
+  "erofs_bytes": 1010708480,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:evergreen-ci_evergreen.py_pr104",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-41036f5f559dd677b87a57e9181b-1232b779160d:latest@sha256:65bc7aae77ea87b8cfbbe314e1ba6978bf22526c000d47450303bb9ae9a52320",
+  "foundation_key": null,
+  "erofs_bytes": 1010708480,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:pallets_werkzeug_pr1550",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-1f6e8731fc73178da19e6ac2d413-756272a9c489:latest@sha256:e7896d7a04cd14985e1f11ab47c02923829d776ebbde4562c15a7dacf84f9c73",
+  "foundation_key": null,
+  "erofs_bytes": 786321408,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:pallets_werkzeug_pr1577",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-33b7b299ffb3e09ed25f7c07bbe6-8d078438c364:latest@sha256:3b847ed6a2ba9310ab02dcf7dcafe01f9a82a24b6ba7b7f4fc3facbec0c266d7",
+  "foundation_key": null,
+  "erofs_bytes": 786321408,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:pallets_werkzeug_pr1590",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-6f69ccdffe4302f65bb9a53319a0-2ee6683c412a:latest@sha256:26bbb52d5bed11b7bdd7f571383c6f41d48cb4655838c870c6ca2289855158ae",
+  "foundation_key": null,
+  "erofs_bytes": 786321408,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:esphome_aioesphomeapi_pr1261",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-05b76258d91df5591dc567ac84a3-3dfac2bac506:latest@sha256:d94527c4a803f0df70138368bd7001bb8af27ab6c1a3e55552ba18915dd11864",
+  "foundation_key": null,
+  "erofs_bytes": 942575616,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:esphome_aioesphomeapi_pr1304",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-93a6a343ceff5e3e181e3cccbe12-ed491494fd24:latest@sha256:6a99ace447ad078622784e2fc9b2f0612b4911373977b02b36610757e415befe",
+  "foundation_key": null,
+  "erofs_bytes": 946933760,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:esphome_aioesphomeapi_pr1237",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-7102afa9f59985ae8881fcb76a46-92c65d88f365:latest@sha256:53a8ed882ad9d113e8b1ab02ba496f91fabf055ae5a56705012de2aaca0d63b2",
+  "foundation_key": null,
+  "erofs_bytes": 946933760,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:snok_flake8-type-checking_pr15",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-28fa967426c3b76c05b9be1c842f-497252a1e2a1:latest@sha256:15187e8436372fd89573c2adbd93efb37e4cd9dbc9e1434ed53ccb52f07d5e1a",
+  "foundation_key": null,
+  "erofs_bytes": 748519424,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:snok_flake8-type-checking_pr142",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-83c9d4cbc0b2181da4cc1762cca1-cac772fb35b5:latest@sha256:541261322e252a2222f0b34cc5846eaa6b61ba703aaf2d5b97fe72c6f7bfdc37",
+  "foundation_key": null,
+  "erofs_bytes": 876261376,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:snok_flake8-type-checking_pr112",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-62b29f9f4168ca63b49ef0227f3d-a057e4f489fa:latest@sha256:b607b1e7ddaae0e4bba5ad71625d5a5c2ba599db98363679776e9996a03beb57",
+  "foundation_key": null,
+  "erofs_bytes": 731385856,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:telefonica_toolium_pr100",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-e4927b4213d4bfea476807fa0522-0ec0d78f7924:latest@sha256:2b07a1bc58206a0244d0a9c69e1888370b4c873fa04845f4a7888c1f18f85bfb",
+  "foundation_key": null,
+  "erofs_bytes": 755712000,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:telefonica_toolium_pr148",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-94028447664616aef62278567e48-ae43e7dc4b63:latest@sha256:deb26593210c05e4899f8429b836052252b3e7156f2cbbb65c7bd8b7e8615960",
+  "foundation_key": null,
+  "erofs_bytes": 755716096,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:telefonica_toolium_pr128",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-7ffe525431c3d9cea2a53e0fddf7-f0d09ac9045d:latest@sha256:92ba8b0fc6d24aa77ac65175cb38a3d231460effd38b4aa896b9742028a6067e",
+  "foundation_key": null,
+  "erofs_bytes": 755716096,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:microsoft_lsprotocol_pr224",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-8872abce0f08fea5d363c629d943-fababc5c5a8b:latest@sha256:db0ca9fce8005e97e882e2b84872ace466f174d8f9a5ee1b75ecea1d07c50563",
+  "foundation_key": null,
+  "erofs_bytes": 724520960,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:microsoft_lsprotocol_pr121",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-503118b84436e63737c2bf4a6d39-5347b4049b35:latest@sha256:7a0e9efcce980b0f5b34ed90009601c35414241fad8114a98984c4264c0f9104",
+  "foundation_key": null,
+  "erofs_bytes": 701992960,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:microsoft_lsprotocol_pr135",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-f6ca49422abf248fea54cd7b88e2-1046c7cbd30d:latest@sha256:a6b5ebf65661abf48f4e40ed4e5dc2e98a9c8ce06c53ccf724aeb38837d7f2a7",
+  "foundation_key": null,
+  "erofs_bytes": 701992960,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:itamarst_eliot_pr156",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-f9413fe461976ece5efb91158e82-6e781949c25d:latest@sha256:024670211cb08c2823e0344074800c17895dd703ff8f6968594d05b97872d7cf",
+  "foundation_key": null,
+  "erofs_bytes": 706588672,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:itamarst_eliot_pr175",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-8e691f8627cc08b9fed7a41f600e-062d8219ed93:latest@sha256:123ba830ef6efa5371239acf8bd803f4666d4ff2e1e7bfbfdb49fa01b6dc5c4c",
+  "foundation_key": null,
+  "erofs_bytes": 706588672,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:itamarst_eliot_pr127",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-919f7f64b904e1ad687994c7cb7d-1126a5f8ebee:latest@sha256:eecf4a198d2674c72cf04c49aa1a99a5b482c307e5fcbd58ed00abc85abb0e70",
+  "foundation_key": null,
+  "erofs_bytes": 706588672,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:jazzband_tablib_pr437",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-75dc5afd9488913ed7c01156bbc4-11c16203488d:latest@sha256:935bfbba49d4a6f5f90721a04bf0222300ea6fe83575b8b7c598f0afa5fcdd22",
+  "foundation_key": null,
+  "erofs_bytes": 834404352,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:jazzband_tablib_pr449",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-5668b75252e1f61f632ab56d0e60-32819b872b7e:latest@sha256:edda3ba8bee87ad1a46f2cacd76283c2233225bfa8d983b127b96bd47ce5e699",
+  "foundation_key": null,
+  "erofs_bytes": 834404352,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:jazzband_tablib_pr307",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-789bdc2594cc8fa5867c3a5ec5a2-a13398179a92:latest@sha256:88afb2ac7a51a1b2f42dde17a3239b04f86cc2862ff374f196fa43786da389a9",
+  "foundation_key": null,
+  "erofs_bytes": 833581056,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:podhmo_dictknife_pr101",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-daf895bc73a03745d26886d41f57-8b4403b3f528:latest@sha256:b851be83d9622adfa1ffe435dac0d632d917b19b33509dcbb1268ad8b7c00809",
+  "foundation_key": null,
+  "erofs_bytes": 700076032,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:podhmo_dictknife_pr133",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-8dd9802dd3752f82b9379be88bfe-5fc42e498468:latest@sha256:3c76ad080cccb36747ffa9c683868b42961a5c769c5da18eb85ff07009a5dcd6",
+  "foundation_key": null,
+  "erofs_bytes": 700080128,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:podhmo_dictknife_pr111",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-68b94a9cbfe8662e423bb5a42fff-b8fc05054199:latest@sha256:bab70ccc3825e1c78dd2fbba6ba72ed94ee8b65c122357d974e9dcfa0434aa5f",
+  "foundation_key": null,
+  "erofs_bytes": 700080128,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:ipython_ipython_pr13625",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-977d8746db51e98e1b9e4363396f-a621f09521c8:latest@sha256:91caffd7067c9aeabfe19b03f02c0a637326dc43a9614954199e580e358b74fa",
+  "foundation_key": null,
+  "erofs_bytes": 807403520,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:ipython_ipython_pr13501",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-abe30136b875b49b60304706c116-1f4c7f0afc0c:latest@sha256:a565919b11f0c890e0032981b8a46ae93b6e967e657fe467df922caab38dea67",
+  "foundation_key": null,
+  "erofs_bytes": 807403520,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-multi",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:ipython_ipython_pr13675",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-b26fa42d4897ac8d0f48601f45de-72d9dfe654dd:latest@sha256:294eb70c726b7bdc6c3eeebba6b2a1c50e5fb289674537a248704c250cd3118c",
+  "foundation_key": null,
+  "erofs_bytes": 807403520,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:facelessuser_wcmatch_pr154",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-296982693c9be8418c9d3813483d-0567a1673b25:latest@sha256:b1f4f12e148930cffd505b332e7f20fcac372f6bf5f958fd3d84210815d4418b",
+  "foundation_key": null,
+  "erofs_bytes": 737447936,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:mirumee_ariadne-codegen_pr119",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-5b62d1a9c904bfd6f70090a5529a-8f267ac422dd:latest@sha256:3cfde22be236aa01e4358c73cba18cf9b92e104bb42b2746b7639535cdc00765",
+  "foundation_key": null,
+  "erofs_bytes": 767942656,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:contentful_rich-text-renderer.py_pr13",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-27a97b7a70798a3ba6713fe0d616-c75e7b62a74a:latest@sha256:b616c2223886ef7d6075e99269bae8a5b68f39109419abaaab05b99bbb3cf952",
+  "foundation_key": null,
+  "erofs_bytes": 774520832,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:canonical_operator_pr101",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-4af4c819f7371a8a333bab1b07a6-708414203c84:latest@sha256:6fbcea829ada309a6d9b170d7951cdbd8231f09008168896aa18ed0fc11ae0e7",
+  "foundation_key": null,
+  "erofs_bytes": 834273280,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:frictionlessdata_tabulator-py_pr129",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-b85d11ba213b9545c05c93aa62b5-842aa9f928f2:latest@sha256:6bb0218ce491cea8b4eb9fa1c2480df558afa0fb123bf8648c861c23a76ba20c",
+  "foundation_key": null,
+  "erofs_bytes": 801964032,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:python-validators_validators_pr184",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-9334f082dce30f7c32f1a5311fbf-5025bd3e04ab:latest@sha256:b815c891434b3be1558aac78ba7e3edc076773f40198eb79e3202f46d3ceb22f",
+  "foundation_key": null,
+  "erofs_bytes": 702017536,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:prompt-toolkit_python-prompt-toolkit_pr1018",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-746c88a2242906412262cf460e3b-8169efaf213a:latest@sha256:c6ec5c595b8e04eb3cc05e6542159af9732bd121c469a76da552940e120b2a76",
+  "foundation_key": null,
+  "erofs_bytes": 712802304,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:jpadilla_pyjwt_pr1005",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-b54bbc0bda9ff158af6435f7fad6-496f0f2fca73:latest@sha256:b8f8a7f7669b5903f4ee60235d421ffc0a7a8e4868b293fd639d8eff229c247e",
+  "foundation_key": null,
+  "erofs_bytes": 702652416,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:mesonbuild_meson-python_pr130",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-3c4211b7349bbe62c2bf94018c41-b2007f1ed34c:latest@sha256:6369840094fd03a29b6d7f16c5224229e94f46c59ae85fa5e518b08789190b71",
+  "foundation_key": null,
+  "erofs_bytes": 712417280,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:sbdchd_codeowners_pr33",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-111c7df3a359c7c526c12b83a647-0d31b120abda:latest@sha256:2ea5ffd4d50e0782caacfc471763dcef7ec6b9b969b219d4093785a4bf8fdec8",
+  "foundation_key": null,
+  "erofs_bytes": 927416320,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:iterative_gto_pr165",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-55b2189667f672e867a0930f2ff1-e8bf1cf284a4:latest@sha256:40abaae7591a0b6b45053dd95f141af67cd64776984d11812d82f11336506f5e",
+  "foundation_key": null,
+  "erofs_bytes": 774225920,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:scikit-hep_uproot3_pr265",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-e7bae019abc6bb9a4e73d1a53839-dc74503477e0:latest@sha256:05681d0b6b2e8d5e52f942d509cfdfb565e50ae0896e197c554831572768c76e",
+  "foundation_key": null,
+  "erofs_bytes": 1071857664,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:pallets-eco_flask-mail_pr219",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-39bf859a9cb625ba2f9f0092a7e1-054609606a14:latest@sha256:6c106fd641620eace2f51acc58b9eece77bc136c5764e2365d095df1a5304b35",
+  "foundation_key": null,
+  "erofs_bytes": 787456000,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:pallets_click_pr1105",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-770768cf726d90ebef7263eb1843-6fffe0ac62cd:latest@sha256:b1e4ccfb1a8e5dc3519ea1a1762d5d1b95ec95b8bb1d25f39e700d55a4db9760",
+  "foundation_key": null,
+  "erofs_bytes": 772349952,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:gristlabs_asttokens_pr114",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-6dd1ac4d201b5bd64164a11d3883-a71c83d28e78:latest@sha256:3a7afbc38d6a042558206779fc0f42723f4d35bf1a298088dd1b323954aa480a",
+  "foundation_key": null,
+  "erofs_bytes": 777830400,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:openedx_openedx-events_pr187",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-a56e3cb57601ef88b043fc9de99b-35bfa808eb28:latest@sha256:39170348d97ee8a98da5da986a1d709028215175834935cf456ea076f3e51e68",
+  "foundation_key": null,
+  "erofs_bytes": 763375616,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:hadialqattan_pycln_pr137",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-afa453972676db1ad082d7dd7c26-cc10bbf3cda7:latest@sha256:cb700015f304cd6f7eb5923a704f3bbe621b76beaadcf95b8fcd58eb00abe5f2",
+  "foundation_key": null,
+  "erofs_bytes": 950927360,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:canonical_operator_pr1017",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-87d6f064473ea76ca957603115bf-9be01ea9b0f3:latest@sha256:f222bc80677735d68fdbad61cfc14782328560f9dec2679fea2d9f8b8f5fc969",
+  "foundation_key": null,
+  "erofs_bytes": 811020288,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:infobloxopen_infoblox-client_pr14",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-6579c100580611fac91fede0dfe8-70e291c825fe:latest@sha256:9bea04657fb01f4b484e1f0ece7f4c4159b9700024b776cddb693e728960735e",
+  "foundation_key": null,
+  "erofs_bytes": 741474304,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:rokam_midea-local_pr21",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-84cb44167cb05d5713e2f61b2e99-3b36c559a70f:latest@sha256:5c3f0fd77c5931b2a86442f46e7748baa1a89114d32509429a6acff9b64ea52f",
+  "foundation_key": null,
+  "erofs_bytes": 785121280,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:mongodb_mongo-python-driver_pr1296",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-17bf1437ad346a4489a6d848a566-985025c58c59:latest@sha256:ebff3e2332fd978c21060f5e815a531b56d1f739e3562c014a4aab01ace992cb",
+  "foundation_key": null,
+  "erofs_bytes": 818380800,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:appium_python-client_pr297",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-2d756eaf2c19a4d6f9abafb9f00a-80aaa1b3cdfa:latest@sha256:ab120c117ff47199e2e531b02846bc14febef49fb156d4f76db2aee892953798",
+  "foundation_key": null,
+  "erofs_bytes": 775823360,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:jodal_biip_pr169",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-d9005b8329b39e6903aad2da0def-7428be4cad44:latest@sha256:f10e2bfa7fd17825cec2f7a1afab31af9c16cbf6c167b7b3b96fb6059891352f",
+  "foundation_key": null,
+  "erofs_bytes": 858062848,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:frostming_unearth_pr10",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-e916d89c8ac48ba3903ed1e5a962-96f113010118:latest@sha256:8afd6c33febc9c86dfce0d0cb5b87d7bfabc476314c874e30a272c344ecf39f3",
+  "foundation_key": null,
+  "erofs_bytes": 842092544,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:pallets_jinja_pr1098",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-89135ec5ba7c5d1bc520555b4549-4c7e528dcd7f:latest@sha256:ae54e7ec1ff035e56393148421ce0310ed6e9e85bc4cdefbdaf7c4be70504e78",
+  "foundation_key": null,
+  "erofs_bytes": 707842048,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:burnash_gspread_pr1012",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-809ab9ee477d99304a22ea3e0880-d92ddf8c4a4d:latest@sha256:2673edec67028420a81ae08be5200a32c9253d214f2c9fa80e7cf419c661ec98",
+  "foundation_key": null,
+  "erofs_bytes": 712474624,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:mongodb_mongo-python-driver_pr1277",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-0930e7fce09115d4c87b9a80ccd9-bfe852c31100:latest@sha256:690b2bb1278e653fdfbc8e2d805c3e52d691c637881192f72a2c5a3dd3e3836f",
+  "foundation_key": null,
+  "erofs_bytes": 818380800,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:valohai_valohai-yaml_pr103",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-fd3f7b64daa2ef35b4f217e27681-c4503a8f14a1:latest@sha256:7c97463a17dcafc26d4bc71bcfc35c9e13cda3939ca8876ae0361c04e3065795",
+  "foundation_key": null,
+  "erofs_bytes": 719429632,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:hakancelikdev_unimport_pr108",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-f7875b6c546ca377f14f4abdd665-83589052a4f5:latest@sha256:a27648eebd7c6abf8f6d74497a1beb89dd7e3cb3799c761cbdfba51789dd2a4b",
+  "foundation_key": null,
+  "erofs_bytes": 727969792,
+  "remaining_build_work": []
+ },
+ {
+  "group": "scaleswe-random",
+  "family": "ScaleSWE",
+  "cached_kind": "source",
+  "image": "aweaiteam/scaleswe:best-doctor_flake8-functions_pr5",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-1a90074ec9efdd860312a7945ae9-dc90b3b6038b:latest@sha256:e864541506747f9edbed46d93b8dfde3bbe69ddc3820adc73d88ae7a9d111bec",
+  "foundation_key": null,
+  "erofs_bytes": 830795776,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-Lego",
+  "cached_kind": "source",
+  "image": "jierun/sweb.eval.x86_64.reata_1776_sqllineage-107:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-dc20a4ac4419e55c788586e142bb-53bbd2924d80:latest@sha256:250812be820fdc30ce716f0e1456af7a8155d1db31812df587a15ecc34a4426f",
+  "foundation_key": null,
+  "erofs_bytes": 1775427584,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-Lego",
+  "cached_kind": "source",
+  "image": "jierun/sweb.eval.x86_64.wright-group_1776_wrighttools-1075:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-b18f66749e0af475bef14b264f3e-dccf1f5e1556:latest@sha256:aea65c40537017b5f659b481eb7713e8f55d078c850be1fc84b60a0a7b12215e",
+  "foundation_key": null,
+  "erofs_bytes": 1998798848,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-rebench v2",
+  "cached_kind": "source",
+  "image": "prime/primeintellect/narwhals-dev-narwhals:1430-2c368d2",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-51ec1ba64dd60324d68874b6ab3b-47453d00c7f2:latest@sha256:b738034622345d70944afa0b2e62a437c390fd70a991d0cdc5e1d09d3fac9b48",
+  "foundation_key": null,
+  "erofs_bytes": 1589465088,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-smith",
+  "cached_kind": "complete_recipe",
+  "image": "swebench/swesmith.x86_64.oauthlib_1776_oauthlib.1fd52536",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-5040ec4f37a9b4d2c428e3cea9c8-ca4f352c5812:latest@sha256:67abe412e0b75442a1e605daa339665d57e1f1e587984ad625d6b871e5303437",
+  "foundation_key": null,
+  "erofs_bytes": 1972113408,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-smith",
+  "cached_kind": "complete_recipe",
+  "image": "swebench/swesmith.x86_64.vitejs_1776_vite.8b47ff76",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-92a938a5290dde51c473f27f043e-02e230ff168e:latest@sha256:1a0a78151f4c7c1f64a91580ac73d2ccbaac4fba089debd36be6402c89e4eb3b",
+  "foundation_key": null,
+  "erofs_bytes": 1109217280,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-rebench v2",
+  "cached_kind": "source",
+  "image": "prime/primeintellect/casey-just:1116-fecb5e3",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-317b6967a195636bec6e2b9f809f-606efac8d171:latest@sha256:299d3ca58498d54e2347be7ede4cfc29e83d048981f9c6630d4adc084ea9df3b",
+  "foundation_key": null,
+  "erofs_bytes": 2542170112,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-rebench v2",
+  "cached_kind": "source",
+  "image": "prime/primeintellect/vyperlang-vyper:2871-42a372e",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-2dc0b0c9164ad8155c943f45ec28-41aca2fe22ce:latest@sha256:74f934da31dff37901356bdf62f60ea201aac5f4b081ec729387c4791fc3b867",
+  "foundation_key": null,
+  "erofs_bytes": 1429938176,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-smith",
+  "cached_kind": "complete_recipe",
+  "image": "swebench/swesmith.x86_64.bottlepy_1776_bottle.a8dfef30",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-bbe10a332fb1a6ed9821c4cdc400-a80d384f5939:latest@sha256:7e59093910a55de505d7d0b198249da4531eaf635b1ddebfda1186b23462c478",
+  "foundation_key": null,
+  "erofs_bytes": 2036269056,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-Lego",
+  "cached_kind": "source",
+  "image": "jierun/sweb.eval.x86_64.ipython_1776_ipython-10263:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-00e05e3dda897ddb5251a3d23358-34b3e3736343:latest@sha256:020fc9849cef9e577fa0c0d0402cd335c7c77d1b72d575d1cbd1bf607b0e444d",
+  "foundation_key": null,
+  "erofs_bytes": 1643917312,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-smith",
+  "cached_kind": "complete_recipe",
+  "image": "swebench/swesmith.x86_64.workiva_1776_go-datastructures.18d77378",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-68ebc41d32b928c22602057da9e2-5eeb6aea8dcc:latest@sha256:f1f06cb08c3dfda2e95c6101ea535cad925d6a036309df81f978aa84baaaf2b2",
+  "foundation_key": null,
+  "erofs_bytes": 586854400,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-smith",
+  "cached_kind": "complete_recipe",
+  "image": "swebench/swesmith.x86_64.antvis_1776_g6.91c0ac85",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-91b5cabe9e97aa31bb850858de82-49d55c3a5900:latest@sha256:7cd1fa61a9594fca766953d45e9e7d9f1e4c321c611039bfb3f1e270ce76c49f",
+  "foundation_key": null,
+  "erofs_bytes": 1634566144,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-smith",
+  "cached_kind": "complete_recipe",
+  "image": "swebench/swesmith.x86_64.davidhalter_1776_parso.338a5760",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-583796b6b9a639f805c48418dea5-db93fa91df0e:latest@sha256:555ddf0f1915262edca196860a9abe016f45a8685545abeb498c633e502121b6",
+  "foundation_key": null,
+  "erofs_bytes": 1955389440,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "R2E-Gym",
+  "cached_kind": "source",
+  "image": "namanjain12/aiohttp_final:28342351fd0432bae9ef5684779feca25689e249",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-ea7904e01b10863230b2f7d07ccd-e90f48b614f4:latest@sha256:00451835f0d5fa3bdb8c3c7e1f84bd70e2e644580e05a292bb9566a26db40d66",
+  "foundation_key": null,
+  "erofs_bytes": 741883904,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-Lego",
+  "cached_kind": "source",
+  "image": "jierun/sweb.eval.x86_64.12rambau_1776_sepal_ui-747:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-d9b61f5f42f54c8deb5fa8c1a461-46bf9a2b4ba8:latest@sha256:ccc0bb0d50bf114374e8298b939011d44f5c15f02a604f3d51dc55fa715ba922",
+  "foundation_key": null,
+  "erofs_bytes": 2367754240,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-smith",
+  "cached_kind": "complete_recipe",
+  "image": "swebench/swesmith.x86_64.trpc_1776_trpc.2f40ba93",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-3773ef94bd1288c61b8c347d0c3b-e5559bf85f36:latest@sha256:d40c8c0100e5992d07a0dabb343a1c5948a1a05508265a178fd0621e51a807b9",
+  "foundation_key": null,
+  "erofs_bytes": 2676002816,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "R2E-Gym",
+  "cached_kind": "source",
+  "image": "namanjain12/aiohttp_final:2c7f760e00dd695854322f86cd5f1c2b1289c983",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-3e2b0f7ae3b9457073c6a855be63-bd0f1c1466f4:latest@sha256:952aeb78d9ae8a9acb951dbb0bb2c42e380b81531739fe682431391659f0bef1",
+  "foundation_key": null,
+  "erofs_bytes": 710356992,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "R2E-Gym",
+  "cached_kind": "source",
+  "image": "namanjain12/aiohttp_final:306b4d0c4cbbf5e6257179f281254153517a5fc4",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-7a8734534de3f1b503d1f0de7489-529bf3e562a1:latest@sha256:9f4d62fc7e12b19cb94dab1d86c01eb4087d019c836afbe4d1906beadd25b0f0",
+  "foundation_key": null,
+  "erofs_bytes": 977133568,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-Lego",
+  "cached_kind": "source",
+  "image": "jierun/sweb.eval.x86_64.astropy_1776_astropy-16127:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-a351bce2fabe1c86d7ef3d340827-afeb74679690:latest@sha256:1407d2e31ef7db206842db025aed757530fcdb9e9edcaa19b3cdaf1fb17f2c4d",
+  "foundation_key": null,
+  "erofs_bytes": 2266783744,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "R2E-Gym",
+  "cached_kind": "source",
+  "image": "namanjain12/aiohttp_final:1a389a53b21305d05cbe9f4fa64b271b5c42015f",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-f7a111117074f3438bd0087c943f-59359299cbcb:latest@sha256:ed8051e38df4d2ecbe342cdfd207efc600a3ad099acc078cb178c835f0c8b863",
+  "foundation_key": null,
+  "erofs_bytes": 817364992,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-smith",
+  "cached_kind": "complete_recipe",
+  "image": "swebench/swesmith.x86_64.mahmoud_1776_boltons.3bfcfdd0",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-4fd3c76bdb8f77ea9607dc3afab4-4101dea9e4a0:latest@sha256:e6cb95df88f8f77e194a8607b7352ea10d40e509fe08a17a2cbdbd28fdc75701",
+  "foundation_key": null,
+  "erofs_bytes": 1969250304,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "R2E-Gym",
+  "cached_kind": "source",
+  "image": "namanjain12/aiohttp_final:274c54e46c11e6f527326a3574eb984f90e0f740",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-1d3faa407cb16236e8d59002c571-977fc0bc73dc:latest@sha256:ee5250f664da7b31c833536554d9b4423955588d55bfde8976a20e96fa0bc3c7",
+  "foundation_key": null,
+  "erofs_bytes": 803123200,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "R2E-Gym",
+  "cached_kind": "source",
+  "image": "namanjain12/scrapy_final:00527fdcbe042ae5b3ea06e93e03a8a353d0524c",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-141cd50ed18869a9ef0215e3fddb-dc37892b9342:latest@sha256:f48f431b176b4719b87794204156ae0a6f0d83d542c3720696259ce7c9057ecb",
+  "foundation_key": null,
+  "erofs_bytes": 599490560,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-Lego",
+  "cached_kind": "source",
+  "image": "jierun/sweb.eval.x86_64.sphinx-doc_1776_sphinx-10429:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-404fac3d151cbf13b2d8c08379c1-d00aa140d5e3:latest@sha256:92e7311445330aea9e2bda3b2b2cf3257a2f12b89330cc6f2a5907e7bdbd96a7",
+  "foundation_key": null,
+  "erofs_bytes": 1708232704,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "R2E-Gym",
+  "cached_kind": "source",
+  "image": "namanjain12/aiohttp_final:259edc369075de63e6f3a4eaade058c62af0df71",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-24a6c83694d58711a66d22b67cfe-589cca4b247f:latest@sha256:5531e2552a25fccd44d551f1adea2ba93cd78f9753565010f1e6dd88706c7f49",
+  "foundation_key": null,
+  "erofs_bytes": 819171328,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-smith",
+  "cached_kind": "complete_recipe",
+  "image": "swebench/swesmith.x86_64.iterative_1776_dvc.1d6ea681",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-a174f1660f3fd6c35f3239b4c54e-99f3ade935ae:latest@sha256:500dbea4cda624aaa334ee5880286546e0b75df0101953abc0957e4c050c41ff",
+  "foundation_key": null,
+  "erofs_bytes": 2493132800,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-smith",
+  "cached_kind": "complete_recipe",
+  "image": "swebench/swesmith.x86_64.gawel_1776_pyquery.811cd048",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-2d59a22dfd789f1ca18bdbdfb8c9-1adbac0b28b1:latest@sha256:729ddede04eab4f4723a381c554d39c07a5241189648f82f856142f364a3030b",
+  "foundation_key": null,
+  "erofs_bytes": 1973227520,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-Lego",
+  "cached_kind": "source",
+  "image": "jierun/sweb.eval.x86_64.cekit_1776_cekit-416:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-364e9e293b2d4dcdae4fcfcb90f2-38c86a770274:latest@sha256:ee729f49ccf890794275c873b3de378fd8295498275cad645c6cd213301cf935",
+  "foundation_key": null,
+  "erofs_bytes": 1529679872,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-rebench v2",
+  "cached_kind": "source",
+  "image": "prime/primeintellect/typescript-eslint-tslint-to-eslint-config:126-95c17ca",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-abd8e00aef77ec8527b43e113148-586a11b7c116:latest@sha256:0da4b0a52aaf7bf357cc93e56d3cfa06f46588cbfee7b229e4fa4a7c90af28bb",
+  "foundation_key": null,
+  "erofs_bytes": 1857609728,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "R2E-Gym",
+  "cached_kind": "source",
+  "image": "namanjain12/aiohttp_final:400feb641e51f3b9afe0eee9c73cafcb8a0d3744",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/shared-task-401a37add82b9480e2610161c619-040623a5413c:latest@sha256:1b4bad6b00dc4dbdea74b3f46ffe0d0590e9c02f0fb7841bfdb7b9d7c9a671af",
+  "foundation_key": null,
+  "erofs_bytes": 876032000,
+  "remaining_build_work": []
+ },
+ {
+  "group": "complete-other",
+  "family": "SWE-rebench v2",
+  "cached_kind": "source",
+  "image": "prime/primeintellect/kayak-pypika:112-db70dad",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-ab2bc50d8550743a4745eb2bc64a-586a66b66c16:latest@sha256:9535f2ee2796974e42ccf50677ffa10569e12e19c0873253f7fb1913c56a3a70",
+  "foundation_key": null,
+  "erofs_bytes": 1234579456,
+  "remaining_build_work": []
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_003753_0602e9c3",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-4c8788f87fd8a976f-b2caf05072fc:latest@sha256:d65ceb372ac04d9beee6584f397844169e02809c97cf4886de463febb959cbe4",
+  "foundation_key": "4c8788f87fd8a976f6725617c7f89fa9cca652b5de1f0b1f13931d89aa362ccd",
+  "erofs_bytes": 379752448,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_001367_c937e1f1",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-7ca032f16c616620e-4139a84847eb:latest@sha256:e44e43965b498faddb65f0987079e7ec6acaf33f104b070ff6183650b00112cd",
+  "foundation_key": "7ca032f16c616620ee3d70578cb01250963171e2e3c9fa776f8cf23d33e7f868",
+  "erofs_bytes": 544813056,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_007282_7d06d241",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-3af2a12732e6aa58e-0f71a10658dc:latest@sha256:96ecb2181e789c8af5e27310c6ba15d068e097753808b2d315c2fccd389988c8",
+  "foundation_key": "3af2a12732e6aa58eafb9b24b74caf185d456e38b4d6408028ef7e250444d410",
+  "erofs_bytes": 407666688,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_006793_24b79c11",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-060bcccc82cb3ce15-64fc141d2743:latest@sha256:5f069c5e7453eb95e12f06daf47016df34c164980c0b3d8273070d252eb702ad",
+  "foundation_key": "060bcccc82cb3ce1539b3bc64171f7eaf149d94b661c88a83e166904e2bb5e88",
+  "erofs_bytes": 394559488,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_005833_c6d6fcd7",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-4b85d67ad48771792-c80d57297a56:latest@sha256:b091c073c4b844e4479b28e118111bcea0d01ef20189f163c1edcb4eb4a3ea74",
+  "foundation_key": "4b85d67ad48771792ed06aa319ece158d28d8d17ec7ff8a21a46dc07300a52c1",
+  "erofs_bytes": 583843840,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000751_b2bfaa17",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-64a7fe35fe3358a46-784179c68dff:latest@sha256:90b5fac00eae9e225770b5bd8ba3e01baedf43e2ee40f810e512bc3a0ea110cb",
+  "foundation_key": "64a7fe35fe3358a4605e46fd1500a2d19970d818896e7c88e05c6ddb04527822",
+  "erofs_bytes": 395898880,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000119_84a08499",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-1ff286abf6f1ba916-5239c0abb0cf:latest@sha256:b2a1b51d9dadc7804f9887571f58a9b9f65789ba8259653ebc8c8d28d69f131e",
+  "foundation_key": "1ff286abf6f1ba916b5a4624731e48524449267d89f4010085f7ad2f84e10141",
+  "erofs_bytes": 362852352,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_001511_057fdc97",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-d39d00701bdea12e8-14ab03b9aeb4:latest@sha256:92543e094b8c28d33efccfad5d18796ba5a2006c1e143274b1d214e427429461",
+  "foundation_key": "d39d00701bdea12e88abf30b1503033bc2c9187957681813d22cd4d14009c1a5",
+  "erofs_bytes": 363061248,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_007313_c1bec0f6",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-21b85099ca6a55bae-56694e699fa4:latest@sha256:7cb390f4f31fd783ee73d2937b1b9340fcc270642bc461d2c263c65d3820239d",
+  "foundation_key": "21b85099ca6a55bae66d196a39d5136a316cf37b7e496b43bc484ae6d6ae2925",
+  "erofs_bytes": 599494656,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_003808_0fa35cef",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-4c10b1571a7a091fe-98f0e7b4243a:latest@sha256:1f9ab95d9645d658529fa00190917304e36cce02900799b2163518687c45a331",
+  "foundation_key": "4c10b1571a7a091feb9bc0cf5a93ceb5bb838a61049e23fa2afcb883f5e04ce8",
+  "erofs_bytes": 624046080,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000018_3997ce32",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-3368ef2ca9992b5fe-537968e32fb8:latest@sha256:b55ea9ea8051a5fc3651198a5638b1d0fed20fb06a92eccde9ba87564fd96373",
+  "foundation_key": "3368ef2ca9992b5fe3ac8b1faaf12bafc1375c3e3fcbb27b3f255f7d067b26e0",
+  "erofs_bytes": 363573248,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_007436_443a382f",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-4aa0ed7607fb753ef-de4ab5f21110:latest@sha256:7fccfca49370b5a241277718f173615cfa172bdee7664de957dfc01da339210b",
+  "foundation_key": "4aa0ed7607fb753efbecebc8886786d9336c3f7609539560d80a7d20c3ebee3a",
+  "erofs_bytes": 367030272,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_002203_dbf2c9fc",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-33d03c54ba42d034b-d7b31050eb84:latest@sha256:8ce668c021c46e98be3af0db00074bc41544d529c19100a769105badfc88857a",
+  "foundation_key": "33d03c54ba42d034be1de3881f79e632e8406f61107b9749b6648e1a581ee23e",
+  "erofs_bytes": 653697024,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_002918_09c236b5",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-5f2e8fe73ba627636-cd47378f1d0d:latest@sha256:e41e20b64f9f6c165cf96a96ad921c785bbec39939f76bac99bff5ae450d7297",
+  "foundation_key": "5f2e8fe73ba627636aa12d25393f6c9f5dfc89fdecc081c8cdb1c453bc839fa2",
+  "erofs_bytes": 363511808,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000202_955e3f2e",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-8d26c0867eec694db-3901cd5d10c1:latest@sha256:1b7c2c9dd545a8d60072396a8eed2f0ab25becbb024aed8b5d41eb87ea514552",
+  "foundation_key": "8d26c0867eec694db6127b7bb8e49bc8a06ddfca50bcacc4beec13e5dff3e1d7",
+  "erofs_bytes": 362852352,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000048_b0bd6829",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-52af7ea2da9f20d86-573eca610b5a:latest@sha256:eb7d45beacedfec294b594312b9cfd90fa5ab49cd9520c48ad0dc51b8a5c0bc4",
+  "foundation_key": "52af7ea2da9f20d86b060f70b4e92ce474fc8248220223bb805315cb1beabe64",
+  "erofs_bytes": 365551616,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000606_5ff4803e",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-a04b547af9a6484ee-ae36654f4e9c:latest@sha256:9657c25a1338e8448b1dacc74d3147f50e6eb3f00cabbc8a3a4c7086aff08b4d",
+  "foundation_key": "a04b547af9a6484ee22fb4e992140ad5a730109995324c367238231e0a31beef",
+  "erofs_bytes": 364310528,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000383_9e0f615a",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-432d6103222506315-d9a5245d6660:latest@sha256:cef00c1458176ce5596244e2356013453039b1cba39d7181cef2d9dcdaf82f04",
+  "foundation_key": "432d6103222506315f968b579545ec84d3437ffeeff4a8db201165e8bf9b695a",
+  "erofs_bytes": 586731520,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_009456_2320b661",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-4b4df6dca34bda491-47537d743298:latest@sha256:cbabd495f7d9b7c81e7a78dc894731441497e1bf746db62ef3732a7ae83f5081",
+  "foundation_key": "4b4df6dca34bda4912104c28d35e15fe8aa1b82d770d794b2c1506a76f3de1e1",
+  "erofs_bytes": 595292160,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000024_d94c710d",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-02ea13488a7593200-7b28afec4c45:latest@sha256:eed21396362ab0887daffb0f14dfc93d3b0197e585272e9ec2addf863d38805c",
+  "foundation_key": "02ea13488a75932003ee6327f404f1cf9b0a5fb1ddda1d84775b8de4f8a2eca5",
+  "erofs_bytes": 377241600,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_003389_6f2c451e",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-bc56ac2f4e624fead-95676f69a62f:latest@sha256:dcb2a3b47259609108cfcf40b969c15b2ab60ce2fe1b49c6b2a61bfd35c8526a",
+  "foundation_key": "bc56ac2f4e624fead809f7e0abb62de46abb8eb7f65f4f8d208fb9d8a1db8b3a",
+  "erofs_bytes": 363548672,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000248_ea207306",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-2005e4abca4511701-a3aad679aa58:latest@sha256:e74cc1565b2b05bd2f1b89f1384d56d48e07472ebfdd5a3d590f851dfb3f3aa8",
+  "foundation_key": "2005e4abca4511701b7d19d7f4266e2d8c9e042b85f2ece86ac324c5edbdc842",
+  "erofs_bytes": 364044288,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000183_2ce41474",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-a1b61b2fb995eb922-70eeddf4d899:latest@sha256:475de84fa2317fd55d0be0348e2ef43e05b36c0774b9824dd64b2396dc8f3941",
+  "foundation_key": "a1b61b2fb995eb92228f5e49a0c4f37c858a911042acb616d6db340d5ce55239",
+  "erofs_bytes": 530923520,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_001167_83b72956",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-92dceba52a791f0bd-f241e24611b3:latest@sha256:c4419da94172a872d807a835d719288b553a5b16e8189721fbed5e51bc00487c",
+  "foundation_key": "92dceba52a791f0bd861112e14740d9c4593bc47e82579eba9701cea54115240",
+  "erofs_bytes": 362852352,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000426_f9bb3e45",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-77c719c8499dc67f2-a7271460b073:latest@sha256:e8e77230f3fd3d5f9c644207900145575c4b7b3c248fa27d600f814d2d601e8b",
+  "foundation_key": "77c719c8499dc67f2c5f9fbc41fe7a70d66776412d7e6653de008489a11a53d7",
+  "erofs_bytes": 403509248,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_007881_2f73b6e4",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-0470a2db89da2c111-a9f0fb66de25:latest@sha256:81eea4ce1d04aa51c27d75633b7cc5aba8e29b437254250fc733bc38c54bb860",
+  "foundation_key": "0470a2db89da2c111f276684561dd26f7dcedbfdf89f5a66cbd8102b520c9a50",
+  "erofs_bytes": 572198912,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000003_b73a4413",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-35f7e719729f48891-3384bacc0e05:latest@sha256:06a5c2587559a51375828692a535c7cf1ebdc9f539a1710b1cc0eee13bb3a72b",
+  "foundation_key": "35f7e719729f4889115e6896fe3e363e8150ae9c40fb02587bc3a58902bbf0ab",
+  "erofs_bytes": 362840064,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_004195_d2f12424",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-2c56365e9f55a59e9-55b9fda37ae6:latest@sha256:f4fb44a70732fa3f453673762305f78a0885b70158b1c80eb50fd91bc52a4784",
+  "foundation_key": "2c56365e9f55a59e9a447f7111c90346673c0b357bd9494d9453ea49a399a71a",
+  "erofs_bytes": 393875456,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000431_2f102c56",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-50fcf3d66e6330fef-252281d9b406:latest@sha256:c7fc2c9d566a4742689523c78884f80967bdc3ef03c3fa2498364d130a439d6f",
+  "foundation_key": "50fcf3d66e6330fef3c36e685fb166141ebcbdebffc32d335d925ade2ded7033",
+  "erofs_bytes": 364224512,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000400_2d48d490",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-e0409232d2e7667eb-4f64968c9908:latest@sha256:73091b164e3ae7dbd00600dd0413b9776272627a0aed2bdaecccbd2fbb238345",
+  "foundation_key": "e0409232d2e7667eb350bfcfd6e3b18786a004ceb177a7ea25b55532a82bcd20",
+  "erofs_bytes": 362852352,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000944_bd55a239",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-2aff17ec970c580b9-64d467f60576:latest@sha256:41cf51c4aaf066147aa15dd32997633940a85a3d92457d7a953c6b838705b03d",
+  "foundation_key": "2aff17ec970c580b94b0c910fe5edd9c59440bbdd02cc63ef98e766f10cfd7f1",
+  "erofs_bytes": 368115712,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_006453_f0fefbc5",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-14a3b19fcf0f0f3fa-17c15354e865:latest@sha256:134d9ccab7c1834084c8e05ba9232b2ec3904343bce9efb41838ee7f3f4edb1b",
+  "foundation_key": "14a3b19fcf0f0f3fa551ab5bcde840c5fa061a3e0b101d9e77ba904b45fe3adb",
+  "erofs_bytes": 362852352,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_006925_af294631",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-1ba26b808a587ee4f-b437854bf0d0:latest@sha256:036e476b1e928d52dd0392bb6de8930b304cde8f49653541385b7927fe31f2f5",
+  "foundation_key": "1ba26b808a587ee4fa1f802bdea33ed239c08c2f7cf3f6befa6e4b13495c8e4f",
+  "erofs_bytes": 619622400,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000489_2d75118e",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-5323f5c1ca2802f34-7dae3b0dc79b:latest@sha256:aa23992615cbf913c28becd5114fc629d09035efd2e00d1e6b1d25be9225f4aa",
+  "foundation_key": "5323f5c1ca2802f347985b87f3aeac129d7e6746722a18041dde6ae1ec2a6b31",
+  "erofs_bytes": 372146176,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_003969_4cd55c63",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-e37685da9003f4e53-4fbdfd180a1d:latest@sha256:241dff96f009675589b6553d6278b09bf28dd7ec821d13bd568401a0aa1c50e4",
+  "foundation_key": "e37685da9003f4e5310b04d3fc356c1089aec00c1b8bcec50ca26b4af3b15dfd",
+  "erofs_bytes": 585293824,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_001693_0141affb",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-1644db751908d15bd-0f3fbfd92719:latest@sha256:8a030d0ac3eb2e87d82b1fdb54b31aa0b663c6fbf8185e9139b33546884ffd12",
+  "foundation_key": "1644db751908d15bdde05c3e3b478afa114b6c4cd669345d0d9bea73ab50377e",
+  "erofs_bytes": 537247744,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000882_23073fc9",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-5faa154dbd608db91-950c1ca3c28a:latest@sha256:02c37d95e470f3bab1b82821f44b4694f5e849c0e76decb196a3fe7197b58125",
+  "foundation_key": "5faa154dbd608db919fa3253daa02e474dd9d0404ac406bc6d83ba6c27df5a16",
+  "erofs_bytes": 362852352,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_003670_dab2c975",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-0017aea9dfb05c8e7-4dad6ddec4bc:latest@sha256:dd2a1759464f56f64291df918b848eac3ec1597c3a8c70ddc6f7b7b43e5ea12e",
+  "foundation_key": "0017aea9dfb05c8e7cee7dcb6478c36724886bab0a47915132591d6ca971df28",
+  "erofs_bytes": 368115712,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_000643_fb83fed2",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-5d94e09a25913c7c6-2599877d0e05:latest@sha256:9ebb0f8ac03bdc54d028efb8a2f331b137bd2adac9acc75929c2923f857448ed",
+  "foundation_key": "5d94e09a25913c7c6f9c8af1c8787af2a31790314c32dd65c6d8dbddf3be4b66",
+  "erofs_bytes": 594026496,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "tmax",
+  "family": "TMax",
+  "cached_kind": "foundation",
+  "image": "prime/primeintellect/tmax:task_004109_99aaa9e8",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-1cebe57987b4a35ed-681f49b4ed6f:latest@sha256:1d891b000c44bc4a750ab1c4c8fa278d94eeb306975a9575ed57ffb54988b4c9",
+  "foundation_key": "1cebe57987b4a35ed110214c15eaeb15d302233ca33ded0abe137a840c48f9a3",
+  "erofs_bytes": 367362048,
+  "remaining_build_work": [
+   "context_transfer",
+   "run_requires_qualification"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/004302:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-ff46ba4e42ce5-106e9a93eea4:latest@sha256:b45eb1fe5a9678b89792342d97b3a502680faeb6b6b8407f9274f336a775bd0e",
+  "foundation_key": "ff46ba4e42ce5d20602774efa8d1d850cb7a40c7a0b6bc7570a35b8986d20f86",
+  "erofs_bytes": 157466624,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/014749:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-01ea6f5badba9-d5d96b7acdee:latest@sha256:2c66f86a670e640af34cfeeacb1f08a8c65567de3c25f061873d2c81db120bc9",
+  "foundation_key": "01ea6f5badba9de27b513f05658f6924617a6e11e17e8cbc7a5ad694158a5bf1",
+  "erofs_bytes": 536805376,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/002247:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-a9384f249da93-8d370d215445:latest@sha256:81ed5fc10984580e2c6fdca34bd59ab55e9beafc59da95d8afee19823efafe5b",
+  "foundation_key": "a9384f249da933e68305c20cf63f573002f37d3ed394f70b86e6e08b5006f5d4",
+  "erofs_bytes": 83759104,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/009429:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-c836c86a6be94-0b38c67d4cf3:latest@sha256:f1c35f08bb0660d864aaba6c7892f3dd776544a109e78299ca2076eefd9a5df5",
+  "foundation_key": "c836c86a6be94b865a21466d0342a14e67b77c5cac8714369d5f9df9ace60e18",
+  "erofs_bytes": 140476416,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/012504:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-1433ff3cdc195-c06b14cdefc4:latest@sha256:53307a4e89209fbd37f5f02c03230ca90caae92d2ee1ba478834518b37a68600",
+  "foundation_key": "1433ff3cdc1959942ba291547c8130c96fe2c20303bb38af2f97a7f4efa6e344",
+  "erofs_bytes": 139202560,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/006465:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-3dd6dfbdb13d8-3b00b818dc24:latest@sha256:0cb43f6834c0917ea442894e609d719bd225b226c5be8ad8d35da8f7141dda31",
+  "foundation_key": "3dd6dfbdb13d8098fb845880a4ec25b81c039d00737a8481496f9f06a229899d",
+  "erofs_bytes": 177733632,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/004662:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-676838d51a61e-cf1005e365e4:latest@sha256:70bee568980ae5c6d5eb686959b0ad25e887da185a7fc223f1c12bd728b52a93",
+  "foundation_key": "676838d51a61efc6d063e65e34045236ad5536cc6f432d14796fc061cadac6cf",
+  "erofs_bytes": 117809152,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/003173:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-7a5f572fd6a91-a397ae29061b:latest@sha256:802d77a6d423d02e0a5277ecd31a057f65bbd9a3ea92b4b61e0ce85ccfc3b03b",
+  "foundation_key": "7a5f572fd6a9104c79b9fe21ce34b710ce4291398485a096c5066cb86ea3b85c",
+  "erofs_bytes": 106758144,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/002553:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-324ddd5dfb15e-9d082df4b81a:latest@sha256:15b40d20588feb0023ef940f07663a75dbebd5400c67dc5c915f070e66719ff5",
+  "foundation_key": "324ddd5dfb15ef74e97b19811e9ffae65874ed622cb7180fbedb685a11fab6cf",
+  "erofs_bytes": 124424192,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/008827:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-1c7432a1ff375-4e162f9d05e0:latest@sha256:8e87d5508235230df50dc0b0d5342db0e1b9a96c1e91e9d34c50fbf96fe817cb",
+  "foundation_key": "1c7432a1ff375b777c8676aa062ef3d1d8c0864c9aee594039dba06d20cb6a88",
+  "erofs_bytes": 94142464,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/013054:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-895cff1b47774-985a42f6dab7:latest@sha256:3f1935cd0ef5c68164802ac47d99c9ff3b3d31e0d3d7033d4515fc11f2a67d41",
+  "foundation_key": "895cff1b47774b3c359df0155877b21f84223c8b307d547459d8e4c6b07b375b",
+  "erofs_bytes": 80064512,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/000055:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-473beb5dabf6d-7a9c4b57e5ee:latest@sha256:e070796255d6e0c1d5d6a3583e69ce61ae04f17b885b28e4ab61b67f48ca0c48",
+  "foundation_key": "473beb5dabf6d33a4ea5b6cd5fb491b44fe8a850c8edb7174b5fac662fc3d38e",
+  "erofs_bytes": 49987584,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/007241:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-26a049e692b4d-806cbb997fac:latest@sha256:966658e2cbfe79a76af200bc82075d3eb99e3645053fb1a8b0c17fa2d5424127",
+  "foundation_key": "26a049e692b4d7fea35a6cacf8aeaad04253a1fd8f6abfeb5062d17f846c5a4a",
+  "erofs_bytes": 310104064,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/003953:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-35f39d5a52d9b-f9c5f5e3968d:latest@sha256:5960d7a68280d3635e68009facf6b150001ee43c35a405e68d53554906575524",
+  "foundation_key": "35f39d5a52d9bdfe42623526ff6eca21f57871c20dd468c976e40566e2df3514",
+  "erofs_bytes": 174051328,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/011293:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-86a7fd2281816-76b8dcf761f9:latest@sha256:6ef0b8f7345946d733adf50805dfd0ea46c30dc301cb1ff006c0399463000a34",
+  "foundation_key": "86a7fd2281816a3ca5d85ccae68222a2468ee12473af0413167c5e4d12cf7afe",
+  "erofs_bytes": 766513152,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/005720:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-670cbef06d4e8-3b4bc9ee2d35:latest@sha256:0e168f7077dcf048f3e8ed8e9c67b37ed36697046e7befb9fad52d46f0425ea2",
+  "foundation_key": "670cbef06d4e8fa8e7137a61901336b4b6fb95ac300481a8dc8d1705bafd2e0b",
+  "erofs_bytes": 500973568,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/007461:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-859715d4048e7-02bdaab24f74:latest@sha256:936764e7cae2ac6602a91f5ba227c465227a5ae2c95f2164d3fedc0b96514bf3",
+  "foundation_key": "859715d4048e7d4970ca459eb6eac3769a877090f5bb33204b0f7240c6030eab",
+  "erofs_bytes": 526729216,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/005255:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-70b97295964b9-b7a0fdc16e3a:latest@sha256:359b882bd31a4c132d39fd0bda8d9e051795191af7af4b6b56a34102faecc309",
+  "foundation_key": "70b97295964b912f1301b77bdb506f5d5dd5e64b65e33766b332f7474dbaaf1f",
+  "erofs_bytes": 83959808,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/010960:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-9c78c44385e25-f5b50aeb286a:latest@sha256:c38db9523ac78626d70039e7ec49364b493662eeb37aaeb79905e3957ce97559",
+  "foundation_key": "9c78c44385e25695321c74cc43db73c637b89e53cc05411b8b8e3ae30eb9cfc5",
+  "erofs_bytes": 80531456,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/000027:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-0b6f94824a90c-9148f7d060a1:latest@sha256:f8f5a0503aaabaa0f7ccf1bbfde7ab7edb906591843fe0e030fff998972315ec",
+  "foundation_key": "0b6f94824a90cae512b65a1ff41c14cd15cab3b633d5552c1d0937aa9912f776",
+  "erofs_bytes": 49627136,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/005803:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-0e675c34b0c13-bc5abb9bd8af:latest@sha256:9945ee3e74dd36d8dee8953ee88b329897b460020d18b1de2ca92d578a9e697b",
+  "foundation_key": "0e675c34b0c13b52b758e03435e9efeab948dedb0c6c879d733b093e29f80cd4",
+  "erofs_bytes": 81620992,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/013108:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-1e66bd618c198-72af354670e8:latest@sha256:42f33973f601ac2a1c317461e2c6df2b1a92a282f9a5a61eeeef58bd07753be8",
+  "foundation_key": "1e66bd618c198a5db15f8e3072487cf585ebdd839abcd89448abf0b0c6634055",
+  "erofs_bytes": 337985536,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/000931:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-5b9dceb3629d9-f3544c1302d5:latest@sha256:fa45cb5227ce5b09b75b2010ae20023a9c8f6a363cad586432abf256bd96d194",
+  "foundation_key": "5b9dceb3629d9ba5a5b86b7893d78cb05a502b38767a24a1f9701b55c4ac4d6a",
+  "erofs_bytes": 121823232,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/002847:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-4f46c72250c12-cf3a62d98f4c:latest@sha256:6a24648fb9d07a1fcce6ac286c57ef6db31492ee45460156525783f6e2dadd36",
+  "foundation_key": "4f46c72250c12f8ca08609fb07312c5b3886a0e92325603b7fcf268efb4beb22",
+  "erofs_bytes": 77955072,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/000095:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-1862f810c6609-b853fd6c2f04:latest@sha256:dea14503127a97fd891f00083eb2d630cd220aebcf91a7e4ad81f984c619d35a",
+  "foundation_key": "1862f810c6609b24a46f3e5534ac9630f919531b1b7e791b3667ce9ef693d8b5",
+  "erofs_bytes": 60837888,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/000096:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-41601309a641d-d38623cc21ca:latest@sha256:69047bd112296c02f127000402a9addb5223589479f41084916355a75c665c03",
+  "foundation_key": "41601309a641d9138d36f85605b34d7e4bdf1afdfa74b2ce3443aa27e0637be8",
+  "erofs_bytes": 50053120,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/003095:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-5fbc0821abf3d-e1a567500586:latest@sha256:c40402f55f90a6ae142f1c46fb76cf5844decb2139176d71c67ad4564bc17824",
+  "foundation_key": "5fbc0821abf3d0be17ca2aa944395302faddc1e9b2e70400b9d6e452f621751f",
+  "erofs_bytes": 78585856,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/008591:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-3173dafb54e8c-aa56cc334772:latest@sha256:4627f607b4145fa72b823f83a9308e3477f58841648deb393107ad2841dc878b",
+  "foundation_key": "3173dafb54e8ce9f828cea2bea051478eeda61f090c85abaec4d79eb5026488b",
+  "erofs_bytes": 535949312,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/013237:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-8082325009d8a-978ef43bda69:latest@sha256:4b8b039a9c5ede4b8b9f7cffc3a2a5045aec5e13b311cd3566bfafd0793ef789",
+  "foundation_key": "8082325009d8a37ef90e36113c9633c2f070a3954f9ec9c887fe02577c1c5b99",
+  "erofs_bytes": 861859840,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/000130:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-c1d637719ad9b-14a003f4f347:latest@sha256:b1d2cb05cffd68e1a072645a2f61d38f08c59400ae1b1abcc4edb2af42d4aaa5",
+  "foundation_key": "c1d637719ad9bfa2214696ef0ec9719f9a9ccb6d286a5871c1e9663f5c9b036f",
+  "erofs_bytes": 164921344,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "source",
+  "image": "terminal-lego/009573:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/precomputed-da3645219c6981bd4183a9017a65-57c309fc5cdb:latest@sha256:4ae730385cdfa772f6bc03a68616d481038718f512212780250819b718f07630",
+  "foundation_key": null,
+  "erofs_bytes": 188616704,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/007175:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-21d5e99466dfe-08e77c063b1f:latest@sha256:9601c27ac2a798cde0054d07ca2f060bc6bba4d0f14a36188be579d608c8f811",
+  "foundation_key": "21d5e99466dfe61a5120e735a4edfcb7ada682ccb5bb8dbe1bf9f220ae913a36",
+  "erofs_bytes": 53145600,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/013387:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-51276fc4395de-f32368ea4e91:latest@sha256:81c7bc3149b7210854c05632229e9b0b7a1a1ddb89a3c8ec7a0c28d504a3dfc2",
+  "foundation_key": "51276fc4395de5aa511054283f9303056bb623ea4396f4771fd8030a952242d0",
+  "erofs_bytes": 226770944,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/002647:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-17f293d34d621-5c028a0a26d9:latest@sha256:2521f171a11cf7bb15f7047c3f196f13a2c95b70f4f4193e496227ba62be5dfe",
+  "foundation_key": "17f293d34d621e1e2a2e875596a0e085a5b392886cb65ded86abb3d034757a45",
+  "erofs_bytes": 331038720,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/002317:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-9a10c22385e23-f0d393214262:latest@sha256:e0216ebe1334d3b0fb7d9f0ccece2c6af96eaf58bc6eded4328dac6b76629a89",
+  "foundation_key": "9a10c22385e235b10adf014de666979302035d7e1a64d47ce09c598aeb246b1c",
+  "erofs_bytes": 133246976,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/010459:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-287dda8859d9b-f83489be18b8:latest@sha256:f0023827afcca8d4907c831ba8ae5edd1c01b533275430912aa50c763c6aa647",
+  "foundation_key": "287dda8859d9b7e1acf2161604497dc23df6ef0aa7df8e299c2d23e172bad965",
+  "erofs_bytes": 78544896,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/005749:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-2f7677a42e586-cfec86e91b87:latest@sha256:0c9eb2bcdc2a957c8f02ddc8de11e09fa0ffe1d36fb52b84629dbc03991c3cac",
+  "foundation_key": "2f7677a42e586fcef42276db4fdd1d19d534c16e0af4f9fdfc3a9c4bc557ee9e",
+  "erofs_bytes": 500346880,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/000046:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-36c0790cd215d-1b010e341b1a:latest@sha256:9eec1bf0377d97a0b33717f9ab678fd3e0534dbb8a53dd5740f9314daff021f1",
+  "foundation_key": "36c0790cd215dc275dc069f175c8a85b3c2f776386f2d39435687cdc96ceb177",
+  "erofs_bytes": 164921344,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/013189:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-9282c65dddc03-73c887985af1:latest@sha256:adeaa5db9b79b6a1a2959cd91b5773ee80f80187935e2cde39684fa8d608b33a",
+  "foundation_key": "9282c65dddc034edfac4e5662bb2b60c73f215de3bc45e11c1a3803fa702acf7",
+  "erofs_bytes": 904470528,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "terminal-lego",
+  "family": "Terminal-Lego",
+  "cached_kind": "foundation",
+  "image": "terminal-lego/005229:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-terminal-prefix-7a2ca68164fc0-9a130704c55e:latest@sha256:65fa74148217f1374e32672986b3df73037283c34d79160bd6b359b99267e93d",
+  "foundation_key": "7a2ca68164fc0a80f076a6fe56a34a7d2e2df96180b89ba985540f6eae2e9942",
+  "erofs_bytes": 74084352,
+  "remaining_build_work": [
+   "context_transfer",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "openswe-foundation",
+  "family": "OpenSWE",
+  "cached_kind": "foundation",
+  "image": "openswe/0xpiranhacodes.webpty-12:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-117ca927ec30d66379411-d245214ea98c:latest@sha256:2cd7883dbfbd78195151120768b5ef39b0d6d145e9e959294f2837cda2f66ce2",
+  "foundation_key": "117ca927ec30d66379411f016997169f7dea95dba8f3456c9ba5b489d9f8fc6c",
+  "erofs_bytes": 1148469248,
+  "remaining_build_work": [
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "openswe-foundation",
+  "family": "OpenSWE",
+  "cached_kind": "foundation",
+  "image": "openswe/adamchainz.time-machine-556:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-156a42c77beabd9574ba4-568edd669be4:latest@sha256:d340413614c82f740e79d653f5e24371340b6e4c454232ed4961df37cd3d1c14",
+  "foundation_key": "156a42c77beabd9574ba486a3c607a7c5f52b22f874b3b2fe9e12b0303afe851",
+  "erofs_bytes": 1217519616,
+  "remaining_build_work": [
+   "compilation",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "openswe-foundation",
+  "family": "OpenSWE",
+  "cached_kind": "foundation",
+  "image": "openswe/0x6f677548.intellireading-calibre-plugins-7:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-24cb913a0a251d9580b0a-878f2b6c6ba1:latest@sha256:0d0a542ca085038ebe2be1ad73978abac8552a98d65ee1653f8205ccfdbbb6b6",
+  "foundation_key": "24cb913a0a251d9580b0a960bed04816589a7bdccc581665703f6051e3271d45",
+  "erofs_bytes": 1184616448,
+  "remaining_build_work": [
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "openswe-foundation",
+  "family": "OpenSWE",
+  "cached_kind": "foundation",
+  "image": "openswe/0x6f677548.intellireading-cli-2:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-35e4faa0d30e4ce979b8a-eb980cbd750b:latest@sha256:dfe383c27d77992c7b8bf9c0e1e17b38bb8a655acdcac5f30f870888775648b1",
+  "foundation_key": "35e4faa0d30e4ce979b8a61805eb26adf2e316791c0cc41c298247e0e394ed66",
+  "erofs_bytes": 1205030912,
+  "remaining_build_work": [
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "openswe-foundation",
+  "family": "OpenSWE",
+  "cached_kind": "foundation",
+  "image": "openswe/23andme.yamale-70:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-3ca1c91e3fc3ae8f67e87-a88dcf2927d9:latest@sha256:ba7cc647802e8dadd7a8598fb02fb2e14b0cec28cd2bd9bac2f4577226521d22",
+  "foundation_key": "3ca1c91e3fc3ae8f67e87437aefbaa02b2ca92b971f9a1bc3477499fc0b9d0b4",
+  "erofs_bytes": 1187540992,
+  "remaining_build_work": [
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "openswe-foundation",
+  "family": "OpenSWE",
+  "cached_kind": "foundation",
+  "image": "openswe/4catalyzer.flask-annex-37:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-8fff7302a0e647ef9568a-9bc2f8efbdca:latest@sha256:30e954684561e62f0e96d2fad99832b933313a8f67c007d4b962c5adcbdbadf7",
+  "foundation_key": "8fff7302a0e647ef9568a8c35debd54d7f0e1f85852eba2900ba1458f2b9431b",
+  "erofs_bytes": 1052020736,
+  "remaining_build_work": [
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "openswe-foundation",
+  "family": "OpenSWE",
+  "cached_kind": "foundation",
+  "image": "openswe/3yourmind.django-migration-linter-123:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-9032b856d86cc97b9deb1-ac06fb6c9598:latest@sha256:e6eaecd9fe71dbb65ca883e603f647a6bd6952ef7f55db6bc5c5a7dfc7cb5f0b",
+  "foundation_key": "9032b856d86cc97b9deb1a9d5776cf2e2c6a94ad6ce8833f2a611ccd82a791e0",
+  "erofs_bytes": 1144508416,
+  "remaining_build_work": [
+   "compilation",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "openswe-foundation",
+  "family": "OpenSWE",
+  "cached_kind": "foundation",
+  "image": "openswe/0xinfection.xsrfprobe-46:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-944e5a6f9422cd9c07caf-ec1779ec8d60:latest@sha256:9a9e92ee1a566d4fbfe54cffb460e6be2bc630dcb9a846a179f5ebf54459f144",
+  "foundation_key": "944e5a6f9422cd9c07caf7b3d5035026183c682ac27299dc56f48bfc2f856902",
+  "erofs_bytes": 1259126784,
+  "remaining_build_work": [
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "openswe-foundation",
+  "family": "OpenSWE",
+  "cached_kind": "foundation",
+  "image": "openswe/aewallin.allantools-93:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-9f9536926be166c375a9c-678ddad19670:latest@sha256:148f0345c3e64c4adc3861e8a3e3cc57f154c6396de568069919ea774fe0521c",
+  "foundation_key": "9f9536926be166c375a9c4a47cb895443287dc4526f6ea08061dfcbdf4fafb69",
+  "erofs_bytes": 1087696896,
+  "remaining_build_work": [
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "openswe-foundation",
+  "family": "OpenSWE",
+  "cached_kind": "foundation",
+  "image": "openswe/0xdebabrata.citrus-10:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+  "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+  "erofs_bytes": 1198120960,
+  "remaining_build_work": [
+   "compilation",
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ },
+ {
+  "group": "openswe-foundation",
+  "family": "OpenSWE",
+  "cached_kind": "foundation",
+  "image": "openswe/0ptim.jellychat-101:latest",
+  "prepared_reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-f76865c684e04ed0c4429-4123d0f63a6a:latest@sha256:41b294c4bffc05983076fc5000123b30159d9f618d001d59a4e2adcd1da6c70b",
+  "foundation_key": "f76865c684e04ed0c4429ade2d4945948b7ad0af880b0f173cb2742cd236f810",
+  "erofs_bytes": 1154953216,
+  "remaining_build_work": [
+   "package_manager",
+   "run_requires_qualification",
+   "source_or_network"
+  ]
+ }
+]

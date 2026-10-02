@@ -1,0 +1,531 @@
+{
+ "idx": 60,
+ "image": "jierun/sweb.eval.x86_64.reata_1776_sqllineage-107:latest",
+ "family": "SWE-Lego",
+ "runs": [
+  {
+   "path": "nydus",
+   "rep": 0,
+   "first": "python_import_sys",
+   "nbd_ready": 0.28175973892211914,
+   "erofs_mounted": 0.2880213260650635,
+   "attach": 0.2907099723815918,
+   "devices": 1,
+   "python_import_sys_cold": {
+    "wall": 0.4478874206542969,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_sys_warm": {
+    "wall": 0.17267298698425293,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_after": {
+    "wall": 0.6110098361968994,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_again": {
+    "wall": 0.33680272102355957,
+    "rc": 0,
+    "out": ""
+   },
+   "upper_pyc_written": 0,
+   "nbd_stats": [
+    "STATS {'reads': 413, 'read_bytes': 22835200, 'chunk_fetches': 171, 'fetched_compressed': 9541332, 'fetched_uncompressed': 23043800}"
+   ]
+  },
+  {
+   "path": "nydus",
+   "rep": 0,
+   "first": "git_status",
+   "nbd_ready": 0.2328014373779297,
+   "erofs_mounted": 0.23935627937316895,
+   "attach": 0.2433316707611084,
+   "devices": 1,
+   "git_status_cold": {
+    "wall": 0.31176066398620605,
+    "rc": 0,
+    "out": "0\n"
+   },
+   "git_status_warm": {
+    "wall": 0.14635992050170898,
+    "rc": 0,
+    "out": "0\n"
+   },
+   "nbd_stats": [
+    "STATS {'reads': 168, 'read_bytes': 8716288, 'chunk_fetches': 75, 'fetched_compressed': 7006952, 'fetched_uncompressed': 10777389}"
+   ]
+  },
+  {
+   "path": "today",
+   "rep": 0,
+   "first": "python_import_sys",
+   "erofs_mounted": 0.6177937984466553,
+   "attach": 0.6218092441558838,
+   "devices": 7,
+   "python_import_sys_cold": {
+    "wall": 0.5777528285980225,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_sys_warm": {
+    "wall": 0.2153475284576416,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_after": {
+    "wall": 0.9599971771240234,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_again": {
+    "wall": 0.5915625095367432,
+    "rc": 0,
+    "out": ""
+   },
+   "upper_pyc_written": 0,
+   "nbd_stats": [
+    "STATS {'reads': 78, 'read_bytes': 3821568, 'chunk_fetches': 36, 'fetched_compressed': 0, 'fetched_uncompressed': 9187328}",
+    "STATS {'reads': 38, 'read_bytes': 1359872, 'chunk_fetches': 19, 'fetched_compressed': 0, 'fetched_uncompressed': 4780032}",
+    "STATS {'reads': 478, 'read_bytes': 13893632, 'chunk_fetches': 122, 'fetched_compressed': 0, 'fetched_uncompressed': 31817728}",
+    "STATS {'reads': 7, 'read_bytes': 28672, 'chunk_fetches': 1, 'fetched_compressed': 0, 'fetched_uncompressed': 61440}",
+    "STATS {'reads': 26, 'read_bytes': 1392640, 'chunk_fetches': 11, 'fetched_compressed': 0, 'fetched_uncompressed': 2768896}",
+    "STATS {'reads': 1, 'read_bytes': 4096, 'chunk_fetches': 1, 'fetched_compressed': 0, 'fetched_uncompressed': 4096}",
+    "STATS {'reads': 37, 'read_bytes': 1368064, 'chunk_fetches': 16, 'fetched_compressed': 0, 'fetched_uncompressed': 3997696}"
+   ]
+  },
+  {
+   "path": "today",
+   "rep": 0,
+   "first": "git_status",
+   "erofs_mounted": 0.6763148307800293,
+   "attach": 0.6805930137634277,
+   "devices": 7,
+   "git_status_cold": {
+    "wall": 0.32184791564941406,
+    "rc": 0,
+    "out": "0\n"
+   },
+   "git_status_warm": {
+    "wall": 0.14507198333740234,
+    "rc": 0,
+    "out": "0\n"
+   },
+   "nbd_stats": [
+    "STATS {'reads': 69, 'read_bytes': 3293184, 'chunk_fetches': 32, 'fetched_compressed': 0, 'fetched_uncompressed': 8138752}",
+    "STATS {'reads': 59, 'read_bytes': 3805184, 'chunk_fetches': 24, 'fetched_compressed': 0, 'fetched_uncompressed': 6090752}",
+    "STATS {'reads': 29, 'read_bytes': 1417216, 'chunk_fetches': 13, 'fetched_compressed': 0, 'fetched_uncompressed': 3244032}",
+    "STATS {'reads': 8, 'read_bytes': 32768, 'chunk_fetches': 1, 'fetched_compressed': 0, 'fetched_uncompressed': 61440}",
+    "STATS {'reads': 26, 'read_bytes': 1392640, 'chunk_fetches': 11, 'fetched_compressed': 0, 'fetched_uncompressed': 2768896}",
+    "STATS {'reads': 1, 'read_bytes': 4096, 'chunk_fetches': 1, 'fetched_compressed': 0, 'fetched_uncompressed': 4096}",
+    "STATS {'reads': 65, 'read_bytes': 2146304, 'chunk_fetches': 24, 'fetched_compressed': 0, 'fetched_uncompressed': 6094848}"
+   ]
+  },
+  {
+   "path": "nydus",
+   "rep": 1,
+   "first": "python_import_sys",
+   "nbd_ready": 0.18356037139892578,
+   "erofs_mounted": 0.18981623649597168,
+   "attach": 0.19212055206298828,
+   "devices": 1,
+   "python_import_sys_cold": {
+    "wall": 0.4130740165710449,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_sys_warm": {
+    "wall": 0.15139245986938477,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_after": {
+    "wall": 0.5621840953826904,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_again": {
+    "wall": 0.2866392135620117,
+    "rc": 0,
+    "out": ""
+   },
+   "upper_pyc_written": 0,
+   "nbd_stats": [
+    "STATS {'reads': 413, 'read_bytes': 22835200, 'chunk_fetches': 171, 'fetched_compressed': 9541332, 'fetched_uncompressed': 23043800}"
+   ]
+  },
+  {
+   "path": "nydus",
+   "rep": 1,
+   "first": "git_status",
+   "nbd_ready": 0.20901989936828613,
+   "erofs_mounted": 0.21591711044311523,
+   "attach": 0.2196815013885498,
+   "devices": 1,
+   "git_status_cold": {
+    "wall": 0.31649112701416016,
+    "rc": 0,
+    "out": "0\n"
+   },
+   "git_status_warm": {
+    "wall": 0.14902877807617188,
+    "rc": 0,
+    "out": "0\n"
+   },
+   "nbd_stats": [
+    "STATS {'reads': 168, 'read_bytes': 8716288, 'chunk_fetches': 75, 'fetched_compressed': 7006952, 'fetched_uncompressed': 10777389}"
+   ]
+  },
+  {
+   "path": "today",
+   "rep": 1,
+   "first": "python_import_sys",
+   "erofs_mounted": 0.7565081119537354,
+   "attach": 0.760587215423584,
+   "devices": 7,
+   "python_import_sys_cold": {
+    "wall": 0.5987362861633301,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_sys_warm": {
+    "wall": 0.23065733909606934,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_after": {
+    "wall": 0.939014196395874,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_again": {
+    "wall": 0.6059107780456543,
+    "rc": 0,
+    "out": ""
+   },
+   "upper_pyc_written": 0,
+   "nbd_stats": [
+    "STATS {'reads': 78, 'read_bytes': 3821568, 'chunk_fetches': 36, 'fetched_compressed': 0, 'fetched_uncompressed': 9187328}",
+    "STATS {'reads': 38, 'read_bytes': 1359872, 'chunk_fetches': 19, 'fetched_compressed': 0, 'fetched_uncompressed': 4780032}",
+    "STATS {'reads': 477, 'read_bytes': 13791232, 'chunk_fetches': 121, 'fetched_compressed': 0, 'fetched_uncompressed': 31555584}",
+    "STATS {'reads': 7, 'read_bytes': 28672, 'chunk_fetches': 1, 'fetched_compressed': 0, 'fetched_uncompressed': 61440}",
+    "STATS {'reads': 26, 'read_bytes': 1392640, 'chunk_fetches': 11, 'fetched_compressed': 0, 'fetched_uncompressed': 2768896}",
+    "STATS {'reads': 1, 'read_bytes': 4096, 'chunk_fetches': 1, 'fetched_compressed': 0, 'fetched_uncompressed': 4096}",
+    "STATS {'reads': 37, 'read_bytes': 1368064, 'chunk_fetches': 16, 'fetched_compressed': 0, 'fetched_uncompressed': 3997696}"
+   ]
+  },
+  {
+   "path": "today",
+   "rep": 1,
+   "first": "git_status",
+   "erofs_mounted": 0.7520933151245117,
+   "attach": 0.7563607692718506,
+   "devices": 7,
+   "git_status_cold": {
+    "wall": 0.38911962509155273,
+    "rc": 0,
+    "out": "0\n"
+   },
+   "git_status_warm": {
+    "wall": 0.14365839958190918,
+    "rc": 0,
+    "out": "0\n"
+   },
+   "nbd_stats": [
+    "STATS {'reads': 69, 'read_bytes': 3293184, 'chunk_fetches': 32, 'fetched_compressed': 0, 'fetched_uncompressed': 8138752}",
+    "STATS {'reads': 59, 'read_bytes': 3805184, 'chunk_fetches': 24, 'fetched_compressed': 0, 'fetched_uncompressed': 6090752}",
+    "STATS {'reads': 29, 'read_bytes': 1417216, 'chunk_fetches': 13, 'fetched_compressed': 0, 'fetched_uncompressed': 3244032}",
+    "STATS {'reads': 8, 'read_bytes': 32768, 'chunk_fetches': 1, 'fetched_compressed': 0, 'fetched_uncompressed': 61440}",
+    "STATS {'reads': 26, 'read_bytes': 1392640, 'chunk_fetches': 11, 'fetched_compressed': 0, 'fetched_uncompressed': 2768896}",
+    "STATS {'reads': 1, 'read_bytes': 4096, 'chunk_fetches': 1, 'fetched_compressed': 0, 'fetched_uncompressed': 4096}",
+    "STATS {'reads': 65, 'read_bytes': 2146304, 'chunk_fetches': 24, 'fetched_compressed': 0, 'fetched_uncompressed': 6094848}"
+   ]
+  }
+ ],
+ "tree_compare_nydus_vs_today": {
+  "files": 20000,
+  "missing": 0,
+  "mtime_diff": 20000,
+  "mtime_diff_by_ext": {
+   ".sh": 13,
+   ".lock": 1,
+   ".conf": 123,
+   ".bashrc": 1,
+   ".blacklist": 1,
+   "(none)": 4346,
+   ".net": 1,
+   ".cache": 1,
+   ".defs": 1,
+   ".alias": 2,
+   ".gen": 1,
+   ".types": 1,
+   ".list": 2,
+   ".gpg": 2,
+   ".info": 7,
+   ".cfg": 5,
+   ".default": 1,
+   ".override": 1,
+   ".init": 1,
+   ".sysctl": 1,
+   ".service": 1,
+   ".timer": 6,
+   ".socket": 5,
+   ".options": 1,
+   ".txt": 121,
+   ".defaults": 1,
+   ".desktop": 1,
+   ".py": 4908,
+   ".cnf": 3,
+   ".0": 266,
+   ".pem": 149,
+   ".crt": 1,
+   ".11": 4,
+   ".1": 191,
+   ".11-config": 1,
+   ".6": 34,
+   ".cmake": 46,
+   ".json": 108,
+   ".9": 6,
+   ".test": 1,
+   ".9-config": 1,
+   ".h": 1608,
+   ".so": 539,
+   ".a": 64,
+   ".8": 10,
+   ".3": 19,
+   ".2": 17,
+   ".7": 4,
+   ".5": 16,
+   ".4": 19,
+   ".29": 2,
+   ".tcl": 148,
+   ".pc": 138,
+   ".orig": 2,
+   ".bak": 1,
+   ".pyc": 4896,
+   ".local": 1,
+   ".c": 83,
+   ".in": 1,
+   ".o": 1,
+   ".ctypes": 1,
+   ".bat": 2,
+   ".sample": 1,
+   ".rst": 4,
+   ".whl": 2,
+   ".def": 4,
+   ".html": 11,
+   ".pyw": 1,
+   ".gif": 22,
+   ".ico": 1,
+   ".png": 32,
+   ".pyi": 1032,
+   ".pickle": 2,
+   ".css": 8,
+   ".pth": 2,
+   ".egg-link": 1,
+   ".typed": 50,
+   ".md": 5,
+   ".js": 5,
+   ".scss": 1,
+   ".yaml": 1,
+   ".markdown-it": 1,
+   ".xslt": 2,
+   ".xsd": 1,
+   ".tmpl": 4,
+   ".APACHE": 5,
+   ".BSD": 5,
+   ".exe": 14,
+   ".zip": 1,
+   ".egg": 1,
+   ".xml": 47,
+   ".gz": 6,
+   ".external": 1,
+   ".lua": 1,
+   ".afm": 60,
+   ".ttf": 38,
+   ".svg": 30,
+   ".pdf": 11,
+   ".csv": 33,
+   ".dat": 2,
+   ".xrc": 1,
+   ".npz": 5,
+   ".jpg": 1,
+   ".npy": 6,
+   ".mplstyle": 28,
+   ".bz2": 4,
+   ".A99": 2,
+   ".B99": 2,
+   ".pxd": 7,
+   ".ini": 3,
+   ".pkl": 1,
+   ".cpp": 1,
+   ".fits": 1,
+   ".pyx": 4,
+   ".build": 3,
+   ".template": 1,
+   ".f90": 53,
+   ".f": 21,
+   ".pyf": 5,
+   ".inc": 5,
+   ".f95": 1,
+   ".17": 1,
+   ".10": 3,
+   ".16": 1,
+   ".i": 1,
+   ".ps1": 1,
+   ".csh": 2,
+   ".fish": 2,
+   ".tm": 6,
+   ".uuid": 1,
+   ".enc": 82,
+   ".msg": 147,
+   ".terms": 1,
+   ".xbm": 6,
+   ".ppm": 1,
+   ".eps": 2,
+   ".dir": 2,
+   ".0BSD": 1,
+   ".GPLv2": 1,
+   ".EXCEPTION": 2,
+   ".gomp_copy": 1,
+   ".mo": 23,
+   ".sys": 2,
+   ".sys-old": 1,
+   ".sysk": 2,
+   ".25": 1,
+   ".25nv": 1,
+   ".25rv": 1,
+   ".0nv": 1,
+   ".0rv": 1,
+   ".10nv": 1,
+   ".10rv": 1,
+   ".app": 2,
+   ".26": 1,
+   ".Eterm": 2,
+   ".gnome": 2,
+   ".konsole": 2,
+   ".linux": 2,
+   ".mrxvt": 2,
+   ".rxvt": 2,
+   ".xterm-new": 2,
+   ".konsole-256color": 1,
+   ".linux-m1": 1,
+   ".linux-m1b": 1,
+   ".linux-m2": 1,
+   ".linux-s": 1,
+   ".minitel1": 1,
+   ".minitel1-nb": 1,
+   ".minitel12-80": 1,
+   ".minitel1b": 1,
+   ".minitel1b-80": 1,
+   ".minitel1b-nb": 1,
+   ".minitel2-80": 1,
+   ".mlterm": 1,
+   ".mlterm-256color": 1,
+   ".putty": 1,
+   ".putty-256color": 1,
+   ".putty-m1": 1,
+   ".putty-m1b": 1,
+   ".putty-m2": 1,
+   ".teraterm": 1,
+   ".vte": 1,
+   ".vte-256color": 1,
+   ".xterm-256color": 1,
+   ".xterm-r6": 1,
+   ".xterm-xfree86": 1,
+   ".59": 1,
+   ".97": 1,
+   ".tab": 4,
+   ".zi": 1,
+   ".dist": 2,
+   ".pl": 2,
+   ".hpp": 92,
+   ".19": 1,
+   ".72": 1,
+   ".73": 6,
+   ".12": 2,
+   ".14": 3,
+   ".13": 1
+  },
+  "mode_diff": 0,
+  "size_diff": 0,
+  "hash_diff": 0,
+  "hashed": 300
+ },
+ "tar_mtime": {
+  "nydus": {
+   "checked": 4000,
+   "match": 4000,
+   "zero": 0,
+   "by_kind": {
+    "file": [
+     1893,
+     1893
+    ],
+    ".py": [
+     430,
+     430
+    ],
+    "symlink": [
+     792,
+     792
+    ],
+    "dir": [
+     399,
+     399
+    ],
+    ".pyc": [
+     439,
+     439
+    ],
+    ".so": [
+     47,
+     47
+    ]
+   }
+  },
+  "today": {
+   "checked": 4000,
+   "match": 0,
+   "zero": 4000,
+   "by_kind": {
+    "file": [
+     1893,
+     0
+    ],
+    ".py": [
+     430,
+     0
+    ],
+    "symlink": [
+     792,
+     0
+    ],
+    "dir": [
+     399,
+     0
+    ],
+    ".pyc": [
+     439,
+     0
+    ],
+    ".so": [
+     47,
+     0
+    ]
+   }
+  }
+ },
+ "pyc_nydus": {
+  "pyc_checked": 1317,
+  "pyc_stale": 0,
+  "py_mtime_zero": 0
+ },
+ "pyc_today": {
+  "pyc_checked": 1317,
+  "pyc_stale": 1317,
+  "py_mtime_zero": 1317
+ }
+}

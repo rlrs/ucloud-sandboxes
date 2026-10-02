@@ -1,0 +1,216 @@
+{
+ "files": 42138,
+ "diffs": [
+  {
+   "path": "/dev/console",
+   "dict": "e3b0c44298fc1c14",
+   "nodict": "e3b0c44298fc1c14",
+   "today": "ERR FileNotFoundError",
+   "size": 0
+  },
+  {
+   "path": "/root/.cache/pip/http-v2/8/9/7/c/3/897c3eb14586defef487405fc684f3303cabbdf0796dbc806abd17d0.body",
+   "dict": "f0263ac689a81007",
+   "nodict": "a8ef22bde8490f57",
+   "today": "a8ef22bde8490f57",
+   "size": 1572278
+  },
+  {
+   "path": "/root/.cache/pip/http-v2/8/e/b/1/a/8eb1a33f2e55b80f5f3a80d3601e41830903afff0d7ee04dc4103380.body",
+   "dict": "5ff866ff3ce86c34",
+   "nodict": "760643d3452b4d77",
+   "today": "760643d3452b4d77",
+   "size": 28317
+  },
+  {
+   "path": "/root/.cache/pip/http-v2/a/1/d/f/2/a1df2490d27d637e00eb9622dfce53f64235c2046107dff7e41862a4.body",
+   "dict": "2dca7b2fd6247d45",
+   "nodict": "a9462224a505ade1",
+   "today": "a9462224a505ade1",
+   "size": 8074
+  },
+  {
+   "path": "/root/.cache/pip/http-v2/a/6/0/8/3/a608380d2d25d0cf1b33c7db53f05c041e4dcb74040afe2ab2b793e5.body",
+   "dict": "f5815bdb0640ffa5",
+   "nodict": "9aac639a3bbd3328",
+   "today": "9aac639a3bbd3328",
+   "size": 391431
+  },
+  {
+   "path": "/root/.cache/pip/http-v2/d/2/8/9/6/d2896328dd7d3a506550a7dca14c3f95cdbc33aae5196d91f9dccdc9.body",
+   "dict": "f5b453c486b7eb2b",
+   "nodict": "15a3ebc0f43c2d0a",
+   "today": "15a3ebc0f43c2d0a",
+   "size": 27047
+  },
+  {
+   "path": "/root/.cache/pip/http-v2/e/8/7/d/2/e87d2417a840deb5d4051e8aa177af5822415389997b0ba6bd43e7fe.body",
+   "dict": "c180d391b295c29a",
+   "nodict": "b74e89e397b1ed28",
+   "today": "b74e89e397b1ed28",
+   "size": 85359
+  },
+  {
+   "path": "/run/adduser",
+   "dict": "e3b0c44298fc1c14",
+   "nodict": "e3b0c44298fc1c14",
+   "today": "ERR FileNotFoundError",
+   "size": 0
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/decorator.py",
+   "dict": "d8a1863f35915671",
+   "nodict": "7169cee9c28aa214",
+   "today": "7169cee9c28aa214",
+   "size": 17067
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/core/error.py",
+   "dict": "c53838962621bb96",
+   "nodict": "94be563f7134b063",
+   "today": "94be563f7134b063",
+   "size": 1734
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/core/extensions.py",
+   "dict": "c288f52170607b3b",
+   "nodict": "2a0a21362a3097bd",
+   "today": "2a0a21362a3097bd",
+   "size": 5020
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/core/payload.py",
+   "dict": "718885c7e9b1efc5",
+   "nodict": "b877301b90219b77",
+   "today": "b877301b90219b77",
+   "size": 1763
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/core/usage.py",
+   "dict": "775686af0f7565e7",
+   "nodict": "6a0ad913979922f2",
+   "today": "6a0ad913979922f2",
+   "size": 13542
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/core/magics/__init__.py",
+   "dict": "478ae5ef84eaf956",
+   "nodict": "a6477e51fce30c6a",
+   "today": "a6477e51fce30c6a",
+   "size": 1619
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/core/magics/config.py",
+   "dict": "46077d20e537fc2d",
+   "nodict": "4012f9b98ee6f90e",
+   "today": "4012f9b98ee6f90e",
+   "size": 4881
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/core/magics/display.py",
+   "dict": "0eb1df24421ee89f",
+   "nodict": "49346aeba1a56707",
+   "today": "49346aeba1a56707",
+   "size": 3130
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/core/magics/extension.py",
+   "dict": "45f108e3eba0dd9e",
+   "nodict": "263e8e96433bd4f4",
+   "today": "263e8e96433bd4f4",
+   "size": 2477
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/core/profile/README_STARTUP",
+   "dict": "162b77ba8faba5f2",
+   "nodict": "638ec6b584245b2e",
+   "today": "638ec6b584245b2e",
+   "size": 371
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/extensions/__init__.py",
+   "dict": "5552748b5aeb500f",
+   "nodict": "578bd296515dd7c0",
+   "today": "578bd296515dd7c0",
+   "size": 78
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/external/__init__.py",
+   "dict": "ebc47d1683f1e8b6",
+   "nodict": "f844076ee52705ed",
+   "today": "f844076ee52705ed",
+   "size": 126
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/lib/deepreload.py",
+   "dict": "1832eb512565adfe",
+   "nodict": "8b299311c2693ff8",
+   "today": "8b299311c2693ff8",
+   "size": 9431
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/lib/editorhooks.py",
+   "dict": "bbfdfb2c48191237",
+   "nodict": "2a641a00465ac148",
+   "today": "2a641a00465ac148",
+   "size": 3982
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/lib/guisupport.py",
+   "dict": "ab95940bf420524a",
+   "nodict": "7b7810136fab605d",
+   "today": "7b7810136fab605d",
+   "size": 6300
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/terminal/magics.py",
+   "dict": "e602ceaa95ca0bcc",
+   "nodict": "e3d6552736c05241",
+   "today": "e3d6552736c05241",
+   "size": 7705
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/terminal/pt_inputhooks/gtk.py",
+   "dict": "7e9ea570cccf025e",
+   "nodict": "ab1d0e4ed0dd8a7c",
+   "today": "ab1d0e4ed0dd8a7c",
+   "size": 2427
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/terminal/pt_inputhooks/gtk4.py",
+   "dict": "58bd661ff1a89269",
+   "nodict": "aff331093edad274",
+   "today": "aff331093edad274",
+   "size": 557
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/terminal/pt_inputhooks/osx.py",
+   "dict": "60f629b4795f78da",
+   "nodict": "4e79ddc91fd23db9",
+   "today": "4e79ddc91fd23db9",
+   "size": 4448
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/testing/__init__.py",
+   "dict": "0c37ddc45244523c",
+   "nodict": "f6df7b5ced37133f",
+   "today": "f6df7b5ced37133f",
+   "size": 784
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/testing/globalipapp.py",
+   "dict": "c2709b1fb8caf4b3",
+   "nodict": "17e443eb12c52764",
+   "today": "17e443eb12c52764",
+   "size": 3948
+  },
+  {
+   "path": "/usr/local/lib/python3.11/site-packages/IPython/testing/skipdoctest.py",
+   "dict": "f4f3c00a8386c586",
+   "nodict": "85a48485df0426bd",
+   "today": "85a48485df0426bd",
+   "size": 717
+  }
+ ],
+ "ndiffs": 2076
+}

@@ -1,0 +1,486 @@
+{
+ "idx": 47,
+ "image": "aweaiteam/scaleswe:canonical_operator_pr1017",
+ "family": "ScaleSWE",
+ "rundir": "/data/work/dict-1m",
+ "runs": [
+  {
+   "path": "nydus",
+   "rep": 0,
+   "first": "python_import_sys",
+   "nbd_ready": 0.2130885124206543,
+   "erofs_mounted": 0.2220311164855957,
+   "attach": 0.22576904296875,
+   "devices": 1,
+   "python_import_sys_cold": {
+    "wall": 0.5307948589324951,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_sys_warm": {
+    "wall": 0.2100367546081543,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_after": {
+    "wall": 0.6060230731964111,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_again": {
+    "wall": 0.36204099655151367,
+    "rc": 0,
+    "out": ""
+   },
+   "upper_pyc_written": 0,
+   "nbd_stats": [
+    "STATS {'reads': 459, 'read_bytes': 22654976, 'chunk_fetches': 168, 'fetched_compressed': 9284395, 'fetched_uncompressed': 22798455}"
+   ]
+  },
+  {
+   "path": "nydus",
+   "rep": 0,
+   "first": "git_status",
+   "nbd_ready": 0.23402070999145508,
+   "erofs_mounted": 0.24147963523864746,
+   "attach": 0.24520206451416016,
+   "devices": 1,
+   "git_status_cold": {
+    "wall": 0.2633490562438965,
+    "rc": 0,
+    "out": "no-testbed\n"
+   },
+   "git_status_warm": {
+    "wall": 0.0867459774017334,
+    "rc": 0,
+    "out": "no-testbed\n"
+   },
+   "nbd_stats": [
+    "STATS {'reads': 68, 'read_bytes': 3600384, 'chunk_fetches': 6, 'fetched_compressed': 1076118, 'fetched_uncompressed': 2291602}"
+   ]
+  },
+  {
+   "path": "today",
+   "rep": 0,
+   "first": "python_import_sys",
+   "erofs_mounted": 0.22156047821044922,
+   "attach": 0.22441911697387695,
+   "devices": 2,
+   "python_import_sys_cold": {
+    "wall": 0.6603751182556152,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_sys_warm": {
+    "wall": 0.2732524871826172,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_after": {
+    "wall": 0.8892772197723389,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_again": {
+    "wall": 0.6404688358306885,
+    "rc": 0,
+    "out": ""
+   },
+   "upper_pyc_written": 0,
+   "nbd_stats": [
+    "STATS {'reads': 536, 'read_bytes': 15831040, 'chunk_fetches': 140, 'fetched_compressed': 0, 'fetched_uncompressed': 36642816}",
+    "STATS {'reads': 1, 'read_bytes': 4096, 'chunk_fetches': 1, 'fetched_compressed': 0, 'fetched_uncompressed': 4096}"
+   ]
+  },
+  {
+   "path": "today",
+   "rep": 0,
+   "first": "git_status",
+   "erofs_mounted": 0.2696115970611572,
+   "attach": 0.2734818458557129,
+   "devices": 2,
+   "git_status_cold": {
+    "wall": 0.29387784004211426,
+    "rc": 0,
+    "out": "no-testbed\n"
+   },
+   "git_status_warm": {
+    "wall": 0.10224318504333496,
+    "rc": 0,
+    "out": "no-testbed\n"
+   },
+   "nbd_stats": [
+    "STATS {'reads': 65, 'read_bytes': 2928640, 'chunk_fetches': 32, 'fetched_compressed': 0, 'fetched_uncompressed': 8331264}",
+    "STATS {'reads': 1, 'read_bytes': 4096, 'chunk_fetches': 1, 'fetched_compressed': 0, 'fetched_uncompressed': 4096}"
+   ]
+  },
+  {
+   "path": "nydus",
+   "rep": 1,
+   "first": "python_import_sys",
+   "nbd_ready": 0.23865604400634766,
+   "erofs_mounted": 0.24782109260559082,
+   "attach": 0.25223231315612793,
+   "devices": 1,
+   "python_import_sys_cold": {
+    "wall": 0.49962878227233887,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_sys_warm": {
+    "wall": 0.2058267593383789,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_after": {
+    "wall": 0.6506137847900391,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_again": {
+    "wall": 0.36019396781921387,
+    "rc": 0,
+    "out": ""
+   },
+   "upper_pyc_written": 0,
+   "nbd_stats": [
+    "STATS {'reads': 459, 'read_bytes': 22654976, 'chunk_fetches': 168, 'fetched_compressed': 9284395, 'fetched_uncompressed': 22798455}"
+   ]
+  },
+  {
+   "path": "nydus",
+   "rep": 1,
+   "first": "git_status",
+   "nbd_ready": 0.2294936180114746,
+   "erofs_mounted": 0.23733901977539062,
+   "attach": 0.24001526832580566,
+   "devices": 1,
+   "git_status_cold": {
+    "wall": 0.2517886161804199,
+    "rc": 0,
+    "out": "no-testbed\n"
+   },
+   "git_status_warm": {
+    "wall": 0.09883236885070801,
+    "rc": 0,
+    "out": "no-testbed\n"
+   },
+   "nbd_stats": [
+    "STATS {'reads': 68, 'read_bytes': 3600384, 'chunk_fetches': 6, 'fetched_compressed': 1076118, 'fetched_uncompressed': 2291602}"
+   ]
+  },
+  {
+   "path": "today",
+   "rep": 1,
+   "first": "python_import_sys",
+   "erofs_mounted": 0.24193191528320312,
+   "attach": 0.2450878620147705,
+   "devices": 2,
+   "python_import_sys_cold": {
+    "wall": 0.6242575645446777,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_sys_warm": {
+    "wall": 0.3137993812561035,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_after": {
+    "wall": 0.8210029602050781,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_again": {
+    "wall": 0.6096696853637695,
+    "rc": 0,
+    "out": ""
+   },
+   "upper_pyc_written": 0,
+   "nbd_stats": [
+    "STATS {'reads': 535, 'read_bytes': 15781888, 'chunk_fetches': 140, 'fetched_compressed': 0, 'fetched_uncompressed': 36642816}",
+    "STATS {'reads': 1, 'read_bytes': 4096, 'chunk_fetches': 1, 'fetched_compressed': 0, 'fetched_uncompressed': 4096}"
+   ]
+  },
+  {
+   "path": "today",
+   "rep": 1,
+   "first": "git_status",
+   "erofs_mounted": 0.21462178230285645,
+   "attach": 0.21851181983947754,
+   "devices": 2,
+   "git_status_cold": {
+    "wall": 0.26087236404418945,
+    "rc": 0,
+    "out": "no-testbed\n"
+   },
+   "git_status_warm": {
+    "wall": 0.10828900337219238,
+    "rc": 0,
+    "out": "no-testbed\n"
+   },
+   "nbd_stats": [
+    "STATS {'reads': 65, 'read_bytes': 2928640, 'chunk_fetches': 32, 'fetched_compressed': 0, 'fetched_uncompressed': 8331264}",
+    "STATS {'reads': 1, 'read_bytes': 4096, 'chunk_fetches': 1, 'fetched_compressed': 0, 'fetched_uncompressed': 4096}"
+   ]
+  }
+ ],
+ "tree_compare_nydus_vs_today": {
+  "files": 20000,
+  "missing": 0,
+  "mtime_diff": 20000,
+  "mtime_diff_by_ext": {
+   "(none)": 2045,
+   ".lock": 1,
+   ".conf": 77,
+   ".bashrc": 1,
+   ".blacklist": 1,
+   ".rc": 5,
+   ".net": 1,
+   ".cache": 3,
+   ".defs": 1,
+   ".mime": 1,
+   ".types": 1,
+   ".xml": 18,
+   ".options": 1,
+   ".txt": 158,
+   ".gz": 83,
+   ".cnf": 7,
+   ".list": 1,
+   ".sources": 1,
+   ".asc": 9,
+   ".cfg": 5,
+   ".default": 2,
+   ".override": 1,
+   ".el": 1,
+   ".sh": 21,
+   ".fallback": 1,
+   ".csh": 4,
+   ".py": 4413,
+   ".init": 1,
+   ".0": 305,
+   ".1": 102,
+   ".pem": 147,
+   ".crt": 1,
+   ".sysctl": 1,
+   ".service": 14,
+   ".timer": 10,
+   ".socket": 10,
+   ".body": 224,
+   ".whl": 3,
+   ".json": 5,
+   ".TAG": 2,
+   ".ps1": 3,
+   ".fish": 3,
+   ".11": 14,
+   ".pth": 4,
+   ".pyc": 3960,
+   ".typed": 65,
+   ".rst": 5,
+   ".exe": 14,
+   ".md": 6,
+   ".APACHE": 5,
+   ".BSD": 5,
+   ".zip": 1,
+   ".egg": 1,
+   ".tmpl": 134,
+   ".pyi": 1119,
+   ".html": 5,
+   ".so": 863,
+   ".yaml": 1,
+   ".markdown-it": 1,
+   ".js": 4,
+   ".log": 2,
+   ".16": 3,
+   ".q16": 12,
+   ".36-x86_64-linux-gnu": 2,
+   ".mit": 1,
+   ".bfd": 2,
+   ".gold": 2,
+   ".textutils": 1,
+   ".ul": 1,
+   ".6": 41,
+   ".basic": 1,
+   ".debianutils": 1,
+   ".h": 3991,
+   ".c": 7,
+   ".tcc": 43,
+   ".hpp": 243,
+   ".x": 25,
+   ".hxx": 1,
+   ".def": 5,
+   ".daily": 1,
+   ".apt": 1,
+   ".mgc": 1,
+   ".o": 24,
+   ".a": 155,
+   ".spec": 3,
+   ".egg-info": 1,
+   ".mo": 12,
+   ".bisect": 1,
+   ".changelog": 1,
+   ".compact": 1,
+   ".phases": 1,
+   ".show": 1,
+   ".status": 1,
+   ".png": 14,
+   ".css": 8,
+   ".pl": 545,
+   ".tcl": 1,
+   ".xterm-256color": 1,
+   ".rules": 2,
+   ".supp": 2,
+   ".2": 50,
+   ".30": 7,
+   ".29": 1,
+   ".4": 27,
+   ".la": 126,
+   ".2301": 1,
+   ".3": 24,
+   ".8": 11,
+   ".5": 8,
+   ".2501": 1,
+   ".9": 4,
+   ".7": 13,
+   ".66": 2,
+   ".21": 1,
+   ".70": 1,
+   ".12": 6,
+   ".10": 10,
+   ".20": 2,
+   ".72": 6,
+   ".23": 2,
+   ".62": 1,
+   ".14": 3,
+   ".36": 1,
+   ".15": 1,
+   ".25": 2,
+   ".199": 1,
+   ".35": 1,
+   ".13": 1,
+   ".cmake": 19,
+   ".typelib": 20,
+   ".inc": 4,
+   ".xbn": 6,
+   ".xc": 4,
+   ".xce": 4,
+   ".xd": 4,
+   ".xdc": 4,
+   ".xdce": 4,
+   ".xde": 4,
+   ".xdw": 4,
+   ".xdwe": 4,
+   ".xe": 6,
+   ".xn": 6,
+   ".xr": 6,
+   ".xs": 4,
+   ".xsc": 4,
+   ".xsce": 4,
+   ".xse": 4,
+   ".xsw": 4,
+   ".xswe": 4,
+   ".xu": 6,
+   ".xw": 4,
+   ".xwe": 4,
+   ".xa": 2,
+   ".pm": 171,
+   ".pod": 2,
+   ".ph": 128,
+   ".pc": 156,
+   ".test": 1,
+   ".11-config": 1,
+   ".bootstrap": 1,
+   ".local": 1,
+   ".stdlib": 1,
+   ".in": 1,
+   ".ctypes": 1,
+   ".bat": 2,
+   ".pyw": 1,
+   ".gif": 9,
+   ".ico": 1,
+   ".pickle": 2,
+   ".jpg": 1,
+   ".wav": 1,
+   ".scss": 1,
+   ".completion": 3
+  },
+  "mode_diff": 0,
+  "size_diff": 0,
+  "hash_diff": 1,
+  "hashed": 300
+ },
+ "tar_mtime": {
+  "nydus": {
+   "checked": 4000,
+   "match": 4000,
+   "zero": 0,
+   "by_kind": {
+    ".pyc": [
+     545,
+     545
+    ],
+    "file": [
+     2109,
+     2109
+    ],
+    "dir": [
+     439,
+     439
+    ],
+    "symlink": [
+     230,
+     230
+    ],
+    ".py": [
+     618,
+     618
+    ],
+    ".so": [
+     59,
+     59
+    ]
+   }
+  },
+  "today": {
+   "checked": 4000,
+   "match": 0,
+   "zero": 4000,
+   "by_kind": {
+    ".pyc": [
+     545,
+     0
+    ],
+    "file": [
+     2109,
+     0
+    ],
+    "dir": [
+     439,
+     0
+    ],
+    "symlink": [
+     230,
+     0
+    ],
+    ".py": [
+     618,
+     0
+    ],
+    ".so": [
+     59,
+     0
+    ]
+   }
+  }
+ },
+ "pyc_today": {
+  "pyc_checked": 4000,
+  "pyc_stale": 4000,
+  "py_mtime_zero": 4000
+ },
+ "pyc_nydus": {
+  "pyc_checked": 4000,
+  "pyc_stale": 0,
+  "py_mtime_zero": 0
+ }
+}

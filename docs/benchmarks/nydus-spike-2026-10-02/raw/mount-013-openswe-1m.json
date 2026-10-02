@@ -1,0 +1,156 @@
+{
+ "idx": 13,
+ "image": "openswe--pandas-dev__pandas-54945",
+ "family": "OpenSWE-task",
+ "rundir": "/data/work/openswe-1m",
+ "runs": [
+  {
+   "path": "nydus",
+   "rep": 0,
+   "first": "python_import_sys",
+   "nbd_ready": 0.22216534614562988,
+   "erofs_mounted": 0.2313070297241211,
+   "attach": 0.23558759689331055,
+   "devices": 1,
+   "python_import_sys_cold": {
+    "wall": 0.5594127178192139,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_sys_warm": {
+    "wall": 0.22486639022827148,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_after": {
+    "wall": 0.4762866497039795,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_again": {
+    "wall": 0.33417725563049316,
+    "rc": 0,
+    "out": ""
+   },
+   "upper_pyc_written": 0,
+   "nbd_stats": [
+    "STATS {'reads': 429, 'read_bytes': 19570688, 'chunk_fetches': 246, 'fetched_compressed': 9484421, 'fetched_uncompressed': 23273400}"
+   ]
+  },
+  {
+   "path": "nydus",
+   "rep": 0,
+   "first": "git_status",
+   "nbd_ready": 0.22033214569091797,
+   "erofs_mounted": 0.22820234298706055,
+   "attach": 0.23092222213745117,
+   "devices": 1,
+   "git_status_cold": {
+    "wall": 3.269994020462036,
+    "rc": 0,
+    "out": "16\n"
+   },
+   "git_status_warm": {
+    "wall": 1.674612045288086,
+    "rc": 0,
+    "out": "16\n"
+   },
+   "nbd_stats": [
+    "STATS {'reads': 2877, 'read_bytes': 95703040, 'chunk_fetches': 2512, 'fetched_compressed': 77780697, 'fetched_uncompressed': 118933246}"
+   ]
+  },
+  {
+   "path": "nydus",
+   "rep": 1,
+   "first": "python_import_sys",
+   "nbd_ready": 0.23351192474365234,
+   "erofs_mounted": 0.24141979217529297,
+   "attach": 0.24566960334777832,
+   "devices": 1,
+   "python_import_sys_cold": {
+    "wall": 0.5552253723144531,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_sys_warm": {
+    "wall": 0.16721892356872559,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_after": {
+    "wall": 0.5192101001739502,
+    "rc": 0,
+    "out": ""
+   },
+   "python_import_stdlib_again": {
+    "wall": 0.2645261287689209,
+    "rc": 0,
+    "out": ""
+   },
+   "upper_pyc_written": 0,
+   "nbd_stats": [
+    "STATS {'reads': 427, 'read_bytes': 19177472, 'chunk_fetches': 246, 'fetched_compressed': 9484421, 'fetched_uncompressed': 23273400}"
+   ]
+  },
+  {
+   "path": "nydus",
+   "rep": 1,
+   "first": "git_status",
+   "nbd_ready": 0.22705674171447754,
+   "erofs_mounted": 0.23386383056640625,
+   "attach": 0.23777318000793457,
+   "devices": 1,
+   "git_status_cold": {
+    "wall": 3.5435938835144043,
+    "rc": 0,
+    "out": "16\n"
+   },
+   "git_status_warm": {
+    "wall": 1.50020170211792,
+    "rc": 0,
+    "out": "16\n"
+   },
+   "nbd_stats": [
+    "STATS {'reads': 2877, 'read_bytes': 95703040, 'chunk_fetches': 2512, 'fetched_compressed': 77780697, 'fetched_uncompressed': 118933246}"
+   ]
+  }
+ ],
+ "tar_mtime": {
+  "nydus": {
+   "checked": 3721,
+   "match": 3721,
+   "zero": 0,
+   "by_kind": {
+    ".py": [
+     693,
+     693
+    ],
+    ".pyc": [
+     610,
+     610
+    ],
+    "file": [
+     1717,
+     1717
+    ],
+    "symlink": [
+     305,
+     305
+    ],
+    "dir": [
+     337,
+     337
+    ],
+    ".so": [
+     59,
+     59
+    ]
+   }
+  }
+ },
+ "pyc_nydus": {
+  "pyc_checked": 945,
+  "pyc_stale": 0,
+  "py_mtime_zero": 0
+ }
+}

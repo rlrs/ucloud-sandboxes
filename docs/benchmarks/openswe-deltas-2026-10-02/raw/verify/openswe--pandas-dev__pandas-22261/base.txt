@@ -1,0 +1,21 @@
+git_status_rc=0
+git_status_ms=22
+git_status_lines=0
+git_status_sha=e3b0c44298fc1c14
+
+head=4f11d1a9a9b02a37dbe109d8413cc75d73b92853
+head_is_base=1
+base_commit_present=1
+commits=17632
+describe=v0.24.0.dev0-493-g4f11d1a9a9
+git_diff_rc=0
+fsck_rc=0
+version=0.24.0.dev0+493.g4f11d1a9a9
+test_patch_check_rc=0
+collect_rc=0
+collect_tail=pandas/tests/test_resample.py::TestDatetimeIndex::test_nanosecond_resample_error 98 tests collected in 0.15s 
+collected=98
+
+verify_rc=0
+verify_s=7.4
+stderr_tail=

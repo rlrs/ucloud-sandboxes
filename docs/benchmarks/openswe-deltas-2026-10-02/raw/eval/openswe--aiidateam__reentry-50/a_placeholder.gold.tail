@@ -1,0 +1,20 @@
+Applying test patch...
+Checking patch reentry/tests/test_config.py...
+Applied patch reentry/tests/test_config.py cleanly.
+>>>>> Start Test Output
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.1.1, pluggy-1.6.0 -- /opt/conda/envs/testbed/bin/python3.12
+cachedir: .pytest_cache
+rootdir: /testbed
+plugins: platformdirs-4.12.2, cov-7.1.0
+collecting ... collected 5 items
+
+reentry/tests/test_config.py::test_find_config PASSED                    [ 20%]
+reentry/tests/test_config.py::test_make_config_parser PASSED             [ 40%]
+reentry/tests/test_config.py::test_get_config PASSED                     [ 60%]
+reentry/tests/test_config.py::test_get_config_with_env_var PASSED        [ 80%]
+reentry/tests/test_config.py::test_get_datafile PASSED                   [100%]
+
+============================== 5 passed in 0.02s ===============================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

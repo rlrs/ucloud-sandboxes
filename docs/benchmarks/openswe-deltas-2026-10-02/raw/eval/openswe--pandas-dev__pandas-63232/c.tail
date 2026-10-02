@@ -1,0 +1,27 @@
+[detached HEAD daf3887] Original state before patching
+========================================
+Running testOnly (test patch only)
+========================================
+HEAD is now at daf3887 Original state before patching
+Checking patch pandas/tests/copy_view/test_methods.py...
+Applied patch pandas/tests/copy_view/test_methods.py cleanly.
+>>>>> Start Test Output (testOnly)
+[1/1] Generating write_version_file with a custom command
+/e/eval.sh: line 52:    37 Segmentation fault      (core dumped) QT_QPA_PLATFORM=offscreen PYTEST_ADDOPTS="--strict-markers" pytest -v --no-header -rN --tb=short -m "not clipboard and not single_cpu and not slow and not network and not db" pandas/tests/copy_view/test_methods.py::test_groupby_modify_series
+>>>>> End Test Output (testOnly)
+TESTONLY_EXIT_CODE=139
+
+========================================
+Running testWithFix (test patch + golden patch)
+========================================
+HEAD is now at daf3887 Original state before patching
+Checking patch pandas/tests/copy_view/test_methods.py...
+Applied patch pandas/tests/copy_view/test_methods.py cleanly.
+Checking patch pandas/core/groupby/grouper.py...
+Applied patch pandas/core/groupby/grouper.py cleanly.
+>>>>> Start Test Output (testWithFix)
+[1/1] Generating write_version_file with a custom command
+/e/eval.sh: line 114:    60 Segmentation fault      (core dumped) QT_QPA_PLATFORM=offscreen PYTEST_ADDOPTS="--strict-markers" pytest -v --no-header -rN --tb=short -m "not clipboard and not single_cpu and not slow and not network and not db" pandas/tests/copy_view/test_methods.py::test_groupby_modify_series
+>>>>> End Test Output (testWithFix)
+TESTWITHFIX_EXIT_CODE=139
+OPENSWE_EXIT_CODE=1

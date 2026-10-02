@@ -1,0 +1,20 @@
+git_status_rc=0
+git_status_ms=84
+git_status_lines=0
+git_status_sha=e3b0c44298fc1c14
+
+head=3118667672f88f815cc8463a8826283ae5cf20bf
+head_is_base=1
+base_commit_present=1
+commits=1
+describe=fatal: No names found, cannot describe anything.
+git_diff_rc=0
+fsck_rc=0
+test_patch_check_rc=0
+collect_rc=0
+collect_tail=27 tests collected in 0.49s 
+collected=27
+
+verify_rc=0
+verify_s=2.7
+stderr_tail=

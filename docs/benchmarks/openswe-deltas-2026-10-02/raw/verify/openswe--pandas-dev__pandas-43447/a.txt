@@ -1,0 +1,21 @@
+git_status_rc=0
+git_status_ms=33
+git_status_lines=6
+git_status_sha=5b6721a65ed8313e
+
+head=805f0d9b941fece5dc5add2206e5932ff7af7412
+head_is_base=1
+base_commit_present=1
+commits=27695
+describe=v1.4.0.dev0-636-g805f0d9b94
+git_diff_rc=1
+fsck_rc=0
+version=1.4.0.dev0+636.g805f0d9b94.dirty
+test_patch_check_rc=0
+collect_rc=0
+collect_tail=4 tests collected in 0.03s 
+collected=4
+
+verify_rc=0
+verify_s=9.6
+stderr_tail=

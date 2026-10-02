@@ -1,0 +1,36 @@
+sts/test_resample.py::TestDatetimeIndex::test_resample_dtype_preservation
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_weekly_resample_buglet
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_monthly_resample_error
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_nanosecond_resample_error
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_anchored_intraday
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_anchored_monthstart
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_anchored_multiday
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_corner_cases
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_anchored_lowercase_buglet
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_upsample_apply_functions
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_not_monotonic
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_median_bug_1688
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_how_lambda_functions
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_unequal_times
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_consistency
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_timegrouper
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_nunique
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_nunique_with_date_gap
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_group_info[10-10000]
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_group_info[10-100000]
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_group_info[100-10000]
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_group_info[100-100000]
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_group_info[1000-10000]
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_group_info[1000-100000]
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_size
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_across_dst
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_dst_anchor
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_downsample_across_dst
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_with_nat
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_timedelta_values
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_datetime_values
+PASSED pandas/tests/test_resample.py::TestDatetimeIndex::test_resample_apply_with_additional_args
+SKIPPED [1] pandas/tests/test_resample.py:1638: could not import 'scipy.interpolate': No module named 'scipy'
+=================== 97 passed, 1 skipped, 1 warning in 1.32s ===================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

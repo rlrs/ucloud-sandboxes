@@ -1,0 +1,5180 @@
+{
+ "openswe--OasisLMF__OasisLMF-1406": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "2644",
+    "git_status_lines": "1",
+    "git_status_sha": "0c477c3a618359ec",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "3218",
+    "describe": "1.28.2-31-gf094fe66e",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.28.4",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "2"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "705",
+    "git_status_lines": "1",
+    "git_status_sha": "0c477c3a618359ec",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "3218",
+    "describe": "1.28.2-31-gf094fe66e",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.28.4",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "2"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "82",
+    "git_status_lines": "1",
+    "git_status_sha": "0c477c3a618359ec",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "1.28.2",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.28.4",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "2"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.2"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "4",
+    "gold_apply": null,
+    "run_s": "2.4"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "735",
+    "git_status_lines": "1",
+    "git_status_sha": "0c477c3a618359ec",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "1.28.2",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.28.4",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "2"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "838",
+    "git_status_lines": "1",
+    "git_status_sha": "0c477c3a618359ec",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "1.28.2",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.28.4",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "2"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.6"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "4",
+    "gold_apply": null,
+    "run_s": "2.4"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "2449",
+    "git_status_lines": "1",
+    "git_status_sha": "0c477c3a618359ec",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "3218",
+    "describe": "1.28.2-31-gf094fe66e",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.28.4",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "2"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "4",
+    "gold_apply": null,
+    "run_s": "2.6"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "680",
+    "git_status_lines": "1",
+    "git_status_sha": "0c477c3a618359ec",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "1.28.2",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.28.4",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "2"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "4",
+    "gold_apply": null,
+    "run_s": "2.3"
+   }
+  }
+ },
+ "openswe--aiidateam__reentry-50": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "6",
+    "git_status_lines": "4",
+    "git_status_sha": "a2a61657a590d35d",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "128",
+    "describe": "v1.2.1-alpha.3-19-g06cabf7",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0a1",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "5"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "16",
+    "git_status_lines": "4",
+    "git_status_sha": "a2a61657a590d35d",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "128",
+    "describe": "v1.2.1-alpha.3-19-g06cabf7",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0a1",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "5"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "6",
+    "git_status_lines": "4",
+    "git_status_sha": "a2a61657a590d35d",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v1.2.1-alpha.3",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0a1",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "5"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.0"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.1"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "14",
+    "git_status_lines": "4",
+    "git_status_sha": "a2a61657a590d35d",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.2.1-alpha.3",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0a1",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "5"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "14",
+    "git_status_lines": "4",
+    "git_status_sha": "a2a61657a590d35d",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.2.1-alpha.3",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0a1",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "5"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "0.9"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.3"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "7",
+    "git_status_lines": "4",
+    "git_status_sha": "a2a61657a590d35d",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "128",
+    "describe": "v1.2.1-alpha.3-19-g06cabf7",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0a1",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "5"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.2"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.1"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "10",
+    "git_status_lines": "4",
+    "git_status_sha": "a2a61657a590d35d",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.2.1-alpha.3",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0a1",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "5"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "0.9"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.0"
+   }
+  }
+ },
+ "openswe--androguard__androguard-411": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "116",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1323",
+    "describe": "v3.1.0-pre.2-222-gc3c671be",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.1.0",
+    "test_patch_check_rc": "128",
+    "collect_rc": null,
+    "collected": null
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "102",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1323",
+    "describe": "v3.1.0-pre.2-222-gc3c671be",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.1.0",
+    "test_patch_check_rc": "128",
+    "collect_rc": null,
+    "collected": null
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "8",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v3.1.0-pre.2",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.1.0",
+    "test_patch_check_rc": "128",
+    "collect_rc": null,
+    "collected": null
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "1.5"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "87",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v3.1.0-pre.2",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.1.0",
+    "test_patch_check_rc": "128",
+    "collect_rc": null,
+    "collected": null
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "128",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v3.1.0-pre.2",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.1.0",
+    "test_patch_check_rc": "128",
+    "collect_rc": null,
+    "collected": null
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.6"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "1.6"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "104",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1323",
+    "describe": "v3.1.0-pre.2-222-gc3c671be",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.1.0",
+    "test_patch_check_rc": "128",
+    "collect_rc": null,
+    "collected": null
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "2.1"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "100",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v3.1.0-pre.2",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.1.0",
+    "test_patch_check_rc": "128",
+    "collect_rc": null,
+    "collected": null
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.6"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "1.7"
+   }
+  }
+ },
+ "openswe--astropy__astropy-16038": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "17",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "36870",
+    "describe": "v6.1.dev-457-gfebf980558",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "6.1.dev457+gfebf98055",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "46"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "27",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "36870",
+    "describe": "v6.1.dev-457-gfebf980558",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "6.1.dev457+gfebf98055",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "46"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "22",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v6.1.dev",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "6.1.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "46"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.4"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.1"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "20",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v6.1.dev",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "6.1.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "46"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "32",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v6.1.dev",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "6.1.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "46"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.1"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.5"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "17",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "36870",
+    "describe": "v6.1.dev-457-gfebf980558",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "6.1.dev457+gfebf98055",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "46"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.2"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "16",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v6.1.dev",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "6.1.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "46"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.4"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.2"
+   }
+  }
+ },
+ "openswe--conan-io__conan-15665": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "114",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "8123",
+    "describe": "2.0.17-115-g1940c9fe9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.1.0-dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "31"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "48",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "8123",
+    "describe": "2.0.17-115-g1940c9fe9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.1.0-dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "31"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "14",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "2.0.17",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.1.0-dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "31"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "5.0"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "5.3"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "41",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "2.0.17",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.1.0-dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "31"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "53",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "2.0.17",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.1.0-dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "31"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "6.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "4.9"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "45",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "8123",
+    "describe": "2.0.17-115-g1940c9fe9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.1.0-dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "31"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "6.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "4.8"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "43",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "2.0.17",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.1.0-dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "31"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "5.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "5.7"
+   }
+  }
+ },
+ "openswe--duck-dynasty__duckbot-1203": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "70",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "988",
+    "describe": "fatal: No names found, cannot describe anything.",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": null,
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "27"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "87",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "988",
+    "describe": "fatal: No names found, cannot describe anything.",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": null,
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "27"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "10",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "fatal: No names found, cannot describe anything.",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": null,
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "27"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "8.6"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "9.2"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "58",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "fatal: No names found, cannot describe anything.",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": null,
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "27"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "28",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "fatal: No names found, cannot describe anything.",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": null,
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "27"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "8.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "9.1"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "30",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "988",
+    "describe": "fatal: No names found, cannot describe anything.",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": null,
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "27"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "8.6"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "9.1"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "84",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "fatal: No names found, cannot describe anything.",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": null,
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "27"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "8.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "9.4"
+   }
+  }
+ },
+ "openswe--fake-useragent__fake-useragent-216": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "7",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "323",
+    "describe": "1.2.1-17-g2bcd556",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "0"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "9",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "323",
+    "describe": "1.2.1-17-g2bcd556",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "0"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "6",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "1.2.1",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "0.8"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.0"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "7",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "1.2.1",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "0"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "9",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "1.2.1",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "0.9"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "0.9"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "10",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "323",
+    "describe": "1.2.1-17-g2bcd556",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.1"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.3"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "7",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "1.2.1",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "0.9"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.0"
+   }
+  }
+ },
+ "openswe--getmoto__moto-7212": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "459",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "8302",
+    "describe": "4.2.13-5-g624de34d8",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "4.2.14.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "194"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "188",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "8302",
+    "describe": "4.2.13-5-g624de34d8",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "4.2.14.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "194"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "24",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "4.2.13",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "4.2.14.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "194"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "5.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "5.7"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "436",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "4.2.13",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "4.2.14.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "194"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "208",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "4.2.13",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "4.2.14.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "194"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "5.6"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "5.9"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "394",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "8302",
+    "describe": "4.2.13-5-g624de34d8",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "4.2.14.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "194"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "180",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "8302",
+    "describe": "4.2.13-5-g624de34d8",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "4.2.14.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "194"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "5.8"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "5.2"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "179",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "4.2.13",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "4.2.14.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "194"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "5.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "5.6"
+   }
+  }
+ },
+ "openswe--getmoto__moto-7752": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "592",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "8687",
+    "describe": "5.0.9-12-g11900987b",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "5.0.10.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "220",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "8687",
+    "describe": "5.0.9-12-g11900987b",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "5.0.10.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "21",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "5.0.9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "5.0.10.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "4.9"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "5.0"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "219",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "5.0.9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "5.0.10.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "179",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "5.0.9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "5.0.10.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "4.9"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "5.2"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "693",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "8687",
+    "describe": "5.0.9-12-g11900987b",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "5.0.10.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "204",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "8687",
+    "describe": "5.0.9-12-g11900987b",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "5.0.10.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "5.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "4.5"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "173",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "5.0.9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "5.0.10.dev",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "6.4"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "6.0"
+   }
+  }
+ },
+ "openswe--mps-gmbh__hl7-parser-32": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "12",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "83",
+    "describe": "0.7.4-4-g41cce26",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "7"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "5",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "83",
+    "describe": "0.7.4-4-g41cce26",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "7"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "7",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "0.7.4",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "7"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.4"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "5",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "0.7.4",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "7"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "6",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "0.7.4",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "7"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.3"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.4"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "6",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "83",
+    "describe": "0.7.4-4-g41cce26",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "7"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.6"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.4"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "10",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "0.7.4",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "7"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.4"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.4"
+   }
+  }
+ },
+ "openswe--napari__napari-tiff-31": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "12",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "58",
+    "describe": "v0.1.2-37-g33a9426",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.1.3.dev37+g33a9426a8",
+    "test_patch_check_rc": "128",
+    "collect_rc": "0",
+    "collected": "12"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "5",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "58",
+    "describe": "v0.1.2-37-g33a9426",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.1.3.dev37+g33a9426a8",
+    "test_patch_check_rc": "128",
+    "collect_rc": "0",
+    "collected": "12"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "6",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v0.1.2",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.1.3.dev37+g33a9426a8",
+    "test_patch_check_rc": "128",
+    "collect_rc": "0",
+    "collected": "12"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.4"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.6"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "5",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.1.2",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.1.3.dev37+g33a9426a8",
+    "test_patch_check_rc": "128",
+    "collect_rc": "0",
+    "collected": "12"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "8",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.1.2",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.1.3.dev37+g33a9426a8",
+    "test_patch_check_rc": "128",
+    "collect_rc": "0",
+    "collected": "12"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.2"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "4.7"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "5",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "58",
+    "describe": "v0.1.2-37-g33a9426",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.1.3.dev37+g33a9426a8",
+    "test_patch_check_rc": "128",
+    "collect_rc": "0",
+    "collected": "12"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "4.6"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "4.7"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "4",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.1.2",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.1.3.dev37+g33a9426a8",
+    "test_patch_check_rc": "128",
+    "collect_rc": "0",
+    "collected": "12"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.6"
+   }
+  }
+ },
+ "openswe--newam__idasen-340": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "11",
+    "git_status_lines": "1",
+    "git_status_sha": "2e5a51b585fac177",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "311",
+    "describe": "v0.10.1",
+    "git_diff_rc": "1",
+    "fsck_rc": "0",
+    "version": null,
+    "test_patch_check_rc": "128",
+    "collect_rc": "0",
+    "collected": "38"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "8",
+    "git_status_lines": "1",
+    "git_status_sha": "2e5a51b585fac177",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "311",
+    "describe": "v0.10.1",
+    "git_diff_rc": "1",
+    "fsck_rc": "0",
+    "version": null,
+    "test_patch_check_rc": "128",
+    "collect_rc": "0",
+    "collected": "38"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "5",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v0.10.1",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": null,
+    "test_patch_check_rc": "128",
+    "collect_rc": "0",
+    "collected": "38"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.5"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "6",
+    "git_status_lines": "1",
+    "git_status_sha": "2e5a51b585fac177",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.10.1",
+    "git_diff_rc": "1",
+    "fsck_rc": "0",
+    "version": null,
+    "test_patch_check_rc": "128",
+    "collect_rc": "0",
+    "collected": "38"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "6",
+    "git_status_lines": "1",
+    "git_status_sha": "2e5a51b585fac177",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.10.1",
+    "git_diff_rc": "1",
+    "fsck_rc": "0",
+    "version": null,
+    "test_patch_check_rc": "128",
+    "collect_rc": "0",
+    "collected": "38"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.4"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "5",
+    "git_status_lines": "1",
+    "git_status_sha": "2e5a51b585fac177",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "311",
+    "describe": "v0.10.1",
+    "git_diff_rc": "1",
+    "fsck_rc": "0",
+    "version": null,
+    "test_patch_check_rc": "128",
+    "collect_rc": "0",
+    "collected": "38"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.1"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "6",
+    "git_status_lines": "1",
+    "git_status_sha": "2e5a51b585fac177",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.10.1",
+    "git_diff_rc": "1",
+    "fsck_rc": "0",
+    "version": null,
+    "test_patch_check_rc": "128",
+    "collect_rc": "0",
+    "collected": "38"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.4"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.4"
+   }
+  }
+ },
+ "openswe--pandas-dev__pandas-20422": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "15",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "16926",
+    "describe": "v0.23.0.dev0-674-g4fb963b6a3",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.23.0.dev0+674.g4fb963b6a3",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "28"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "21",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "16926",
+    "describe": "v0.23.0.dev0-674-g4fb963b6a3",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.23.0.dev0+674.g4fb963b6a3",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "28"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "23",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v0.23.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.23.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "28"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.1"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.4"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "16",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.23.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.23.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "28"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "16",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.23.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.23.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "28"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.1"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.3"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "15",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "16926",
+    "describe": "v0.23.0.dev0-674-g4fb963b6a3",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.23.0.dev0+674.g4fb963b6a3",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "28"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "28",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "16926",
+    "describe": "v0.23.0.dev0-674-g4fb963b6a3",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.23.0.dev0+674.g4fb963b6a3",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "28"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.1"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.4"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "51",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.23.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.23.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "28"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.0"
+   }
+  }
+ },
+ "openswe--pandas-dev__pandas-21799": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "26",
+    "git_status_lines": "4",
+    "git_status_sha": "7f2f50d51c161e92",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "17587",
+    "describe": "v0.24.0.dev0-448-g475e391eaa",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0+448.g475e391eaa",
+    "test_patch_check_rc": "0",
+    "collect_rc": "1",
+    "collected": "0"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "15",
+    "git_status_lines": "4",
+    "git_status_sha": "7f2f50d51c161e92",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "17587",
+    "describe": "v0.24.0.dev0-448-g475e391eaa",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0+448.g475e391eaa",
+    "test_patch_check_rc": "0",
+    "collect_rc": "1",
+    "collected": "0"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "27",
+    "git_status_lines": "4",
+    "git_status_sha": "7f2f50d51c161e92",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v0.24.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "1",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": "ok",
+    "run_s": "1.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.6"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "24",
+    "git_status_lines": "4",
+    "git_status_sha": "7f2f50d51c161e92",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.24.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "1",
+    "collected": "0"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "14",
+    "git_status_lines": "4",
+    "git_status_sha": "7f2f50d51c161e92",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.24.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "1",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": "ok",
+    "run_s": "1.6"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.7"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "21",
+    "git_status_lines": "4",
+    "git_status_sha": "7f2f50d51c161e92",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "17587",
+    "describe": "v0.24.0.dev0-448-g475e391eaa",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0+448.g475e391eaa",
+    "test_patch_check_rc": "0",
+    "collect_rc": "1",
+    "collected": "0"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "19",
+    "git_status_lines": "4",
+    "git_status_sha": "7f2f50d51c161e92",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "17587",
+    "describe": "v0.24.0.dev0-448-g475e391eaa",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0+448.g475e391eaa",
+    "test_patch_check_rc": "0",
+    "collect_rc": "1",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": "ok",
+    "run_s": "1.9"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.1"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "21",
+    "git_status_lines": "4",
+    "git_status_sha": "7f2f50d51c161e92",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.24.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "1",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": "ok",
+    "run_s": "1.8"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.7"
+   }
+  }
+ },
+ "openswe--pandas-dev__pandas-22261": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "22",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "17632",
+    "describe": "v0.24.0.dev0-493-g4f11d1a9a9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0+493.g4f11d1a9a9",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "98"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "23",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "17632",
+    "describe": "v0.24.0.dev0-493-g4f11d1a9a9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0+493.g4f11d1a9a9",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "98"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "22",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v0.24.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "98"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.1"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "3.0"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "18",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.24.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "98"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "15",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.24.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "98"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.1"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "3.1"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "18",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "17632",
+    "describe": "v0.24.0.dev0-493-g4f11d1a9a9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0+493.g4f11d1a9a9",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "98"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "22",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "17632",
+    "describe": "v0.24.0.dev0-493-g4f11d1a9a9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0+493.g4f11d1a9a9",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "98"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.9"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "3.0"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "22",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.24.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "0.24.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "98"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.1"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "3.3"
+   }
+  }
+ },
+ "openswe--pandas-dev__pandas-34736": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "32",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "23336",
+    "describe": "v1.1.0.dev0-1817-g57d056a650",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.1.0.dev0+1817.g57d056a650",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "38"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "35",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "23336",
+    "describe": "v1.1.0.dev0-1817-g57d056a650",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.1.0.dev0+1817.g57d056a650",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "38"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "28",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v1.1.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.1.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "38"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.9"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.8"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "30",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.1.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.1.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "38"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "30",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.1.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.1.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "38"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.8"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.8"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "34",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "23336",
+    "describe": "v1.1.0.dev0-1817-g57d056a650",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.1.0.dev0+1817.g57d056a650",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "38"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "18",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "23336",
+    "describe": "v1.1.0.dev0-1817-g57d056a650",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.1.0.dev0+1817.g57d056a650",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "38"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.9"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.4"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "14",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.1.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.1.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "38"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.2"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.8"
+   }
+  }
+ },
+ "openswe--pandas-dev__pandas-39341": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "22",
+    "git_status_lines": "6",
+    "git_status_sha": "50b8c6d2ce5c980b",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "25672",
+    "describe": "v1.3.0.dev0-507-gb31c069ded",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0.dev0+507.gb31c069ded",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "61"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "23",
+    "git_status_lines": "6",
+    "git_status_sha": "50b8c6d2ce5c980b",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "25672",
+    "describe": "v1.3.0.dev0-507-gb31c069ded",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0.dev0+507.gb31c069ded",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "61"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "18",
+    "git_status_lines": "6",
+    "git_status_sha": "50b8c6d2ce5c980b",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v1.3.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "61"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "8.4"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "8.7"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "24",
+    "git_status_lines": "6",
+    "git_status_sha": "50b8c6d2ce5c980b",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.3.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "61"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "16",
+    "git_status_lines": "6",
+    "git_status_sha": "50b8c6d2ce5c980b",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.3.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "61"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "8.9"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "8.5"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "26",
+    "git_status_lines": "6",
+    "git_status_sha": "50b8c6d2ce5c980b",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "25672",
+    "describe": "v1.3.0.dev0-507-gb31c069ded",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0.dev0+507.gb31c069ded",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "61"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "19",
+    "git_status_lines": "6",
+    "git_status_sha": "50b8c6d2ce5c980b",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "25672",
+    "describe": "v1.3.0.dev0-507-gb31c069ded",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0.dev0+507.gb31c069ded",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "61"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "8.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "9.1"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "20",
+    "git_status_lines": "6",
+    "git_status_sha": "50b8c6d2ce5c980b",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.3.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.3.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "61"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "9.0"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "9.2"
+   }
+  }
+ },
+ "openswe--pandas-dev__pandas-42222": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "30",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "27672",
+    "describe": "v1.4.0.dev0-613-g73c473dce9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0+613.g73c473dce9",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "9"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "24",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "27672",
+    "describe": "v1.4.0.dev0-613-g73c473dce9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0+613.g73c473dce9",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "9"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "35",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v1.4.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "9"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.4"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.7"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "23",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.4.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "9"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "28",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.4.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "9"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.6"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "30",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "27672",
+    "describe": "v1.4.0.dev0-613-g73c473dce9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0+613.g73c473dce9",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "9"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "24",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "27672",
+    "describe": "v1.4.0.dev0-613-g73c473dce9",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0+613.g73c473dce9",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "9"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.4"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.9"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "20",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.4.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "9"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.3"
+   }
+  }
+ },
+ "openswe--pandas-dev__pandas-43447": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "33",
+    "git_status_lines": "6",
+    "git_status_sha": "5b6721a65ed8313e",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "27695",
+    "describe": "v1.4.0.dev0-636-g805f0d9b94",
+    "git_diff_rc": "1",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0+636.g805f0d9b94.dirty",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "4"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "15",
+    "git_status_lines": "6",
+    "git_status_sha": "5b6721a65ed8313e",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "27695",
+    "describe": "v1.4.0.dev0-636-g805f0d9b94",
+    "git_diff_rc": "1",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0+636.g805f0d9b94.dirty",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "4"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "19",
+    "git_status_lines": "5",
+    "git_status_sha": "9bd1fee20d25a5cb",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v1.4.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "4"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.3"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.3"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "33",
+    "git_status_lines": "6",
+    "git_status_sha": "5b6721a65ed8313e",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.4.0.dev0",
+    "git_diff_rc": "1",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0+0.g805f0d9.dirty",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "4"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "34",
+    "git_status_lines": "6",
+    "git_status_sha": "5b6721a65ed8313e",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.4.0.dev0",
+    "git_diff_rc": "1",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0+0.g805f0d9.dirty",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "4"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.2"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.2"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "31",
+    "git_status_lines": "6",
+    "git_status_sha": "5b6721a65ed8313e",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "27695",
+    "describe": "v1.4.0.dev0-636-g805f0d9b94",
+    "git_diff_rc": "1",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0+636.g805f0d9b94.dirty",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "4"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "18",
+    "git_status_lines": "6",
+    "git_status_sha": "5b6721a65ed8313e",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "27695",
+    "describe": "v1.4.0.dev0-636-g805f0d9b94",
+    "git_diff_rc": "1",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0+636.g805f0d9b94.dirty",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "4"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.6"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "28",
+    "git_status_lines": "6",
+    "git_status_sha": "5b6721a65ed8313e",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.4.0.dev0",
+    "git_diff_rc": "1",
+    "fsck_rc": "0",
+    "version": "1.4.0.dev0+0.g805f0d9.dirty",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "4"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "2.4"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "2.2"
+   }
+  }
+ },
+ "openswe--pandas-dev__pandas-45642": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "34",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "28827",
+    "describe": "v1.5.0.dev0-190-g6659da4b5d",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0+190.g6659da4b5d",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "26",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "28827",
+    "describe": "v1.5.0.dev0-190-g6659da4b5d",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0+190.g6659da4b5d",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "25",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v1.5.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "12.2"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "13.0"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "23",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.5.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "31",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.5.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "12.8"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "12.3"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "34",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "28827",
+    "describe": "v1.5.0.dev0-190-g6659da4b5d",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0+190.g6659da4b5d",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "20",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "28827",
+    "describe": "v1.5.0.dev0-190-g6659da4b5d",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0+190.g6659da4b5d",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "12.9"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "12.6"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "22",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.5.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "45"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "12.3"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "13.8"
+   }
+  }
+ },
+ "openswe--pandas-dev__pandas-46301": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "24",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "29138",
+    "describe": "v1.5.0.dev0-501-g0453fdf4b8",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0+501.g0453fdf4b8",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "33",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "29138",
+    "describe": "v1.5.0.dev0-501-g0453fdf4b8",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0+501.g0453fdf4b8",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "28",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v1.5.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.2"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.4"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "48",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.5.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "20",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.5.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.1"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.5"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "23",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "29138",
+    "describe": "v1.5.0.dev0-501-g0453fdf4b8",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0+501.g0453fdf4b8",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "21",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "29138",
+    "describe": "v1.5.0.dev0-501-g0453fdf4b8",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0+501.g0453fdf4b8",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.3"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.4"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "18",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v1.5.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.5.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.0"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.3"
+   }
+  }
+ },
+ "openswe--pandas-dev__pandas-50682": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "25",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "31147",
+    "describe": "v2.0.0.dev0-1145-g710b83bf29",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.0.0.dev0+1145.g710b83bf29",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "529"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "34",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "31147",
+    "describe": "v2.0.0.dev0-1145-g710b83bf29",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.0.0.dev0+1145.g710b83bf29",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "529"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "21",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v2.0.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.0.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "529"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "8.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "9.0"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "23",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v2.0.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.0.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "529"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "51",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v2.0.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.0.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "529"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "8.1"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "7.9"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "24",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "31147",
+    "describe": "v2.0.0.dev0-1145-g710b83bf29",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.0.0.dev0+1145.g710b83bf29",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "529"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "17",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "31147",
+    "describe": "v2.0.0.dev0-1145-g710b83bf29",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.0.0.dev0+1145.g710b83bf29",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "529"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "8.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "8.8"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "26",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v2.0.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.0.0.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "529"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "8.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "9.4"
+   }
+  }
+ },
+ "openswe--pandas-dev__pandas-54945": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "30",
+    "git_status_lines": "16",
+    "git_status_sha": "51ba30daa41a22aa",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "33231",
+    "describe": "v2.2.0.dev0-163-gac8d34dd9a",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.2.0.dev0+163.gac8d34dd9a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "11"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "20",
+    "git_status_lines": "16",
+    "git_status_sha": "51ba30daa41a22aa",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "33231",
+    "describe": "v2.2.0.dev0-163-gac8d34dd9a",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.2.0.dev0+163.gac8d34dd9a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "11"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "32",
+    "git_status_lines": "16",
+    "git_status_sha": "51ba30daa41a22aa",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v2.2.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.2.0.dev0+163.gac8d34dd9a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "11"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.6"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "3.4"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "15",
+    "git_status_lines": "16",
+    "git_status_sha": "51ba30daa41a22aa",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v2.2.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.2.0.dev0+163.gac8d34dd9a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "11"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "35",
+    "git_status_lines": "16",
+    "git_status_sha": "51ba30daa41a22aa",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v2.2.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.2.0.dev0+163.gac8d34dd9a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "11"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "4.1"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "3.3"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "31",
+    "git_status_lines": "16",
+    "git_status_sha": "51ba30daa41a22aa",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "33231",
+    "describe": "v2.2.0.dev0-163-gac8d34dd9a",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.2.0.dev0+163.gac8d34dd9a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "11"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "17",
+    "git_status_lines": "16",
+    "git_status_sha": "51ba30daa41a22aa",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "33231",
+    "describe": "v2.2.0.dev0-163-gac8d34dd9a",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.2.0.dev0+163.gac8d34dd9a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "11"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "3.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "4.0"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "49",
+    "git_status_lines": "16",
+    "git_status_sha": "51ba30daa41a22aa",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v2.2.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2.2.0.dev0+163.gac8d34dd9a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "11"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "4.4"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "4.1"
+   }
+  }
+ },
+ "openswe--pandas-dev__pandas-62428": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "19",
+    "git_status_lines": "3",
+    "git_status_sha": "d2f9e85d10b72f4c",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "36462",
+    "describe": "v3.0.0.dev0-2435-g22bae73689",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2435.g22bae73689",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "27",
+    "git_status_lines": "3",
+    "git_status_sha": "d2f9e85d10b72f4c",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "36462",
+    "describe": "v3.0.0.dev0-2435-g22bae73689",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2435.g22bae73689",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "19",
+    "git_status_lines": "3",
+    "git_status_sha": "d2f9e85d10b72f4c",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v3.0.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2435.g22bae73689",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "139",
+    "gold_apply": "ok",
+    "run_s": "2.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "139",
+    "gold_apply": null,
+    "run_s": "2.5"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "25",
+    "git_status_lines": "3",
+    "git_status_sha": "d2f9e85d10b72f4c",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v3.0.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2435.g22bae73689",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "17",
+    "git_status_lines": "3",
+    "git_status_sha": "d2f9e85d10b72f4c",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v3.0.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2435.g22bae73689",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "139",
+    "gold_apply": "ok",
+    "run_s": "2.6"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "139",
+    "gold_apply": null,
+    "run_s": "2.7"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "18",
+    "git_status_lines": "3",
+    "git_status_sha": "d2f9e85d10b72f4c",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "36462",
+    "describe": "v3.0.0.dev0-2435-g22bae73689",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2435.g22bae73689",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "18",
+    "git_status_lines": "3",
+    "git_status_sha": "d2f9e85d10b72f4c",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "36462",
+    "describe": "v3.0.0.dev0-2435-g22bae73689",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2435.g22bae73689",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "139",
+    "gold_apply": "ok",
+    "run_s": "2.6"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "139",
+    "gold_apply": null,
+    "run_s": "3.2"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "27",
+    "git_status_lines": "3",
+    "git_status_sha": "d2f9e85d10b72f4c",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v3.0.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2435.g22bae73689",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "139",
+    "gold_apply": "ok",
+    "run_s": "2.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "139",
+    "gold_apply": null,
+    "run_s": "2.7"
+   }
+  }
+ },
+ "openswe--pandas-dev__pandas-63232": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "58",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "36784",
+    "describe": "v3.0.0.dev0-2757-gfb517bad0a",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2757.gfb517bad0a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "23",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "36784",
+    "describe": "v3.0.0.dev0-2757-gfb517bad0a",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2757.gfb517bad0a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "18",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v3.0.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2757.gfb517bad0a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": "ok",
+    "run_s": "4.0"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "4.1"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "23",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v3.0.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2757.gfb517bad0a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "25",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v3.0.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2757.gfb517bad0a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": "ok",
+    "run_s": "4.1"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "4.2"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "17",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "36784",
+    "describe": "v3.0.0.dev0-2757-gfb517bad0a",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2757.gfb517bad0a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "42",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "36784",
+    "describe": "v3.0.0.dev0-2757-gfb517bad0a",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2757.gfb517bad0a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": "ok",
+    "run_s": "4.2"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "4.6"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "19",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v3.0.0.dev0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "3.0.0.dev0+2757.gfb517bad0a",
+    "test_patch_check_rc": "0",
+    "collect_rc": "139",
+    "collected": "0"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": "ok",
+    "run_s": "4.1"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "4.2"
+   }
+  }
+ },
+ "openswe--pydata__xarray-9194": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "15",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "5464",
+    "describe": "v2024.06.0-27-g3deee7bb",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2024.6.1.dev27+g3deee7bb5",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "1"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "10",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "5464",
+    "describe": "v2024.06.0-27-g3deee7bb",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2024.6.1.dev27+g3deee7bb5",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "1"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "9",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v2024.06.0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2024.6.1.dev27+g3deee7bb5",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "1"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": "ok",
+    "run_s": "21.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "21.7"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "10",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v2024.06.0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2024.6.1.dev27+g3deee7bb5",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "1"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "24",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v2024.06.0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2024.6.1.dev27+g3deee7bb5",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "1"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": "ok",
+    "run_s": "24.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "23.7"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "18",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "5464",
+    "describe": "v2024.06.0-27-g3deee7bb",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2024.6.1.dev27+g3deee7bb5",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "1"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": "ok",
+    "run_s": "22.3"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "20.1"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "12",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v2024.06.0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "2024.6.1.dev27+g3deee7bb5",
+    "test_patch_check_rc": "0",
+    "collect_rc": "4",
+    "collected": "1"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": "ok",
+    "run_s": "21.9"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "22.6"
+   }
+  }
+ },
+ "openswe--rustedpy__result-58": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "10",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "64",
+    "describe": "v0.6.0-9-g7624723",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "6",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "64",
+    "describe": "v0.6.0-9-g7624723",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "4",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "v0.6.0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.2"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.2"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "11",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.6.0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "9",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.6.0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.3"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.3"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "9",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "64",
+    "describe": "v0.6.0-9-g7624723",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.4"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.4"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "5",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "v0.6.0",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "?",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "1"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "1.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "1.3"
+   }
+  }
+ },
+ "openswe--scikit-learn__scikit-learn-29021": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "16",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "31296",
+    "describe": "0.19-branching-9244-g00db4dfeb6",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "207"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "20",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "31296",
+    "describe": "0.19-branching-9244-g00db4dfeb6",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "207"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "17",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "0.19-branching",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "207"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "140.8"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "150.1"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "30",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "0.19-branching",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "207"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "30",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "0.19-branching",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "207"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "140.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "143.3"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "24",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "31296",
+    "describe": "0.19-branching-9244-g00db4dfeb6",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "207"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "16",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "31296",
+    "describe": "0.19-branching-9244-g00db4dfeb6",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "207"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "135.5"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "128.7"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "15",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "0.19-branching",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "207"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "142.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": null,
+    "run_s": "149.1"
+   }
+  }
+ },
+ "openswe--scikit-learn__scikit-learn-30152": {
+  "a": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "442",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "31835",
+    "describe": "0.19-branching-9783-g04fbe04fed",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "338"
+   }
+  },
+  "a_gc": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "114",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "31835",
+    "describe": "0.19-branching-9783-g04fbe04fed",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "338"
+   }
+  },
+  "a_placeholder": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "16",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "0",
+    "base_commit_present": "0",
+    "commits": "1",
+    "describe": "0.19-branching",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "338"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "17.4"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.2"
+   }
+  },
+  "a_shallow": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "100",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "0.19-branching",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "338"
+   }
+  },
+  "a_shallow_loose": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "118",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "0.19-branching",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "338"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "18.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.4"
+   }
+  },
+  "a_sharedpack": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "225",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "31835",
+    "describe": "0.19-branching-9783-g04fbe04fed",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "338"
+   }
+  },
+  "base": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "92",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "31835",
+    "describe": "0.19-branching-9783-g04fbe04fed",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "338"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "16.3"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.6"
+   }
+  },
+  "c": {
+   "verify": {
+    "git_status_rc": "0",
+    "git_status_ms": "139",
+    "git_status_lines": "0",
+    "git_status_sha": "e3b0c44298fc1c14",
+    "head_is_base": "1",
+    "base_commit_present": "1",
+    "commits": "1",
+    "describe": "0.19-branching",
+    "git_diff_rc": "0",
+    "fsck_rc": "0",
+    "version": "1.6.dev0",
+    "test_patch_check_rc": "0",
+    "collect_rc": "0",
+    "collected": "338"
+   },
+   "eval_gold": {
+    "OPENSWE_EXIT_CODE": "0",
+    "gold_apply": "ok",
+    "run_s": "16.7"
+   },
+   "eval_unpatched": {
+    "OPENSWE_EXIT_CODE": "1",
+    "gold_apply": null,
+    "run_s": "3.4"
+   }
+  }
+ }
+}

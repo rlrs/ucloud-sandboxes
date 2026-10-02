@@ -1,0 +1,34 @@
+ray/tests/test_groupby.py[0m:562: in <module>
+    [0mrepr_da = xr.DataArray([90m[39;49;00m
+[1m[31mxarray/core/dataarray.py[0m:456: in __init__
+    [0mcoords, dims = _infer_coords_and_dims(data.shape, coords, dims)[90m[39;49;00m
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[90m[39;49;00m
+[1m[31mxarray/core/dataarray.py[0m:186: in _infer_coords_and_dims
+    [0mnew_coords[k] = as_variable(v, name=k, auto_convert=[94mFalse[39;49;00m)[90m[39;49;00m
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[90m[39;49;00m
+[1m[31mxarray/core/variable.py[0m:154: in as_variable
+    [0mdata: T_DuckArray = as_compatible_data(obj)[90m[39;49;00m
+                        ^^^^^^^^^^^^^^^^^^^^^^^[90m[39;49;00m
+[1m[31mxarray/core/variable.py[0m:286: in as_compatible_data
+    [0mdata = _possibly_convert_datetime_or_timedelta_index(data)[90m[39;49;00m
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[90m[39;49;00m
+[1m[31mxarray/core/variable.py[0m:255: in _possibly_convert_datetime_or_timedelta_index
+    [0mdata = _as_nanosecond_precision(data)[90m[39;49;00m
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[90m[39;49;00m
+[1m[31mxarray/core/variable.py[0m:207: in _as_nanosecond_precision
+    [0mutils.emit_user_level_warning(NON_NANOSECOND_WARNING.format(case=[33m"[39;49;00m[33mdatetime[39;49;00m[33m"[39;49;00m))[90m[39;49;00m
+[1m[31mxarray/core/utils.py[0m:1112: in emit_user_level_warning
+    [0m[94mreturn[39;49;00m warnings.warn(message, category=category, stacklevel=stacklevel)[90m[39;49;00m
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[90m[39;49;00m
+[1m[31mE   UserWarning: Converting non-nanosecond precision datetime values to nanosecond precision. This behavior can eventually be relaxed in xarray, as it is an artifact from pandas which is now beginning to support non-nanosecond precision values. This warning is caused by passing non-nanosecond np.datetime64 or np.timedelta64 values to the DataArray or Variable constructor; it can be silenced by converting the values to nanosecond precision ahead of time.[0m
+[33m=============================== warnings summary ===============================[0m
+../opt/conda/envs/testbed/lib/python3.12/site-packages/dask_expr/__init__.py:3
+  /opt/conda/envs/testbed/lib/python3.12/site-packages/dask_expr/__init__.py:3: DeprecationWarning: Dask-expr is now part of the main dask package. Please remove dask-expr from your environment.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+[36m[1m=========================== short test summary info ============================[0m
+[31mERROR[0m xarray/tests/test_groupby.py - UserWarning: Converting non-nanosecond precision datetime values to nanosec...
+[31m========================= [33m1 warning[0m, [31m[1m1 error[0m[31m in 1.12s[0m[31m ==========================[0m
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=1

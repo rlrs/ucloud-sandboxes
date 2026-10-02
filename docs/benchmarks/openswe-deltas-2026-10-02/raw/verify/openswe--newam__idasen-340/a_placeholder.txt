@@ -1,0 +1,20 @@
+git_status_rc=0
+git_status_ms=5
+git_status_lines=0
+git_status_sha=e3b0c44298fc1c14
+
+head=72be9eeeb801f0fa52dba6c05a8af2638208101f
+head_is_base=0
+base_commit_present=0
+commits=1
+describe=v0.10.1
+git_diff_rc=0
+fsck_rc=0
+test_patch_check_rc=128
+collect_rc=0
+collect_tail=tests/test_cli.py::test_main_internal_error 38 tests collected in 0.06s 
+collected=38
+
+verify_rc=0
+verify_s=1.4
+stderr_tail=

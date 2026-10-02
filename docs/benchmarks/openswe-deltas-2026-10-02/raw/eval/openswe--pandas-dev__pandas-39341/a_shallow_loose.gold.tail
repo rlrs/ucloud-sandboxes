@@ -1,0 +1,27 @@
+SED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_frame_setitem_datetime64_col_other_units[Y]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_frame_setitem_datetime64_col_other_units[D]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_frame_setitem_datetime64_col_other_units[M]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_setitem_with_ea_name[period[D]]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_frame_setitem_existing_datetime64_col_other_units[m]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_frame_setitem_existing_datetime64_col_other_units[h]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_setitem_bool_with_numeric_index[f8]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_frame_setitem_existing_datetime64_col_other_units[Y]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_setitem_frame_length_0_str_key[indexer1]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_frame_setitem_existing_datetime64_col_other_units[M]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_setitem_periodindex
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_setitem_dt64tz
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_setitem_bool_with_numeric_index[u8]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_frame_setitem_datetime64_col_other_units[h]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_frame_setitem_existing_datetime64_col_other_units[s]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_frame_setitem_existing_datetime64_col_other_units[D]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_setitem_frame_length_0_str_key[B]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_frame_setitem_existing_datetime64_col_other_units[ms]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_setitem_complete_column_with_array
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_setitem_frame_duplicate_columns
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_setitem_df_wrong_column_number[cols0]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_setitem_bool_with_numeric_index[i8]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_setitem_df_wrong_column_number[cols1]
+PASSED pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_setitem_listlike_indexer_duplicate_columns
+======================= 61 passed, 206 warnings in 6.20s =======================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

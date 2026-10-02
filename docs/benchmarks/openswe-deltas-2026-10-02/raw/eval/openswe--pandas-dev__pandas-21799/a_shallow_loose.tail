@@ -1,0 +1,29 @@
+Applying test patch...
+Checking patch pandas/tests/frame/test_timeseries.py...
+Checking patch pandas/tests/series/test_timeseries.py...
+Applied patch pandas/tests/frame/test_timeseries.py cleanly.
+Applied patch pandas/tests/series/test_timeseries.py cleanly.
+Applied test patch
+>>>>> Start Test Output
+ImportError while loading conftest '/testbed/pandas/conftest.py'.
+pandas/__init__.py:23: in <module>
+    from pandas.compat.numpy import *
+pandas/compat/__init__.py:431: in <module>
+    re_type = typing.re.Pattern
+              ^^^^^^^^^
+/opt/conda/lib/python3.13/typing.py:3817: in __getattr__
+    raise AttributeError(f"module {__name__!r} has no attribute {attr!r}")
+E   AttributeError: module 'typing' has no attribute 're'
+>>>>> End Test Output
+>>>>> Start Test Output (Series)
+ImportError while loading conftest '/testbed/pandas/conftest.py'.
+pandas/__init__.py:23: in <module>
+    from pandas.compat.numpy import *
+pandas/compat/__init__.py:431: in <module>
+    re_type = typing.re.Pattern
+              ^^^^^^^^^
+/opt/conda/lib/python3.13/typing.py:3817: in __getattr__
+    raise AttributeError(f"module {__name__!r} has no attribute {attr!r}")
+E   AttributeError: module 'typing' has no attribute 're'
+>>>>> End Test Output (Series)
+OPENSWE_EXIT_CODE=1

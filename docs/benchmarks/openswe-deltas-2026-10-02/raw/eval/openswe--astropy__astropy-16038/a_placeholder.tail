@@ -1,0 +1,29 @@
+py::[1mTestAddRow::test_add_with_list[subclass][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_add_with_dict[unmasked][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_add_with_dict[masked][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_add_with_dict[subclass][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_add_with_none[unmasked][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_add_with_none[masked][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_add_with_none[subclass][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_add_missing_column[unmasked][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_add_missing_column[masked][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_add_missing_column[subclass][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_wrong_size_tuple[unmasked][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_wrong_size_tuple[masked][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_wrong_size_tuple[subclass][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_wrong_vals_type[unmasked][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_wrong_vals_type[masked][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_wrong_vals_type[subclass][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_add_row_failures[unmasked][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_add_row_failures[masked][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_add_row_failures[subclass][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_insert_table_row[unmasked][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_insert_table_row[masked][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mTestAddRow::test_insert_table_row[subclass][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mtest_inserting_quantity_row_in_empty_table[QTable-Quantity][0m
+[32mPASSED[0m astropy/table/tests/test_table.py::[1mtest_inserting_quantity_row_in_empty_table[QTable-Quantity-other_units][0m
+[31mFAILED[0m astropy/table/tests/test_table.py::[1mtest_inserting_quantity_row_in_empty_table[Table-Column][0m - Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emi...
+[31mFAILED[0m astropy/table/tests/test_table.py::[1mtest_inserting_quantity_row_in_empty_table[QTable-Column][0m - Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emi...
+[31m========================= [31m[1m2 failed[0m, [32m44 passed[0m[31m in 0.62s[0m[31m =========================[0m
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=1

@@ -1,0 +1,21 @@
+git_status_rc=0
+git_status_ms=21
+git_status_lines=0
+git_status_sha=e3b0c44298fc1c14
+
+head=26a88c8ad355f2e3cd548bb401b09d5d6538aadd
+head_is_base=0
+base_commit_present=0
+commits=1
+describe=5.0.9
+git_diff_rc=0
+fsck_rc=0
+version=5.0.10.dev
+test_patch_check_rc=0
+collect_rc=0
+collect_tail=tests/test_rds/test_rds_clusters.py::test_backtrack_errors[params2] 45 tests collected in 0.30s 
+collected=45
+
+verify_rc=0
+verify_s=1.8
+stderr_tail=

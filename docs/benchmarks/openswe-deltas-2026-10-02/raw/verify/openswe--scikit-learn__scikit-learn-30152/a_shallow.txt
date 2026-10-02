@@ -1,0 +1,21 @@
+git_status_rc=0
+git_status_ms=100
+git_status_lines=0
+git_status_sha=e3b0c44298fc1c14
+
+head=04fbe04fedda0e86e67867854900a49fb53c4c01
+head_is_base=1
+base_commit_present=1
+commits=1
+describe=0.19-branching
+git_diff_rc=0
+fsck_rc=0
+version=1.6.dev0
+test_patch_check_rc=0
+collect_rc=0
+collect_tail=sklearn/tests/test_multioutput.py::test_multi_output_not_fitted_error[predict] [32m[32m338 tests collected[0m[32m in 0.43s[0m[0m 
+collected=338
+
+verify_rc=0
+verify_s=4.5
+stderr_tail=

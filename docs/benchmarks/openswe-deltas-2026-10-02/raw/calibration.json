@@ -1,0 +1,5 @@
+{
+ "method": "scripts/calib.sh: full tree of one image via docker export, walker --full vs nydus-image v2.4.5 create -t dir-rafs --fs-version 6 --chunk-size 0x40000 --compressor zstd --digester sha256; chunk table read with rafs.py",
+ "fake-useragent-216 (base)": {"nydus_wall_s": 20.98, "nydus_chunks": 34057, "walker_chunks": 34057, "common": 34057, "only_nydus": 0, "only_walker": 0, "nydus_u": 2188941058, "walker_u": 2188941058, "nydus_c": 761861000, "walker_c_zstd3": 761035763, "blob_bytes": 762257789},
+ "pandas-45642 (variant c)": {"nydus_wall_s": 16.06, "nydus_chunks": 41947, "walker_chunks": 41947, "common": 41947, "only_nydus": 0, "only_walker": 0, "nydus_u": 1430569383, "walker_u": 1430569383, "nydus_c": 528677809, "walker_c_zstd3": 527893673, "blob_bytes": 529171911}
+}

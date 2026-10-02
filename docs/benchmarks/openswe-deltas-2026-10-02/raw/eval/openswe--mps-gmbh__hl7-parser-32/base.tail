@@ -1,0 +1,62 @@
+cond = int(composite[15:17])  # noqa
+            else: tenth_second = 0  # noqa
+    
+            if precision >= 19:
+>               microsecond = int(composite[17:19]) * 100
+                              ^^^^^^^^^^^^^^^^^^^^^
+E               ValueError: invalid literal for int() with base 10: '3+'
+
+hl7parser/hl7_data_types.py:202: ValueError
+_ test_datetime[20250204141403.03-2025-02-04T14:14:03.030000-20250204141403.03] _
+
+input_string = '20250204141403.03', isoformat = '2025-02-04T14:14:03.030000'
+string_repr = '20250204141403.03'
+
+    @pytest.mark.parametrize(
+        "input_string, isoformat, string_repr",
+        [
+            ("198808181126", "1988-08-18T11:26:00", "198808181126"),
+            ("", "", ""),
+            ("2010", "2010-01-01T00:00:00", "2010"),
+            ("-200", "", ""),
+            ("20190924143134^YYYYMMDDHHMMSS", "2019-09-24T14:31:34", "20190924143134"),
+            ("20250204141403.403+0100", "2025-02-04T14:14:03.403000+01:00", "20250204141403.403+0100"),
+            ("20250204141403.03", "2025-02-04T14:14:03.030000", "20250204141403.03")
+        ]
+    )
+    def test_datetime(input_string, isoformat, string_repr):
+    
+        delimiters = HL7Delimiters(*"|^~\\&")
+    
+        dt = HL7Datetime(input_string, delimiters)
+>       assert dt.isoformat() == isoformat
+E       AssertionError: assert '2025-02-04T14:14:03' == '2025-02-04T14:14:03.030000'
+E         
+E         - 2025-02-04T14:14:03.030000
+E         ?                    -------
+E         + 2025-02-04T14:14:03
+
+tests/data_types.py:24: AssertionError
+==================================== PASSES ====================================
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.14-final-0 _______________
+
+Name                          Stmts   Miss  Cover
+-------------------------------------------------
+hl7parser/__init__.py             1      0   100%
+hl7parser/hl7.py                 95     73    23%
+hl7parser/hl7_data_types.py     131     43    67%
+hl7parser/hl7_segments.py         3      0   100%
+-------------------------------------------------
+TOTAL                           230    116    50%
+=========================== short test summary info ============================
+PASSED tests/data_types.py::test_datetime[198808181126-1988-08-18T11:26:00-198808181126]
+PASSED tests/data_types.py::test_datetime[--]
+PASSED tests/data_types.py::test_datetime[2010-2010-01-01T00:00:00-2010]
+PASSED tests/data_types.py::test_datetime[-200--]
+PASSED tests/data_types.py::test_datetime[20190924143134^YYYYMMDDHHMMSS-2019-09-24T14:31:34-20190924143134]
+FAILED tests/data_types.py::test_datetime[20250204141403.403+0100-2025-02-04T14:14:03.403000+01:00-20250204141403.403+0100]
+FAILED tests/data_types.py::test_datetime[20250204141403.03-2025-02-04T14:14:03.030000-20250204141403.03]
+========================= 2 failed, 5 passed in 0.14s ==========================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=1

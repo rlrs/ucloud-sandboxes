@@ -1,0 +1,52 @@
+ew_categories
+    )
+    new_codes = take_nd(indexer, codes, fill_value=-1)
+    return new_codes
+
+error: patch failed: pandas/core/arrays/categorical.py:2948
+error: pandas/core/arrays/categorical.py: patch does not apply
+Error: Golden patch failed to apply. This may affect test results.
+Applying test patch (test_reshape.py addition)...
+Checking patch pandas/tests/indexes/multi/test_reshape.py...
+Applied patch pandas/tests/indexes/multi/test_reshape.py cleanly.
+Test patch applied successfully.
+>>>>> Start Test Output
+[1/1] Generating write_version_file with a custom command
++ /opt/conda/envs/testbed/bin/ninja
+============================= test session starts ==============================
+collecting ... collected 11 items
+
+pandas/tests/indexes/multi/test_reshape.py::test_insert PASSED
+pandas/tests/indexes/multi/test_reshape.py::test_insert2 PASSED
+pandas/tests/indexes/multi/test_reshape.py::test_append PASSED
+pandas/tests/indexes/multi/test_reshape.py::test_append_index PASSED
+pandas/tests/indexes/multi/test_reshape.py::test_append_names_match[b-b] PASSED
+pandas/tests/indexes/multi/test_reshape.py::test_append_names_match[c-None] PASSED
+pandas/tests/indexes/multi/test_reshape.py::test_append_names_dont_match PASSED
+pandas/tests/indexes/multi/test_reshape.py::test_append_overlapping_interval_levels PASSED
+pandas/tests/indexes/multi/test_reshape.py::test_repeat PASSED
+pandas/tests/indexes/multi/test_reshape.py::test_insert_base PASSED
+pandas/tests/indexes/multi/test_reshape.py::test_delete_base PASSED
+
+==================================== PASSES ====================================
+------------------ generated xml file: /testbed/test-data.xml ------------------
+============================== slowest durations ===============================
+0.01s call     pandas/tests/indexes/multi/test_reshape.py::test_insert
+0.01s call     pandas/tests/indexes/multi/test_reshape.py::test_append_overlapping_interval_levels
+
+(31 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ============================
+PASSED pandas/tests/indexes/multi/test_reshape.py::test_insert
+PASSED pandas/tests/indexes/multi/test_reshape.py::test_insert2
+PASSED pandas/tests/indexes/multi/test_reshape.py::test_append
+PASSED pandas/tests/indexes/multi/test_reshape.py::test_append_index
+PASSED pandas/tests/indexes/multi/test_reshape.py::test_append_names_match[b-b]
+PASSED pandas/tests/indexes/multi/test_reshape.py::test_append_names_match[c-None]
+PASSED pandas/tests/indexes/multi/test_reshape.py::test_append_names_dont_match
+PASSED pandas/tests/indexes/multi/test_reshape.py::test_append_overlapping_interval_levels
+PASSED pandas/tests/indexes/multi/test_reshape.py::test_repeat
+PASSED pandas/tests/indexes/multi/test_reshape.py::test_insert_base
+PASSED pandas/tests/indexes/multi/test_reshape.py::test_delete_base
+============================== 11 passed in 0.06s ==============================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

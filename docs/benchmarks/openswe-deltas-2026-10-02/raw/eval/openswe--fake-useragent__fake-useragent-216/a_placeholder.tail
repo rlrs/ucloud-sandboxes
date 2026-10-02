@@ -1,0 +1,36 @@
+   self.assertIsInstance(ua.getChrome, dict)
+E   AssertionError: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36' is not an instance of <class 'dict'>
+------------------------------ Captured log call -------------------------------
+WARNING  fake_useragent:fake.py:108 Error occurred during getting browser: internetexplorer, but was suppressed with fallback.
+WARNING  fake_useragent:fake.py:108 Error occurred during getting browser: internetexplorer, but was suppressed with fallback.
+WARNING  fake_useragent:fake.py:108 Error occurred during getting browser: getchrome, but was suppressed with fallback.
+WARNING  fake_useragent:fake.py:108 Error occurred during getting browser: getchrome, but was suppressed with fallback.
+==================================== PASSES ====================================
+_________________________ TestFake.test_fake_fallback __________________________
+------------------------------ Captured log call -------------------------------
+WARNING  fake_useragent:fake.py:108 Error occurred during getting browser: nonexisting, but was suppressed with fallback.
+WARNING  fake_useragent:fake.py:108 Error occurred during getting browser: nonexisting, but was suppressed with fallback.
+_________________ TestFake.test_fake_probe_user_agent_browsers _________________
+------------------------------ Captured log call -------------------------------
+WARNING  fake_useragent:fake.py:108 Error occurred during getting browser: getedge, but was suppressed with fallback.
+WARNING  fake_useragent:fake.py:108 Error occurred during getting browser: getchrome, but was suppressed with fallback.
+WARNING  fake_useragent:fake.py:108 Error occurred during getting browser: getfirefox, but was suppressed with fallback.
+WARNING  fake_useragent:fake.py:108 Error occurred during getting browser: getsafari, but was suppressed with fallback.
+WARNING  fake_useragent:fake.py:108 Error occurred during getting browser: getrandom, but was suppressed with fallback.
+=========================== short test summary info ============================
+PASSED ../dev/::TestFake::test_fake_aliases
+PASSED ../dev/::TestFake::test_fake_browser_str_or_list_types
+PASSED ../dev/::TestFake::test_fake_data_browser_type
+PASSED ../dev/::TestFake::test_fake_fallback
+PASSED ../dev/::TestFake::test_fake_fallback_str_types
+PASSED ../dev/::TestFake::test_fake_os_str_or_list_types
+PASSED ../dev/::TestFake::test_fake_percentage_float_types
+PASSED ../dev/::TestFake::test_fake_probe_user_agent_browsers
+PASSED ../dev/::TestFake::test_fake_safe_attrs
+PASSED ../dev/::TestFake::test_fake_safe_attrs_iterable_str_types
+PASSED ../dev/::TestFake::test_fake_version
+FAILED ../dev/::TestFake::test_fake_fallback_dictionary - TypeError: 'str' ob...
+FAILED ../dev/::TestFake::test_fake_init - AssertionError: 'Mozilla/5.0 (Wind...
+========================= 2 failed, 11 passed in 0.04s =========================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=1

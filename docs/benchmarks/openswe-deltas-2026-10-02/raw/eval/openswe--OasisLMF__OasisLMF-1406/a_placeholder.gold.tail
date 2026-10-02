@@ -1,0 +1,45 @@
+cution/test_bin.py::SetVulnerabilitySet::test_symbolic_link_creation PASSED [ 28%]
+tests/model_execution/test_bin.py::SetFootprintSet::test_no_valid_symbolic_links_raises_exception PASSED [ 42%]
+tests/model_execution/test_bin.py::SetFootprintSet::test_symbolic_link_to_csv_file PASSED [ 57%]
+tests/model_execution/test_bin.py::SetFootprintSet::test_symbolic_links_to_bin_files PASSED [ 71%]
+tests/model_execution/test_bin.py::SetFootprintSet::test_symbolic_links_to_binz_files PASSED [ 85%]
+tests/model_execution/test_bin.py::SetFootprintSet::test_symbolic_links_to_parquet_files PASSED [100%]
+
+=============================== warnings summary ===============================
+../opt/conda/envs/testbed/lib/python3.11/site-packages/_pytest/config/__init__.py:1464
+  /opt/conda/envs/testbed/lib/python3.11/site-packages/_pytest/config/__init__.py:1464: PytestConfigWarning: Unknown config option: exclude
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+oasislmf/__init__.py:63
+  /testbed/oasislmf/__init__.py:63: UserWarning: imports from 'oasislmf.model_execution' are deprecated. Import by using 'oasislmf.execution' instead.
+    warnings.warn(
+
+oasislmf/execution/bin.py:503
+  /testbed/oasislmf/execution/bin.py:503: DeprecationWarning: invalid escape sequence '\d'
+    for ri_directory_to_check in glob.glob('{}{}RI_\d+$'.format(directory_to_check, os.path.sep)):
+
+oasislmf/execution/bash.py:120
+  /testbed/oasislmf/execution/bash.py:120: DeprecationWarning: invalid escape sequence '\.'
+    TRAP_FUNC = """
+
+oasislmf/execution/bash.py:1894
+  /testbed/oasislmf/execution/bash.py:1894: DeprecationWarning: invalid escape sequence '\('
+    filename, f"find {fifo_queue_dir} \( -name '*P{process_number}[^0-9]*' -o -name '*P{process_number}' \)" + " -exec rm -R -f {} +")
+
+oasislmf/execution/bash.py:1894
+  /testbed/oasislmf/execution/bash.py:1894: DeprecationWarning: invalid escape sequence '\)'
+    filename, f"find {fifo_queue_dir} \( -name '*P{process_number}[^0-9]*' -o -name '*P{process_number}' \)" + " -exec rm -R -f {} +")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+PASSED tests/model_execution/test_bin.py::SetVulnerabilitySet::test_no_valid_files_raises_exception
+PASSED tests/model_execution/test_bin.py::SetVulnerabilitySet::test_symbolic_link_creation
+PASSED tests/model_execution/test_bin.py::SetFootprintSet::test_no_valid_symbolic_links_raises_exception
+PASSED tests/model_execution/test_bin.py::SetFootprintSet::test_symbolic_link_to_csv_file
+PASSED tests/model_execution/test_bin.py::SetFootprintSet::test_symbolic_links_to_bin_files
+PASSED tests/model_execution/test_bin.py::SetFootprintSet::test_symbolic_links_to_binz_files
+PASSED tests/model_execution/test_bin.py::SetFootprintSet::test_symbolic_links_to_parquet_files
+======================== 7 passed, 6 warnings in 1.05s =========================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

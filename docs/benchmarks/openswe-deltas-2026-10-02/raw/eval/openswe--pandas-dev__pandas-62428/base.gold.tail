@@ -1,0 +1,9 @@
+Applying test patch...
+Checking patch pandas/tests/indexes/datetimes/test_indexing.py...
+Checking patch pandas/tests/series/indexing/test_getitem.py...
+Applied patch pandas/tests/indexes/datetimes/test_indexing.py cleanly.
+Applied patch pandas/tests/series/indexing/test_getitem.py cleanly.
+>>>>> Start Test Output
+/e/eval.sh: line 84:    17 Segmentation fault      (core dumped) PANDAS_CI=1 python -m pytest --no-header -rA --tb=no -p no:cacheprovider -p no:qt -m 'not clipboard' pandas/tests/indexes/datetimes/test_indexing.py pandas/tests/series/indexing/test_getitem.py 2>&1
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=139

@@ -1,0 +1,58 @@
+top new-chunk dirs (MB):
+    678.1  env:testbed/lib
+    153.5  site:llvmlite
+    143.9  site:numpy
+    115.5  site:scipy
+     78.6  site:PyQt5
+     67.5  site:pyarrow
+     64.5  site:pandas
+     47.4  site:_polars_runtime_32
+     39.2  site:botocore
+     35.9  site:numpy.libs
+     35.8  site:Cython
+     33.4  env:testbed/bin
+     32.8  site:matplotlib
+     30.5  site:timezonefinder
+     30.5  site:sympy
+     30.1  site:babel
+     28.5  site:pyogrio.libs
+     22.4  site:numba
+     21.4  site:08ae81f72d5a2b5fa9e0__mypyc.cpython-312-x86_64-linux-gnu.so
+     20.9  site:fontTools
+     20.2  site:mypy
+     18.7  site:statsmodels
+     18.6  site:cryptography
+     18.3  site:sphinx
+     17.6  site:sqlalchemy
+     16.9  site:lxml
+     16.6  site:pygments
+     15.7  env:testbed/include
+     15.6  site:imagecodecs
+     15.5  site:mip
+     15.5  site:sklearn
+     15.1  site:scipy.libs
+     14.4  site:skimage
+     13.4  site:imagecodecs.libs
+     13.2  site:plotly
+     13.0  site:f9cd58ee140be1597db0__mypyc.cpython-38-x86_64-linux-gnu.so
+     11.8  site:6ec57f84c680d3a3778b__mypyc.cpython-312-x86_64-linux-gnu.so
+     11.8  site:6ec57f84c680d3a3778b__mypyc.cpython-310-x86_64-linux-gnu.so
+     11.8  site:virtualenv
+     10.7  site:numcodecs
+dist-info names: 744 distinct, 1615 installs; repeats 871
+new MB attributable to first install of a package==version: 1172; to repeat installs of the same package==version: 237
+   repeat   49.3 MB llvmlite-0.50.0.dist-info (x2)
+   repeat   25.1 MB scipy-1.15.3.dist-info (x2)
+   repeat   19.1 MB pandas-2.3.3.dist-info (x2)
+   repeat   14.6 MB sympy-1.14.0.dist-info (x2)
+   repeat   12.4 MB pyarrow-25.0.1.dist-info (x4)
+   repeat    8.9 MB numpy-2.5.3.dist-info (x5)
+   repeat    7.5 MB numpy-1.26.4.dist-info (x2)
+   repeat    7.0 MB pygments-2.21.0.dist-info (x14)
+   repeat    6.7 MB lxml-6.1.3.dist-info (x3)
+   repeat    5.8 MB pandas-3.0.6.dist-info (x3)
+   repeat    5.8 MB numba-0.68.0.dist-info (x2)
+   repeat    5.2 MB cryptography-50.0.2.dist-info (x4)
+   repeat    4.5 MB hypothesis-6.168.3.dist-info (x6)
+   repeat    4.1 MB numpy-1.24.3.dist-info (x2)
+   repeat    4.0 MB cython-3.3.0.dist-info (x4)

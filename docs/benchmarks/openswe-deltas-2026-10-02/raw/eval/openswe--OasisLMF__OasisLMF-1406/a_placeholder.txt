@@ -1,0 +1,5 @@
+eval_shell_rc=0
+OPENSWE_EXIT_CODE=4
+
+run_rc=0
+run_s=2.4

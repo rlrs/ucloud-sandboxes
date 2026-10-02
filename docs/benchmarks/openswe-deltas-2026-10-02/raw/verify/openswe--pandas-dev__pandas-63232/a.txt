@@ -1,0 +1,21 @@
+git_status_rc=0
+git_status_ms=58
+git_status_lines=0
+git_status_sha=e3b0c44298fc1c14
+
+head=fb517bad0a5c4ab4f6576a9bc0ebbe818263917d
+head_is_base=1
+base_commit_present=1
+commits=36784
+describe=v3.0.0.dev0-2757-gfb517bad0a
+git_diff_rc=0
+fsck_rc=0
+version=3.0.0.dev0+2757.gfb517bad0a
+test_patch_check_rc=0
+collect_rc=139
+collect_tail=
+collected=0
+
+verify_rc=0
+verify_s=10.2
+stderr_tail=/slim/verify.sh: line 25:    79 Segmentation fault      timeout 900 python -m pytest --collect-only -q -p no:cacheprovider $(cat /e/collect.txt) > /tmp/co 2>&1 

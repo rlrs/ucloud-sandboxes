@@ -1,0 +1,21 @@
+git_status_rc=0
+git_status_ms=30
+git_status_lines=0
+git_status_sha=e3b0c44298fc1c14
+
+head=57d056a650f41553b575f7659109ec3904a85489
+head_is_base=1
+base_commit_present=1
+commits=1
+describe=v1.1.0.dev0
+git_diff_rc=0
+fsck_rc=0
+version=1.1.0.dev0
+test_patch_check_rc=0
+collect_rc=0
+collect_tail=38 tests collected in 0.07s 
+collected=38
+
+verify_rc=0
+verify_s=2.9
+stderr_tail=

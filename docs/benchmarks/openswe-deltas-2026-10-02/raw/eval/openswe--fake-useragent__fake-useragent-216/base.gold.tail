@@ -1,0 +1,41 @@
+/::TestFake::test_fake_fallback PASSED                             [ 30%]
+../dev/::TestFake::test_fake_fallback_dictionary PASSED                  [ 38%]
+../dev/::TestFake::test_fake_fallback_str_types PASSED                   [ 46%]
+../dev/::TestFake::test_fake_init PASSED                                 [ 53%]
+../dev/::TestFake::test_fake_os_str_or_list_types PASSED                 [ 61%]
+../dev/::TestFake::test_fake_percentage_float_types PASSED               [ 69%]
+../dev/::TestFake::test_fake_probe_user_agent_browsers PASSED            [ 76%]
+../dev/::TestFake::test_fake_safe_attrs PASSED                           [ 84%]
+../dev/::TestFake::test_fake_safe_attrs_iterable_str_types PASSED        [ 92%]
+../dev/::TestFake::test_fake_version PASSED                              [100%]
+
+==================================== PASSES ====================================
+_________________________ TestFake.test_fake_fallback __________________________
+------------------------------ Captured log call -------------------------------
+WARNING  fake_useragent:fake.py:171 Error occurred during getting browser: nonexisting, but was suppressed with fallback.
+WARNING  fake_useragent:fake.py:171 Error occurred during getting browser: nonexisting, but was suppressed with fallback.
+____________________ TestFake.test_fake_fallback_dictionary ____________________
+------------------------------ Captured log call -------------------------------
+WARNING  fake_useragent:fake.py:104 Error occurred during getting browser: nonexisting, but was suppressed with fallback.
+WARNING  fake_useragent:fake.py:104 Error occurred during getting browser: nonexisting, but was suppressed with fallback.
+___________________________ TestFake.test_fake_init ____________________________
+------------------------------ Captured log call -------------------------------
+WARNING  fake_useragent:fake.py:171 Error occurred during getting browser: internetexplorer, but was suppressed with fallback.
+WARNING  fake_useragent:fake.py:171 Error occurred during getting browser: internetexplorer, but was suppressed with fallback.
+=========================== short test summary info ============================
+PASSED ../dev/::TestFake::test_fake_aliases
+PASSED ../dev/::TestFake::test_fake_browser_str_or_list_types
+PASSED ../dev/::TestFake::test_fake_data_browser_type
+PASSED ../dev/::TestFake::test_fake_fallback
+PASSED ../dev/::TestFake::test_fake_fallback_dictionary
+PASSED ../dev/::TestFake::test_fake_fallback_str_types
+PASSED ../dev/::TestFake::test_fake_init
+PASSED ../dev/::TestFake::test_fake_os_str_or_list_types
+PASSED ../dev/::TestFake::test_fake_percentage_float_types
+PASSED ../dev/::TestFake::test_fake_probe_user_agent_browsers
+PASSED ../dev/::TestFake::test_fake_safe_attrs
+PASSED ../dev/::TestFake::test_fake_safe_attrs_iterable_str_types
+PASSED ../dev/::TestFake::test_fake_version
+============================== 13 passed in 0.03s ==============================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

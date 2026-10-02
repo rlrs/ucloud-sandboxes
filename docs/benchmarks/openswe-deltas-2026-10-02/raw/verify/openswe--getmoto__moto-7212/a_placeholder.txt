@@ -1,0 +1,21 @@
+git_status_rc=0
+git_status_ms=24
+git_status_lines=0
+git_status_sha=e3b0c44298fc1c14
+
+head=e140d08c6cdefe7552078338dd61dd656663b648
+head_is_base=0
+base_commit_present=0
+commits=1
+describe=4.2.13
+git_diff_rc=0
+fsck_rc=0
+version=4.2.14.dev
+test_patch_check_rc=0
+collect_rc=0
+collect_tail=tests/test_cognitoidp/test_cognitoidp.py::test_confirm_forgot_password_with_non_existent_client_id_raises_error 194 tests collected in 0.65s 
+collected=194
+
+verify_rc=0
+verify_s=2.3
+stderr_tail=

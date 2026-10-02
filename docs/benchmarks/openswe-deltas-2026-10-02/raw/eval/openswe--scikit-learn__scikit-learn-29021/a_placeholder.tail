@@ -1,0 +1,23 @@
+metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[OneVsOneClassifier] [32mPASSED[0m[33m [ 90%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[OutputCodeClassifier] [32mPASSED[0m[33m [ 91%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[SelectFromModel] [32mPASSED[0m[33m [ 91%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[OrthogonalMatchingPursuitCV] [32mPASSED[0m[33m [ 92%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[ElasticNetCV] [32mPASSED[0m[33m [ 92%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[LassoCV] [32mPASSED[0m[33m [ 93%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[MultiTaskElasticNetCV] [32mPASSED[0m[33m [ 93%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[MultiTaskLassoCV] [32mPASSED[0m[33m [ 94%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[LarsCV] [32mPASSED[0m[33m [ 94%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[LassoLarsCV] [32mPASSED[0m[33m [ 95%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[RANSACRegressor] [32mPASSED[0m[33m [ 95%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[IterativeImputer] [32mPASSED[0m[33m [ 96%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[BaggingClassifier] [32mPASSED[0m[33m [ 96%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[BaggingRegressor] [32mPASSED[0m[33m [ 97%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[RidgeCV0] [32mPASSED[0m[33m [ 97%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[RidgeClassifierCV0] [32mPASSED[0m[33m [ 98%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[RidgeCV1] [32mPASSED[0m[33m [ 98%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[RidgeClassifierCV1] [32mPASSED[0m[33m [ 99%][0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_metadata_is_routed_correctly_to_splitter[GraphicalLassoCV] [32mPASSED[0m[33m [100%][0m
+
+[33m======================= [32m195 passed[0m, [33m[1m21 warnings[0m[33m in 1.32s[0m[33m =======================[0m
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

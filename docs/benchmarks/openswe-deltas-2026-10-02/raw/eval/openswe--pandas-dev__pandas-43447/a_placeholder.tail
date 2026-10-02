@@ -1,0 +1,42 @@
+Checking patch pandas/tests/io/parser/test_encoding.py...
+Applied patch pandas/tests/io/parser/test_encoding.py cleanly.
+error: corrupt patch at line 30
+>>>>> Start Test Output
+============================= test session starts ==============================
+collecting ... collected 4 items
+
+pandas/tests/io/parser/test_encoding.py::test_not_readable[c_high] FAILED
+
+=================================== FAILURES ===================================
+__________________________ test_not_readable[c_high] ___________________________
+pandas/tests/io/parser/test_encoding.py:263: in test_not_readable
+    df = parser.read_csv(handle)
+pandas/tests/io/parser/conftest.py:28: in read_csv
+    return read_csv(*args, **kwargs)
+pandas/util/_decorators.py:311: in wrapper
+    return func(*args, **kwargs)
+pandas/io/parsers/readers.py:630: in read_csv
+    return _read(filepath_or_buffer, kwds)
+pandas/io/parsers/readers.py:526: in _read
+    parser = TextFileReader(filepath_or_buffer, **kwds)
+pandas/io/parsers/readers.py:878: in __init__
+    self._engine = self._make_engine(self.engine)
+pandas/io/parsers/readers.py:1125: in _make_engine
+    return mapping[engine](self.f, **self.options)  # type: ignore[call-arg]
+pandas/io/parsers/c_parser_wrapper.py:51: in __init__
+    self._open_handles(src, kwds)
+pandas/io/parsers/base_parser.py:224: in _open_handles
+    self.handles = get_handle(
+pandas/io/common.py:726: in get_handle
+    handle = TextIOWrapper(
+E   AttributeError: 'SpooledTemporaryFile' object has no attribute 'readable'
+------------------ generated xml file: /testbed/test-data.xml ------------------
+============================= slowest 30 durations =============================
+
+(3 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ============================
+FAILED pandas/tests/io/parser/test_encoding.py::test_not_readable[c_high] - A...
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+============================== 1 failed in 0.16s ===============================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=1

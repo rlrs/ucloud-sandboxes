@@ -1,0 +1,32 @@
+Applying test patch...
+Checking patch tests/data_types.py...
+Applied patch tests/data_types.py cleanly.
+>>>>> Start Test Output
+============================= test session starts ==============================
+collected 7 items
+
+tests/data_types.py .......                                              [100%]
+
+==================================== PASSES ====================================
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.14-final-0 _______________
+
+Name                          Stmts   Miss  Cover
+-------------------------------------------------
+hl7parser/__init__.py             1      0   100%
+hl7parser/hl7.py                 95     73    23%
+hl7parser/hl7_data_types.py     147     43    71%
+hl7parser/hl7_segments.py         3      0   100%
+-------------------------------------------------
+TOTAL                           246    116    53%
+=========================== short test summary info ============================
+PASSED tests/data_types.py::test_datetime[198808181126-1988-08-18T11:26:00-198808181126]
+PASSED tests/data_types.py::test_datetime[--]
+PASSED tests/data_types.py::test_datetime[2010-2010-01-01T00:00:00-2010]
+PASSED tests/data_types.py::test_datetime[-200--]
+PASSED tests/data_types.py::test_datetime[20190924143134^YYYYMMDDHHMMSS-2019-09-24T14:31:34-20190924143134]
+PASSED tests/data_types.py::test_datetime[20250204141403.403+0100-2025-02-04T14:14:03.403000+01:00-20250204141403.403+0100]
+PASSED tests/data_types.py::test_datetime[20250204141403.03-2025-02-04T14:14:03.030000-20250204141403.03]
+============================== 7 passed in 0.11s ===============================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

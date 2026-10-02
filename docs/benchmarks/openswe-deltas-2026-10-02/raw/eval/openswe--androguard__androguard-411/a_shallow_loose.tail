@@ -1,0 +1,22 @@
+Applying golden patch...
+Checking patch androguard/core/analysis/analysis.py...
+Applied patch androguard/core/analysis/analysis.py cleanly.
+>>>>> Start Test Output
+/testbed/androguard/core/bytecodes/apk.py:31: CryptographyDeprecationWarning: Python 3.6 is no longer supported by the Python core team. Therefore, support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.6.
+  from cryptography import x509
+test_show_output_with_patch (__main__.TestMethodAnalysisShow)
+Test that MethodAnalysis.show() works with golden patch applied. ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.556s
+
+OK
+[35m<init>-BB@0x0[0m : 
+	[33m0  [0m([32m00000000[0m) [33miput-object         [0m[0mv1[0m, [0mv0[0m, [32mLTestDefaultPackage$TestInnerClass$TestInnerInnerClass;->this$1 LTestDefaultPackage$TestInnerClass;[0m
+	[33m1  [0m([32m00000004[0m) [33minvoke-direct       [0m[0mv0[0m, [36mLjava/lang/Object;-><init>()V[0m
+	[33m2  [0m([32m0000000a[0m) [33miput                [0m[0mv2[0m, [0mv0[0m, [32mLTestDefaultPackage$TestInnerClass$TestInnerInnerClass;->a I[0m
+	[33m3  [0m([32m0000000e[0m) [33miput                [0m[0mv3[0m, [0mv0[0m, [32mLTestDefaultPackage$TestInnerClass$TestInnerInnerClass;->c I[0m
+	[33m4  [0m([32m00000012[0m) [33mreturn-void         [0m
+
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

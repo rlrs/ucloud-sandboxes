@@ -1,0 +1,31 @@
+py:38: DeprecationWarning: 'cgi' is deprecated and slated for removal in Python 3.13
+    import base64, cgi, email.utils, functools, hmac, itertools, mimetypes,\
+
+conans/test/integration/graph/test_platform_requires.py: 14 warnings
+conans/test/integration/graph/test_system_tools.py: 4 warnings
+  /testbed/conans/util/dates.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+    return datetime.datetime.utcfromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S UTC')
+
+-- Docs: https://docs.pytest.org/en/stable/warnings.html
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPlatformRequires::test_platform_requires
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPlatformRequires::test_platform_requires_non_matching
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPlatformRequires::test_platform_requires_range
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPlatformRequires::test_platform_requires_range_non_matching
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPlatformRequires::test_platform_requires_no_host
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPlatformRequires::test_platform_requires_build_context
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPlatformRequires::test_graph_info_platform_requires_range
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPlatformRequires::test_consumer_resolved_version
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPlatformRequires::test_consumer_resolved_revision
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPlatformRequires::test_consumer_unresolved_revision
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPlatformTestRequires::test_platform_requires
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPlatformRequiresLock::test_platform_requires_range
+PASSED conans/test/integration/graph/test_platform_requires.py::TestGenerators::test_platform_requires_range
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPackageID::test_package_id_modes[recipe_revision_mode]
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPackageID::test_package_id_modes[full_package_mode]
+PASSED conans/test/integration/graph/test_platform_requires.py::TestPackageID::test_package_id_explicit_revision
+PASSED conans/test/integration/graph/test_system_tools.py::TestToolRequires::test_require_build_context
+================ 17 passed, 14 deselected, 19 warnings in 3.25s ================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

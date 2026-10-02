@@ -1,0 +1,55 @@
+-------------------------- Captured stdout call -----------------------------
+0.10.1
+__________________________ test_main_version[delete] ___________________________
+----------------------------- Captured stdout call -----------------------------
+0.10.1
+___________________________ test_main_version[None] ____________________________
+----------------------------- Captured stdout call -----------------------------
+0.10.1
+_______________________________ test_main_no_sub _______________________________
+----------------------------- Captured stdout call -----------------------------
+A subcommand is required
+usage: pytest [-h] [--mac-address MAC_ADDRESS] [--verbose] [--version]
+              {height,monitor,init,save,pair,delete} ...
+=========================== short test summary info ============================
+PASSED tests/test_cli.py::test_get_parser_smoke
+PASSED tests/test_cli.py::test_load_config_no_file
+PASSED tests/test_cli.py::test_load_config_invalid_schema
+PASSED tests/test_cli.py::test_load_config_reserved_position
+PASSED tests/test_cli.py::test_init_exists_no_force
+PASSED tests/test_cli.py::test_init[AA:AA:AA:AA:AA:AA]
+PASSED tests/test_cli.py::test_init[None]
+PASSED tests/test_cli.py::test_from_config_empty
+PASSED tests/test_cli.py::test_from_config_cli_set_config_unset
+PASSED tests/test_cli.py::test_from_config_cli_unset_config_set
+PASSED tests/test_cli.py::test_from_config_both_set
+PASSED tests/test_cli.py::test_from_config_none_set
+PASSED tests/test_cli.py::test_count_to_level[0-50]
+PASSED tests/test_cli.py::test_count_to_level[1-40]
+PASSED tests/test_cli.py::test_count_to_level[2-30]
+PASSED tests/test_cli.py::test_count_to_level[3-20]
+PASSED tests/test_cli.py::test_count_to_level[4-10]
+PASSED tests/test_cli.py::test_count_to_level[5-10]
+PASSED tests/test_cli.py::test_subcommand_to_callable[init]
+PASSED tests/test_cli.py::test_subcommand_to_callable[pair]
+PASSED tests/test_cli.py::test_subcommand_to_callable[monitor]
+PASSED tests/test_cli.py::test_subcommand_to_callable[sit]
+PASSED tests/test_cli.py::test_subcommand_to_callable[height]
+PASSED tests/test_cli.py::test_subcommand_to_callable[stand]
+PASSED tests/test_cli.py::test_subcommand_to_callable[save]
+PASSED tests/test_cli.py::test_subcommand_to_callable[delete]
+PASSED tests/test_cli.py::test_main_to_exit
+PASSED tests/test_cli.py::test_main_internal_error
+PASSED tests/test_cli.py::test_main_version[init]
+PASSED tests/test_cli.py::test_main_version[pair]
+PASSED tests/test_cli.py::test_main_version[monitor]
+PASSED tests/test_cli.py::test_main_version[sit]
+PASSED tests/test_cli.py::test_main_version[height]
+PASSED tests/test_cli.py::test_main_version[stand]
+PASSED tests/test_cli.py::test_main_version[add]
+PASSED tests/test_cli.py::test_main_version[delete]
+PASSED tests/test_cli.py::test_main_version[None]
+PASSED tests/test_cli.py::test_main_no_sub
+============================== 38 passed in 0.09s ==============================
+>>>>> End Test Output (existing tests)
+OPENSWE_EXIT_CODE=1

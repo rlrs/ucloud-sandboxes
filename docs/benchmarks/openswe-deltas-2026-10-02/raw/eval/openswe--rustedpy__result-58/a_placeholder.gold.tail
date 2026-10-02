@@ -1,0 +1,44 @@
+tr is deprecated and will be removed in Python 3.14; use ast.Constant instead
+    expr = ast.IfExp(test, self.display(name), ast.Str(name.id))
+
+../opt/conda/envs/testbed/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:1071: 50 warnings
+  /opt/conda/envs/testbed/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:1071: DeprecationWarning: ast.Str is deprecated and will be removed in Python 3.14; use ast.Constant instead
+    syms.append(ast.Str(sym))
+
+../opt/conda/envs/testbed/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:1073: 50 warnings
+  /opt/conda/envs/testbed/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:1073: DeprecationWarning: ast.Str is deprecated and will be removed in Python 3.14; use ast.Constant instead
+    expls.append(ast.Str(expl))
+
+../opt/conda/envs/testbed/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:823: 322 warnings
+  /opt/conda/envs/testbed/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:823: DeprecationWarning: ast.Str is deprecated and will be removed in Python 3.14; use ast.Constant instead
+    keys = [ast.Str(key) for key in current.keys()]
+
+../opt/conda/envs/testbed/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:933: 53 warnings
+  /opt/conda/envs/testbed/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:933: DeprecationWarning: ast.Str is deprecated and will be removed in Python 3.14; use ast.Constant instead
+    assertmsg = ast.Str("")
+
+../opt/conda/envs/testbed/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:935: 53 warnings
+  /opt/conda/envs/testbed/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:935: DeprecationWarning: ast.Str is deprecated and will be removed in Python 3.14; use ast.Constant instead
+    template = ast.BinOp(assertmsg, ast.Add(), ast.Str(explanation))
+
+../opt/conda/envs/testbed/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:947: 53 warnings
+  /opt/conda/envs/testbed/lib/python3.12/site-packages/_pytest/assertion/rewrite.py:947: DeprecationWarning: ast.NameConstant is deprecated and will be removed in Python 3.14; use ast.Constant instead
+    clear = ast.Assign(variables, ast.NameConstant(None))
+
+-- Docs: https://docs.pytest.org/en/stable/warnings.html
+
+---------- coverage: platform linux, python 3.12.14-final-0 ----------
+Name                               Stmts   Miss  Cover
+------------------------------------------------------
+result/__init__.py                     2      0   100%
+result/result.py                      96     37    61%
+result/tests-pattern-matching.py      15     15     0%
+result/tests.py                      129     99    23%
+------------------------------------------------------
+TOTAL                                242    151    38%
+
+=========================== short test summary info ============================
+PASSED result/tests.py::test_slots
+======================= 1 passed, 727 warnings in 0.12s ========================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

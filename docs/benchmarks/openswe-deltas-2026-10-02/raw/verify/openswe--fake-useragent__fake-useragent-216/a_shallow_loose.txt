@@ -1,0 +1,21 @@
+git_status_rc=0
+git_status_ms=9
+git_status_lines=0
+git_status_sha=e3b0c44298fc1c14
+
+head=2bcd556ece6479793545caebf0ae59df2137ca3a
+head_is_base=1
+base_commit_present=1
+commits=1
+describe=1.2.1
+git_diff_rc=0
+fsck_rc=0
+version=?
+test_patch_check_rc=0
+collect_rc=4
+collect_tail=__main__.py: error: unrecognized arguments: --cache-clear 
+collected=0
+
+verify_rc=0
+verify_s=1.1
+stderr_tail=

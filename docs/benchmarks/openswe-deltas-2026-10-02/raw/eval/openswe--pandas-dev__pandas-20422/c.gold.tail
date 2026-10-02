@@ -1,0 +1,43 @@
+Applying test patch to add new unittest...
+Checking patch pandas/tests/frame/test_missing.py...
+Applied patch pandas/tests/frame/test_missing.py cleanly.
+>>>>> Start Test Output
+.                                                                        [100%]
+=============================== warnings summary ===============================
+pandas/core/strings.py:274
+  /testbed/pandas/core/strings.py:274: DeprecationWarning: invalid escape sequence \$
+    """
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_dropna_tz_aware_datetime
+1 passed, 1 warning in 0.07s
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0
+>>>>> Start Existing Tests Output
+.............                                                            [100%]
+=============================== warnings summary ===============================
+pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_fillna_categorical_nan
+  /opt/conda/envs/testbed/lib/python3.6/site-packages/numpy/lib/function_base.py:3858: RuntimeWarning: All-NaN slice encountered
+    r = func(a, **kwargs)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_fillna
+PASSED pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_fillna_categorical_nan
+PASSED pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_fillna_downcast
+PASSED pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_fillna_dtype_conversion
+PASSED pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_fillna_datetime_columns
+PASSED pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_fillna_skip_certain_blocks
+PASSED pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_fillna_inplace
+PASSED pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_fillna_dict_series
+PASSED pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_fillna_dataframe
+PASSED pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_fillna_columns
+PASSED pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_fillna_invalid_method
+PASSED pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_fillna_invalid_value
+PASSED pandas/tests/frame/test_missing.py::TestDataFrameMissingData::test_fillna_col_reordering
+13 passed, 14 deselected, 1 warning in 0.14s
+>>>>> End Existing Tests Output
+OPENSWE_EXIT_CODE_EXISTING=0

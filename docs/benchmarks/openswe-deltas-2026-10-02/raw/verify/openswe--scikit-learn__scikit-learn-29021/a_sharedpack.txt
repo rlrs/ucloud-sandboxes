@@ -1,0 +1,21 @@
+git_status_rc=0
+git_status_ms=24
+git_status_lines=0
+git_status_sha=e3b0c44298fc1c14
+
+head=00db4dfeb65a276d144b0d0b93e779eb0966634d
+head_is_base=1
+base_commit_present=1
+commits=31296
+describe=0.19-branching-9244-g00db4dfeb6
+git_diff_rc=0
+fsck_rc=0
+version=1.6.dev0
+test_patch_check_rc=0
+collect_rc=0
+collect_tail=sklearn/tests/test_metaestimators_metadata_routing.py::test_setting_request_on_sub_estimator_removes_error[GraphicalLassoCV] [32m[32m207 tests collected[0m[32m in 0.37s[0m[0m 
+collected=207
+
+verify_rc=0
+verify_s=21.7
+stderr_tail=

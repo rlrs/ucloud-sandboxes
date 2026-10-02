@@ -1,0 +1,25 @@
+Checking patch pandas/tests/io/parser/test_encoding.py...
+Applied patch pandas/tests/io/parser/test_encoding.py cleanly.
+error: corrupt patch at line 30
+>>>>> Start Test Output
+============================= test session starts ==============================
+collecting ... collected 4 items
+
+pandas/tests/io/parser/test_encoding.py::test_not_readable[c_high] PASSED
+pandas/tests/io/parser/test_encoding.py::test_not_readable[c_low] PASSED
+pandas/tests/io/parser/test_encoding.py::test_not_readable[python] SKIPPED
+pandas/tests/io/parser/test_encoding.py::test_not_readable[pyarrow] SKIPPED
+
+==================================== PASSES ====================================
+------------------ generated xml file: /testbed/test-data.xml ------------------
+============================= slowest 30 durations =============================
+
+(11 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ============================
+PASSED pandas/tests/io/parser/test_encoding.py::test_not_readable[c_high]
+PASSED pandas/tests/io/parser/test_encoding.py::test_not_readable[c_low]
+SKIPPED [1] pandas/tests/io/parser/test_encoding.py:259: SpooledTemporaryFile does only work with the c-engine
+SKIPPED [1] pandas/tests/io/parser/test_encoding.py:255: could not import 'pyarrow': No module named 'pyarrow'
+========================= 2 passed, 2 skipped in 0.05s =========================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

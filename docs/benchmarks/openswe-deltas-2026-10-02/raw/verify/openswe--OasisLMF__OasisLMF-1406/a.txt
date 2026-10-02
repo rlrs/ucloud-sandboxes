@@ -1,0 +1,21 @@
+git_status_rc=0
+git_status_ms=2644
+git_status_lines=1
+git_status_sha=0c477c3a618359ec
+
+head=f094fe66e4d73f59cbc8712b9c13a782ec1b56ed
+head_is_base=1
+base_commit_present=1
+commits=3218
+describe=1.28.2-31-gf094fe66e
+git_diff_rc=0
+fsck_rc=0
+version=1.28.4
+test_patch_check_rc=0
+collect_rc=4
+collect_tail=no tests collected, 1 error in 2.80s 
+collected=2
+
+verify_rc=0
+verify_s=7.9
+stderr_tail=

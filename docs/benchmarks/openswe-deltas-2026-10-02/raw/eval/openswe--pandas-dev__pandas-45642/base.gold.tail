@@ -1,0 +1,32 @@
+ests/frame/methods/test_fillna.py::TestFillNA::test_fillna_dtype_conversion_equiv_replace[1.0]
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_datetime_columns
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_ffill
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_ffill_pos_args_deprecation
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_bfill
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_bfill_pos_args_deprecation
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_frame_pad_backfill_limit
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_frame_fillna_limit
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_skip_certain_blocks
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_positive_limit[int]
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_positive_limit[float]
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_integer_limit[int]
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_integer_limit[float]
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_inplace
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_dict_series
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_dataframe
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_columns
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_invalid_method
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_invalid_value
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_col_reordering
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fill_corner
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_downcast_dict
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_pos_args_deprecation
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_with_columns_and_limit
+PASSED pandas/tests/frame/methods/test_fillna.py::TestFillNA::test_fillna_inplace_with_columns_limit_and_value
+============================== 43 passed in 4.69s ==============================
+/opt/conda/envs/testbed/lib/python3.8/site-packages/pytest_asyncio/plugin.py:208: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

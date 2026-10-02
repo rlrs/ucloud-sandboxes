@@ -1,0 +1,21 @@
+git_status_rc=0
+git_status_ms=25
+git_status_lines=0
+git_status_sha=e3b0c44298fc1c14
+
+head=710b83bf29c90b0952e442d04c52a9fc1a4bc7fc
+head_is_base=1
+base_commit_present=1
+commits=31147
+describe=v2.0.0.dev0-1145-g710b83bf29
+git_diff_rc=0
+fsck_rc=0
+version=2.0.0.dev0+1145.g710b83bf29
+test_patch_check_rc=0
+collect_rc=0
+collect_tail=pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_columns_none_raise_error 529 tests collected in 0.10s 
+collected=529
+
+verify_rc=0
+verify_s=7.3
+stderr_tail=

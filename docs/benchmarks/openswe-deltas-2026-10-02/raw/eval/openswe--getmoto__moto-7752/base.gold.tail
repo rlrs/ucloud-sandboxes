@@ -1,0 +1,38 @@
+s/test_rds/test_rds_clusters.py::test_describe_db_cluster_after_creation
+PASSED tests/test_rds/test_rds_clusters.py::test_delete_db_cluster
+PASSED tests/test_rds/test_rds_clusters.py::test_delete_db_cluster_do_snapshot
+PASSED tests/test_rds/test_rds_clusters.py::test_delete_db_cluster_that_is_protected
+PASSED tests/test_rds/test_rds_clusters.py::test_delete_db_cluster_unknown_cluster
+PASSED tests/test_rds/test_rds_clusters.py::test_start_db_cluster_unknown_cluster
+PASSED tests/test_rds/test_rds_clusters.py::test_start_db_cluster_after_stopping
+PASSED tests/test_rds/test_rds_clusters.py::test_start_db_cluster_without_stopping
+PASSED tests/test_rds/test_rds_clusters.py::test_stop_db_cluster
+PASSED tests/test_rds/test_rds_clusters.py::test_stop_db_cluster_already_stopped
+PASSED tests/test_rds/test_rds_clusters.py::test_stop_db_cluster_unknown_cluster
+PASSED tests/test_rds/test_rds_clusters.py::test_create_db_cluster_snapshot_fails_for_unknown_cluster
+PASSED tests/test_rds/test_rds_clusters.py::test_create_db_cluster_snapshot
+PASSED tests/test_rds/test_rds_clusters.py::test_create_db_cluster_snapshot_copy_tags
+PASSED tests/test_rds/test_rds_clusters.py::test_copy_db_cluster_snapshot_fails_for_unknown_snapshot
+PASSED tests/test_rds/test_rds_clusters.py::test_copy_db_cluster_snapshot
+PASSED tests/test_rds/test_rds_clusters.py::test_copy_db_cluster_snapshot_fails_for_existed_target_snapshot
+PASSED tests/test_rds/test_rds_clusters.py::test_describe_db_cluster_snapshots
+PASSED tests/test_rds/test_rds_clusters.py::test_delete_db_cluster_snapshot
+PASSED tests/test_rds/test_rds_clusters.py::test_restore_db_cluster_from_snapshot
+PASSED tests/test_rds/test_rds_clusters.py::test_restore_db_cluster_from_snapshot_and_override_params
+PASSED tests/test_rds/test_rds_clusters.py::test_add_tags_to_cluster
+PASSED tests/test_rds/test_rds_clusters.py::test_add_tags_to_cluster_snapshot
+PASSED tests/test_rds/test_rds_clusters.py::test_create_serverless_db_cluster
+PASSED tests/test_rds/test_rds_clusters.py::test_create_db_cluster_with_enable_http_endpoint_invalid
+PASSED tests/test_rds/test_rds_clusters.py::test_describe_db_clusters_filter_by_engine
+PASSED tests/test_rds/test_rds_clusters.py::test_replicate_cluster
+PASSED tests/test_rds/test_rds_clusters.py::test_createdb_instance_engine_mismatch_fail
+PASSED tests/test_rds/test_rds_clusters.py::test_describe_db_cluster_snapshot_attributes_default
+PASSED tests/test_rds/test_rds_clusters.py::test_describe_db_cluster_snapshot_attributes
+PASSED tests/test_rds/test_rds_clusters.py::test_modify_db_cluster_snapshot_attribute
+PASSED tests/test_rds/test_rds_clusters.py::test_backtrack_window
+PASSED tests/test_rds/test_rds_clusters.py::test_backtrack_errors[params0]
+PASSED tests/test_rds/test_rds_clusters.py::test_backtrack_errors[params1]
+PASSED tests/test_rds/test_rds_clusters.py::test_backtrack_errors[params2]
+============================== 45 passed in 2.80s ==============================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

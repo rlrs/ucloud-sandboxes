@@ -1,0 +1,21 @@
+git_status_rc=0
+git_status_ms=18
+git_status_lines=6
+git_status_sha=50b8c6d2ce5c980b
+
+head=2fa63f9aedee47ee32b0375ef533eebbbb79c66d
+head_is_base=0
+base_commit_present=0
+commits=1
+describe=v1.3.0.dev0
+git_diff_rc=0
+fsck_rc=0
+version=1.3.0.dev0
+test_patch_check_rc=0
+collect_rc=0
+collect_tail=pandas/tests/frame/indexing/test_setitem.py::TestDataFrameSetItem::test_setitem_error_msmgs 61 tests collected in 0.04s 
+collected=61
+
+verify_rc=0
+verify_s=3.4
+stderr_tail=

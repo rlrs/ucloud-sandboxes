@@ -1,0 +1,30 @@
+estPivotTable::test_pivot_with_tz[True]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_with_categorical[False-True]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_table_aggfunc_dropna[False]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_with_categorical[False-False]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_with_categorical[False-None]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_with_categorical[None-None]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_with_categorical[None-True]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_with_tz[False]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_with_categorical[None-False]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_table_dropna_categoricals[True]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_with_categorical[True-True]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_margin_with_only_columns_defined[columns1-sum-values1-expected_columns1]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_with_categorical[True-None]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_with_categorical[True-False]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_margin_with_only_columns_defined[A-mean-values0-expected_columns0]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_table_dropna_categoricals[False]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_dtypes
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_table_empty_aggfunc[True]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_margins_casted_to_float
+
+(1518 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ============================
+FAILED pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_table_with_mixed_nested_tuples
+=================== 1 failed, 524 passed, 4 xfailed in 6.19s ===================
+/opt/conda/envs/testbed/lib/python3.8/site-packages/pytest_asyncio/plugin.py:208: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=1

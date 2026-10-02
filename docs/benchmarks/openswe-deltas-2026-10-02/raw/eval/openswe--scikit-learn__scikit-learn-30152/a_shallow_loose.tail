@@ -1,0 +1,32 @@
+metaestimators_metadata_routing.py cleanly.
+Applied patch sklearn/tests/test_multioutput.py cleanly.
+Applied patch sklearn/utils/_test_common/instance_generator.py cleanly.
+>>>>> Start Test Output
+[1m============================= test session starts ==============================[0m
+[1mcollecting ... [0mcollected 338 items
+
+sklearn/tests/test_metaestimators_metadata_routing.py::test_unsupported_estimators_get_metadata_routing[estimator0] I: Seeding RNGs with 1077315220
+[32mPASSED[0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_unsupported_estimators_get_metadata_routing[estimator1] [32mPASSED[0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_unsupported_estimators_fit_with_metadata[estimator0] [32mPASSED[0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_unsupported_estimators_fit_with_metadata[estimator1] [32mPASSED[0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_registry_copy [32mPASSED[0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_default_request[MultiOutputRegressor] [32mPASSED[0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_default_request[MultiOutputClassifier] [32mPASSED[0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_default_request[CalibratedClassifierCV] [32mPASSED[0m
+sklearn/tests/test_metaestimators_metadata_routing.py::test_default_request[ClassifierChain] [31mFAILED[0m
+
+[36m[1m=========================== short test summary info ============================[0m
+[32mPASSED[0m sklearn/tests/test_metaestimators_metadata_routing.py::[1mtest_unsupported_estimators_get_metadata_routing[estimator0][0m
+[32mPASSED[0m sklearn/tests/test_metaestimators_metadata_routing.py::[1mtest_unsupported_estimators_get_metadata_routing[estimator1][0m
+[32mPASSED[0m sklearn/tests/test_metaestimators_metadata_routing.py::[1mtest_unsupported_estimators_fit_with_metadata[estimator0][0m
+[32mPASSED[0m sklearn/tests/test_metaestimators_metadata_routing.py::[1mtest_unsupported_estimators_fit_with_metadata[estimator1][0m
+[32mPASSED[0m sklearn/tests/test_metaestimators_metadata_routing.py::[1mtest_registry_copy[0m
+[32mPASSED[0m sklearn/tests/test_metaestimators_metadata_routing.py::[1mtest_default_request[MultiOutputRegressor][0m
+[32mPASSED[0m sklearn/tests/test_metaestimators_metadata_routing.py::[1mtest_default_request[MultiOutputClassifier][0m
+[32mPASSED[0m sklearn/tests/test_metaestimators_metadata_routing.py::[1mtest_default_request[CalibratedClassifierCV][0m
+[31mFAILED[0m sklearn/tests/test_metaestimators_metadata_routing.py::[1mtest_default_request[ClassifierChain][0m - TypeError: ClassifierChain.__init__() got an unexpected keyword argument 'e...
+[31m!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!![0m
+[31m========================= [31m[1m1 failed[0m, [32m8 passed[0m[31m in 0.44s[0m[31m ==========================[0m
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=1

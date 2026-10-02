@@ -1,0 +1,21 @@
+{
+ "stats": {
+  "git_apply": 36829,
+  "git_any": 36842,
+  "pytest": 29485,
+  "pip_install": 2710,
+  "git_checkout_rev_paths": 90,
+  "git_checkout_any": 1430,
+  "git_reset": 1919,
+  "git_clean": 1249,
+  "git_status": 1433,
+  "git_stash": 138,
+  "git_diff": 1027,
+  "build_ext": 1904,
+  "patch_cmd": 193,
+  "git_log_show": 362,
+  "network_fetch": 128,
+  "rows": 36884,
+  "base_commit_in_eval_body": 870
+ }
+}

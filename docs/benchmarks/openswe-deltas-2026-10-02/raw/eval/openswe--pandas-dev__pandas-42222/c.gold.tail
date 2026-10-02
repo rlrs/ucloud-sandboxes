@@ -1,0 +1,30 @@
+xml ------------------
+============================= slowest 30 durations =============================
+0.02s call     pandas/tests/io/excel/test_openpyxl.py::test_if_sheet_exists_append_modes[new-2-expected0-.xlsx]
+0.02s call     pandas/tests/io/excel/test_openpyxl.py::test_if_sheet_exists_append_modes[replace-1-expected1-.xlsx]
+0.02s call     pandas/tests/io/excel/test_openpyxl.py::test_append_overlay_startrow_startcol[1-0-greeting2-goodbye2-.xlsx]
+0.02s call     pandas/tests/io/excel/test_openpyxl.py::test_append_overlay_startrow_startcol[0-1-greeting1-goodbye1-.xlsx]
+0.02s call     pandas/tests/io/excel/test_openpyxl.py::test_append_overlay_startrow_startcol[1-1-greeting3-goodbye3-.xlsx]
+0.02s call     pandas/tests/io/excel/test_openpyxl.py::test_append_overlay_startrow_startcol[0-0-greeting0-goodbye0-.xlsx]
+0.02s call     pandas/tests/io/excel/test_openpyxl.py::test_if_sheet_exists_append_modes[overlay-1-expected2-.xlsx]
+0.02s call     pandas/tests/io/excel/test_openpyxl.py::test_write_append_mode[a-expected1-.xlsx]
+0.01s call     pandas/tests/io/excel/test_openpyxl.py::test_write_append_mode[w-expected0-.xlsx]
+
+(18 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ============================
+PASSED pandas/tests/io/excel/test_openpyxl.py::test_if_sheet_exists_append_modes[new-2-expected0-.xlsx]
+PASSED pandas/tests/io/excel/test_openpyxl.py::test_if_sheet_exists_append_modes[replace-1-expected1-.xlsx]
+PASSED pandas/tests/io/excel/test_openpyxl.py::test_if_sheet_exists_append_modes[overlay-1-expected2-.xlsx]
+PASSED pandas/tests/io/excel/test_openpyxl.py::test_append_overlay_startrow_startcol[0-0-greeting0-goodbye0-.xlsx]
+PASSED pandas/tests/io/excel/test_openpyxl.py::test_append_overlay_startrow_startcol[0-1-greeting1-goodbye1-.xlsx]
+PASSED pandas/tests/io/excel/test_openpyxl.py::test_append_overlay_startrow_startcol[1-0-greeting2-goodbye2-.xlsx]
+PASSED pandas/tests/io/excel/test_openpyxl.py::test_append_overlay_startrow_startcol[1-1-greeting3-goodbye3-.xlsx]
+PASSED pandas/tests/io/excel/test_openpyxl.py::test_write_append_mode[w-expected0-.xlsx]
+PASSED pandas/tests/io/excel/test_openpyxl.py::test_write_append_mode[a-expected1-.xlsx]
+============================== 9 passed in 0.33s ===============================
+/opt/conda/envs/testbed/lib/python3.8/site-packages/pytest_asyncio/plugin.py:208: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

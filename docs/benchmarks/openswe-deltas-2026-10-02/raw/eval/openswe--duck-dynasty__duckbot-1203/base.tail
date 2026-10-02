@@ -1,0 +1,27 @@
+} [-words-]{+change+}]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_large_edit_distance[are you eating cake???-I'm getting a root canal.-[-are-]{+I'm+} [-you-]{+getting+} [-eating-]{+a+} [-cake???-]{+root canal.+}]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_large_edit_distance[hi-hi hello how are you lsoer-hi{+ hello how are you lsoer+}]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_test_special_user_as_before[add space-add   space-add[- -]{+   +}space]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_test_special_user_as_before[add word-add small word-add {+small +}word]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_test_special_user_as_before[add-add word-add{+ word+}]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_test_special_user_as_before[word-add word-{+add +}word]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_test_special_user_as_before[remove word-remove-remove[- word-]]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_test_special_user_as_before[two words-two things-two [-words-]{+things+}]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_test_special_user_as_after[add space-add   space-add[- -]{+   +}space]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_test_special_user_as_after[add word-add small word-add {+small +}word]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_test_special_user_as_after[add-add word-add{+ word+}]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_test_special_user_as_after[word-add word-{+add +}word]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_test_special_user_as_after[remove word-remove-remove[- word-]]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_test_special_user_as_after[two words-two things-two [-words-]{+things+}]
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_diff_bot_author_before
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_diff_bot_author_after
+PASSED tests/cogs/messages/edit_diff_test.py::test_show_edit_diff_bot_content_same
+FAILED tests/cogs/messages/edit_diff_test.py::test_show_edit_diff_small_edit_distance[add space-add   space-add[- -]{+   +}space]
+FAILED tests/cogs/messages/edit_diff_test.py::test_show_edit_diff_small_edit_distance[add word-add small word-add {+small +}word]
+FAILED tests/cogs/messages/edit_diff_test.py::test_show_edit_diff_small_edit_distance[add-add word-add{+ word+}]
+FAILED tests/cogs/messages/edit_diff_test.py::test_show_edit_diff_small_edit_distance[word-add word-{+add +}word]
+FAILED tests/cogs/messages/edit_diff_test.py::test_show_edit_diff_small_edit_distance[remove word-remove-remove[- word-]]
+FAILED tests/cogs/messages/edit_diff_test.py::test_show_edit_diff_small_edit_distance[two words-two things-two [-words-]{+things+}]
+========================= 6 failed, 21 passed in 7.41s =========================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=1

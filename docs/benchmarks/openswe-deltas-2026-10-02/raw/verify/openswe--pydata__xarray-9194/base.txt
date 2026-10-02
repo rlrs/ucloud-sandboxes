@@ -1,0 +1,21 @@
+git_status_rc=0
+git_status_ms=18
+git_status_lines=0
+git_status_sha=e3b0c44298fc1c14
+
+head=3deee7bb535dba9a48ee590c7f5119a7f2d779be
+head_is_base=1
+base_commit_present=1
+commits=5464
+describe=v2024.06.0-27-g3deee7bb
+git_diff_rc=0
+fsck_rc=0
+version=2024.6.1.dev27+g3deee7bb5
+test_patch_check_rc=0
+collect_rc=4
+collect_tail=[31m[33mno tests collected[0m, [31m1 error[0m[31m in 1.05s[0m[0m 
+collected=1
+
+verify_rc=0
+verify_s=6.9
+stderr_tail=

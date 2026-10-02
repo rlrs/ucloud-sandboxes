@@ -1,0 +1,317 @@
+[
+ {
+  "pos": 0,
+  "task": "openswe--pandas-dev__pandas-20422",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "main",
+  "foundation_key": "3ca1c91e",
+  "first_of_project": true
+ },
+ {
+  "pos": 1,
+  "task": "openswe--pandas-dev__pandas-63232",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "main",
+  "foundation_key": "ede7449b",
+  "first_of_project": false
+ },
+ {
+  "pos": 2,
+  "task": "openswe--pandas-dev__pandas-22261",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "main",
+  "foundation_key": "3ca1c91e",
+  "first_of_project": false
+ },
+ {
+  "pos": 3,
+  "task": "openswe--pandas-dev__pandas-62428",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "main",
+  "foundation_key": "35e4faa0",
+  "first_of_project": false
+ },
+ {
+  "pos": 4,
+  "task": "openswe--duck-dynasty__duckbot-1203",
+  "project": "duck-dynasty__duckbot",
+  "group": "other",
+  "role": "main",
+  "foundation_key": "f76865c6",
+  "first_of_project": true
+ },
+ {
+  "pos": 5,
+  "task": "openswe--OasisLMF__OasisLMF-1406",
+  "project": "OasisLMF__OasisLMF",
+  "group": "other",
+  "role": "main",
+  "foundation_key": "24cb913a",
+  "first_of_project": true
+ },
+ {
+  "pos": 6,
+  "task": "openswe--androguard__androguard-411",
+  "project": "androguard__androguard",
+  "group": "other",
+  "role": "main",
+  "foundation_key": "3ca1c91e",
+  "first_of_project": true
+ },
+ {
+  "pos": 7,
+  "task": "openswe--mps-gmbh__hl7-parser-32",
+  "project": "mps-gmbh__hl7-parser",
+  "group": "other",
+  "role": "main",
+  "foundation_key": "ede7449b",
+  "first_of_project": true
+ },
+ {
+  "pos": 8,
+  "task": "openswe--napari__napari-tiff-31",
+  "project": "napari__napari-tiff",
+  "group": "other",
+  "role": "main",
+  "foundation_key": "ede7449b",
+  "first_of_project": true
+ },
+ {
+  "pos": 9,
+  "task": "openswe--newam__idasen-340",
+  "project": "newam__idasen",
+  "group": "other",
+  "role": "main",
+  "foundation_key": "24cb913a",
+  "first_of_project": true
+ },
+ {
+  "pos": 10,
+  "task": "openswe--aiidateam__reentry-50",
+  "project": "aiidateam__reentry",
+  "group": "other",
+  "role": "main",
+  "foundation_key": "ede7449b",
+  "first_of_project": true
+ },
+ {
+  "pos": 11,
+  "task": "openswe--fake-useragent__fake-useragent-216",
+  "project": "fake-useragent__fake-useragent",
+  "group": "other",
+  "role": "main",
+  "foundation_key": "24cb913a",
+  "first_of_project": true
+ },
+ {
+  "pos": 12,
+  "task": "openswe--rustedpy__result-58",
+  "project": "rustedpy__result",
+  "group": "other",
+  "role": "main",
+  "foundation_key": "ede7449b",
+  "first_of_project": true
+ },
+ {
+  "pos": 13,
+  "task": "openswe--pandas-dev__pandas-54945",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "main",
+  "foundation_key": "f76865c6",
+  "first_of_project": false
+ },
+ {
+  "pos": 14,
+  "task": "openswe--pandas-dev__pandas-43447",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "main",
+  "foundation_key": "9032b856",
+  "first_of_project": false
+ },
+ {
+  "pos": 15,
+  "task": "openswe--pandas-dev__pandas-45642",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "main",
+  "foundation_key": "9032b856",
+  "first_of_project": false
+ },
+ {
+  "pos": 16,
+  "task": "openswe--pandas-dev__pandas-34736",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "main",
+  "foundation_key": "9032b856",
+  "first_of_project": false
+ },
+ {
+  "pos": 17,
+  "task": "openswe--pandas-dev__pandas-21799",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "main",
+  "foundation_key": "3ca1c91e",
+  "first_of_project": false
+ },
+ {
+  "pos": 18,
+  "task": "openswe--pandas-dev__pandas-47327",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "main",
+  "foundation_key": "f76865c6",
+  "first_of_project": false
+ },
+ {
+  "pos": 19,
+  "task": "openswe--pandas-dev__pandas-50682",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "main",
+  "foundation_key": "9032b856",
+  "first_of_project": false
+ },
+ {
+  "pos": 20,
+  "task": "openswe--pandas-dev__pandas-58452",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "main",
+  "foundation_key": "f76865c6",
+  "first_of_project": false
+ },
+ {
+  "pos": 21,
+  "task": "openswe--pandas-dev__pandas-39341",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "backup",
+  "foundation_key": "117ca927",
+  "first_of_project": false
+ },
+ {
+  "pos": 22,
+  "task": "openswe--pandas-dev__pandas-60697",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "backup",
+  "foundation_key": "f76865c6",
+  "first_of_project": false
+ },
+ {
+  "pos": 23,
+  "task": "openswe--pandas-dev__pandas-52264",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "backup",
+  "foundation_key": "24cb913a",
+  "first_of_project": false
+ },
+ {
+  "pos": 24,
+  "task": "openswe--scikit-learn__scikit-learn-30152",
+  "project": "scikit-learn__scikit-learn",
+  "group": "other",
+  "role": "main",
+  "foundation_key": "ede7449b",
+  "first_of_project": true
+ },
+ {
+  "pos": 25,
+  "task": "openswe--astropy__astropy-16038",
+  "project": "astropy__astropy",
+  "group": "other",
+  "role": "main",
+  "foundation_key": "24cb913a",
+  "first_of_project": true
+ },
+ {
+  "pos": 26,
+  "task": "openswe--getmoto__moto-7212",
+  "project": "getmoto__moto",
+  "group": "other",
+  "role": "main",
+  "foundation_key": "f76865c6",
+  "first_of_project": true
+ },
+ {
+  "pos": 27,
+  "task": "openswe--getmoto__moto-7752",
+  "project": "getmoto__moto",
+  "group": "other-later",
+  "role": "extra",
+  "foundation_key": "ede7449b",
+  "first_of_project": false
+ },
+ {
+  "pos": 28,
+  "task": "openswe--scikit-learn__scikit-learn-29021",
+  "project": "scikit-learn__scikit-learn",
+  "group": "other-later",
+  "role": "extra",
+  "foundation_key": "ede7449b",
+  "first_of_project": false
+ },
+ {
+  "pos": 29,
+  "task": "openswe--conan-io__conan-15665",
+  "project": "conan-io__conan",
+  "group": "other",
+  "role": "backup",
+  "foundation_key": "ede7449b",
+  "first_of_project": true
+ },
+ {
+  "pos": 30,
+  "task": "openswe--pydata__xarray-9194",
+  "project": "pydata__xarray",
+  "group": "other",
+  "role": "backup",
+  "foundation_key": "ede7449b",
+  "first_of_project": true
+ },
+ {
+  "pos": 31,
+  "task": "openswe--pandas-dev__pandas-32121",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "backup2",
+  "foundation_key": "944e5a6f",
+  "first_of_project": false
+ },
+ {
+  "pos": 32,
+  "task": "openswe--pandas-dev__pandas-42222",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "backup2",
+  "foundation_key": "9032b856",
+  "first_of_project": false
+ },
+ {
+  "pos": 33,
+  "task": "openswe--pandas-dev__pandas-46301",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "backup2",
+  "foundation_key": "9032b856",
+  "first_of_project": false
+ },
+ {
+  "pos": 34,
+  "task": "openswe--pandas-dev__pandas-30175",
+  "project": "pandas-dev__pandas",
+  "group": "pandas",
+  "role": "backup2",
+  "foundation_key": "944e5a6f",
+  "first_of_project": false
+ }
+]

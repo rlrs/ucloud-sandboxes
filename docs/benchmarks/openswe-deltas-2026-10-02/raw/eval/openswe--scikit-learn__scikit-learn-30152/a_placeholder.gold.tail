@@ -1,0 +1,30 @@
+csr_array][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_base_chain_random_order[0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_base_chain_crossval_fit_and_predict[classifier-predict][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_base_chain_crossval_fit_and_predict[classifier-predict_proba][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_base_chain_crossval_fit_and_predict[classifier-predict_log_proba][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_base_chain_crossval_fit_and_predict[classifier-decision_function][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_base_chain_crossval_fit_and_predict[regressor-][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_multi_output_classes_[estimator0][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_multi_output_classes_[estimator1][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_multi_output_classes_[estimator2][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_multioutput_estimator_with_fit_params[estimator0-dataset0][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_multioutput_estimator_with_fit_params[estimator1-dataset1][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_regressor_chain_w_fit_params[0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_support_missing_values[MultiOutputClassifier-LogisticRegression][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_support_missing_values[MultiOutputRegressor-Ridge][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_classifier_chain_tuple_order[list][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_classifier_chain_tuple_order[array][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_classifier_chain_tuple_order[tuple][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_classifier_chain_tuple_invalid_order[0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_classifier_chain_verbose[0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_regressor_chain_verbose[0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_multioutputregressor_ducktypes_fitted_estimator[0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_fit_params_no_routing[ClassifierChain-fit][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_fit_params_no_routing[MultiOutputClassifier-partial_fit][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_multioutput_regressor_has_partial_fit[0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_base_estimator_deprecation[ClassifierChain][0m
+[32mPASSED[0m sklearn/tests/test_multioutput.py::[1mtest_base_estimator_deprecation[RegressorChain][0m
+[33m====================== [32m338 passed[0m, [33m[1m276 warnings[0m[33m in 13.32s[0m[33m ======================[0m
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

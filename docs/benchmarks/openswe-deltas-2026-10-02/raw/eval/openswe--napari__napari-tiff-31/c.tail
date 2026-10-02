@@ -1,0 +1,35 @@
+all -----------------------------
+{'ImageJ': '1.11a', 'images': 1, 'hyperstack': True, 'mode': 'grayscale'}
+______ test_all_readers[tifffile_reader-example_data_tiff-original_data2] ______
+----------------------------- Captured stdout call -----------------------------
+({'shape': [20, 20]},)
+____ test_all_readers[tifffile_reader-example_data_ometiff-original_data3] _____
+----------------------------- Captured stdout call -----------------------------
+<?xml version="1.0" encoding="UTF-8"?><OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openmicroscopy.org/Schemas/OME/2016-06 http://www.openmicroscopy.org/Schemas/OME/2016-06/ome.xsd" UUID="urn:uuid:41ecb39e-be78-11f1-9de9-92000a099127"  Creator="tifffile.py 2023.9.26"><Image ID="Image:0" Name="Image0"><Pixels ID="Pixels:0" DimensionOrder="XYCZT" Type="uint8" SizeX="20" SizeY="20" SizeC="1" SizeZ="1" SizeT="1"><Channel ID="Channel:0:0" SamplesPerPixel="1"><LightPath/></Channel><TiffData IFD="0" PlaneCount="1"/></Pixels></Image></OME>
+=========================== short test summary info ============================
+PASSED napari_tiff/_tests/test_tiff_metadata.py::test_metadata_dict[example_data_ometiff-original_data0-ome_metadata]
+PASSED napari_tiff/_tests/test_tiff_metadata.py::test_metadata_dict[example_data_imagej-original_data1-imagej_metadata]
+PASSED napari_tiff/_tests/test_tiff_metadata.py::test_imagej_hyperstack_metadata
+PASSED napari_tiff/_tests/test_tiff_reader.py::test_get_reader_pass
+PASSED napari_tiff/_tests/test_tiff_reader.py::test_reader[example_data_filepath-original_data0]
+PASSED napari_tiff/_tests/test_tiff_reader.py::test_reader[example_data_zipped_filepath-original_data1]
+PASSED napari_tiff/_tests/test_tiff_reader.py::test_all_readers[imagecodecs_reader-example_data_filepath-original_data0]
+PASSED napari_tiff/_tests/test_tiff_reader.py::test_all_readers[tifffile_reader-example_data_imagej-original_data1]
+PASSED napari_tiff/_tests/test_tiff_reader.py::test_all_readers[tifffile_reader-example_data_tiff-original_data2]
+PASSED napari_tiff/_tests/test_tiff_reader.py::test_all_readers[tifffile_reader-example_data_ometiff-original_data3]
+PASSED napari_tiff/_tests/test_tiff_reader.py::test_all_readers[zip_reader-example_data_zipped_filepath-original_data4]
+PASSED napari_tiff/_tests/test_tiff_reader.py::test_multiresolution_image
+======================= 12 passed, 13 warnings in 1.19s ========================
+>>>>> End Test Output (with patch)
+OPENSWE_EXIT_CODE_WITH_PATCH=0
+=== Testing imports after golden patch ===
+>>>>> Start Test Output (import test)
+Testing imports...
+✓ napari_tiff_colormaps imports successfully
+  alpha_colormap type: <class 'function'>
+Testing function call...
+  alpha_colormap() returns: <class 'vispy.color.colormap.Colormap'>
+✗ Import failed: 'str' object has no attribute '_rgba'
+>>>>> End Test Output (import test)
+OPENSWE_EXIT_CODE_IMPORT_TEST=1
+OPENSWE_EXIT_CODE=1

@@ -1,0 +1,35 @@
+ pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[280]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[177]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[186]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[264]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[266]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[193]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[192]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[354]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[279]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[187]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[283]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[281]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pivot_string_func_vs_func[sum-sum]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[183]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[267]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[185]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[184]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pass_array
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_pass_function
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[175]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[182]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[195]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[352]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[174]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[268]
+0.01s call     pandas/tests/reshape/test_pivot.py::TestPivotTable::test_daily[282]
+
+(1486 durations < 0.005s hidden.  Use -vv to show these durations.)
+======================== 525 passed, 4 xfailed in 6.36s ========================
+/opt/conda/envs/testbed/lib/python3.8/site-packages/pytest_asyncio/plugin.py:208: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=0

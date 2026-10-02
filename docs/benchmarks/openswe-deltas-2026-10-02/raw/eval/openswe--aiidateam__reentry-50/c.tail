@@ -1,0 +1,56 @@
+mdirs-4.12.2, cov-7.1.0
+collecting ... collected 5 items
+
+reentry/tests/test_config.py::test_find_config PASSED                    [ 20%]
+reentry/tests/test_config.py::test_make_config_parser PASSED             [ 40%]
+reentry/tests/test_config.py::test_get_config FAILED                     [ 60%]
+reentry/tests/test_config.py::test_get_config_with_env_var FAILED        [ 80%]
+reentry/tests/test_config.py::test_get_datafile PASSED                   [100%]
+
+=================================== FAILURES ===================================
+_______________________________ test_get_config ________________________________
+/opt/conda/envs/testbed/lib/python3.12/configparser.py:771: in get
+    value = d[option]
+            ^^^^^^^^^
+/opt/conda/envs/testbed/lib/python3.12/collections/__init__.py:1015: in __getitem__
+    return self.__missing__(key)            # support subclasses that define __missing__
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/conda/envs/testbed/lib/python3.12/collections/__init__.py:1007: in __missing__
+    raise KeyError(key)
+E   KeyError: 'data_filename'
+
+During handling of the above exception, another exception occurred:
+reentry/tests/test_config.py:50: in test_get_config
+    _check_config_valid(parser)
+reentry/tests/test_config.py:42: in _check_config_valid
+    assert parser.get('general', 'data_filename')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/conda/envs/testbed/lib/python3.12/configparser.py:774: in get
+    raise NoOptionError(option, section)
+E   configparser.NoOptionError: No option 'data_filename' in section: 'general'
+_________________________ test_get_config_with_env_var _________________________
+/opt/conda/envs/testbed/lib/python3.12/configparser.py:771: in get
+    value = d[option]
+            ^^^^^^^^^
+/opt/conda/envs/testbed/lib/python3.12/collections/__init__.py:1015: in __getitem__
+    return self.__missing__(key)            # support subclasses that define __missing__
+           ^^^^^^^^^^^^^^^^^^^^^
+/opt/conda/envs/testbed/lib/python3.12/collections/__init__.py:1007: in __missing__
+    raise KeyError(key)
+E   KeyError: 'data_filename'
+
+During handling of the above exception, another exception occurred:
+reentry/tests/test_config.py:60: in test_get_config_with_env_var
+    _check_config_valid(parser, data_filename)
+reentry/tests/test_config.py:42: in _check_config_valid
+    assert parser.get('general', 'data_filename')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/conda/envs/testbed/lib/python3.12/configparser.py:774: in get
+    raise NoOptionError(option, section)
+E   configparser.NoOptionError: No option 'data_filename' in section: 'general'
+=========================== short test summary info ============================
+FAILED reentry/tests/test_config.py::test_get_config - configparser.NoOptionE...
+FAILED reentry/tests/test_config.py::test_get_config_with_env_var - configpar...
+========================= 2 failed, 3 passed in 0.10s ==========================
+>>>>> End Test Output
+OPENSWE_EXIT_CODE=1

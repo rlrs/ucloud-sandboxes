@@ -1,0 +1,6 @@
+gold_apply=ok
+eval_shell_rc=0
+OPENSWE_EXIT_CODE=0
+
+run_rc=0
+run_s=3.2

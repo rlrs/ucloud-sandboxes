@@ -548,6 +548,37 @@ today's code, preserved under `docs/benchmarks/rl-scale-baseline-*`.
 - **Long-term:** C3.1 commit plus C2.5 toolkits shrink the set of images that
   need offline factoring to flattened upstream datasets.
 
+Added 2026-10-02 after `docs/reviews/prepared-image-cache-2026-10-02.md`. That
+review finds that the prepared cache leaves 63,926 of 66,786 training images
+(49% of task rows) to a live, unpinned build at first use.
+
+**C2.13 Content-addressed chunks instead of layer-chain identity.**
+- **Change:** publish components with chunk-aligned file data in a content-addressed
+  chunk store, using EROFS chunk-based files over external blob devices (the Nydus
+  RAFS v6 layout). Identical file chunks then dedupe across images, whatever their
+  layer history.
+- **Why:** today a component is keyed by its parent ChainID and diff IDs. Two
+  ScaleSWE images with 98.55% identical bytes shared nothing, and foundations,
+  anchors and flat deltas exist only to manufacture identical prefixes.
+- **First step:** a spike that republishes 200 OpenSWE, 100 ScaleSWE and 100 TMax
+  images both ways and compares stored bytes, chunk-cache bytes per burst and
+  attach latency.
+- **Deletes, once C2.14 lands:** the flat and layered delta pipeline, anchors, alias
+  writes into `images.sqlite`, the offline recipe-index rewrite and most per-work-dir
+  state (with C2.10).
+
+**C2.14 Precompute and freeze the whole training split.**
+- **Change:** build every training image once, before training, with the layout-2
+  writer on. Give training images a protected retention owner, so they are never
+  evicted or rebuilt implicitly.
+- **Cost:** about 1,200–1,300 build-slot hours at the measured p50 of about 70 s.
+- **Option:** run each task's remaining steps in a sandbox started from its
+  foundation and publish them with C3.1 commit, which parallelizes across the
+  worker fleet. Pilot it on TMax and Terminal-Lego.
+- **Gate:**
+  - a create for any training task makes no build request;
+  - the same task always gets the same root digest.
+
 ### W3 — State primitives for RL
 
 **C3.1 Commit: DSec `pack_diff` for gVisor.**
@@ -953,8 +984,17 @@ merge conflicts.
 
 ### W9 — A realistic rollout-start benchmark, and caching for it (deferred)
 
-**Status:** deferred, including the measurements. Nothing here runs until it
-is scheduled. It needs the image list of a real training run.
+**Status:** scheduled 2026-10-02. The image list is the 2026-10-01 selection
+(130,253 task rows, 66,786 images). The starting point is a fair corpus, not
+today's:
+1. C9.1 registry read limit;
+2. the C2.13 spike;
+3. the layout-2 writer;
+4. C2.14 precompute;
+5. C9.2 runs;
+6. C9.3 cache seeding.
+
+Keep one C9.2 run on today's corpus as the "before".
 
 **Why.** The real load is 500+ rollouts starting at once on distinct prepared
 SWE and terminal images, usually on a fleet scaled to zero. The W0 scenarios

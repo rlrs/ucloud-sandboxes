@@ -12,13 +12,14 @@ contract; this is the reference.
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+import dataclasses
 import hashlib
 import os
 from pathlib import Path
 import threading
 
 from .chunk_index import http_range, http_request
-from .chunk_store import BLOCK, RAW, ChunkMap, decode_chunk, parse_bootstrap, zstd_decompress
+from .chunk_store import BLOCK, RAW, ChunkMap, decode_chunk, pack_key, parse_bootstrap, zstd_decompress
 from .environment_artifact import Chunk, RafsEnvironmentComponent, content_digest
 from .managed_registry import RegistryRequestError
 
@@ -231,6 +232,13 @@ def _get(url, limit, timeout=60.0):
 
 def store_prefix(base_url):
     return base_url.rstrip("/") + "/v1/objects/"
+
+
+def store_locator(locator, base_url, prefix):
+    """``locator`` with its packs named on the store node, as the index names them for workers."""
+    packs = tuple((digest, store_prefix(base_url) + pack_key(prefix, digest).removeprefix(prefix + "/"))
+                  for digest, _ in locator.packs)
+    return dataclasses.replace(locator, packs=packs)
 
 
 def require_origin(locator, origin):

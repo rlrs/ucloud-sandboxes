@@ -129,15 +129,33 @@ class TreeTests(unittest.TestCase):
                          layer([("d/.wh.x", b""), ("e/.wh..wh..opq", b""), ("e/new", b"5"), ("g", ("link", "f"))]))
         tree = expected_tree(tars)
         self.assertEqual(sorted(tree), ["d/y", "e/new", "f", "g"])
-        self.assertEqual(tree["g"][-1], "f")
+        self.assertIsNotNone(tree["g"][-1])
+        self.assertEqual(tree["g"][-1], tree["f"][-1])
         actual = {name: value[:-1] + (None,) for name, value in tree.items()}
         actual["g"] = actual["g"][:-1] + ("f",)
         actual["f"] = actual["f"][:-1] + ("f",)
         self.assertEqual(compare_trees(tree, actual), [])
+        unlinked = {**actual, "g": actual["g"][:-1] + (None,)}
+        self.assertEqual(compare_trees(tree, unlinked), ["hardlink groups differ: f,g"])
         broken = dict(actual)
         broken["d/y"] = ("file", 0o600) + broken["d/y"][2:]
         del broken["e/new"]
         self.assertEqual(len(compare_trees(tree, broken)), 2)
+
+    def test_a_replaced_hardlink_member_leaves_its_group(self):
+        # conda: lib/x.pyc is a link into pkgs/; a later layer rewrites lib/x.pyc.
+        tars = self.tars(layer([("pkgs/x.pyc", b"old"), ("lib/x.pyc", ("link", "pkgs/x.pyc")),
+                                ("pkgs/y", b"y"), ("lib/y", ("link", "pkgs/y")), ("lib/y2", ("link", "pkgs/y"))]),
+                         layer([("lib/x.pyc", b"new"), ("pkgs/.wh.y", b"")]),
+                         layer([("pkgs/z", b"z"), ("lib/z", ("link", "pkgs/z"))]))
+        tree = expected_tree(tars)
+        self.assertIsNone(tree["lib/x.pyc"][-1])
+        self.assertEqual(tree["lib/y"][-1], tree["lib/y2"][-1])
+        self.assertNotEqual(tree["lib/y"][-1], tree["lib/z"][-1])
+        actual = {name: value[:-1] + (None,) for name, value in tree.items()}
+        for name, label in (("lib/y", "lib/y"), ("lib/y2", "lib/y"), ("pkgs/z", "lib/z"), ("lib/z", "lib/z")):
+            actual[name] = actual[name][:-1] + (label,)
+        self.assertEqual(compare_trees(tree, actual), [])
 
     def test_overlay_whiteouts_for_per_layer_stacking(self):
         source = self.tars(layer([("d/.wh.x", b""), ("e/.wh..wh..opq", b""), ("e/new", b"5")], compress=False))[0]

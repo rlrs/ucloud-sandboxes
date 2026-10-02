@@ -28,8 +28,9 @@ from tests.test_package_budget import package_lines
 # attach. They retire test_environment_layers and test_erofs_metadata with the
 # EROFS builder after migration. Then +276 for the M1 gate driver
 # (test_chunk_store_gate: no scenario covers an operator script) and +399 for
-# the C2.6 store node (test_chunk_store_node: needs a store node, not a scenario), +9 adapter, +16 attach knob, +6 gate fixes.
-SUITE_LINE_BUDGET = 95_645
+# the C2.6 store node (test_chunk_store_node: needs a store node, not a scenario), +9 adapter, +16 attach knob, +6 gate fixes,
+# +24 verifier fixes from the M1 gate (replaced hardlink members, node locators).
+SUITE_LINE_BUDGET = 95_669
 SUITE = Path(__file__).resolve().parent
 
 

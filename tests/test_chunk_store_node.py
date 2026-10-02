@@ -16,7 +16,7 @@ from ucloud_sandboxes.chunk_store_node import (ChunkStoreClient, ChunkStoreNode,
                                                S3Source, locator_objects)
 from ucloud_sandboxes.environment_artifact import load_environment
 from ucloud_sandboxes.environment_cache import VerifiedEnvironmentCache
-from ucloud_sandboxes.environment_rafs import load_rafs_image, store_access
+from ucloud_sandboxes.environment_rafs import load_rafs_image, store_access, store_locator
 from ucloud_sandboxes.managed_registry import RegistryRequestError
 
 TEST_TIER = "contract"
@@ -230,6 +230,10 @@ class ChunkStoreNodeTests(unittest.TestCase):
         self.assertTrue(all(url.startswith(store.url + "/v1/objects/") and "?" not in url for url in urls))
         builder = fixture.index.writer.locate(list(presigned.map.ids[:3]))  # Builders stay presigned.
         self.assertTrue(all("X-Amz-Signature=" in url for _, url in builder.packs))
+        # The converter's verification mount reads through the node, as workers do.
+        mapped = store_locator(fixture.index.writer.locate(list(presigned.map.ids)), store.url,
+                               fixture.index.store.prefix)
+        self.assertEqual(mapped.packs, locator.packs)
         reader, getter = store_access(store.url, READ)
         image = load_rafs_image(digest, component, fixture.index.reader, reader=reader, getter=getter,
                                 origin=store.url)

@@ -344,8 +344,9 @@ def _normal(name):
 
 
 def expected_tree(layer_tars):
-    """The final tree OCI semantics give: path -> attributes, hardlink groups."""
-    tree = {}
+    """The final tree OCI semantics give: path -> attributes, hardlink groups
+    (numbered: a layer replacing one member, as conda's pyc rewrites do, drops only it)."""
+    tree, labels = {}, iter(range(1 << 62))
     for path in layer_tars:
         with tarfile.open(path, "r:*") as reader:
             members = reader.getmembers()
@@ -368,7 +369,9 @@ def expected_tree(layer_tars):
                 if member.islnk():
                     target = _normal(member.linkname)
                     if target in tree:
-                        tree[name] = tree[target][:-1] + (tree[target][-1] or target,)
+                        if tree[target][-1] is None:
+                            tree[target] = tree[target][:-1] + (next(labels),)
+                        tree[name] = tree[target]
                     continue
                 for existing in [key for key in tree if key.startswith(name + "/")] if not member.isdir() else ():
                     del tree[existing]
@@ -426,7 +429,7 @@ def compare_trees(expected, actual, *, limit=20):
         found = {}
         for name, attributes in tree.items():
             if attributes[-1] is not None:
-                found.setdefault(attributes[-1], {attributes[-1]}).add(name)
+                found.setdefault(attributes[-1], set()).add(name)
         return sorted(sorted(group) for group in found.values() if len(group) > 1)
     differences = []
     for name in sorted(set(expected) | set(actual)):
@@ -436,8 +439,10 @@ def compare_trees(expected, actual, *, limit=20):
             differences.append(f"{name}: expected {expected[name][:-1]}, found {actual[name][:-1]}")
         if len(differences) >= limit:
             return differences
-    if groups(expected) != groups(actual):
-        differences.append("hardlink groups differ")
+    wanted, found = groups(expected), groups(actual)
+    if wanted != found:
+        differences.append("hardlink groups differ: " + "; ".join(",".join(group[:4]) for group in (
+            [group for group in wanted if group not in found] + [group for group in found if group not in wanted])[:3]))
     return differences
 
 
@@ -484,12 +489,20 @@ def mounted_images(images, root, *, devices, trusted_keys, cache=None, runner=su
         cache.close()
 
 
-def mount_verifier(*, devices, trusted_keys, work_root):
+def mount_verifier(*, devices, trusted_keys, work_root, store_node=None):
     """§3 step 7: mount through the worker's own RAFS device and compare the
-    whole tree with the OCI layers before anything is published."""
+    whole tree with the OCI layers before anything is published. ``store_node``
+    (URL, prefix, token) reads through the node, as workers do: S3's tail
+    outlasts the kernel's 30 s NBD timeout under load (S12, M1 gate)."""
     def verify(signed, tars):
-        from .environment_rafs import RafsImage
-        images = [RafsImage(None, component, bootstrap, chunk_map, locator)
+        from .environment_rafs import RafsImage, store_access, store_locator
+        options = {}
+        if store_node is not None:
+            base_url, prefix, token = store_node
+            options = {"reader": store_access(base_url, token)[0], "origin": base_url}
+            signed = [(component, bootstrap, chunk_map, store_locator(locator, base_url, prefix))
+                      for component, bootstrap, chunk_map, locator in signed]
+        images = [RafsImage(None, component, bootstrap, chunk_map, locator, **options)
                   for component, bootstrap, chunk_map, locator in signed]
         with TemporaryDirectory(dir=work_root) as temporary, \
                 mounted_images(images, temporary, devices=devices, trusted_keys=trusted_keys) as tree:
@@ -633,6 +646,7 @@ def _registry_and_index(args, store):
 
 def convert_command(args):
     from cryptography.hazmat.primitives.serialization import load_pem_private_key
+    from .environment_config import read_token
     from .managed_registry import manifest_digest_from_image_ref, registry_repository_tag_from_image_ref
     store = _chunk_store(args.config)
     registry, index = _registry_and_index(args, store)
@@ -640,8 +654,10 @@ def convert_command(args):
     if coordinates is None:
         raise ValueError("convert-environment needs an image in the managed registry")
     key = load_pem_private_key(Path(args.environment_signing_key).read_bytes(), password=None)
+    store_node = store.store_node and (store.store_node.url, store.prefix,
+                                       read_token(args.chunk_index_token_file).decode())
     verifier = mount_verifier(devices=args.verify_device, trusted_keys=registry.trusted_keys,
-                              work_root=args.work_root) if args.verify_device else None
+                              work_root=args.work_root, store_node=store_node) if args.verify_device else None
     converter = RafsConverter(registry, store.object_store(), index, key, args.work_root,
                               nydus_image=store.nydus_image, layout=args.layout or store.mount_granularity,
                               verifier=verifier, **({"owner": args.owner} if args.owner else {}))

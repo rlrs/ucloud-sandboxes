@@ -546,7 +546,8 @@ bounded to 30 s or 2,048 chunks. The trace is saved atomically, with no fsync,
 as `<backend root>/traces/<image digest>.json`. The store keeps the 4,096
 most recently written traces. It is untrusted hint data: invalid, stale or
 foreign files are deleted and recorded again. A detach before the window
-closes discards it.
+closes ends it early and saves what was read, since deleting a sandbox drops
+its components at once; a failed attach saves nothing.
 
 Later attaches replay the trace in the background, with lower priority than
 metadata. The replay sorts the trace into runs ordered by first touch and is

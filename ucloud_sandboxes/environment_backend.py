@@ -251,6 +251,8 @@ class EnvironmentBackend:
             try:
                 self._mount(selected.path, target)
             except BaseException:
+                # A failed attach is no startup trace: discard it before drop.
+                self.cache.stop_recording(component)
                 # Never disconnect a possibly mounted backing device. If
                 # unmount/close cannot finish, retain it for a later cleanup.
                 try:
@@ -280,9 +282,9 @@ class EnvironmentBackend:
             # do not inspect the now-unmounted directory's parent filesystem.
             component = self._components.get(digest)
             if component is not None:
-                # Detached: stop warming it and forget an unfinished window.
+                # Detached, often inside the trace window: save what was read.
                 self.cache.cancel_prefetch(component)
-                self.cache.stop_recording(component)
+                self.cache.stop_recording(component, save=True)
             device.close()
             del self._active[digest]
             self._components.pop(digest, None)

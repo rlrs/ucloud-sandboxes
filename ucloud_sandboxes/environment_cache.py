@@ -374,12 +374,17 @@ class VerifiedEnvironmentCache:
             self._guard.notify_all()
         return True
 
-    def stop_recording(self, component):
-        """Discard an unfinished window, for example when the component detaches."""
+    def stop_recording(self, component, *, save=False):
+        """End an unfinished window; ``save`` (a detach) persists what it read so far.
+
+        A failed attach discards it."""
         with self._trace_guard:
             recording = self._recordings.get(component.image_digest)
-            if recording is not None and recording.component == component:
-                del self._recordings[component.image_digest]
+            if recording is None or recording.component != component:
+                return
+            del self._recordings[component.image_digest]
+        if save:
+            self._persist([recording])
 
     def cancel_prefetch(self, component):
         with self._guard:

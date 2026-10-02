@@ -21,6 +21,7 @@ Node-failure semantics; see `docs/node-failure-semantics.md`. Upgrade the gatewa
   - **Loss codes:** provider-confirmed termination, final-job pruning and stale-route deletion record `node_lost`. Clients get 410 and exec sessions are recorded as worker-lost, instead of a 404.
   - **Metrics:** `vm_observed` carries `phase`, `interrupted_at` and the last known `node_epoch`. A new `node_epoch_retired` event records each boot change with its downtime.
   - **Provider plugins:** external providers must declare boolean `requires_continuity_history` and `requires_guest_continuity`. `unreachable_lease_expiry_loss` is gone.
+- Record startup traces of immutable environment components when the sandbox is deleted inside the trace window (plan C2.3). Deleting a sandbox collects its image, which drops each component from the artifact backend, and the drop discarded the open 30 s recording window. A sandbox created, used and deleted within 30 s of attach therefore never saved a trace; production counted `trace_recordings_started` but no `traces_recorded`. A detach now ends the window early and saves the chunks read so far. A failed mount still discards it, and a window with no reads saves nothing. The qualification script missed this because it keeps its components attached until the window closes.
 
 ## 0.8.0 - 2026-10-02
 

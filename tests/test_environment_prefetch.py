@@ -501,6 +501,40 @@ class BackendPrefetchTests(PrefetchFixture):
         self.assertEqual(len(self.client.requests), 3)
         self.assertEqual(later.metrics()["misses"], 0)
 
+    def test_a_detach_inside_the_window_saves_what_the_guest_read(self):
+        # Production: a sandbox is created, used and deleted inside the default
+        # 30 s window, and delete's image collection drops each component.
+        traces = LocalTraceStore(self.root / "traces")
+        backend = self.backend(traces=traces)
+        backend.ensure(self.digest)
+        component = backend._components[self.digest]  # What the NBD export reads.
+        for index in (4, 5, 30):
+            backend.cache.read(component, index * CHUNK_BYTES, 512)
+        self.assertTrue(backend.drop(self.digest))
+        metrics = backend.metrics()
+        self.assertEqual((metrics["trace_recordings_started"], metrics["traces_recorded"],
+                          metrics["trace_chunks_recorded"]), (1, 1, 3))
+        self.assertEqual(traces.load(self.component), ("present", (4, 5, 30)))
+        backend.ensure(self.digest)  # The next attach replays it.
+        self.assertEqual(backend.metrics()["trace_hint_present"], 1)
+
+    def test_a_failed_mount_or_unread_detach_saves_no_trace(self):
+        traces = LocalTraceStore(self.root / "traces")
+        backend = self.backend(traces=traces)
+
+        def failing(device, target):
+            backend.cache.read(backend._components[self.digest], 0, 512)  # The superblock read.
+            raise OSError("mount failed")
+        backend._mount = failing
+        with self.assertRaises(OSError):
+            backend.ensure(self.digest)
+        backend._mount = lambda device, target: self.mounts.append(target)
+        backend.ensure(self.digest)
+        self.assertTrue(backend.drop(self.digest))
+        self.assertEqual(traces.load(self.component), ("absent", None))
+        self.assertEqual(backend.metrics()["trace_recordings_started"], 2)
+        self.assertEqual(backend.metrics()["traces_recorded"], 0)
+
     def test_trace_budget_is_capped_by_the_cache(self):
         traces = LocalTraceStore(self.root / "traces")
         traces.save(self.component, range(CHUNKS))

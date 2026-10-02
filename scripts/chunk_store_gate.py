@@ -842,6 +842,7 @@ class Gate:
             record.update(status="failed", error=redact(str(exc))[:2000])
             self.save()
             raise
+        record.pop("error", None)  # A retried phase that succeeds is not a failure.
         record.update(status="done", finished=self.now())
         self.save()
 

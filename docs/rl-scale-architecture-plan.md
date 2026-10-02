@@ -622,6 +622,26 @@ review finds that the prepared cache leaves 63,926 of 66,786 training images
 >   build trees);
 > - precomputing only the training split's OpenSWE tasks;
 > - a bounded OpenSWE set with lockfile rebuilds.
+>
+> **Measured** (`docs/benchmarks/openswe-deltas-2026-10-02/`, 29 tasks, every
+> eval unchanged):
+> - **Today:** 275 MB of new chunks per task. That is 34% installed packages, 28%
+>   caches, 22% `.git` packs, 8% apt files and 6% build artifacts.
+> - **With the slim step:** 134 MB (median 78). The step deletes caches, cuts
+>   history at the task commit (real SHA kept, objects left unpacked), writes
+>   checked-hash `.pyc` files, strips debug info from in-tree `.so` files and
+>   deletes setuptools `.o` files. Never `git gc`, and never a placeholder commit:
+>   870 eval scripts name their base commit.
+> - **All OpenSWE:** about 9.7 TB today against 2.8–4.8 TB with the slim step,
+>   and about 3.7 TB if lockfiles prefer versions already stored.
+> - **Decided:** add `scripts/slim.sh` (variant c) as the final step of every
+>   C2.14 build. OpenSWE goes to S3 under its own budget (decision 4 in
+>   docs/chunk-store-design.md), training split first.
+> - **Recipe rot:** only 13 of 27 pandas recipes build against today's upstream,
+>   all failing on dependency resolution. 4 of 29 built tasks fail their own eval
+>   even with the gold patch. The precompute campaign must record both kinds per
+>   task and exclude them from the training selection. The same tasks fail today,
+>   live at request time.
 - **Why ahead of time:** a run touches 500 tasks × 100–1,000 steps, so 50,000–500,000
   task uses against 130,253 rows. Long runs touch nearly every one of the 63,926
   images that still need a build. Building just ahead of the sampler would need

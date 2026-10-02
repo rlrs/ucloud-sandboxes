@@ -19,8 +19,17 @@ UCLOUD_SANDBOX_API_TOKEN. Tokens are never written to the report.
 ``rollout`` (plan C9.2) samples N tasks from a training selection, issues all N
 creates at once, runs a per-family startup command and M agent turns with think
 time, and writes the ``rollout`` metric section. Its fleet state is declared
-with --fleet-state; the harness never changes the fleet, and only reads node
-heartbeats (GET /v1/nodes) when given --operator-token-file.
+with --fleet-state; the harness never changes the fleet. With
+--operator-token-file it reads node heartbeats (GET /v1/nodes) and the status
+inventory (GET /v1/sandboxes?view=status) for a density timeline.
+
+--think-mode chooses what a think does: ``sleep`` waits on the driver;
+``relay`` (plan C9.2 follow-up) registers a model-relay rollout per sandbox,
+runs the turns in a managed agent inside the sandbox that ends each turn with a
+blocking model call through the relay, and answers each call from a fake
+inference worker in this process after the sampled think time, so the gateway's
+own wait policy decides whether to keep, pause or park the sandbox; ``park``
+explicitly parks after each turn and wakes before the next.
 """
 
 from __future__ import annotations
@@ -45,6 +54,8 @@ import sys
 import threading
 import time
 from typing import Any, Callable, Iterable, Sequence
+import urllib.error
+import urllib.parse
 import urllib.request
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -212,6 +223,112 @@ TURN_COMMANDS = {
              'printf "x\\n" >>/tmp/ucloud-bench-edit.txt || exit 93\n'
              '  echo "ucloud-bench edit=file"; fi\n'),
 }
+
+# -- think modes ---------------------------------------------------------------
+THINK_MODES = ("sleep", "relay", "park")
+# Heartbeat runtime_metrics.resident_wait values that are levels, not counters
+# (ucloud_sandboxes/models.py ResidentWaitMetrics); the rest are counters.
+RESIDENT_WAIT_GAUGES = frozenset({
+    "resident_waits", "checkpoint_inflight", "reclaim_target_bytes", "projected_reclaim_bytes",
+    "cache_reclaim_inflight", "admitted_demand_bytes", "pending_demand_bytes",
+    "unknown_transition_memory_costs", "admitted_ram_backing_bytes", "pending_ram_backing_bytes",
+    "paused_sandboxes", "thaw_ms_max"})
+# Inventory states that mean "not resident". A pause keeps the route running
+# (ucloud_sandboxes/pause_tier.py), so paused sandboxes show only per node in
+# the heartbeat's resident_wait.paused_sandboxes.
+PARKED_STATES = frozenset({"parked", "parking", "waking", "detaching", "detached"})
+RELAY_LEASE_SECONDS = 120.0
+RELAY_RENEW_SECONDS = 40.0
+RELAY_POLL_SECONDS = 10.0
+RELAY_CALL_ATTEMPTS = 60
+# How often a worker waiting for a model call checks that the agent still runs.
+AGENT_CHECK_SECONDS = 5.0
+AGENT_PATH = "/workspace/.ucloud-bench-agent.py"
+# 97: no Python 3 in the image (the relay client below needs urllib.request).
+AGENT_COMMAND = ("sh", "-c", 'P=$(command -v python3 || command -v python) || exit 97; '
+                 f'exec "$P" {AGENT_PATH}')
+AGENT_EXIT_CODES = {3: "turn", 4: "think", 97: "turn"}
+# The managed agent (relay mode): each turn runs its command, then makes one
+# blocking chat-completions call through the sandbox's relay capability URL,
+# as a real agent inside a training sandbox does. One JSON line per turn on
+# stdout; the driver reads the job log after the agent exits. No token or URL
+# is ever printed. Python 2 and 3.5+ parse it; only Python 3 runs it.
+AGENT_PROGRAM = r'''import json, os, subprocess, sys, time
+try:
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+except ImportError:
+    sys.exit(97)
+CFG = json.loads(os.environ["UCLOUD_BENCH_AGENT"])
+URL = os.environ["UCLOUD_BENCH_RELAY_URL"]
+
+
+def emit(row):
+    sys.stdout.write("ucloud-bench-agent " + json.dumps(row, sort_keys=True) + "\n")
+    sys.stdout.flush()
+
+
+def markers(text):
+    found = {}
+    for line in text.splitlines():
+        if line.startswith("ucloud-bench "):
+            for token in line.split()[1:]:
+                key, sep, value = token.partition("=")
+                if sep and len(found) < 24:
+                    found[key[:64]] = value[:200]
+    return found
+
+
+def call(turn, kind):
+    body = json.dumps({"model": "ucloud-bench-fake", "max_tokens": 8, "metadata": {"turn": turn},
+                       "messages": [{"role": "user", "content": "turn %d %s done" % (turn, kind)}]})
+    headers = {"Authorization": "Bearer intercepted", "Content-Type": "application/json",
+               "X-UCloud-Relay-Request-Id": "%s-turn-%d" % (CFG["id"], turn)}
+    last = None
+    for attempt in range(1, CFG["attempts"] + 1):
+        try:
+            response = urlopen(Request(URL, data=body.encode(), headers=headers),
+                               timeout=CFG["call_timeout"])
+            try:
+                return attempt, response.getcode(), json.loads(response.read().decode()), None
+            finally:
+                response.close()
+        except HTTPError as exc:
+            last = "http_%d" % exc.code
+            if exc.code < 500 and exc.code not in (408, 425, 429):
+                return attempt, exc.code, None, last
+        except (OSError, ValueError) as exc:
+            last = "transport_" + type(exc).__name__
+        time.sleep(min(2.0, 0.2 * attempt))
+    return CFG["attempts"], None, None, last
+
+
+for turn, kind in enumerate(CFG["kinds"]):
+    row = {"turn": turn, "kind": kind, "exit_code": None}
+    started = time.monotonic()
+    try:
+        done = subprocess.run(CFG["commands"][kind], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              timeout=CFG["timeout"])
+        row.update(exit_code=done.returncode, markers=markers(done.stdout.decode("utf-8", "replace")),
+                   stderr=done.stderr[-400:].decode("utf-8", "replace"))
+    except subprocess.TimeoutExpired:
+        row["status"] = "timeout"
+    row["turn_seconds"] = time.monotonic() - started
+    if row["exit_code"] != 0:
+        emit(row)
+        sys.exit(3)
+    row["issued_unix"] = time.time()
+    issued = time.monotonic()
+    attempts, status, reply, error = call(turn, kind)
+    row.update(returned_unix=time.time(), call_seconds=time.monotonic() - issued,
+               attempts=attempts, status=status)
+    if error is not None or not isinstance(reply, dict):
+        row["call_error"] = error or "invalid_reply"
+        emit(row)
+        sys.exit(4)
+    row["completion_id"] = str(reply.get("id"))[:80]
+    emit(row)
+'''
 
 
 # ---------------------------------------------------------------------------
@@ -789,11 +906,19 @@ def fleet_snapshot(nodes: Sequence[dict[str, Any]], *, now: float,
         seen = _timestamp(node.get("received_at")) or _timestamp(node.get("updated_at"))
         age = None if seen is None else round(now - seen, 3)
         metrics = node.get("runtime_metrics") if isinstance(node.get("runtime_metrics"), dict) else {}
+        used, total = (node.get(key) if isinstance(node.get(key), dict) else {}
+                       for key in ("used_resources", "total_resources"))
         rows.append({"node_id": node.get("node_id"), "job_id": node.get("job_id"),
                      "node_epoch": node.get("node_epoch"), "age_seconds": age,
                      "fresh": age is not None and age <= fresh_seconds,
                      "active_sandboxes": node.get("active_sandboxes"),
-                     "environment_io": metrics.get("environment_io")})
+                     "memory_mb": {"available": metrics.get("memory_available_mb"),
+                                   "total": metrics.get("memory_total_mb"),
+                                   "used": metrics.get("memory_used_mb"),
+                                   "committed": used.get("memory_mb"),
+                                   "capacity": total.get("memory_mb")},
+                     "environment_io": metrics.get("environment_io"),
+                     "resident_wait": metrics.get("resident_wait")})
     fresh = [row for row in rows if row["fresh"]]
     return {"observed_at": datetime.fromtimestamp(now, timezone.utc).isoformat(),
             "fresh_seconds": fresh_seconds, "sandbox_nodes_stored": len(rows),
@@ -802,22 +927,24 @@ def fleet_snapshot(nodes: Sequence[dict[str, Any]], *, now: float,
                                       for row in fresh), "nodes": rows}
 
 
-def environment_io_deltas(before: dict[str, Any] | None,
-                          after: dict[str, Any]) -> dict[str, Any]:
-    """Per-node counter deltas between two snapshots. A node that is new or
-    restarted (another node_epoch, or a counter went down) counts from zero."""
+def environment_io_deltas(before: dict[str, Any] | None, after: dict[str, Any], *,
+                          metric: str = "environment_io",
+                          gauges: frozenset[str] = ENVIRONMENT_IO_GAUGES) -> dict[str, Any]:
+    """Per-node counter deltas of heartbeat ``metric`` between two snapshots. A
+    node that is new or restarted (another node_epoch, or a counter went down)
+    counts from zero."""
     old = {row["node_id"]: row for row in (before or {}).get("nodes", [])}
     per_node: dict[str, Any] = {}
     totals: dict[str, float] = {}
     for row in after["nodes"]:
-        current = row.get("environment_io")
+        current = row.get(metric)
         if not isinstance(current, dict):
             continue
         previous = old.get(row["node_id"]) or {}
-        baseline = previous.get("environment_io") if previous.get(
+        baseline = previous.get(metric) if previous.get(
             "node_epoch") == row.get("node_epoch") else None
         counters = {key: value for key, value in current.items()
-                    if key not in ENVIRONMENT_IO_GAUGES and type(value) in (int, float)}
+                    if key not in gauges and type(value) in (int, float)}
         reset = not isinstance(baseline, dict) or any(
             value < baseline.get(key, 0) for key, value in counters.items())
         deltas = {key: value - (0 if reset else baseline.get(key, 0))
@@ -828,14 +955,182 @@ def environment_io_deltas(before: dict[str, Any] | None,
             "counted_from_zero": reset, "deltas": deltas,
             "gauges": {key: {"before": None if reset else baseline.get(key),
                              "after": current.get(key)}
-                       for key in sorted(ENVIRONMENT_IO_GAUGES) if key in current}}
+                       for key in sorted(gauges) if key in current}}
     lookups = totals.get("hits", 0) + totals.get("misses", 0)
     return {"totals": totals, "per_node": per_node,
             "hit_ratio": round(totals.get("hits", 0) / lookups, 6) if lookups else None}
 
 
+def status_state(record: object) -> str | None:
+    """Inventory state; a route on a stale node shows its cached state."""
+    state = record_state(record)
+    if state == "unknown" and isinstance(record, dict):
+        state = record.get("cached_state") or state
+    return state
+
+
+def density_sample(snapshot: dict[str, Any], statuses: Sequence[dict[str, Any]], *,
+                   prefix: str, previous: dict[str, Any] | None,
+                   offset: float) -> dict[str, Any]:
+    """One density timeline point. Per node: this run's sandboxes from the status
+    inventory (running, parked, other), the heartbeat's memory, paused and
+    resident-wait gauges, and resident_wait counter deltas since ``previous``."""
+    nodes: dict[str, dict[str, Any]] = {}
+
+    def node(node_id: object) -> dict[str, Any]:
+        return nodes.setdefault(str(node_id), {"node_id": str(node_id), "running": 0,
+                                               "parked": 0, "other": 0})
+
+    for row in snapshot["nodes"]:
+        wait = row.get("resident_wait") if isinstance(row.get("resident_wait"), dict) else {}
+        node(row["node_id"]).update(
+            {key: row.get(key) for key in ("job_id", "fresh", "active_sandboxes", "memory_mb")},
+            paused=wait.get("paused_sandboxes"), resident_waits=wait.get("resident_waits"))
+    for record in statuses:
+        sandbox_id, state = record_id(record), status_state(record)
+        if not sandbox_id or not sandbox_id.startswith(prefix) or state == "deleted":
+            continue
+        placement = record.get("node") if isinstance(record.get("node"), dict) else {}
+        bucket = ("running" if state == "running" else
+                  "parked" if state in PARKED_STATES else "other")
+        node(placement.get("node_id") or "unplaced")[bucket] += 1
+    deltas = environment_io_deltas(previous, snapshot, metric="resident_wait",
+                                   gauges=RESIDENT_WAIT_GAUGES)
+    for node_id, entry in deltas["per_node"].items():
+        node(node_id)["resident_wait_deltas"] = entry["deltas"]
+    rows = sorted(nodes.values(), key=lambda row: row["node_id"])
+    counts = {key: sum(row[key] for row in rows) for key in ("running", "parked", "other")}
+    paused = [row["paused"] for row in rows if row.get("fresh") and type(row.get("paused")) is int]
+    return {"offset_seconds": round(offset, 3),
+            "sandbox_nodes_fresh": snapshot["sandbox_nodes_fresh"],
+            "live": sum(counts.values()), **counts, "paused": sum(paused) if paused else None,
+            "resident_wait_deltas": deltas["totals"], "nodes": rows}
+
+
+def fleet_density(timeline: Sequence[dict[str, Any]], *, driver_peak: int) -> dict[str, Any]:
+    """Peaks over the density timeline. ``driver_peak`` counts sandboxes between
+    create returned and delete issued, so it needs no operator token."""
+    samples = [sample for sample in timeline if "live" in sample]
+    result: dict[str, Any] = {"status": "measured" if samples else "not_measured",
+                              "samples": len(samples),
+                              "peak_live_sandboxes": {"driver": driver_peak, "inventory": None}}
+    if not samples:
+        return result
+    peak = max(samples, key=lambda sample: sample["live"])
+    node_peak = max(((row["running"] + row["parked"] + row["other"], row["node_id"],
+                      sample["offset_seconds"]) for sample in samples for row in sample["nodes"]),
+                    default=(0, None, None))
+    totals: dict[str, float] = {}
+    for sample in samples:
+        for key, value in sample["resident_wait_deltas"].items():
+            totals[key] = totals.get(key, 0) + value
+    live = peak["live"]
+    result.update(
+        peak_live_sandboxes={"driver": driver_peak, "inventory": live,
+                             "offset_seconds": peak["offset_seconds"]},
+        peak_per_node=dict(zip(("sandboxes", "node_id", "offset_seconds"), node_peak)),
+        at_peak={**{key: peak[key] for key in ("running", "parked", "other", "paused")},
+                 "parked_share": round(peak["parked"] / live, 6) if live else None,
+                 "paused_share": (round(peak["paused"] / live, 6)
+                                  if live and peak["paused"] is not None else None)},
+        resident_wait_deltas=totals)
+    return result
+
+
+def observed_states(transitions: Sequence[Sequence[Any]], start: float, end: float) -> set[str]:
+    """Inventory states seen in [start, end]: the one current at ``start`` and
+    every change up to ``end``. ``transitions`` is ascending (unix, state)."""
+    seen: set[str] = set()
+    for at, state in transitions:
+        if at <= start:
+            seen = {state}
+        elif at <= end:
+            seen.add(state)
+    return seen
+
+
+def agent_records(text: str) -> list[dict[str, Any]]:
+    """The managed agent's per-turn JSON lines from its stdout log."""
+    records = []
+    for line in text.splitlines():
+        if line.startswith("ucloud-bench-agent "):
+            try:
+                value = json.loads(line.split(" ", 1)[1])
+            except ValueError:
+                continue
+            if isinstance(value, dict) and type(value.get("turn")) is int:
+                records.append(value)
+    return records
+
+
+THINK_DEFINITIONS = {
+    "sleep": "the driver waits the sampled think time; nothing parks the sandbox but the "
+             "gateway's own idle policy",
+    "park": "driver-timed POST /park (operator token) after the turn, think time, status read, "
+            "POST /wake with the current generation; park and wake are the two POST durations",
+    "relay": "the managed agent ends each turn with a blocking chat-completions call through "
+             "its relay capability URL; the fake worker polls it, holds it for the think time "
+             "(renewing the lease), and commits a fixed completion. call_seconds and "
+             "returned_unix are measured in the sandbox (its clock); received/answered on the "
+             "driver. relay_call_overhead = call_seconds - think_seconds. answer_to_resume = "
+             "guest returned_unix - driver answered_unix (cross-clock: node vs driver NTP). "
+             "model_wait_accepted is relay request state (accepted_notified_at, read by a lease "
+             "renewal just before the answer): the gateway accepted the park request for this "
+             "wait, which the node may keep resident, pause or hibernate. park is not timed; "
+             "wake = answer_to_resume of calls where the status inventory showed the sandbox "
+             "parked",
+}
+
+
+def think_section(rows: Sequence[dict[str, Any]], *, mode: str,
+                  status_poll_seconds: float | None) -> dict[str, Any]:
+    thinks = [think for row in rows for think in row.get("thinks", [])]
+    done = [think for think in thinks if think.get("ok")]
+    observed = [think for think in done if think.get("parked_observed") is not None]
+    parked = [think for think in observed if think["parked_observed"]]
+
+    def summary(key: str, group: Sequence[dict[str, Any]] = done) -> dict[str, Any]:
+        return latency_summary(think[key] for think in group
+                               if type(think.get(key)) in (int, float))
+
+    codes: dict[str, int] = {}
+    for think in thinks:
+        for code in think.get("retry_codes", []):
+            codes[code] = codes.get(code, 0) + 1
+    section = {
+        "mode": mode, "definition": THINK_DEFINITIONS[mode], "n": len(thinks), "n_ok": len(done),
+        "park_observation": (
+            f"status inventory sampled every {status_poll_seconds:g} s; a park shorter than "
+            "the interval can be missed, and a pause keeps the route running (per node only: "
+            "density resident_wait)" if status_poll_seconds else "not observed: needs "
+            "--operator-token-file and --status-poll-seconds > 0"),
+        "n_observed": len(observed), "n_parked_observed": len(parked),
+        "think": summary("think_seconds"), "park": summary("park_seconds"),
+        "wake": summary("answer_to_resume_seconds", parked) if mode == "relay"
+        else summary("wake_seconds"),
+        "status_read": summary("status_seconds"),
+        "retries": sum(think.get("retries", 0) for think in thinks), "retry_codes": codes}
+    if mode == "relay":
+        statuses: dict[str, int] = {}
+        for think in done:
+            statuses[str(think.get("delivery_status"))] = statuses.get(
+                str(think.get("delivery_status")), 0) + 1
+        section.update(
+            relay_call_overhead=summary("overhead_seconds"),
+            relay_call_overhead_by_wait={
+                "parked_observed": summary("overhead_seconds", parked),
+                "resident": summary("overhead_seconds", [think for think in observed
+                                                         if not think["parked_observed"]])},
+            answer_to_resume=summary("answer_to_resume_seconds"),
+            issue_to_receive=summary("issue_to_receive_seconds"),
+            model_wait_accepted=sum(bool(think.get("model_wait_accepted")) for think in done),
+            delivery_status=statuses)
+    return section
+
+
 def rollout_section(rows: Sequence[dict[str, Any]], *, tasks: int, fleet_state: str,
                     arrival: dict[str, Any], node_io: dict[str, Any],
+                    think: dict[str, Any] | None = None, density: dict[str, Any] | None = None,
                     slowest: int = 20) -> dict[str, Any]:
     ok = [row for row in rows if row.get("ok")]
 
@@ -850,6 +1145,7 @@ def rollout_section(rows: Sequence[dict[str, Any]], *, tasks: int, fleet_state: 
     families = sorted({row["family"] for row in rows})
     phases: dict[str, list[float]] = {}
     failures: dict[str, dict[str, Any]] = {}
+    by_phase: dict[str, dict[str, int]] = {}
     turns: dict[str, dict[str, list[float]]] = {}
     turn_failures: dict[str, int] = {}
     resolutions: dict[str, int] = {}
@@ -862,6 +1158,9 @@ def rollout_section(rows: Sequence[dict[str, Any]], *, tasks: int, fleet_state: 
                                         {"n": 0, "by_phase": {}, "example": row.get("error")})
             entry["n"] += 1
             entry["by_phase"][row["phase"]] = entry["by_phase"].get(row["phase"], 0) + 1
+            codes = by_phase.setdefault(row["phase"], {})
+            codes[row.get("error_code") or "unknown"] = codes.get(
+                row.get("error_code") or "unknown", 0) + 1
         seen: set[str] = set()
         for turn in row.get("turns", []):
             if not turn["ok"]:
@@ -888,7 +1187,11 @@ def rollout_section(rows: Sequence[dict[str, Any]], *, tasks: int, fleet_state: 
             "--ramp-seconds), then its family's first command and M turns with think time; "
             "it is deleted when its turns end. time_to_ready: create request start to create "
             "returned; time_to_first_command: create request start to first command exit. "
-            "Each summary counts the samples that completed that step."),
+            "Each summary counts the samples that completed that step. Turn seconds are "
+            "driver-timed execs, except in think mode relay, where the managed agent runs "
+            "and times each turn inside the sandbox. failures_by_phase: create, "
+            "first_command, turn (including relay setup), think (sleep, park/wake or "
+            "the relay model call)."),
         "fleet_state": fleet_state,
         "tasks": tasks,
         "n_started": len(rows),
@@ -912,6 +1215,9 @@ def rollout_section(rows: Sequence[dict[str, Any]], *, tasks: int, fleet_state: 
             "n_with_phases": sum(bool(row.get("create_phases_ms")) for row in rows),
             "phases": {name: latency_summary(values) for name, values in sorted(phases.items())}},
         "failures_by_error_code": failures,
+        "failures_by_phase": by_phase,
+        "think": think or {"mode": "sleep"},
+        "density": density or {"status": "not_measured"},
         "turns": {"n": sum(len(row.get("turns", [])) for row in rows),
                   "n_failed": sum(turn_failures.values()),
                   "by_kind": {kind: {"n_failed": turn_failures.get(kind, 0),
@@ -1158,7 +1464,8 @@ def _live_parent() -> argparse.ArgumentParser:
                             "default; '' = image default)")
     shape.add_argument("--profile", choices=("container", "linux_host"),
                        help="sandbox profile (default: container; rollout: linux_host, "
-                            "as SandboxSpec.benchmark and the training integration use)")
+                            "as SandboxSpec.benchmark and the training integration use; "
+                            "rollout --think-mode relay: container, for managed_process)")
     shape.add_argument("--first-command",
                        help="command whose first success marks a sandbox ready (default: "
                             "true; rollout uses its per-family table, see --family-command)")
@@ -1267,7 +1574,26 @@ def build_parser() -> argparse.ArgumentParser:
                          help="create parkable sandboxes, so think time can park them")
     rollout.add_argument("--operator-token-file", type=Path,
                          help="gateway control token: read GET /v1/nodes to verify "
-                              "--fleet-state zero and record heartbeat environment_io")
+                              "--fleet-state zero, record heartbeat environment_io and the "
+                              "density timeline (GET /v1/sandboxes?view=status); park mode")
+    rollout.add_argument("--think-mode", choices=THINK_MODES, default="sleep",
+                         help="sleep: the driver waits (default); relay: a managed agent in "
+                              "each sandbox ends each turn with a blocking model call through "
+                              "the relay, answered by a fake worker here after the think time, "
+                              "and the gateway's wait policy decides whether to park; park: "
+                              "explicit park, think, wake after each turn (needs --parkable "
+                              "and --operator-token-file)")
+    rollout.add_argument("--relay-url",
+                         help="relay base URL for the fake worker (default: $UCLOUD_RELAY_URL, "
+                              "else <gateway>/relay)")
+    rollout.add_argument("--sandbox-relay-url",
+                         help="relay base URL as reachable from inside a sandbox (default: "
+                              "--relay-url)")
+    rollout.add_argument("--relay-worker-token-file", type=Path,
+                         help="relay worker bearer token (default: $UCLOUD_RELAY_WORKER_TOKEN)")
+    rollout.add_argument("--status-poll-seconds", type=_non_negative_float, default=2.0,
+                         help="status inventory interval with an operator token, to observe "
+                              "parks during each think (0 = off)")
     rollout.add_argument("--node-fresh-seconds", type=_positive_float, default=120.0)
     rollout.add_argument("--node-poll-seconds", type=_non_negative_float, default=15.0,
                          help="node-count timeline interval with an operator token (0 = off)")
@@ -1303,7 +1629,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             args.images = images
         else:
             args.images = [args.image]
-        args.profile = args.profile or ("linux_host" if args.scenario == "rollout" else "container")
+        # managed_process sandboxes (relay mode) are container-only in the SDK.
+        args.profile = args.profile or ("linux_host" if args.scenario == "rollout" and
+                                        args.think_mode != "relay" else "container")
         if args.scenario != "rollout":
             args.first_command_argv = parse_command(
                 "true" if args.first_command is None else args.first_command,
@@ -1342,6 +1670,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             args.ramp_seconds + args.turns * args.think_seconds[1] >= args.ttl_seconds:
         parser.error("--ttl-seconds must exceed --ramp-seconds plus --turns times the "
                      "longest think time")
+    if args.scenario == "rollout" and args.think_mode == "relay":
+        if args.relay_worker_token_file is None and \
+                not os.environ.get("UCLOUD_RELAY_WORKER_TOKEN", "").strip():
+            parser.error("--think-mode relay needs --relay-worker-token-file or "
+                         "$UCLOUD_RELAY_WORKER_TOKEN")
+        if args.profile != "container" or args.sandbox_command_argv:
+            parser.error("--think-mode relay creates managed_process sandboxes: container "
+                         "profile and no --sandbox-command")
+        args.parkable = True  # managed_process requires parkable=True
+    if args.scenario == "rollout" and args.think_mode == "park" and \
+            not (args.parkable and args.operator_token_file):
+        parser.error("--think-mode park needs --parkable and --operator-token-file")
     return args
 
 
@@ -1461,23 +1801,71 @@ def run_parallel(items: Sequence[Any], operation: Callable[[Any], Any], *, worke
         executor.shutdown(wait=True, cancel_futures=True)
 
 
+class OperatorError(RuntimeError):
+    """A gateway control-route failure; status_code None is a transport error."""
+
+    def __init__(self, message: str, *, status_code: int | None, body: object = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.body = body
+        code = body.get("error_code") if isinstance(body, dict) else None
+        self.error_code = code if isinstance(code, str) and code else (
+            f"http_{status_code}" if status_code is not None else "transport_error")
+        self.retryable = (body.get("retryable") is True if isinstance(body, dict) else False) \
+            or status_code in (None, 429, 502, 503, 504)
+
+
 class OperatorApi:
-    """Read-only operator view: GET /v1/nodes with the gateway control token."""
+    """Gateway control routes with the control token: GET /v1/nodes and the status
+    inventory (read-only), and for --think-mode park only, POST park and wake."""
 
     def __init__(self, url: str, token: str, timeout_seconds: float) -> None:
         self.url = url.rstrip("/")
         self.token = token
         self.timeout_seconds = timeout_seconds
 
+    def call(self, method: str, path: str, payload: object = None) -> Any:
+        request = urllib.request.Request(
+            self.url + path, method=method,
+            data=None if payload is None else json.dumps(payload).encode("utf-8"),
+            headers={"Authorization": f"Bearer {self.token}", "Accept": "application/json",
+                     **({} if payload is None else {"Content-Type": "application/json"})})
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                return json.loads(response.read().decode("utf-8") or "{}")
+        except urllib.error.HTTPError as exc:
+            raw = exc.read(4096).decode("utf-8", "replace")
+            try:
+                body = json.loads(raw)
+            except ValueError:
+                body = None
+            raise OperatorError(f"{method} {path.split('?')[0]} HTTP {exc.code}: {raw[:300]}",
+                                status_code=exc.code, body=body) from None
+        except (OSError, ValueError) as exc:
+            raise OperatorError(f"{method} {path.split('?')[0]}: {type(exc).__name__}: {exc}",
+                                status_code=None) from None
+
     def nodes(self) -> list[dict[str, Any]]:
-        request = urllib.request.Request(self.url + "/v1/nodes", headers={
-            "Authorization": f"Bearer {self.token}", "Accept": "application/json"})
-        with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        payload = self.call("GET", "/v1/nodes")
         nodes = payload.get("nodes") if isinstance(payload, dict) else None
         if not isinstance(nodes, list):
             raise ValueError("GET /v1/nodes returned no nodes[] list")
         return nodes
+
+    def statuses(self, sandbox_id: str | None = None) -> list[dict[str, Any]]:
+        query = "" if sandbox_id is None else "&id=" + urllib.parse.quote(sandbox_id, safe="")
+        records = self.call("GET", "/v1/sandboxes?view=status" + query).get("sandboxes")
+        if not isinstance(records, list):
+            raise ValueError("GET /v1/sandboxes?view=status returned no sandboxes[] list")
+        return records
+
+    def park(self, sandbox_id: str, operation_id: str) -> Any:
+        return self.call("POST", f"/v1/sandboxes/{urllib.parse.quote(sandbox_id, safe='')}/park",
+                         {"operation_id": operation_id})
+
+    def wake(self, sandbox_id: str, operation_id: str, generation: int) -> Any:
+        return self.call("POST", f"/v1/sandboxes/{urllib.parse.quote(sandbox_id, safe='')}/wake",
+                         {"operation_id": operation_id, "generation": generation})
 
 
 class CommandFailed(RuntimeError):
@@ -1502,6 +1890,12 @@ class LiveRun:
         self.owned: dict[str, str] = {}
         self.inline_delete_errors: list[str] = []
         self.operator: OperatorApi | None = None
+        self.relay: Any = None
+        # Relay rollout id -> registration token while registered, None once
+        # released. Recorded before use, released on exit like owned sandboxes.
+        self.registrations: dict[str, str | None] = {}
+        # Sandbox id -> ascending (unix, state) changes seen in the inventory.
+        self.transitions: dict[str, list[tuple[float, str]]] = {}
 
     # -- sandbox primitives -------------------------------------------------
 
@@ -1524,11 +1918,17 @@ class LiveRun:
             return self.sdk.Image.from_name(reference)
         return self.sdk.Image.from_registry(reference)
 
-    def spec(self, sandbox_id: str, reference: str, *, parkable: bool = False) -> Any:
+    def spec(self, sandbox_id: str, reference: str, *, parkable: bool = False,
+             managed: bool = False) -> Any:
         # linux_host is what SandboxSpec.benchmark builds: no security or
-        # filesystem override, so the gateway's host defaults apply.
+        # filesystem override, so the gateway's host defaults apply. A managed
+        # agent (relay mode) runs as root, as the training integration's
+        # sandboxes do (docs/image-pools.md), in the container profile.
         profile = ({} if self.args.profile == "container" else
                    {"profile": self.args.profile, "security": None, "filesystem": None})
+        if managed:
+            profile = {"managed_process": True,
+                       "security": self.sdk.SandboxSecuritySpec(user="0:0")}
         return self.sdk.SandboxSpec(
             **profile,
             id=sandbox_id,
@@ -1637,6 +2037,21 @@ class LiveRun:
             self.owned[sandbox_id] = "deleted"
         return None
 
+    def release_registration(self, rollout_id: str) -> str | None:
+        """Unregister a relay rollout; its pending calls fail with an OpenAI error."""
+        with self.lock:
+            token = self.registrations.get(rollout_id)
+        if token is None:
+            return None
+        try:
+            self.relay.unregister_rollout(rollout_id, registration_token=token)
+        except Exception as exc:
+            if getattr(exc, "status_code", None) != 404:
+                return f"unregister relay rollout {rollout_id}: {safe_error(exc)}"
+        with self.lock:
+            self.registrations[rollout_id] = None
+        return None
+
     # -- run-level discipline -----------------------------------------------
 
     def require_idle_fleet(self) -> None:
@@ -1651,10 +2066,13 @@ class LiveRun:
 
     def cleanup(self) -> None:
         with self.lock:
+            registered = [rid for rid, token in self.registrations.items() if token is not None]
             pending = [sid for sid, state in self.owned.items() if state != "deleted"]
         stop = threading.Event()
-        errors = [error for error in run_parallel(pending, self.delete_one, workers=16, stop=stop)
-                  if error]
+        errors = [error for error in run_parallel(registered, self.release_registration,
+                                                  workers=16, stop=stop) if error]
+        errors += [error for error in run_parallel(pending, self.delete_one, workers=16, stop=stop)
+                   if error]
         remaining: list[str] = []
         owned = set(self.owned)
         deadline = time.monotonic() + min(60.0, self.args.cleanup_timeout_seconds)
@@ -1674,6 +2092,8 @@ class LiveRun:
             "attempted": len(self.owned), "deleted": sum(
                 state == "deleted" for state in self.owned.values()),
             "failed": len(errors), "remaining_owned_ids": remaining, "errors": all_errors,
+            "relay_registrations": {"registered": len(self.registrations), "remaining": sorted(
+                rid for rid, token in self.registrations.items() if token is not None)},
         }
         # Inline delete failures that the final sweep repaired stay visible in
         # cleanup.errors but no longer fail the run.
@@ -1892,10 +2312,232 @@ def scenario_park(run: LiveRun) -> None:
         }
 
 
+def think_sleep(run: LiveRun, row: dict[str, Any], turn: int, seconds: float) -> None:
+    think = {"turn": turn, "think_seconds": seconds, "ok": False, "started_unix": time.time()}
+    row["thinks"].append(think)
+    if run.stop.wait(seconds):
+        raise ScenarioStopped("interrupted during think time")
+    think.update(ok=True, ended_unix=time.time())
+
+
+def operator_retry(run: LiveRun, think: dict[str, Any], operation: Callable[[], Any]) -> Any:
+    """Retry one control call on transient failures (429, 5xx gateway, transport,
+    or retryable: true), counting each retry and its error code in ``think``."""
+    deadline = time.monotonic() + run.args.request_timeout_seconds
+    attempt = 0
+    while True:
+        try:
+            return operation()
+        except OperatorError as exc:
+            if not exc.retryable or time.monotonic() >= deadline:
+                raise
+            attempt += 1
+            think["retries"] = think.get("retries", 0) + 1
+            think.setdefault("retry_codes", []).append(exc.error_code)
+        if run.stop.wait(min(2.0, 0.2 * attempt)):
+            raise ScenarioStopped("interrupted during a park/wake retry")
+
+
+def think_park(run: LiveRun, row: dict[str, Any], sandbox_id: str, turn: int,
+               seconds: float) -> None:
+    """Explicit park after the turn, the think time, then wake with the
+    generation the status inventory reports (tests/harness/fleet.py does the same)."""
+    think = {"turn": turn, "think_seconds": seconds, "ok": False, "started_unix": time.time()}
+    row["thinks"].append(think)
+    operation = f"{run.run_id}:{sandbox_id}:{turn}"
+    started = time.perf_counter()
+    operator_retry(run, think, lambda: run.operator.park(sandbox_id, "park:" + operation))
+    think["park_seconds"] = time.perf_counter() - started
+    if run.stop.wait(seconds):
+        raise ScenarioStopped("interrupted during think time")
+    started = time.perf_counter()
+    records = operator_retry(run, think, lambda: run.operator.statuses(sandbox_id))
+    think["status_seconds"] = time.perf_counter() - started
+    record = next((item for item in records if record_id(item) == sandbox_id), None)
+    generation = record.get("generation") if isinstance(record, dict) else None
+    think["state_before_wake"] = status_state(record)
+    if type(generation) is not int or generation < 1:
+        raise CommandFailed(f"status of {sandbox_id} has no generation", "status_no_generation")
+    think["generation"] = generation
+    if think["state_before_wake"] == "running":  # something else already woke it
+        think.update(wake_skipped=True, ok=True, ended_unix=time.time())
+        return
+    started = time.perf_counter()
+    operator_retry(run, think, lambda: run.operator.wake(sandbox_id, "wake:" + operation,
+                                                         generation))
+    think.update(wake_seconds=time.perf_counter() - started, ok=True, ended_unix=time.time())
+
+
+class AgentEnded(Exception):
+    """The managed agent exited before its next model call."""
+
+
+def relay_retry(run: LiveRun, deadline: float, operation: Callable[[], Any]) -> Any:
+    """Retry a worker-side relay or job-status call on transport, 429 and 5xx errors."""
+    attempt = 0
+    while True:
+        try:
+            return operation()
+        except Exception as exc:
+            status = getattr(exc, "status_code", 0)
+            if not (isinstance(exc, OSError) or status in (None, 429, 502, 503, 504)) or \
+                    time.monotonic() >= deadline:
+                raise
+        attempt += 1
+        if run.stop.wait(min(2.0, 0.2 * attempt)):
+            raise ScenarioStopped("interrupted during a relay retry")
+
+
+def next_relay_request(run: LiveRun, sandbox_id: str, job: Any) -> Any:
+    """Long-poll this rollout until its agent's next model call arrives."""
+    deadline = time.monotonic() + run.args.exec_timeout_seconds + 120
+    check = time.monotonic() + AGENT_CHECK_SECONDS
+    while not run.stop.is_set():
+        polled = relay_retry(run, deadline, lambda: run.relay.poll(
+            sandbox_id, worker_id=run.run_id + "-worker", limit=1,
+            lease_seconds=RELAY_LEASE_SECONDS,
+            timeout_seconds=max(0.1, min(RELAY_POLL_SECONDS, deadline - time.monotonic()))))
+        if polled.requests:
+            return polled.requests[0]
+        if time.monotonic() >= check:
+            if relay_retry(run, deadline, job.refresh).terminal:
+                raise AgentEnded()
+            check = time.monotonic() + AGENT_CHECK_SECONDS
+        if time.monotonic() >= deadline:
+            raise CommandFailed(f"{sandbox_id}: no model call within the turn timeout",
+                                "relay_request_timeout")
+    raise ScenarioStopped("interrupted while waiting for a model call")
+
+
+def hold_relay_request(run: LiveRun, request: Any, seconds: float) -> Any:
+    """Hold an inference for the think time, renewing its lease. The last
+    renewal returns the relay's current request state (accepted_notified_at)."""
+    end = time.monotonic() + seconds
+    while True:
+        remaining = end - time.monotonic()
+        if run.stop.wait(max(0.0, min(remaining, RELAY_RENEW_SECONDS))):
+            raise ScenarioStopped("interrupted during think time")
+        request = relay_retry(run, time.monotonic() + 30, lambda: run.relay.renew_request(
+            request, lease_seconds=RELAY_LEASE_SECONDS))
+        if remaining <= RELAY_RENEW_SECONDS:
+            return request
+
+
+def fake_completion(turn: int) -> bytes:
+    """A fixed small chat completion; no model is called."""
+    return json.dumps({
+        "id": f"ucloud-bench-{turn}", "object": "chat.completion", "created": int(time.time()),
+        "model": "ucloud-bench-fake", "usage": {"prompt_tokens": 8, "completion_tokens": 1,
+                                                 "total_tokens": 9},
+        "choices": [{"index": 0, "finish_reason": "stop",
+                     "message": {"role": "assistant", "content": "ok"}}]}).encode()
+
+
+def merge_agent_log(job: Any, row: dict[str, Any], t0_unix: float, turns: int) -> None:
+    """Fold the agent's per-turn lines into row turns and thinks; raise its failure."""
+    record = job.record
+    records = agent_records(job.logs("stdout", limit=1 << 20).data.decode("utf-8", "replace"))
+    thinks = {think["turn"]: think for think in row["thinks"]}
+    for item in records:
+        row["turns"].append({
+            "turn": item["turn"], "kind": item.get("kind"), "ok": item.get("exit_code") == 0,
+            "seconds": item.get("turn_seconds"), "markers": item.get("markers"),
+            "offset_seconds": item["issued_unix"] - t0_unix if "issued_unix" in item else None})
+        think = thinks.get(item["turn"])
+        if think is None or "returned_unix" not in item:
+            continue
+        think.update({key: item.get(key) for key in (
+            "issued_unix", "returned_unix", "call_seconds", "attempts", "status", "call_error")})
+        if not item.get("call_error") and "answered_unix" in think:
+            think.update(ok=True, ended_unix=max(think["answered_unix"], item["returned_unix"]),
+                         overhead_seconds=item["call_seconds"] - think["think_seconds"],
+                         answer_to_resume_seconds=item["returned_unix"] - think["answered_unix"],
+                         issue_to_receive_seconds=think["received_unix"] - item["issued_unix"])
+    last = records[-1] if records else {}
+    if record.state == "exited" and record.exit_code == 3 and last.get("exit_code") != 0:
+        row["phase"] = "turn"
+        code = last.get("exit_code") if last.get("exit_code") is not None else last.get("status")
+        raise CommandFailed(f"turn {last.get('kind')} failed in the agent: exit_code="
+                            f"{last.get('exit_code')} stderr={str(last.get('stderr'))[-300:]!r}",
+                            f"turn_{last.get('kind')}_exit_{code}")
+    if record.state == "exited" and record.exit_code == 4:
+        row["phase"] = "think"
+        raise CommandFailed(f"model call failed in the agent: {last.get('call_error')}",
+                            f"relay_call_{last.get('call_error')}")
+    if record.terminal and (not record.success or len(records) < turns):
+        row["phase"] = AGENT_EXIT_CODES.get(record.exit_code, "think")
+        raise CommandFailed(
+            f"managed agent ended: state={record.state} exit_code={record.exit_code} "
+            f"signal={record.signal} turns_logged={len(records)}/{turns}",
+            "relay_agent_no_python" if record.exit_code == 97 else
+            f"relay_agent_{record.state}_{record.exit_code}")
+
+
+def relay_episode(run: LiveRun, handle: Any, task: dict[str, Any], row: dict[str, Any],
+                  rng: random.Random, t0_unix: float) -> None:
+    """Relay mode: register the rollout with its managed sandbox, start the
+    agent, and answer each of its M model calls after that turn's think time.
+    The benchmark never parks: the gateway's wait policy decides."""
+    args, plan, relay = run.args, run.args._rollout, run.relay
+    sandbox_id = handle.id
+    registration = relay.register_agent_rollout(sandbox_id, handle, metadata={
+        "benchmark": "rl-scale", "benchmark.run_id": run.run_id})
+    token = registration["rollout"]["registration_token"]
+    _SECRETS.add(token)
+    with run.lock:
+        run.registrations[sandbox_id] = token
+    kinds = [plan["turn_mix"][(task["index"] + turn) % len(plan["turn_mix"])]
+             for turn in range(args.turns)]
+    config = {"id": sandbox_id, "kinds": kinds, "commands": plan["commands"]["turns"],
+              "timeout": args.exec_timeout_seconds, "attempts": RELAY_CALL_ATTEMPTS,
+              "call_timeout": args.think_seconds[1] + args.exec_timeout_seconds + 120}
+    handle.upload_file(AGENT_PATH, AGENT_PROGRAM)
+    job = handle.start_agent(list(AGENT_COMMAND), env={
+        "UCLOUD_BENCH_AGENT": json.dumps(config),
+        "UCLOUD_BENCH_RELAY_URL": run.sdk.http_tunnel_url(
+            plan["sandbox_relay_url"], sandbox_id, "chat/completions", registration_token=token)})
+    row["agent_job_id"] = job.job_id
+    failure: CommandFailed | None = None
+    try:
+        for turn, kind in enumerate(kinds):
+            row["phase"] = "turn"
+            request = next_relay_request(run, sandbox_id, job)
+            received = time.time()
+            think = {"turn": turn, "kind": kind, "ok": False, "received_unix": received,
+                     "started_unix": received, "think_seconds": rng.uniform(*args.think_seconds),
+                     "request_id": request.request_id, "delivery_count": request.delivery_count,
+                     "relay_created_unix": request.created_at}
+            row["thinks"].append(think)
+            row["phase"] = "think"
+            request = hold_relay_request(run, request, think["think_seconds"])
+            receipt = relay.commit_response_bytes_to(
+                request, fake_completion(turn), headers={"Content-Type": "application/json"},
+                attempts=30, retry_delay_seconds=0.5)
+            think.update(answered_unix=time.time(), delivery_status=receipt.get("delivery_status"),
+                         accepted_notified_unix=request.accepted_notified_at,
+                         model_wait_accepted=request.accepted_notified_at is not None)
+        # The last call returns inside the sandbox; the agent then exits.
+        deadline = time.monotonic() + args.exec_timeout_seconds + 120
+        while not relay_retry(run, deadline, job.refresh).terminal:
+            if time.monotonic() >= deadline:
+                raise CommandFailed("managed agent did not exit after its last call",
+                                    "relay_agent_timeout")
+            if run.stop.wait(0.5):
+                raise ScenarioStopped("interrupted waiting for the agent to exit")
+    except AgentEnded:
+        pass
+    except CommandFailed as exc:  # keep what the agent logged before the timeout
+        failure = exc
+    merge_agent_log(job, row, t0_unix, args.turns)
+    if failure is not None:
+        raise failure
+
+
 def rollout_sandbox(run: LiveRun, task: dict[str, Any], *, t0: float, offset: float,
                     inflight: dict[str, int]) -> dict[str, Any]:
-    """One rollout: create, the family's first command, M turns, delete."""
+    """One rollout: create, the family's first command, M turns and thinks, delete."""
     args, plan = run.args, run.args._rollout
+    mode = args.think_mode
     sandbox_id = run.new_id("rollout")
     with run.lock:
         run.owned[sandbox_id] = "requested"
@@ -1904,9 +2546,10 @@ def rollout_sandbox(run: LiveRun, task: dict[str, Any], *, t0: float, offset: fl
         **{key: task.get(key) for key in ("family", "image", "task_name", "reference",
                                            "cached_kind", "erofs_bytes")},
         "image_resolution": task["resolution"], "arrival_offset_seconds": round(offset, 6),
-        "turns": []}
+        "turns": [], "thinks": []}
     started = time.perf_counter()
     row["start_offset_seconds"] = started - t0
+    live = False
 
     def check(result: dict[str, Any], phase: str) -> None:
         if not result["ok"]:
@@ -1919,13 +2562,17 @@ def rollout_sandbox(run: LiveRun, task: dict[str, Any], *, t0: float, offset: fl
             inflight["max"] = max(inflight["max"], inflight["now"])
         try:
             handle = run.client.create_sandbox(
-                run.spec(sandbox_id, task["reference"], parkable=args.parkable),
+                run.spec(sandbox_id, task["reference"], parkable=args.parkable,
+                         managed=mode == "relay"),
                 request_timeout_seconds=args.create_timeout_seconds)
         finally:
             with run.lock:
                 inflight["now"] -= 1
         with run.lock:
             run.owned[sandbox_id] = "created"
+            live = True
+            inflight["live"] += 1
+            inflight["live_max"] = max(inflight["live_max"], inflight["live"])
         response = getattr(handle, "create_response", None) or {}
         row.update(time_to_ready_seconds=time.perf_counter() - started,
                    node=node_identity(response), create_phases_ms=create_phases(
@@ -1939,25 +2586,35 @@ def rollout_sandbox(run: LiveRun, task: dict[str, Any], *, t0: float, offset: fl
         row.update(first_command_ok=True, phase="turn",
                    time_to_first_command_seconds=time.perf_counter() - started)
         rng = random.Random(f"{args.seed}:{task['index']}")
-        for turn in range(args.turns):
-            if run.stop.wait(rng.uniform(*args.think_seconds)):
-                raise ScenarioStopped("interrupted during think time")
+        if mode == "relay":
+            relay_episode(run, handle, task, row, rng, time.time() - (time.perf_counter() - t0))
+        for turn in range(args.turns if mode != "relay" else 0):
+            seconds = rng.uniform(*args.think_seconds)
             kind = plan["turn_mix"][(task["index"] + turn) % len(plan["turn_mix"])]
+            if mode == "sleep":
+                row["phase"] = "think"
+                think_sleep(run, row, turn, seconds)
+            row["phase"] = "turn"
             result = run.run_command(sandbox_id, plan["commands"]["turns"][kind], markers=True)
             row["turns"].append({"turn": turn, "kind": kind, "ok": result["ok"],
                                  "seconds": result["seconds"], "markers": result.get("markers"),
                                  "offset_seconds": time.perf_counter() - t0})
             check(result, f"turn_{kind}")
+            if mode == "park":
+                row["phase"] = "think"
+                think_park(run, row, sandbox_id, turn, seconds)
         row.update(ok=True, phase="done")
     except Exception as exc:
         row.update(error=safe_error(exc), error_code=error_code_of(exc),
                    failed_after_seconds=time.perf_counter() - started)
     finally:
         # The episode ends with its sandbox, freeing capacity for later arrivals.
-        error = run.delete_one(sandbox_id)
-        if error:
-            with run.lock:
-                run.inline_delete_errors.append(error)
+        for error in (run.release_registration(sandbox_id), run.delete_one(sandbox_id)):
+            if error:
+                with run.lock:
+                    run.inline_delete_errors.append(error)
+        with run.lock:
+            inflight["live"] -= live
         row["finished_offset_seconds"] = time.perf_counter() - t0
     emit("rollout_" + ("done" if row["ok"] else "failed"), sandbox_id=sandbox_id,
          family=row["family"], ready=row.get("time_to_ready_seconds"),
@@ -1976,6 +2633,8 @@ def scenario_rollout(run: LiveRun) -> None:
     args, plan = run.args, run.args._rollout
     tasks = plan["tasks"]
     conditions = run.report["conditions"]["rollout"] = dict(plan["conditions"])
+    conditions["think"] = {"mode": args.think_mode, "definition": THINK_DEFINITIONS[args.think_mode],
+                           **plan.get("think_conditions", {})}
     before = observe_fleet(run)
     fleet: dict[str, Any] = {"declared": args.fleet_state, "verified": None, "before": before}
     conditions["fleet_state"] = fleet
@@ -1996,9 +2655,11 @@ def scenario_rollout(run: LiveRun) -> None:
     offsets = [args.ramp_seconds * index / count for index in range(count)]
     rows: list[dict[str, Any]] = []
     timeline: list[dict[str, Any]] = []
+    status_errors: list[str] = []
     go, poll_stop = threading.Event(), threading.Event()
     start = [0.0]
-    inflight = {"now": 0, "max": 0}
+    inflight = {"now": 0, "max": 0, "live": 0, "live_max": 0}
+    prefix = f"{run.run_id}-rollout-"
 
     def worker(index: int) -> None:
         go.wait()
@@ -2010,27 +2671,53 @@ def scenario_rollout(run: LiveRun) -> None:
             rows.append(row)
 
     def poll() -> None:
+        previous = before
         while not poll_stop.wait(args.node_poll_seconds):
-            entry: dict[str, Any] = {"offset_seconds": round(time.perf_counter() - start[0], 3)}
+            offset = time.perf_counter() - start[0]
             try:
-                entry["sandbox_nodes_fresh"] = observe_fleet(run)["sandbox_nodes_fresh"]
+                snapshot = observe_fleet(run)
+                entry = density_sample(snapshot, run.operator.statuses(), prefix=prefix,
+                                       previous=previous, offset=offset)
+                previous = snapshot
             except Exception as exc:
-                entry["error"] = safe_error(exc)
+                entry = {"offset_seconds": round(offset, 3), "error": safe_error(exc)}
             timeline.append(entry)
+
+    def watch() -> None:
+        # State changes of this run's sandboxes, to see parks during a think.
+        while True:
+            try:
+                records = run.operator.statuses()
+                now = time.time()
+                with run.lock:
+                    for record in records:
+                        sandbox_id, state = record_id(record), status_state(record)
+                        if sandbox_id and sandbox_id.startswith(prefix) and state:
+                            seen = run.transitions.setdefault(sandbox_id, [])
+                            if not seen or seen[-1][1] != state:
+                                seen.append((now, state))
+            except Exception as exc:
+                if len(status_errors) < 20:
+                    status_errors.append(safe_error(exc))
+            if poll_stop.wait(args.status_poll_seconds):
+                return
 
     # One thread per sandbox: the client never caps concurrency below N.
     threads = [threading.Thread(target=worker, args=(index,), name=f"rollout-{index}",
                                 daemon=True) for index in range(count)]
-    poller = (threading.Thread(target=poll, name="rollout-nodes", daemon=True)
-              if run.operator is not None and args.node_poll_seconds > 0 else None)
+    pollers = [threading.Thread(target=target, name=name, daemon=True)
+               for target, name, interval in ((poll, "rollout-nodes", args.node_poll_seconds),
+                                              (watch, "rollout-status", args.status_poll_seconds))
+               if run.operator is not None and interval > 0]
+    watched = run.operator is not None and args.status_poll_seconds > 0
     try:
         for thread in threads:
             thread.start()
         start[0] = time.perf_counter()
         go.set()
         emit("rollout_started", tasks=count, references=len(args.images),
-             fleet_state=args.fleet_state)
-        if poller is not None:
+             fleet_state=args.fleet_state, think_mode=args.think_mode)
+        for poller in pollers:
             poller.start()
         for thread in threads:
             while thread.is_alive():
@@ -2045,8 +2732,9 @@ def scenario_rollout(run: LiveRun) -> None:
     finally:
         poll_stop.set()
         wall = time.perf_counter() - start[0] if start[0] else 0.0
-        if poller is not None and poller.ident is not None:
-            poller.join(args.request_timeout_seconds)
+        for poller in pollers:
+            if poller.ident is not None:
+                poller.join(args.request_timeout_seconds)
         if run.operator is None:
             node_io: dict[str, Any] = {"status": "not_measured", "reason": (
                 "no --operator-token-file: node heartbeats need the gateway control token")}
@@ -2058,23 +2746,50 @@ def scenario_rollout(run: LiveRun) -> None:
                     "status": "measured", "after": after,
                     "sandbox_nodes_fresh": {"before": before["sandbox_nodes_fresh"],
                                             "after": after["sandbox_nodes_fresh"]},
-                    "node_count_timeline": timeline,
+                    "node_count_timeline": [{key: entry.get(key) for key in (
+                        "offset_seconds", "sandbox_nodes_fresh", "error") if key in entry}
+                        for entry in timeline],
                     "first_fresh_node_offset_seconds": next(
                         (entry["offset_seconds"] for entry in timeline
                          if entry.get("sandbox_nodes_fresh")), None),
-                    "environment_io": environment_io_deltas(before, after)}
+                    "environment_io": environment_io_deltas(before, after),
+                    "resident_wait": environment_io_deltas(before, after, metric="resident_wait",
+                                                           gauges=RESIDENT_WAIT_GAUGES)}
             except Exception as exc:
                 node_io = {"status": "failed", "error": safe_error(exc),
                            "node_count_timeline": timeline}
         with run.lock:
             snapshot = sorted(rows, key=lambda row: row["sandbox_id"])
+            transitions = {key: list(value) for key, value in run.transitions.items()}
+        for row in snapshot:
+            for think in row["thinks"]:
+                if watched and think.get("ok") and "ended_unix" in think:
+                    states = observed_states(transitions.get(row["sandbox_id"], []),
+                                             think["started_unix"], think["ended_unix"])
+                    think.update(parked_observed=bool(states & PARKED_STATES),
+                                 states_observed=sorted(states))
+        density = fleet_density(timeline, driver_peak=inflight["live_max"])
+        density.update(timeline=timeline, status_poll_errors=status_errors,
+                       definition=(
+                           "timeline every --node-poll-seconds: this run's sandboxes per node from "
+                           "GET /v1/sandboxes?view=status (running, parked = parked/parking/"
+                           "waking/detaching/detached, other), heartbeat memory_mb (available, "
+                           "total, used from runtime_metrics; committed and capacity from "
+                           "used/total_resources), paused and resident_waits gauges and "
+                           "resident_wait counter deltas since the previous sample. paused counts "
+                           "every paused sandbox on fresh nodes, not only this run's"))
+        if run.operator is None:
+            density["reason"] = "no --operator-token-file: inventory and heartbeats need it"
         run.report["metrics"]["rollout"] = rollout_section(
             snapshot, tasks=count, fleet_state=args.fleet_state, node_io=node_io,
+            think=think_section(snapshot, mode=args.think_mode,
+                                status_poll_seconds=args.status_poll_seconds if watched else None),
+            density=density,
             arrival={"ramp_seconds": args.ramp_seconds, "client_concurrency": count,
                      "max_concurrent_creates": inflight["max"], "wall_seconds": round(wall, 6),
                      "turns": args.turns, "think_seconds": list(args.think_seconds),
-                     "turn_mix": plan["turn_mix"], "parkable": args.parkable,
-                     "profile": args.profile})
+                     "think_mode": args.think_mode, "turn_mix": plan["turn_mix"],
+                     "parkable": args.parkable, "profile": args.profile})
 
 
 def build_conditions(args: argparse.Namespace, sdk: Any, url: str,
@@ -2103,25 +2818,56 @@ def _raise_interrupt(signum: int, _frame: object) -> None:
     raise KeyboardInterrupt(f"signal {signum}")
 
 
+def read_secret(path: Path | None, variable: str | None = None) -> str | None:
+    """A token from its file, else from the environment; never logged."""
+    if path is not None:
+        value = path.read_text(encoding="utf-8").strip()
+        if not value:
+            raise SystemExit(f"empty token file: {path}")
+    else:
+        value = (os.environ.get(variable, "") if variable else "").strip() or None
+    if value:
+        _SECRETS.add(value)
+    return value
+
+
 def run_live(args: argparse.Namespace, *, sdk: Any = None, client: Any = None,
-             operator: OperatorApi | None = None) -> dict[str, Any]:
+             operator: OperatorApi | None = None, relay: Any = None) -> dict[str, Any]:
     sdk = sdk if sdk is not None else import_sdk()
     url, token = resolve_credentials(args)
     if client is None:
         client = sdk.SandboxClient(url, api_token=token,
                                    timeout_seconds=args.request_timeout_seconds)
     if operator is None and getattr(args, "operator_token_file", None) is not None:
-        operator_token = args.operator_token_file.read_text(encoding="utf-8").strip()
-        if not operator_token:
-            raise SystemExit(f"empty token file: {args.operator_token_file}")
-        _SECRETS.add(operator_token)
-        operator = OperatorApi(url, operator_token, args.request_timeout_seconds)
+        operator = OperatorApi(url, read_secret(args.operator_token_file),
+                               args.request_timeout_seconds)
+    if getattr(args, "think_mode", None) == "relay":
+        # The Hetzner ingress publishes the relay under <gateway>/relay (docs/hetzner.md).
+        args.relay_url = (args.relay_url or os.environ.get("UCLOUD_RELAY_URL", "").strip()
+                          or gateway_origin(url) + "/relay")
+        args.sandbox_relay_url = args.sandbox_relay_url or args.relay_url
+        args._rollout["sandbox_relay_url"] = args.sandbox_relay_url
+        args._rollout["think_conditions"] = {"relay": {
+            "worker_relay": gateway_origin(args.relay_url),
+            "sandbox_relay": gateway_origin(args.sandbox_relay_url),
+            "worker_client": "ucloud_sandboxes_sdk.RelayWorkerClient (sync worker protocol)",
+            "sandbox_call": "POST <sandbox relay>/tunnels/<rollout>/_relay/<registration "
+                            "token>/chat/completions from the managed agent (http_tunnel_url)",
+            "sandbox_shape": "container profile, parkable, managed_process, user 0:0",
+            "lease_seconds": RELAY_LEASE_SECONDS, "renew_seconds": RELAY_RENEW_SECONDS}}
+        if relay is None:
+            relay = sdk.RelayWorkerClient(
+                args.relay_url, timeout_seconds=args.request_timeout_seconds,
+                worker_token=read_secret(args.relay_worker_token_file,
+                                         "UCLOUD_RELAY_WORKER_TOKEN"),
+                max_inflight_requests=max(512, 2 * args.tasks + 16))
     # Reserve only after configuration is known to be usable.
     reserve_output(args.output, overwrite=args.overwrite)
     run_id = args.run_id or "rlbench-" + uuid4().hex[:12]
     report = new_report(run_id, args.scenario, {"scenario_arguments": sanitized_arguments(args)})
     run = LiveRun(args, sdk, client, report)
     run.operator = operator
+    run.relay = relay
     interrupted = False
 
     def persist() -> None:

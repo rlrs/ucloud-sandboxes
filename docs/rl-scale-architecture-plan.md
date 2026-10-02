@@ -1152,6 +1152,96 @@ uv run python scripts/bench_rl_scale.py rollout \
   The ten survey metrics stay present: `not_run`, `external` or
   `unsupported`.
 
+**C9.2 think modes (2026-10-02, no runs yet).** `--think-mode` selects what a
+think does, so the same rollout measures density and park behaviour under
+training load without LLM inference:
+
+```sh
+# The faithful one: the gateway's own wait policy parks or pauses.
+uv run python scripts/bench_rl_scale.py rollout \
+  --selection ~/all-cached-training-tasks-with-terminal-lego-2026-10-01.zip \
+  --tasks 512 --seed 1 --fleet-state warm-empty --think-mode relay \
+  --relay-worker-token-file /path/to/relay-worker-token \
+  --operator-token-file /path/to/gateway-token \
+  --output docs/benchmarks/rl-scale-rollout-<date>/relay-512.json
+
+# Explicit park and wake around every think.
+uv run python scripts/bench_rl_scale.py rollout ... --think-mode park \
+  --parkable --operator-token-file /path/to/gateway-token
+```
+
+- **`sleep`** (the default) is the behaviour above: the driver waits
+  `--think-seconds` before each turn.
+- **`relay`** works the way `scripts/live_agentic_parking.py` and the training
+  integration do:
+  - **Shape.** Each sandbox is created `parkable` and `managed_process`
+    (container profile, user `0:0`). The SDK allows managed processes only in
+    the container profile, so this mode cannot use `linux_host`.
+  - **Registration.** After the first command, the sandbox gets
+    `RelayWorkerClient.register_agent_rollout`, which binds the rollout to the
+    sandbox generation.
+  - **Agent.** A small Python agent is uploaded and started with
+    `start_agent`, the only path the relay may park. It runs the M turn
+    commands itself. It ends each turn with a blocking chat-completions POST
+    through its registration-scoped tunnel URL (`http_tunnel_url`), using a
+    stable `X-UCloud-Relay-Request-Id` and retries.
+  - **Fake worker.** A worker in the benchmark process long-polls the rollout
+    and holds each call for that turn's sampled think time, renewing the
+    lease. It then commits a fixed small completion.
+  - **The benchmark never parks.** The gateway's resident-wait policy decides
+    whether to keep the sandbox resident, pause it or hibernate it.
+  - **Flags.** `--relay-url` (default `$UCLOUD_RELAY_URL`, else
+    `<gateway>/relay`), `--sandbox-relay-url` (default `--relay-url`) and
+    `--relay-worker-token-file` (or `$UCLOUD_RELAY_WORKER_TOKEN`; required).
+    Registration tokens and tunnel URLs are redacted from reports and logs.
+  - **Exit.** On exit and on interrupt, every registration is unregistered
+    before its sandbox is deleted.
+  - **Requirement.** The agent needs Python 3 in the image. Without it the
+    sandbox fails with `relay_agent_no_python`.
+- **`park`** issues `POST /v1/sandboxes/{id}/park` with an `operation_id` after
+  each turn, sleeps the think time, reads the generation from the status
+  inventory, and wakes with it. It needs `--parkable` and
+  `--operator-token-file`. Retries on 429, 5xx and transport errors are
+  counted with their error codes.
+- **Measured directly, per relay call:**
+  - in the sandbox: `issued_unix`, `returned_unix` and `call_seconds`;
+  - on the driver: `received_unix` and `answered_unix`, plus the receipt's
+    `delivery_status`;
+  - in the relay request state: `accepted_notified_at`, read by a lease
+    renewal just before the answer. It means the gateway accepted the park
+    request for that wait, not that a checkpoint ran.
+
+  `relay_call_overhead` = `call_seconds` − think time, which uses the
+  sandbox's clock only. `answer_to_resume` crosses the node and driver
+  clocks.
+- **Inferred:**
+  - **Parks per think.** With an operator token, the status inventory
+    (`GET /v1/sandboxes?view=status`) is sampled every
+    `--status-poll-seconds` (default 2). A think counts as
+    `parked_observed` when the sandbox showed parked, waking or detached
+    during it. Shorter parks can be missed.
+  - **Pauses.** A pause keeps the route running, so pauses show only per
+    node, as heartbeat `resident_wait` deltas.
+  - **Relay `wake`.** This is `answer_to_resume` over the calls observed
+    parked. Relay park latency is not observable from outside.
+- **Density.** This needs `--operator-token-file`. In every mode, a timeline
+  every `--node-poll-seconds` records, per node:
+  - this run's running, parked and other sandboxes;
+  - heartbeat `memory_mb`: available, total and used, plus committed and
+    capacity from `used_resources` and `total_resources`;
+  - the `paused_sandboxes` and `resident_waits` gauges;
+  - `resident_wait` counter deltas: pauses, thaws, escalations, thaw
+    prefetches, checkpoints and reclaims.
+- **New `metrics.rollout` fields:**
+  - `density`: peak live sandboxes (from the driver count and from the
+    inventory), peak per node, and the running, parked and paused shares at
+    the peak;
+  - `think`: park and wake p50/p95/p99, relay call overhead (overall and
+    split by observed park), retries, and how many model waits the gateway accepted for parking;
+  - `failures_by_phase`: `create`, `first_command`, `turn` (relay setup
+    included) and `think`, each by `error_code`;
+  - `node_io.resident_wait`: run-total counter deltas.
+
 **C9.3 Seed caches before the burst.**
 - **Change:** a run declares its image set. Workers fetch that set's
   foundations and prefetch-trace chunks into the node chunk cache at boot,

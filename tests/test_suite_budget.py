@@ -20,8 +20,9 @@ from tests.test_package_budget import package_lines
 # and C5.2, then to 93,200 for the node-failure scenarios (reboot re-adoption
 # and reaping, heartbeat pull, UCloud quarantine), then to 93,390 for the C2.15
 # upstream mirror (test_upstream_mirror), then to 93,450 for the C9.2 rollout
-# scenario tests, then to 93,490 for the backend EAGAIN tests. Lower it later.
-SUITE_LINE_BUDGET = 93_490
+# scenario tests, then to 93,490 for the backend EAGAIN tests, then to 93,653
+# for the rollout think modes (relay and park; net of 31 merged-out lines).
+SUITE_LINE_BUDGET = 93_653
 SUITE = Path(__file__).resolve().parent
 
 

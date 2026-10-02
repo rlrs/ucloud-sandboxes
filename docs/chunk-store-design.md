@@ -176,13 +176,75 @@ is unmeasured, so these are assumptions:
     `Boto3S3ObjectClient` (`storage_native_s3.py:78`), lifted out of code that
     C1.3 deletes.
   - Config: a `chunk_store` block shaped like `snapshot_store` (`config.py:44-125`).
-- **Phase B (C2.6, M4):**
-  - The `ucloud-store` role runs nginx (`slice 1m`, `proxy_cache` on NVMe) and
-    signs its own upstream S3 requests.
-  - Locators list the store URL first and S3 as fallback; the index database
-    moves to store node 1 by copy. Nothing else moves.
-  - Trigger: S12 or the M2 canary shows demand-miss p99 over 150 ms, or a bucket
-    limit below the burst need.
+- **Phase B (C2.6), built from the start because S12 failed the gate:** a
+  store node on the private network, described next. It replaced the earlier
+  sketch (nginx with `slice 1m` and `proxy_cache`, S3 as the locator's
+  fallback): workers have no S3 fallback, and the index moved with it.
+
+### C2.6 store node (as built)
+
+`ucloud-chunk-store` (`chunk_store_node.py`, `serve-chunk-store`) is a
+read-through cache over S3 on one store node's NVMe; operator steps are in
+[hetzner.md](hetzner.md#chunk-store-node-c26). Benchmarks:
+[chunk-store-node-2026-10-02](benchmarks/chunk-store-node-2026-10-02/README.md).
+
+- **Reads.** `GET /v1/objects/<key>` with a single `Range` (or none), for the
+  chunk store's content-addressed keys only (`packs/hh/<sha>.pack`,
+  `meta/<sha>.boot.zst`, `meta/<sha>.map`), authenticated by the index's read
+  token. Workers hold that token and no S3 credential or URL.
+- **Fills.** A miss fetches one aligned extent of `extent_bytes` (4 MiB in
+  production) from S3 with the node's own key, by a SigV4-presigned GET (M1's
+  `S3Presigner`). Concurrent misses on one extent join one fill. A GET that
+  has made no progress (no first byte, or no body bytes) for 3 × the median
+  TTFB, within 150 ms–2 s, is hedged by another, at most twice; the first
+  complete attempt wins and the losers are cut off. A slow but flowing GET is
+  never duplicated: in a bandwidth-bound burst that only splits the
+  bandwidth (hedging on elapsed time, as S12 tried, made 3.4× the hedges).
+  5xx, 429, timeouts and short bodies retry with backoff for 60 s; then the
+  read answers 503, which workers retry and finally turn into EIO.
+- **Cache.** LRU under a byte budget, with in-flight fills reserved. A fill is
+  written in `tmp/` while hashed and renamed into place with its sha256 in the
+  file name; nothing is fsynced. After a restart every extent is hashed on
+  first use, so one torn by power loss is dropped and refetched, never
+  served. Whole packs and chunk maps must also match their names, or they are
+  not kept.
+- **Serving.** One asyncio loop: a request whose extents are present answers
+  in the loop with sendfile(2); a fill (or a first hash) waits in a thread
+  pool. On this machine the loop served 1 MiB ranges from page cache at
+  3.7–3.9 GiB/s with p99 25/56/101 ms at concurrency 64/128/256, saturating
+  one core. Thread-per-connection served the same bytes but took up to 2.1 s
+  to accept a 256-connection burst under a busy GIL (asyncio: 121 ms).
+- **Fill unit: 4 MiB extents, not whole packs.** In a cold 500-sandbox burst
+  against an S3 stand-in with S12's latency and a 250 MiB/s cap, 4 MiB
+  extents with hedging ended the burst in 20.4 s with a cold-start p99 of
+  17.4 s (median of 3 runs). Whole 64 MiB packs: 24.5 s and 23.3 s, moving
+  3.3× the bytes readers need against 2.4×; 1 MiB extents: 30.0 s, since a
+  1 MiB window usually spans two. Workers reading S3 directly (Phase A):
+  40.0 s and 28.2 s. Hedging took the 4 MiB cold-start p99 from 29.0 s to
+  17.4 s. The cold burst is S3-bandwidth-bound, so warming matters more: with
+  the run's foundation packs filled first (10.5 s), the burst took 12.4 s
+  with a cold-start p99 of 6.2 s. Warm jobs take whole objects, filled
+  extent by extent.
+- **Prefetch.** `POST /v1/warm` (write token) takes objects or ranges and fills
+  them with bounded concurrency, behind demand fills; `GET /v1/warm/<job>`
+  reports extents done, cached, failed and bytes. `warm-chunk-store
+  --component …` warms a component's packs and metadata from its locator
+  (C9.3).
+- **Metrics.** `/v1/metrics`: requests, hits, misses, coalesced, bytes served,
+  fill waits, S3 requests, bytes, errors, retries, hedges and hedge wins, TTFB
+  and fill percentiles, cache bytes, extents, evictions and failed checks.
+  `/healthz` is open.
+- **Index.** With `store_node.serve_index`, `ucloud-chunk-index` runs on the
+  store node (its RAM holds the 31 GB index resident, S12) and the gateway's
+  unit only creates the tokens. Worker locators name store-node URLs, which do
+  not expire; builder lookups stay presigned, since builders hold the key.
+- **Workers fail closed.** With `--chunk-store-url` the backend reads only
+  URLs under the store node, with the token, and refuses any locator that
+  names something else; a store outage is EIO after the fetch deadline, never
+  zeros, and never S3.
+- **Node init.** The `store` role of VM init: the bundle's agent runtime, the
+  block, both tokens, the S3 key and the two units; no Docker, node agent or
+  heartbeat, so placement never sees the node.
 
 ## 3. Write path
 
@@ -458,7 +520,7 @@ more layer.
 | **M1: store core** (behind `immutable_environments.chunk_store`) | pack and chunk-map formats; `ucloud-chunk-index`; the converter; the RAFS component and root; the worker RAFS device with presigned S3 reads; concurrent attach; chunk-id traces; the `unpack` rollback tool | On S10's 181-image sample: <br>• 181/181 full-tree equal; <br>• stored bytes within 5% of 17.5 GB; <br>• cold first commands within 1.3× of S10, read from S3 with traces; <br>• 20-way cold burst ≤ 5.5 s (S11); <br>• crash injection at every §3 step leaves no visible partial image | 2.5–3 weeks |
 | **M2: migration** | waves 1–3, the `image_roots` switch, release and sweeps | Per wave: <br>• 100% verified; <br>• canaries pass; <br>• Volume drops by the predicted release ±10%; <br>• zero `environment_io` corruptions | 1.5 weeks of work, about 4 calendar weeks with holds |
 | **M3: GC and corpus** | mark, condemn, delete; the `training-corpus` owner; the per-owner budget report; then the C2.14 campaign | GC dry run marks 100% of corpus roots live; deleting a test image frees its unique packs; a build racing GC either registers or retries, and never dangles | 1 week |
-| **M4: C2.6 and compaction** | the nginx store tier if triggered (§2); compaction once dead bytes exceed 20%; the §8 deletions | C2.6 gates; the deletion ledger | 1–2 weeks |
+| **M4: C2.6 and compaction** | the store node, built ahead of M1's gates after S12 (§2, C2.6 store node); compaction once dead bytes exceed 20%; the §8 deletions | C2.6 gates; the deletion ledger | 1–2 weeks |
 
 **Total:** about 6–8 engineer-weeks.
 

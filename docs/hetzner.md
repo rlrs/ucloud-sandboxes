@@ -782,6 +782,72 @@ reservations, zero active ublk devices, and zero storage errors. The complete
 machine-readable evidence is in
 [`benchmarks/hetzner-agentic-e2e-2026-08-12.json`](benchmarks/hetzner-agentic-e2e-2026-08-12.json).
 
+## Chunk store node (C2.6)
+
+Chunk-store (RAFS) images keep their packs, bootstraps and chunk maps in S3,
+but workers never read S3: S3's tail is seconds (S12) and private-only workers
+would reach it through the gateway's NAT. They range-read a **store node** on
+the private network instead, a read-through NVMe cache over S3 that also hosts
+`ucloud-chunk-index`. Design and benchmarks:
+[chunk-store-design.md §2](chunk-store-design.md#c26-store-node-as-built),
+[benchmarks/chunk-store-node-2026-10-02](benchmarks/chunk-store-node-2026-10-02/README.md).
+
+**Shape:** one CCX43 (16 dedicated vCPUs, 64 GB RAM, 360 GB NVMe) at
+`10.42.0.200`, booted from the worker snapshot. Its RAM holds the index
+resident (31 GB at the full corpus) plus the page cache of hot extents; its
+disk holds the hot set, not the corpus (`cache_bytes` 280 GiB). It gets a
+public IPv4 for S3 fills only: both services bind the private address, and
+the worker firewall applies. Check the account's dedicated-core limit first
+(S12 was refused CPX clients with `resource_limit_exceeded`).
+
+**Bring-up** (from the gateway, as root, unless noted):
+
+1. `hz.py server sandboxes-store-1 ccx43 <worker-snapshot-id> 10.42.0.200 public`.
+2. In `make_config.py` set `CHUNK_STORE = True`, then run it and
+   `upgrade-gateway.sh <version>`. Reconcile starts the gateway's
+   `ucloud-sandbox-chunk-index.service` once: with `serve_index` it creates
+   the read and write tokens as `ucloud` and exits 78.
+3. **Index already on the gateway (M1)?** Stop it before step 2 and copy the
+   database: `sqlite3 /var/lib/ucloud-chunk-index/index.sqlite ".backup /root/index.sqlite"`,
+   then `gscp` it to the store node as
+   `/var/lib/ucloud-chunk-index/index.sqlite` (owner `ucloud`, mode 0600)
+   after step 4 creates the directory, and restart `ucloud-chunk-index`
+   there. The tokens stay the same files on the gateway.
+4. Run store init, with the S3 key in the environment (only this process, the
+   index and builders see it):
+   ```bash
+   set -a; . /etc/ucloud-sandboxes/hetzner.env; . /etc/ucloud-sandboxes/chunk-store.env; set +a
+   /work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes init-vm <server-id> \
+     --config /etc/ucloud-sandboxes/deployment.json --role store \
+     --package-spec /work/ucloud-sandboxes/release/sandbox-node-package.tar.gz \
+     --ssh-private-key-file /var/lib/ucloud-sandboxes/state/ssh/gateway-init --execute --output json
+   ```
+   The `store` role uses only the bundle's agent runtime: no Docker, no node
+   agent, no heartbeats, so placement never sees the node. It writes
+   `/etc/ucloud-sandboxes/chunk-store.json` (the `chunk_store` block),
+   `chunk-store.env` (the S3 key, root-only), both tokens, and enables
+   `ucloud-chunk-store.service` and `ucloud-chunk-index.service`. It fails
+   unless `/healthz` answers.
+5. Check it: `curl http://10.42.0.200:5091/healthz`, and
+   `curl -H "Authorization: Bearer $(cat /var/lib/ucloud-chunk-index/read.token)" http://10.42.0.200:5091/v1/metrics`.
+6. **Replace RAFS-reading workers.** Locators now name the store node, and a
+   worker initialized before step 2 has no `--chunk-store-url`, so its RAFS
+   reads fail closed (401, then EIO). New workers get the URL from node init.
+   Drain the old ones, or wait for the autoscaler's idle release.
+7. **Before a burst** (C9.3), fill the node with the run's components:
+   `ucloud-sandboxes warm-chunk-store --config /etc/ucloud-sandboxes/deployment.json --component sha256:… --wait`.
+   Drivers can also `POST /v1/warm` with the write token: a list of
+   `{"key": "packs/ab/<sha256>.pack", "ranges": [[start, length], …] | null}`,
+   then poll `GET /v1/warm/<job>`.
+
+**Operating it:** `/v1/metrics` reports hits, misses, coalesced misses, bytes
+served, S3 requests, retries, hedges and hedge wins, S3 time-to-first-byte and
+fill percentiles, cache bytes, evictions and extents that failed their check
+after a restart. A restart keeps the cache; extents are hashed on first use.
+`DELETE /v1/objects/<key>` (write token) drops an object an operator found bad.
+Losing the node stops RAFS reads (EIO), never serves wrong bytes; S3 still
+holds everything, so a replacement starts cold.
+
 ## Remaining deployment work
 
 1. Add transactional off-node backups for gateway SQLite/journal state. Keep

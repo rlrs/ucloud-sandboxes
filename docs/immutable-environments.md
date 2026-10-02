@@ -216,6 +216,15 @@ installed but disabled.
   runs `nydus-image unpack` on a private copy of the bootstrap, and pushes a
   one-layer OCI image without the old root annotation. Layout `image` only.
 
+* **Store node (C2.6)** (`chunk_store_node.py`): with
+  `chunk_store.store_node`, workers read packs, bootstraps and chunk maps only
+  from `ucloud-chunk-store` on the private network (`--chunk-store-url`, the
+  same read token), a read-through NVMe cache over S3 that fills aligned
+  extents, coalesces and hedges misses, and takes prefetch jobs; the index can
+  move there too (`serve_index`). Workers fail closed: no S3 fallback. See
+  [chunk-store-design.md](chunk-store-design.md#c26-store-node-as-built) and
+  [hetzner.md](hetzner.md#chunk-store-node-c26).
+
 M1 does not include GC (M3), the `image_roots` dispatch (M2) or builder
 automation: conversion is an explicit command.
 

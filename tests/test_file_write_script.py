@@ -6,6 +6,8 @@ import subprocess
 import unittest
 from ucloud_sandboxes.direct_service import sandbox_file_write_script
 
+TEST_TIER = "contract"
+
 
 class AtomicShellFileWriteTests(unittest.TestCase):
     def run_write(self, path, body, *, umask='022', env=None):

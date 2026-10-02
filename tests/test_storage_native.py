@@ -17,6 +17,8 @@ from ucloud_sandboxes.storage_native import (
     StorageNativeTerminalError,
 )
 
+TEST_TIER = "contract"
+
 
 class FakeUblkDaemon:
     def __init__(self, socket_path: Path, responses: list[dict]) -> None:

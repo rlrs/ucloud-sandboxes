@@ -19,6 +19,8 @@ from ucloud_sandboxes.direct_registry import (
 from ucloud_sandboxes.direct_warden import DirectSandbox
 from ucloud_sandboxes.sandbox import SandboxSpec
 
+TEST_TIER = "contract"
+
 
 def _spec(name):
     return SandboxSpec(id=name, image="registry/image@sha256:" + "a" * 64,
@@ -182,7 +184,6 @@ class GatewayInitialClaimTests(unittest.TestCase):
 
     def _route(self, parkable=True, state="creating"):
         from tests import test_control_plane as fixtures
-        from ucloud_sandboxes.models import ResourceQuantity
         spec = _spec("burst")
         return fixtures._sandbox_route(
             sandbox_id="burst", node_id="node", job_id="job", node_url="http://node:8090",

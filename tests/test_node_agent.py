@@ -30,6 +30,8 @@ from ucloud_sandboxes.sandbox import (
     sandbox_spec_fingerprint,
 )
 
+TEST_TIER = "contract"
+
 TOKEN = "node-control-secret"
 
 

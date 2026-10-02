@@ -54,9 +54,10 @@ def _verified_memory_mount(proc_root, root, mount_id, device, inode):
             continue
         separator = parts.index("-")
         mount_path = parts[4].replace("\\040", " ").replace("\\011", "\t").replace("\\134", "\\")
-        options = set(parts[5].split(",")) | set(parts[separator + 3].split(","))
+        # Swap policy is the provisioner's contract (noswap unless the pause
+        # tier is on); capacity evidence is the same either way.
         return (mount_path == str(root) and parts[separator + 1] == "tmpfs"
-                and "noswap" in options and parts[2] == device)
+                and parts[2] == device)
     return False
 
 

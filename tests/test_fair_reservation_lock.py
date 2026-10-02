@@ -62,24 +62,24 @@ class FairReservationLockTests(unittest.TestCase):
     def test_create_waits_through_short_contention_without_restarting_request(self):
         from tempfile import TemporaryDirectory
         from pathlib import Path
-        from ucloud_sandboxes import control_plane
+        from tests.gateway_support import gateway_services
+        from ucloud_sandboxes.gateway.placement import _GATEWAY_SCHEDULING_LOCK
         from ucloud_sandboxes.models import ResourceQuantity
         from ucloud_sandboxes.routing import RoutingStore
 
-        handler = object.__new__(control_plane.ControlPlaneHandler)
-        handler.telemetry = None
-        handler.admission_wait_seconds = 2
         entered = Event()
-        handler._select_node = lambda *_args, **_kwargs: entered.set()
         with TemporaryDirectory() as directory:
-            handler.routing_store = RoutingStore(Path(directory) / 'routes.sqlite')
+            placement = gateway_services(
+                routing_store=RoutingStore(Path(directory) / 'routes.sqlite'),
+            ).placement
+            placement.select = lambda *_args, **_kwargs: entered.set()
             with ThreadPoolExecutor(max_workers=1) as pool:
-                with control_plane._GATEWAY_SCHEDULING_LOCK:
+                with _GATEWAY_SCHEDULING_LOCK:
                     future = pool.submit(
-                        handler._select_and_reserve_node, 'test', ResourceQuantity(),
-                        spec={'id': 'test'}, spec_hash='a' * 64,
+                        placement.select_and_reserve, 'test', ResourceQuantity(),
+                        spec={'id': 'test'}, spec_hash='a' * 64, lock_timeout=2,
                     )
-                    self.wait_queued(control_plane._GATEWAY_SCHEDULING_LOCK, 1)
+                    self.wait_queued(_GATEWAY_SCHEDULING_LOCK, 1)
                     # Previously this aborted at 250 ms and repeated the entire
                     # image-resolution/HTTP pipeline on the next SDK retry.
                     self.assertFalse(entered.wait(.35))

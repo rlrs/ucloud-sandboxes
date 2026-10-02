@@ -12,6 +12,8 @@ from tests.legacy_relay_fixture import write_legacy_journal
 from ucloud_sandboxes import model_relay
 from ucloud_sandboxes.shared_control import legacy_relay
 
+TEST_TIER = "contract"
+
 
 class RelayRetirementTests(TestCase):
     def test_old_live_configuration_fails_before_any_sqlite_write(self):

@@ -20,7 +20,10 @@ from ucloud_sandboxes.direct_registry import (
 )
 from ucloud_sandboxes.direct_warden import DirectRunscWarden, DirectSandbox
 from ucloud_sandboxes.storage_native_daemon import StorageVolumeState
-from tests.test_direct_registry import DirectRegistryTests
+# Import the module, not the TestCase: discovery would rerun it here.
+from tests import test_direct_registry as registry_fixtures
+
+TEST_TIER = "contract"
 
 MIB = 1024**2
 
@@ -30,7 +33,7 @@ class PublishedWorkspaceCapacityTests(unittest.TestCase):
         self.directory = TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name).resolve()
-        self.spec = DirectRegistryTests().spec("one")
+        self.spec = registry_fixtures.DirectRegistryTests().spec("one")
         self.claim = self.spec.requested_resources().disk_mb
         self.workspace = self.spec.disk_mb
         # Exactly one full claim fits.
@@ -41,7 +44,7 @@ class PublishedWorkspaceCapacityTests(unittest.TestCase):
 
     def _plan(self, name):
         return self.registry.plan(
-            spec=DirectRegistryTests().spec(name), sandbox_generation=1,
+            spec=registry_fixtures.DirectRegistryTests().spec(name), sandbox_generation=1,
             operation_id="create:" + name, runtime_compatibility_sha256="b" * 64,
         )
 

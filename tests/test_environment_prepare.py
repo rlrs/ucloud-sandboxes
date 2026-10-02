@@ -10,6 +10,8 @@ from ucloud_sandboxes import environment_prepare as prepare
 from ucloud_sandboxes.managed_registry import RegistryClient
 from ucloud_sandboxes.oci_layer_materialize import UnsupportedLayer
 
+TEST_TIER = "contract"
+
 
 class PreparationProtocolTests(unittest.TestCase):
     def setUp(self):

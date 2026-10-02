@@ -10,6 +10,8 @@ from ucloud_sandboxes.metrics import (
     BufferedMetricsStore, MetricEvent, MetricsStore, _EncodedMetricEvent,
 )
 
+TEST_TIER = "contract"
+
 
 class BufferedMetricsTests(unittest.TestCase):
     def test_encoded_snapshot_preserves_accounting_and_json_values(self):

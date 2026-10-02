@@ -276,12 +276,14 @@ def _provision_locked(mount_root: Path, capacity: int) -> dict:
     return record
 
 
-def provision_ram_filesystem(root: Path, *, capacity_bytes: int) -> dict:
-    """Retain active memory in bounded unswappable shmem on qualified workers.
+def provision_ram_filesystem(root: Path, *, capacity_bytes: int, swappable: bool = False) -> dict:
+    """Retain active memory in bounded shmem on qualified workers.
 
     This mount reserves no RAM in advance. Per-sandbox cgroups enforce actual
     charges; admission and resident-wait policy leave host headroom. Reattaching
     an existing live mount must never resize it or hide ordinary files.
+    Pause-tier workers (C1.1) mount it swappable and add SwapTotal to its size:
+    a swapped-out page still owns its tmpfs block until the guest frees it.
     """
     if (os.geteuid() != 0 or not root.is_absolute() or root.resolve() != root
             or type(capacity_bytes) is not int or capacity_bytes <= 0):
@@ -290,7 +292,8 @@ def provision_ram_filesystem(root: Path, *, capacity_bytes: int) -> dict:
     total = int(counters["MemTotal"].split()[0]) * 1024
     # Provider-advertised memory can exceed guest MemTotal. Bound by the guest
     # and leave five percent outside application backing for kernel/services.
-    size = min(capacity_bytes, total) * 95 // 100 // 4096 * 4096
+    swap = int(counters["SwapTotal"].split()[0]) * 1024 if swappable else 0
+    size = (min(capacity_bytes, total) * 95 // 100 + swap) // 4096 * 4096
     if size < 4096:
         raise ValueError("RAM backing capacity is too small")
     root.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -305,17 +308,18 @@ def provision_ram_filesystem(root: Path, *, capacity_bytes: int) -> dict:
         if mounted["target"] != str(root):
             if any(root.iterdir()):
                 raise MemoryFilesystemError("refusing to cover existing application-memory files")
-            _run("mount", "-t", "tmpfs", "-o", f"size={size},noswap,nodev,nosuid,mode=0700",
+            noswap = "" if swappable else "noswap,"
+            _run("mount", "-t", "tmpfs", "-o", f"size={size},{noswap}nodev,nosuid,mode=0700",
                  "ucloud-application-memory", str(root))
             mounted = _mount(root)
         space = os.statvfs(root)
         if (mounted["target"] != str(root) or mounted["fstype"] != "tmpfs"
                 or mounted["source"] != "ucloud-application-memory"
-                or "noswap" not in mounted["options"].split(",")
+                or ("noswap" in mounted["options"].split(",")) == swappable
                 or space.f_blocks * space.f_frsize != size):
-            raise MemoryFilesystemError("RAM backing mount differs from its unswappable capacity contract")
+            raise MemoryFilesystemError("RAM backing mount differs from its swap and capacity contract")
         _private(root, directory=True)
-        return {"schema": 1, "mount_root": str(root), "capacity_bytes": size, "noswap": True}
+        return {"schema": 1, "mount_root": str(root), "capacity_bytes": size, "noswap": not swappable}
     finally:
         fcntl.flock(descriptor, fcntl.LOCK_UN)
         os.close(descriptor)
@@ -327,6 +331,8 @@ def main() -> None:
     parser.add_argument("--hard-capacity-bytes", type=int, required=True)
     parser.add_argument("--ram-root", type=Path)
     parser.add_argument("--ram-capacity-bytes", type=int)
+    parser.add_argument("--ram-swappable", action="store_true",
+                        help="Pause tier: let paused memory move to zswap/swap.")
     args = parser.parse_args()
     if (args.ram_root is None) != (args.ram_capacity_bytes is None):
         parser.error("RAM root and capacity must be supplied together")
@@ -334,7 +340,8 @@ def main() -> None:
         args.mount_root, hard_capacity_bytes=args.hard_capacity_bytes
     )
     if args.ram_root is not None:
-        provision_ram_filesystem(args.ram_root, capacity_bytes=args.ram_capacity_bytes)
+        provision_ram_filesystem(args.ram_root, capacity_bytes=args.ram_capacity_bytes,
+                                 swappable=args.ram_swappable)
 
 
 if __name__ == "__main__":

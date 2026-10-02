@@ -34,6 +34,8 @@ from ucloud_sandboxes.storage_native_daemon import (
     StorageVolumeState,
 )
 
+TEST_TIER = "contract"
+
 
 DIGEST_A = "a" * 64
 DIGEST_B = "b" * 64
@@ -119,6 +121,7 @@ class FakeRunsc:
                 "state",
                 "list",
                 "checkpoint",
+                "pause",
                 "resume",
                 "restore",
                 "exec",
@@ -166,16 +169,22 @@ class FakeRunsc:
             (image / "pages_meta.img").write_bytes(b"metadata")
             (image / "pages.img").write_bytes(b"private")
             self.status = "paused"
+        elif verb == "pause":
+            if self.status != "running":
+                return CommandResult(command, 1, stderr=f"cannot pause in state {self.status}")
+            self.status = "paused"
         elif verb == "resume":
             if self.before_resume is not None:
                 self.before_resume()
-            assert self.checkpoint is not None
-            captured = self.checkpoint / "application_memory.img"
-            active = (
-                self.memory_root / self.memory_directory / "application_memory.active"
-            )
-            if captured.exists() and not getattr(self, 'reflink_restored', False):
-                captured.replace(active)
+            if self.status != "paused":
+                return CommandResult(command, 1, stderr=f"cannot resume in state {self.status}")
+            if self.checkpoint is not None:
+                captured = self.checkpoint / "application_memory.img"
+                active = (
+                    self.memory_root / self.memory_directory / "application_memory.active"
+                )
+                if captured.exists() and not getattr(self, 'reflink_restored', False):
+                    captured.replace(active)
             self.status = "running"
         elif verb == "restore":
             image = Path(

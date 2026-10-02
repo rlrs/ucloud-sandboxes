@@ -22,6 +22,8 @@ from ucloud_sandboxes.storage_native_daemon import (
     storage_operation_id,
 )
 
+TEST_TIER = "contract"
+
 
 class FakeQuota:
     def __init__(self):
@@ -131,7 +133,7 @@ class SplitLifecycleTests(unittest.TestCase):
         service.config = replace(service.config, mount_root=self.config.memory_root)
         socket_path = self.root / "s.sock"
         server = StorageNativeNodeServer(socket_path, service, require_root_peer=False)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
         thread.start()
         self.addCleanup(lambda: thread.join(timeout=2))
         self.addCleanup(server.shutdown)

@@ -2,7 +2,6 @@
 
 from contextlib import asynccontextmanager, closing
 import asyncio
-import importlib.util
 import os
 import time
 import unittest
@@ -12,7 +11,11 @@ from uuid import uuid4
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from tests.support import requires_sdk
 from ucloud_sandboxes import model_relay as api
+from ucloud_sandboxes.shared_control.model import cancel_until_done
+
+TEST_TIER = "contract"
 
 DSN = os.environ.get("UCLOUD_TEST_POSTGRES_DSN")
 if DSN:
@@ -674,8 +677,7 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         finally:
             release.set()
             await asyncio.gather(*occupants, return_exceptions=True)
-            waiter.cancel()
-            await asyncio.gather(waiter, return_exceptions=True)
+            await cancel_until_done(waiter)
 
     async def bound_state(self, **kwargs):
         self.deployment = "bound"
@@ -886,8 +888,7 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
             # moving the fallback deadline and strand its durable park row.
             await asyncio.wait_for(recovered.wait(), 1)
         finally:
-            spam.cancel()
-            await asyncio.gather(spam, return_exceptions=True)
+            await cancel_until_done(spam)
 
     async def test_peer_receives_legacy_global_lifecycle_notification(self):
         async def park(_request):
@@ -1015,7 +1016,7 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
             )).fetchone()
         self.assertTrue(observed["reattachable"])
 
-    @unittest.skipUnless(importlib.util.find_spec("ucloud_sandboxes_sdk"), "requires coordinated SDK")
+    @requires_sdk()
     async def test_sdk_renewal_preserves_original_transport_through_deferred_park(self):
         from ucloud_sandboxes_sdk.relay import RelayRequest, _renewed_request
 
@@ -1508,11 +1509,7 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         peer = await self.new_state()
         # Both listener and publisher can disappear without losing queue state.
         for state in (self.state, peer):
-            state._tasks[0].cancel()
-            state._tasks[-1].cancel()
-            await asyncio.gather(
-                state._tasks[0], state._tasks[-1], return_exceptions=True
-            )
+            await cancel_until_done(state._tasks[0], state._tasks[-1])
         req = await self.enqueue()
         (leased,) = await self.poll(peer)
         waiting = asyncio.create_task(
@@ -1557,17 +1554,13 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
                 self.assertGreaterEqual(counts.count(1), 28, counts)
                 self.assertTrue(all(count in (1, 512) for count in counts), counts)
             finally:
-                for task in waiting:
-                    task.cancel()
-                await asyncio.gather(*waiting, return_exceptions=True)
+                await cancel_until_done(*waiting)
         self.assertFalse(self.state._response_waiters)
 
     async def test_delivery_reconciles_lost_hint_during_unrelated_hint_stream(self):
         peer = await self.new_state()
         for state in (self.state, peer):
-            for task in (state._tasks[0], state._tasks[-1]):
-                task.cancel()
-            await asyncio.gather(state._tasks[0], state._tasks[-1], return_exceptions=True)
+            await cancel_until_done(state._tasks[0], state._tasks[-1])
         request = await self.enqueue()
         (leased,) = await self.poll(peer)
         other = await self.enqueue()
@@ -1596,9 +1589,7 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await asyncio.wait_for(waiting[0], 1.5)).body, b"answer")
         finally:
             tasks = waiting + ([spam] if spam is not None else [])
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+            await cancel_until_done(*tasks)
 
     async def test_late_delivery_waiter_recovers_failed_hint_read_and_cancelled_peer(self):
         from contextlib import asynccontextmanager
@@ -1607,9 +1598,7 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         # Completion precedes socket attachment; neither process receives a
         # notification, so only the local attach hint and durable fallback exist.
         for state in (self.state, peer):
-            for task in (state._tasks[0], state._tasks[-1]):
-                task.cancel()
-            await asyncio.gather(state._tasks[0], state._tasks[-1], return_exceptions=True)
+            await cancel_until_done(state._tasks[0], state._tasks[-1])
         request = await self.enqueue()
         (leased,) = await self.poll(peer)
         await self.respond(leased, peer)
@@ -1648,9 +1637,7 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         self.state.store.observe = lambda sample: operations.update([sample.operation])
         registrations = [await self.state.register_rollout(f"idle-{i}") for i in range(32)]
         # Isolate periodic fallback from delayed registration NOTIFY hints.
-        for task in (self.state._tasks[0], self.state._tasks[-1]):
-            task.cancel()
-        await asyncio.gather(self.state._tasks[0], self.state._tasks[-1], return_exceptions=True)
+        await cancel_until_done(self.state._tasks[0], self.state._tasks[-1])
         waiting = [asyncio.create_task(self.state.poll(
             rollout_id=reg["rollout_id"], registration_token=reg["registration_token"],
             timeout_seconds=10,
@@ -1666,16 +1653,12 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
             self.assertGreaterEqual(operations["relay_poll_readiness"], 1)
             self.assertTrue(all(not task.done() for task in waiting))
         finally:
-            for task in waiting:
-                task.cancel()
-            await asyncio.gather(*waiting, return_exceptions=True)
+            await cancel_until_done(*waiting)
         self.assertEqual(self.state._poll_waiters, {})
 
     async def test_batched_poll_fallback_recovers_enqueue_and_expired_lease_without_hints(self):
         peer = await self.new_state()
-        for task in (self.state._tasks[0], self.state._tasks[-1]):
-            task.cancel()
-        await asyncio.gather(self.state._tasks[0], self.state._tasks[-1], return_exceptions=True)
+        await cancel_until_done(self.state._tasks[0], self.state._tasks[-1])
         waiting = asyncio.create_task(self.poll(timeout_seconds=3))
         try:
             await asyncio.sleep(.05)
@@ -1689,14 +1672,11 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(again.request_id, leased.request_id)
             self.assertNotEqual(again.lease_id, leased.lease_id)
         finally:
-            waiting.cancel()
-            await asyncio.gather(waiting, return_exceptions=True)
+            await cancel_until_done(waiting)
 
     async def test_batched_poll_fallback_observes_registration_revocation(self):
         peer = await self.new_state()
-        for task in (self.state._tasks[0], self.state._tasks[-1]):
-            task.cancel()
-        await asyncio.gather(self.state._tasks[0], self.state._tasks[-1], return_exceptions=True)
+        await cancel_until_done(self.state._tasks[0], self.state._tasks[-1])
         waiting = asyncio.create_task(self.poll(timeout_seconds=3))
         try:
             await asyncio.sleep(.05)
@@ -1704,8 +1684,7 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(web.HTTPNotFound):
                 await asyncio.wait_for(waiting, 2)
         finally:
-            waiting.cancel()
-            await asyncio.gather(waiting, return_exceptions=True)
+            await cancel_until_done(waiting)
 
     async def test_timeout_wakes_parked_caller_to_deliver_terminal_error(self):
         wake = asyncio.Event()
@@ -2031,7 +2010,8 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
                 "_ucloud_resource_phase": {"sequence": 999, "phase": "model_wait"},
             })
 
-    @unittest.skipUnless(importlib.util.find_spec("ucloud_sandboxes_sdk"), "requires coordinated SDK")
+    # AsyncRelayWorkerClient.update_resource_phase first shipped in 0.4.26.
+    @requires_sdk("0.4.26")
     async def test_resource_phase_real_sync_and_async_sdk_round_trip(self):
         from ucloud_sandboxes_sdk import AsyncRelayWorkerClient, RelayWorkerClient
         http, state = await self.completion_client(None)

@@ -194,3 +194,46 @@ def node_storage_pressure_allows(
         metrics.storage_hard_capacity_mb - metrics.storage_hard_reserved_mb,
     )
     return requested.disk_mb <= hard_available
+
+
+def node_pressure_score(heartbeat: NodeHeartbeat) -> float:
+    """Reduce live node pressure to a bounded destination-ranking score."""
+
+    metrics = heartbeat.runtime_metrics
+    if metrics is None:
+        return 0.0
+    values = [
+        max(0.0, min(1.0, float(metrics.cpu_percent or 0.0) / 100.0)),
+        max(0.0, min(1.0, float(metrics.memory_percent or 0.0) / 100.0)),
+        min(1.0, metrics.memory_working_set_mb / max(1, metrics.memory_total_mb)),
+        max(
+            0.0,
+            min(1.0, float(metrics.memory_psi_full_avg10 or 0.0) / 100.0),
+        ),
+    ]
+    # "some" captures stalls affecting a subset of tasks, which can be severe
+    # for sandbox latency even while other host CPUs remain idle. I/O pressure
+    # is a relative ranking signal, not another admission/rejection threshold.
+    values.extend(
+        max(0.0, min(1.0, float(value or 0.0) / 100.0))
+        for value in (
+            metrics.memory_psi_some_avg10,
+            metrics.io_psi_some_avg10,
+            metrics.io_psi_full_avg10,
+        )
+    )
+    if metrics.storage_max_concurrent_operations > 0:
+        values.append(
+            max(
+                0.0,
+                min(
+                    1.0,
+                    (
+                        metrics.storage_active_operations
+                        + metrics.storage_waiting_operations
+                    )
+                    / metrics.storage_max_concurrent_operations,
+                ),
+            )
+        )
+    return max(values)

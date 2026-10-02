@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from uuid import UUID
 
-from ucloud_sandboxes.control_plane import _managed_registry_build_tag
+from ucloud_sandboxes.gateway.registry_refs import _managed_registry_build_tag
 from ucloud_sandboxes.images import ImageRecord, ImageStore
 from ucloud_sandboxes.managed_registry import RegistryRequestError, digest_protection_tag, registry_repository_tag_from_image_ref
 

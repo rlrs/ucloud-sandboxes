@@ -16,6 +16,7 @@ from ucloud_sandboxes.capabilities import (
 from ucloud_sandboxes.config import DeploymentConfig
 from ucloud_sandboxes.control_state import SOFT_DRAIN, ControlStateStore
 from ucloud_sandboxes.deployment import package_version
+from ucloud_sandboxes.gateway import placement as placement_rules
 from ucloud_sandboxes.models import (
     NodeHeartbeat,
     NodeRuntimeMetrics,
@@ -32,8 +33,11 @@ from tests.test_cli import (
     autoscaler_args, owned_heartbeat, owned_node_job, reconcile, save_heartbeats,
     temporary_root, ucloud_config, write_jobs,
 )
+from tests.gateway_support import gateway_services
 from tests.test_control_plane import _portable_snapshot, _sandbox_route, build_heartbeat
 from tests.test_policy import demand, node
+
+TEST_TIER = "contract"
 
 
 CAPACITY = ResourceQuantity(vcpu=32, memory_mb=98_304, disk_mb=1_000_000)
@@ -513,9 +517,8 @@ class SoftDrainGatewayTests(unittest.TestCase):
             pass
 
         handler = object.__new__(Handler)
-        handler.store = store
         handler.routing_store = routing
-        handler.heartbeat_ttl_seconds = 120
+        handler.services = gateway_services(store=store, routing_store=routing)
         handler.wake_consolidation_policy = ScalePolicy()
         return handler, route
 
@@ -544,7 +547,7 @@ class SoftDrainGatewayTests(unittest.TestCase):
             handler, route = self.handler(Path(raw), self.heartbeat("100", drained=True))
             outcomes = []
             handler._read_json_body = lambda: {"migration_id": "m-1", "soft_drain": True}
-            handler._atomic_placement = lambda operation, **_kwargs: operation()
+            handler.services.placement.atomic = lambda operation, **_kwargs: operation()
             handler._write_wake_unavailable = outcomes.append
             handler._migrate_sandbox_on_node(route.sandbox_id)
             self.assertEqual(outcomes[0].error_code, "migration_destination_unavailable")
@@ -566,7 +569,7 @@ class SoftDrainGatewayTests(unittest.TestCase):
 
             handler._publish_route_for_detach = publish
             handler._read_json_body = lambda: {"migration_id": "m-2", "soft_drain": True}
-            handler._atomic_placement = lambda operation, **_kwargs: operation()
+            handler.services.placement.atomic = lambda operation, **_kwargs: operation()
             handler._write_wake_unavailable = outcomes.append
             handler._migrate_sandbox_on_node(unseen.sandbox_id)
             self.assertEqual(asked, ["unseen"])
@@ -603,7 +606,7 @@ class SoftDrainGatewayTests(unittest.TestCase):
             handler, route = self.handler(Path(raw), self.heartbeat("150"))
             written, aborted = [], []
             handler._read_json_body = lambda: {"migration_id": "m-3", "soft_drain": True}
-            handler._atomic_placement = lambda operation, **_kwargs: operation()
+            handler.services.placement.atomic = lambda operation, **_kwargs: operation()
             handler._prepare_and_advance_sandbox_migration = lambda migration, **_kwargs: replace(
                 migration, phase="prepared",
                 error="storage-native snapshot does not match the required runtime",
@@ -630,20 +633,16 @@ class SoftDrainGatewayTests(unittest.TestCase):
                                 total_resources=ResourceQuantity(16, 16384, 1_000_000))
 
         def selector(heartbeats):
-            handler = object.__new__(control_plane.ControlPlaneHandler)
-            handler.telemetry = None
-            handler.registry_layer_cache = None
-            handler.create_target_concurrency_per_node = 4
-            handler.inflight_create_placements = control_plane.InflightCreatePlacements()
-            handler._placement_routes = lambda: []
-            handler._ready_sandbox_heartbeats = lambda **_kwargs: list(heartbeats)
-            handler._nodes_with_image = lambda *_args, **_kwargs: {"a"}
-            return handler
+            placement = gateway_services(create_target_concurrency_per_node=4).placement
+            placement.routes = lambda: []
+            placement.fleet.ready_sandbox_heartbeats = lambda **_kwargs: list(heartbeats)
+            placement.image_locality = lambda *_args, **_kwargs: {"a"}
+            return placement
 
         requested = ResourceQuantity(1, 1024, 4096)
-        with patch.object(control_plane, "_node_can_fit_available", return_value=True):
-            self.assertEqual(selector([drained, other])._select_node(requested).node_id, "b")
-            self.assertEqual(selector([drained])._select_node(requested).node_id, "a")
+        with patch.object(placement_rules, "_node_can_fit_available", return_value=True):
+            self.assertEqual(selector([drained, other]).select(requested).node_id, "b")
+            self.assertEqual(selector([drained]).select(requested).node_id, "a")
 
 
 class SoftDrainConfigTests(unittest.TestCase):

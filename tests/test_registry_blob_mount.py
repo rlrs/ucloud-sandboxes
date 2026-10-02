@@ -4,6 +4,8 @@ from unittest.mock import Mock, patch
 from ucloud_sandboxes.managed_registry import RegistryClient, RegistryRequestError
 from tests.test_registry_client_contract import _RegistryHTTPServer
 
+TEST_TIER = "contract"
+
 DIGEST = 'sha256:' + 'a' * 64
 
 

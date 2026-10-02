@@ -319,11 +319,11 @@ def is_worker_detachable_parked_route(route: SandboxRoute) -> bool:
 
 @dataclass(frozen=True)
 class ProgramRequestState:
-    """Current scheduler projection for one relay request.
+    """Current phase projection for one relay request.
 
     Product ownership remains in the relay journal and sandbox route. This
-    projection is durable so autoscaling and shadow placement never need to
-    reconstruct current program phases by scanning metric history.
+    projection is durable so relay fencing, cold offload and metrics never need
+    to reconstruct current program phases by scanning metric history.
     """
 
     request_id: str

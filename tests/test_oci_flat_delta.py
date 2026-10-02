@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from ucloud_sandboxes.oci_flat_delta import (
-    UnsupportedFlatImage, index_flat_tar, plan_flat_delta, write_flat_delta,
+    FileEntry, UnsupportedFlatImage, index_flat_tar, plan_flat_delta, write_flat_delta,
 )
 
 
@@ -140,7 +140,7 @@ class SourceFilesystemQualificationTests(unittest.TestCase):
                                ('app/b', tarfile.LNKTYPE, 'app/a', 0o640),
                                ('app/link', tarfile.SYMTYPE, 'a', 0o777)])
         index = index_flat_tar(io.BytesIO(data))
-        expected = expected_filesystem(index)
+        expected = expected_filesystem(index, layout=1)
         self.assertEqual(expected['/app/b']['sha256'], hashlib.sha256(b'payload').hexdigest())
         self.assertEqual(expected['/app/b']['nlink'], 2)
         self.assertEqual(expected['/app/b']['hardlinks'], ['/app/a', '/app/b'])
@@ -157,8 +157,59 @@ class SourceFilesystemQualificationTests(unittest.TestCase):
         for changed in (dict(snapshot, errors=['unreadable']), dict(snapshot, excluded=[])):
             with self.assertRaises(ValueError):
                 compare_snapshot(index, changed, layer_formats=formats)
-        with self.assertRaises(ValueError):
-            compare_snapshot(index, snapshot, layer_formats=[{'layout': 2}])
+        excludes = ['dev', 'proc', 'sys', 'run']
+        for unknown in ([], [{'layout': 2}], [{'layout': 3, 'excludes': excludes}],
+                        [{'layout': True, 'excludes': excludes}],
+                        [{'layout': 1, 'excludes': excludes}, {'layout': 2, 'excludes': excludes}]):
+            with self.subTest(formats=unknown), self.assertRaisesRegex(ValueError, 'one known EROFS layout'):
+                compare_snapshot(index, snapshot, layer_formats=unknown)
+
+    def test_layout_two_checks_whole_second_file_and_symlink_mtimes_against_the_source(self):
+        from copy import deepcopy
+        from ucloud_sandboxes.flat_image_qualification import (
+            RUNTIME_FILES, RUNTIME_TREES, SCAN_OUTPUT, compare_snapshot, expected_filesystem,
+        )
+        output = io.BytesIO()
+        with tarfile.open(fileobj=output, mode='w', format=tarfile.PAX_FORMAT) as tar:
+            for path, kind, mtime, value in [('.', tarfile.DIRTYPE, 11, ''), ('app', tarfile.DIRTYPE, 22, ''),
+                                             ('app/mod.py', tarfile.REGTYPE, 1_700_000_000, 'x = 1\n'),
+                                             ('app/frac.py', tarfile.REGTYPE, 1_700_000_001.75, 'y = 2\n'),
+                                             ('app/hard.py', tarfile.LNKTYPE, 5, 'app/mod.py'),
+                                             ('app/link', tarfile.SYMTYPE, 1_600_000_000, 'mod.py')]:
+                info = tarfile.TarInfo(path)
+                info.type, info.mode, info.mtime, info.uid, info.gid = kind, 0o755, mtime, 12, 34
+                info.linkname = value if kind in {tarfile.LNKTYPE, tarfile.SYMTYPE} else ''
+                payload = value.encode() if kind == tarfile.REGTYPE else b''
+                info.size = len(payload)
+                tar.addfile(info, io.BytesIO(payload) if payload else None)
+        index = index_flat_tar(io.BytesIO(output.getvalue()))
+        expected = expected_filesystem(index, layout=2)
+        self.assertEqual(expected['/app/mod.py']['mtime_ns'], 1_700_000_000 * 10**9)
+        # A hard link is its target's inode; a .pyc check reads whole seconds.
+        self.assertEqual(expected['/app/hard.py']['mtime_ns'], 1_700_000_000 * 10**9)
+        self.assertEqual(expected['/app/frac.py']['mtime_ns'], 1_700_000_001 * 10**9)
+        self.assertEqual(expected['/app/link']['mtime_ns'], 1_600_000_000 * 10**9)
+        self.assertNotIn('mtime_ns', expected['/app'])
+        self.assertNotIn('mtime_ns', expected['/workspace'])
+        # The scanner reports nanoseconds and the builder's directory times.
+        entries = deepcopy(expected)
+        entries['/app/frac.py']['mtime_ns'] = 1_700_000_001_750_000_000
+        for path in ('/', '/app', '/workspace'):
+            entries[path]['mtime_ns'] = 0
+        snapshot = {'entries': entries, 'errors': [],
+                    'excluded': sorted(RUNTIME_TREES | (RUNTIME_FILES - {'/.ucloud-init'}) | {SCAN_OUTPUT})}
+        layout2 = [{'layout': 2, 'excludes': ['dev', 'proc', 'run', 'sys']}]
+        result = compare_snapshot(index, snapshot, layer_formats=layout2)
+        self.assertTrue(result['equivalent'], result['difference_sample'])
+        self.assertIn('--mkfs-time', result['timestamp_contract'])
+        # The same tree mounted from a layout-1 image is not equivalent.
+        self.assertFalse(compare_snapshot(index, snapshot, layer_formats=[{**layout2[0], 'layout': 1}])['equivalent'])
+        for path, mtime_ns in [('/app/mod.py', 0), ('/app/mod.py', 1_699_999_999 * 10**9),
+                               ('/app/link', 0), ('/app/frac.py', 1_700_000_002 * 10**9)]:
+            with self.subTest(path=path, mtime_ns=mtime_ns):
+                changed = deepcopy(snapshot)
+                changed['entries'][path]['mtime_ns'] = mtime_ns
+                self.assertFalse(compare_snapshot(index, changed, layer_formats=layout2)['equivalent'])
 
     def test_scan_certificate_requires_identical_bytes_ranges_model_and_runtime(self):
         from copy import deepcopy
@@ -167,7 +218,7 @@ class SourceFilesystemQualificationTests(unittest.TestCase):
         index = index_flat_tar(io.BytesIO(archive(ROOT + [('app/a', tarfile.REGTYPE, 'payload', 0o644)])))
         profile = {'source_layers': ['old-layer'], 'parent': 'old-parent', 'image_digest': 'image',
                    'image_size': 4096, 'chunks': [{'digest': 'range', 'offset': 0, 'length': 4096}],
-                   'format': {'layout': 1}, 'producer_key': 'trusted'}
+                   'format': {'layout': 1, 'excludes': ['dev', 'proc', 'run', 'sys']}, 'producer_key': 'trusted'}
         def component(value):
             return SimpleNamespace(unsigned=lambda: deepcopy(value))
         config = {'Env': ['MODE=safe']}
@@ -180,13 +231,21 @@ class SourceFilesystemQualificationTests(unittest.TestCase):
         self.assertNotEqual(key, qualification_key(index, [component(profile)], config, 'worker-v2'))
         changed = index_flat_tar(io.BytesIO(archive(ROOT + [('app/a', tarfile.REGTYPE, 'changed', 0o644)])))
         self.assertNotEqual(key, qualification_key(changed, [component(profile)], config, 'worker-v1'))
+        # Layout 2 certifies source file times; layout 1 expects them zeroed.
+        layout2 = {**profile, 'format': {**profile['format'], 'layout': 2}}
+        retimed = {path: FileEntry(**{**vars(entry), 'mtime': 99}) for path, entry in index.items()}
+        self.assertEqual(key, qualification_key(retimed, [component(profile)], config, 'worker-v1'))
+        self.assertNotEqual(qualification_key(index, [component(layout2)], config, 'worker-v1'),
+                            qualification_key(retimed, [component(layout2)], config, 'worker-v1'))
+        with self.assertRaisesRegex(ValueError, 'one known EROFS layout'):
+            qualification_key(index, [component(profile), component(layout2)], config, 'worker-v1')
 
     def test_runtime_tmpfs_contents_are_excluded_but_app_files_are_not(self):
         from ucloud_sandboxes.flat_image_qualification import expected_filesystem
         data = archive(ROOT + [('tmp', tarfile.DIRTYPE, '', 0o1777),
                                ('tmp/installer.tar.gz', tarfile.REGTYPE, 'runtime hides this', 0o644),
                                ('app/required', tarfile.REGTYPE, 'runtime retains this', 0o644)])
-        expected = expected_filesystem(index_flat_tar(io.BytesIO(data)))
+        expected = expected_filesystem(index_flat_tar(io.BytesIO(data)), layout=1)
         self.assertNotIn('/tmp', expected)
         self.assertNotIn('/tmp/installer.tar.gz', expected)
         self.assertEqual(expected['/app/required']['sha256'], hashlib.sha256(b'runtime retains this').hexdigest())
@@ -198,7 +257,7 @@ class SourceFilesystemQualificationTests(unittest.TestCase):
             RUNTIME_FILES, RUNTIME_TREES, SCAN_OUTPUT, compare_snapshot, expected_filesystem,
         )
         index = index_flat_tar(io.BytesIO(archive(ROOT)))
-        expected = expected_filesystem(index)
+        expected = expected_filesystem(index, layout=1)
         self.assertEqual(expected['/workspace']['mode'], stat.S_IFDIR | 0o1777)
         snapshot = {'entries': deepcopy(expected), 'errors': [],
                     'excluded': sorted(RUNTIME_TREES | (RUNTIME_FILES - {'/.ucloud-init'}) | {SCAN_OUTPUT})}
@@ -209,11 +268,11 @@ class SourceFilesystemQualificationTests(unittest.TestCase):
         self.assertFalse(compare_snapshot(index, snapshot, layer_formats=formats)['equivalent'])
         present = index_flat_tar(io.BytesIO(archive(ROOT + [
             ('workspace', tarfile.DIRTYPE, '', 0o750), ('workspace/input', tarfile.REGTYPE, 'required', 0o640)])))
-        snapshot['entries'] = expected_filesystem(present)
+        snapshot['entries'] = expected_filesystem(present, layout=1)
         self.assertEqual(snapshot['entries']['/workspace']['mode'], stat.S_IFDIR | 0o750)
         snapshot['entries']['/workspace']['mtime_ns'] = 123
         self.assertFalse(compare_snapshot(present, snapshot, layer_formats=formats)['equivalent'])
-        snapshot['entries'] = expected_filesystem(present)
+        snapshot['entries'] = expected_filesystem(present, layout=1)
         snapshot['entries'].pop('/workspace/input')
         self.assertFalse(compare_snapshot(present, snapshot, layer_formats=formats)['equivalent'])
 
@@ -222,7 +281,7 @@ class SourceFilesystemQualificationTests(unittest.TestCase):
         data = archive([('.', tarfile.DIRTYPE, '', 0o755), ('tmp', tarfile.DIRTYPE, '', 0o1777),
                         ('tmp/ucloud-filesystem-proof.json.gz', tarfile.REGTYPE, 'source data', 0o644)])
         with self.assertRaisesRegex(ValueError, 'qualification output'):
-            expected_filesystem(index_flat_tar(io.BytesIO(data)))
+            expected_filesystem(index_flat_tar(io.BytesIO(data)), layout=1)
 
 
 if __name__ == '__main__':

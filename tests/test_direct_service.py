@@ -13,6 +13,8 @@ from ucloud_sandboxes.memory_backing import MemoryBackingBusyError, MemoryBackin
 from ucloud_sandboxes.sandbox import SandboxDeleteBusyError, SandboxFileTooLargeError
 from tests.test_split_memory_lifecycle import FakeQuota
 
+TEST_TIER = "contract"
+
 
 class DirectProcessRunnerTests(unittest.TestCase):
     def test_file_stdin_is_consumed_without_materializing_it_in_python(self) -> None:

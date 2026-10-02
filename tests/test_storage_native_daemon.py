@@ -39,6 +39,8 @@ from ucloud_sandboxes.storage_native_registry import (
     StorageSnapshotPublication,
 )
 
+TEST_TIER = "contract"
+
 
 class LinuxVolumeReadaheadTests(unittest.TestCase):
     def test_workspace_format_disables_only_supported_host_cpu_log_sizing(self):
@@ -1721,7 +1723,7 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                 service,
                 require_root_peer=False,
             )
-            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
             thread.start()
             client = StorageNativeNodeClient(socket_path, timeout_seconds=2)
             deadline = time.monotonic() + 2

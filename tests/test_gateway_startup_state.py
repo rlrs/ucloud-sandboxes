@@ -14,6 +14,8 @@ from ucloud_sandboxes.control_state import ControlStateStore, _json
 from ucloud_sandboxes.models import NodeRuntimeMetrics, utc_now
 from ucloud_sandboxes.resource_evidence import ResourceEvidence
 
+TEST_TIER = "contract"
+
 
 class GatewayStartupStateTests(unittest.TestCase):
     def persist_legacy_worker(self, root):
@@ -47,7 +49,7 @@ class GatewayStartupStateTests(unittest.TestCase):
             server = _gateway_server(root)
             self.addCleanup(server.server_close)
             self.assertIn(
-                "legacy-worker", server.RequestHandlerClass.store._heartbeat_cache
+                "legacy-worker", server.RequestHandlerClass.services.fleet.store._heartbeat_cache
             )
             with _running_server(server) as address:
                 with urlopen(address + "/healthz", timeout=2) as response:

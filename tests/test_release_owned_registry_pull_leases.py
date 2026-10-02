@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from ucloud_sandboxes.control_plane import _registry_operation_lease_owner
+from ucloud_sandboxes.gateway.registry_refs import _registry_operation_lease_owner
 from ucloud_sandboxes.managed_registry import RegistryUsageStore
 
 HELPER = runpy.run_path(str(Path(__file__).parents[1] / 'docs/benchmarks/registry-pulls-2026-09-30/release-owned-smoke-pull-leases.py'))

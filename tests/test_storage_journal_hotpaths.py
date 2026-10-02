@@ -10,6 +10,8 @@ from ucloud_sandboxes.storage_native_daemon import (
     StorageNativeJournal, StorageVolumeOwner, StorageVolumeState,
 )
 
+TEST_TIER = "contract"
+
 
 def add_history(journal, template, count):
     """Keep valid tombstones, as long-running workers do for replay fencing."""

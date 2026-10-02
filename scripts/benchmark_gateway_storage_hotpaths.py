@@ -22,7 +22,8 @@ from tempfile import TemporaryDirectory
 import time
 import tracemalloc
 
-from ucloud_sandboxes import control_plane, storage_native_registry
+from ucloud_sandboxes import storage_native_registry
+from ucloud_sandboxes.gateway import registry_refs
 from ucloud_sandboxes.managed_registry import RegistryUsageStore
 from ucloud_sandboxes.storage_native import StorageNativeLayer
 
@@ -57,13 +58,13 @@ def registry_benchmark(root: Path, revision: str, repeat: int) -> dict:
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     old_helper = previous_function(source_at(revision, "control_plane"),
-                                   "_persist_registry_image_protection", control_plane)
+                                   "_persist_registry_image_protection", registry_refs)
     now = datetime(2026, 9, 21, tzinfo=timezone.utc)
     digest = "sha256:" + "a" * 64
     variants = {}
     for name, cls, helper in (
         ("before", module.RegistryUsageStore, old_helper),
-        ("after", RegistryUsageStore, control_plane._persist_registry_image_protection),
+        ("after", RegistryUsageStore, registry_refs._persist_registry_image_protection),
     ):
         store = cls(root / f"{name}.sqlite")
         with sqlite3.connect(store.path) as db:

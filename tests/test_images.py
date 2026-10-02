@@ -37,6 +37,8 @@ from ucloud_sandboxes.images import (
 from ucloud_sandboxes.models import utc_now
 from ucloud_sandboxes.sandbox import CommandResult
 
+TEST_TIER = "contract"
+
 
 class ImageTests(unittest.TestCase):
     def test_completed_build_records_the_runtime_resolved_command(self):

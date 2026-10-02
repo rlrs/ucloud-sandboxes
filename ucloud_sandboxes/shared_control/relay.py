@@ -2,7 +2,7 @@
 
 Only waiters live in process memory. Registration, inference leases, retry identity,
 responses and lifecycle work are durable. The gateway remains the sole sandbox
-owner authority during the relay cutover; this module never imports fixture owners.
+owner authority.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from .. import model_relay as api
 from ..telemetry import Telemetry
 from ..relay_phase import METADATA_KEY as PHASE_METADATA_KEY, current_phase, phase_update
 from .database import PostgresDatabase
+from .model import cancel_until_done
 
 LOGGER = logging.getLogger(__name__)
 # Reserve response space BEFORE accepting work. This is a durable-storage safety
@@ -206,16 +207,7 @@ class PostgresRelayState:
         # may consume cancellation racing readiness on Python 3.10. In that
         # case the background loop must not enter another indefinite wait.
         self._closing = True
-        tasks = set(self._tasks) | self._active
-        pending = tasks
-        while pending:
-            for task in pending:
-                task.cancel()
-            # Retrying cancellation is needed when a dependency consumes the
-            # first signal while entering another wait. asyncio.wait itself
-            # does not consume cancellation; transaction rollback is shielded.
-            _, pending = await asyncio.wait(pending, timeout=0.1)
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await cancel_until_done(*self._tasks, *self._active)
         try:
             if self._lifecycle_store is not None:
                 await self._lifecycle_store.close()

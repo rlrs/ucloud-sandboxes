@@ -13,6 +13,8 @@ from tempfile import TemporaryDirectory
 import time
 import unittest
 
+TEST_TIER = "linux"
+
 
 ENABLED = sys.platform == "linux" and os.environ.get("UCLOUD_RUN_NETNS_TESTS") == "1"
 

@@ -110,10 +110,21 @@ and TTY flag. Events use monotonically increasing sequence numbers and bounded
 retention. Long-poll readers wait on the session notification rather than
 scanning all sessions or spinning while idle.
 
-The session ID is opaque and bound to its origin node. Before returning it, the
-gateway stores the node URL in its durable exec-route table and bounded
-in-memory cache. Follow-up reads therefore do not depend on a fresh heartbeat
-lookup.
+The session ID is opaque and bound to its origin node. When the gateway
+forwards an exec start, it sends `X-UCloud-Exec-Session-Prefix`: an HMAC-signed
+binding of the sandbox, its generation and worker job, keyed by the gateway
+credential. A current worker names the session `<prefix>.<random>`. Follow-up
+polls, stdin, signals and closes verify the prefix and route by the worker's
+heartbeat, with no exec-route row and no routing-database read. The durable
+route table is read only when that worker is stale or absent, to distinguish a
+lost owner (410 `exec_worker_lost`), a deleted or replaced incarnation (404)
+and a temporarily silent worker (503). A session is never redirected to another
+owner. Rotating the gateway credential invalidates outstanding prefixes.
+
+A worker that ignores the header names the session `exec-<uuid>`. The gateway
+then stores the node URL in its durable exec-route table before returning it,
+and every follow-up read loads that indexed row; there is no process-local
+route cache, because another process may retire the route.
 
 ## File and SSH routes
 

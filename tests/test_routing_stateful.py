@@ -12,6 +12,8 @@ from ucloud_sandboxes.routing import (
     SandboxRouteAllocation,
 )
 
+TEST_TIER = "contract"
+
 
 class RoutingStoreStateMachine(RuleBasedStateMachine):
     """Exercise one reused sandbox id against a small durable route model."""

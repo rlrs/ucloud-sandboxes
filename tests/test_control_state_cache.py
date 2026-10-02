@@ -13,6 +13,8 @@ from ucloud_sandboxes.models import (
     NODE_RUNTIME_METRIC_DEFAULTS, NodeRuntimeMetrics, SandboxInventoryEntry, utc_now,
 )
 
+TEST_TIER = "contract"
+
 
 class ControlStateCacheTests(unittest.TestCase):
     def test_persisted_legacy_metrics_survive_upgrade_and_preserve_validation(self):
@@ -411,10 +413,11 @@ class ControlStateCacheTests(unittest.TestCase):
         from datetime import timedelta
         from ucloud_sandboxes.capabilities import REQUEST_BODY_KEEPALIVE_CAPABILITY
         from ucloud_sandboxes.control_plane import ControlPlaneHandler
+        from tests.gateway_support import gateway_services
         with TemporaryDirectory() as directory:
             store = ControlStateStore(Path(directory) / 'control.sqlite')
             handler = object.__new__(ControlPlaneHandler)
-            handler.store, handler.heartbeat_ttl_seconds = store, 30
+            handler.services = gateway_services(store=store, heartbeat_ttl_seconds=30)
             for capable, age, expected in [(False, 0, None), (True, 0, 'http://node-job:8090'), (True, 60, None)]:
                 observed = utc_now() - timedelta(seconds=age)
                 store.upsert_heartbeat(replace(self.heartbeat(), received_at=observed,

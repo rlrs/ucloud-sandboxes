@@ -12,6 +12,8 @@ from uuid import uuid4
 from tests.test_routing import sandbox_route
 from ucloud_sandboxes.shared_control.routing_repository import PostgresRoutingStore
 
+TEST_TIER = "contract"
+
 DSN = os.environ.get("UCLOUD_TEST_POSTGRES_DSN")
 
 

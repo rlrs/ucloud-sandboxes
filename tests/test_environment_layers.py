@@ -24,8 +24,8 @@ from ucloud_sandboxes.direct_registry import DirectRegistryCapacityUnavailable
 from ucloud_sandboxes.environment_artifact import (
     COMPONENT_SCHEMA, COMPONENT_SCHEMA_V2, EMPTY_LAYER_DIFF_ID, OCI_IMAGE, EnvironmentArtifactRegistry,
     EnvironmentComponent, LayerEnvironmentComponent, bind_source_layers, canonical_bytes, content_digest,
-    layer_chain_id, layer_group_key, load_image_environment, publish_environment, sign_component,
-    sign_layer_component,
+    layer_chain_id, layer_group_key, load_image_environment, publish_environment, require_layer_format,
+    sign_component, sign_layer_component,
 )
 from ucloud_sandboxes.environment_backend import NO_BLOCK_DEVICE, mount_has_dependents
 from ucloud_sandboxes.environment_builder import (
@@ -35,6 +35,8 @@ from ucloud_sandboxes.environment_manifest import EnvironmentManifest, HOST_EROF
 from ucloud_sandboxes.environment_rootfs import EnvironmentDeviceCapacityError, EnvironmentRootfsStore
 from ucloud_sandboxes.image_rootfs import DockerImageConfig, DockerOverlay2RootfsStore
 from ucloud_sandboxes.managed_registry import RegistryRequestError
+
+TEST_TIER = "contract"
 
 
 MIB = 1024 ** 2
@@ -100,10 +102,30 @@ class LayerComponentSchemaTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             EnvironmentComponent.from_dict(whole.to_dict() | {"schema": COMPONENT_SCHEMA_V2})
         for invalid in ({"source_layers": [EMPTY_LAYER_DIFF_ID]}, {"source_layers": []},
-                        {"format": FORMAT | {"layout": 2}}, {"format": FORMAT | {"excludes": ["sys", "dev"]}},
+                        {"format": FORMAT | {"layout": 3}}, {"format": FORMAT | {"excludes": ["sys", "dev"]}},
                         {"parent": "not-a-digest"}):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 LayerEnvironmentComponent.from_dict(layer.to_dict() | invalid)
+
+    def test_readers_accept_layouts_one_and_two_and_nothing_else(self):
+        layers = (diff_id("a"),)
+        for layout in (1, 2):
+            with self.subTest(layout=layout):
+                self.assertEqual(require_layer_format(FORMAT | {"layout": layout})["layout"], layout)
+                image = image_file(self.root / f"layout-{layout}.erofs", b"m")
+                signed = sign_layer_component(image, source_layers=layers, parent=None,
+                                              layer_format=FORMAT | {"layout": layout}, signing_key=self.keys.key)
+                published = self.registry.publish(image, signed, tag="layer-" + signed.group_key)
+                self.assertEqual(self.registry.load(published).format["layout"], layout)
+                self.assertEqual(EnvironmentComponent.from_dict(signed.to_dict()).authenticate(self.keys.trusted),
+                                 signed)
+        # The layout is identity: layout-2 groups never reuse layout-1 components.
+        self.assertNotEqual(layer_group_key(FORMAT, None, layers), layer_group_key(FORMAT | {"layout": 2}, None, layers))
+        for invalid in (FORMAT | {"layout": 0}, FORMAT | {"layout": 3}, FORMAT | {"layout": True},
+                        FORMAT | {"layout": "2"}, FORMAT | {"layout": 2.0}, FORMAT | {"layout": 2, "mtimes": "kept"},
+                        {key: value for key, value in FORMAT.items() if key != "layout"}):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "layer format"):
+                require_layer_format(invalid)
 
     def test_small_task_delta_preserves_a_signed_cached_base_group(self):
         a, b, c = [diff_id(name) for name in ('base-a', 'base-b', 'task')]
@@ -683,6 +705,69 @@ class LayerPublicationTests(unittest.TestCase):
         self.assertEqual(task_environment.environment.rootfs_fingerprint(HOST_EROFS_ABI),
                          EnvironmentManifest.from_dict(task_environment.environment.to_dict())
                          .rootfs_fingerprint(HOST_EROFS_ABI))
+
+    def capture_mkfs(self, commands, times):
+        def run(command, **kwargs):
+            if command[1] != "-V":
+                commands.append(command)
+                view = Path(command[-1])
+                times.append({str(path.relative_to(view)): path.lstat().st_mtime_ns
+                              for path in (view, *view.rglob("*"))})
+            return self.mkfs(command, **kwargs)
+        return patch("ucloud_sandboxes.environment_builder.subprocess.run", side_effect=run)
+
+    def test_preserve_mtimes_selects_layout_two_and_normalizes_only_owned_views(self):
+        # Docker diffs: tar-header file times, layer-creation directory times.
+        for _, directory, _ in self.base_layers:
+            for path in (directory, *directory.rglob("*")):
+                os.utime(path, ns=(7, 1_234_567_890 * 10**9 if path.is_dir() else 1_500_000_000 * 10**9))
+        borrowed = {path: path.lstat().st_mtime_ns for _, directory, _ in self.base_layers
+                    for path in (directory, *directory.rglob("*"))}
+        ref = "registry.example/ucloud-managed/base:base"
+        layouts = []
+        for preserve in (False, True):
+            builder = FreshEnvironmentBuilder(self.store, self.registry, self.keys.key, self.root / "scratch",
+                                              preserve_mtimes=preserve)
+            commands, times = [], []
+            with self.capture_mkfs(commands, times):
+                annotated = builder.publish_image(ref, allowlist=("*",))
+            _root, environment = load_image_environment(self.registry, "ucloud-managed/base", annotated)
+            layouts.append([self.registry.load(component).format["layout"] for component in environment.components])
+            # Layout-2 groups have their own keys: all three are built again.
+            self.assertEqual(len(commands), 3)
+            # Layout 2 adds exactly the mtime mode and the metadata zone.
+            self.assertEqual([list(command[1:-2]) for command in commands],
+                             [["-T", "0", *(["--mkfs-time", "--MZ"] if preserve else []),
+                               "-U", "00000000-0000-0000-0000-000000000000", "-zlz4",
+                               "--exclude-regex=^(dev|proc|run|sys)$"]] * 3)
+            squashed, *single = times
+            self.assertEqual(squashed["b0/content"], 1_500_000_000 * 10**9)
+            if preserve:
+                self.assertEqual({squashed[name] for name in (".", "b0", "b1")}, {0})
+            for view in single:
+                self.assertEqual({name for name, value in view.items() if value == 0}, set())
+        self.assertEqual(layouts, [[1, 1, 1], [2, 2, 2]])
+        # Borrowed Docker diffs are read, never normalized.
+        self.assertEqual({path: path.lstat().st_mtime_ns for path in borrowed}, borrowed)
+
+    def test_whole_image_components_follow_the_switch_without_touching_the_docker_rootfs(self):
+        rootfs = self.store.images["base"][1]
+        os.utime(rootfs / "merged", ns=(0, 6 * 10**9))
+        os.utime(rootfs, ns=(0, 5 * 10**9))
+        for preserve in (False, True):
+            builder = FreshEnvironmentBuilder(self.store, self.registry, self.keys.key, self.root / "scratch",
+                                              preserve_mtimes=preserve)
+            commands, times = [], []
+            with self.capture_mkfs(commands, times):
+                for allowlist in (("merged",), ("*",)):
+                    builder.build("registry.example/ucloud-managed/base:base", allowlist=allowlist,
+                                  tag="whole-" + "-".join(allowlist).replace("*", "all"))
+            self.assertEqual([("--mkfs-time" in command, "--MZ" in command) for command in commands],
+                             [(preserve, preserve)] * 2)
+            # The private allowlisted view is normalized; the merged rootfs is borrowed.
+            self.assertEqual(times, [{".": 0 if preserve else 5 * 10**9, "merged": 6 * 10**9},
+                                     {".": 5 * 10**9, "merged": 6 * 10**9}])
+        self.assertEqual(rootfs.lstat().st_mtime_ns, 5 * 10**9)
 
     def test_stale_or_unwritable_index_tags_are_rebuilt(self):
         whole = sign_component(image_file(self.root / "whole.erofs", b"w"), source_image=digest("1"),

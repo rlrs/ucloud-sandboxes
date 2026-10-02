@@ -6,18 +6,22 @@ from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from tests.test_control_plane import ControlPlaneTests
-from tests.test_postgres_routing import DSN, PostgresRoutingContracts
+# Import modules, not TestCase names: discovery reruns every imported class.
+from tests import test_control_plane as control_plane
+from tests import test_postgres_routing as postgres_routing
+from tests.test_postgres_routing import DSN
+
+TEST_TIER = "contract"
 
 
 @unittest.skipUnless(DSN, "requires isolated PostgreSQL")
-class PostgresGatewayContracts(ControlPlaneTests):
+class PostgresGatewayContracts(control_plane.ControlPlaneTests):
     def setUp(self):
         from ucloud_sandboxes.shared_control.routing_repository import (
             PostgresRoutingStore,
         )
 
-        PostgresRoutingContracts.setUp(self)
+        postgres_routing.PostgresRoutingContracts.setUp(self)
         self.gateway_stores = {}
         self.factory = lambda path: self.store(path)
         # The original HTTP fault-injection test patches this domain method on
@@ -40,7 +44,7 @@ class PostgresGatewayContracts(ControlPlaneTests):
         with self.guard:
             store = self.gateway_stores.get(path)
             if store is None:
-                store = PostgresRoutingContracts._store(self, path)
+                store = postgres_routing.PostgresRoutingContracts._store(self, path)
                 store.allocate_sandbox_create_with_pending = lambda *args, **kwargs: (
                     self.factory.allocate_sandbox_create_with_pending(
                         store, *args, **kwargs
@@ -61,30 +65,33 @@ class PostgresGatewayContracts(ControlPlaneTests):
                 )
             return store
 
-    _store = PostgresRoutingContracts._store
+    _store = postgres_routing.PostgresRoutingContracts._store
 
     # That SQLite test expects a failure from the removed process-lock path.
     test_gateway_placement_contention_deadline_returns_retryable_json = None
 
     def test_postgres_placement_does_not_wait_for_legacy_process_lock(self):
         from tempfile import TemporaryDirectory
-        from ucloud_sandboxes import control_plane
+        from tests.gateway_support import gateway_services
+        from ucloud_sandboxes.gateway.placement import _GATEWAY_SCHEDULING_LOCK
         from ucloud_sandboxes.models import ResourceQuantity
 
         with TemporaryDirectory() as directory:
-            handler = object.__new__(control_plane.ControlPlaneHandler)
-            handler.routing_store = self.store(Path(directory) / "routes.sqlite")
-            handler._select_node = lambda *a, **kw: None
+            placement = gateway_services(
+                routing_store=self.store(Path(directory) / "routes.sqlite"),
+            ).placement
+            placement.select = lambda *a, **kw: None
             with (
-                control_plane._GATEWAY_SCHEDULING_LOCK,
+                _GATEWAY_SCHEDULING_LOCK,
                 ThreadPoolExecutor(1) as executor,
             ):
                 result = executor.submit(
-                    handler._select_and_reserve_node,
+                    placement.select_and_reserve,
                     "s",
                     ResourceQuantity(),
                     spec={"id": "s"},
                     spec_hash="a" * 64,
+                    lock_timeout=30,
                 ).result(timeout=0.5)
                 self.assertIsNone(result)
 
@@ -100,4 +107,4 @@ class PostgresGatewayContracts(ControlPlaneTests):
     def tearDown(self):
         for item in self.gateway_patches:
             item.stop()
-        PostgresRoutingContracts.tearDown(self)
+        postgres_routing.PostgresRoutingContracts.tearDown(self)

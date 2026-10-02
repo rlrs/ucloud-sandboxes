@@ -34,7 +34,6 @@ from .routing import (
 DEFAULT_RECENT_EVENT_LIMIT = 50
 DEFAULT_SCALE_UP_SAMPLE_LIMIT = 200
 DEFAULT_VM_LIFECYCLE_LIMIT = 100
-DEFAULT_PROGRAM_WAKE_PLAN_SAMPLE_LIMIT = 100
 DEFAULT_AUTOSCALER_OPERATION_SAMPLE_LIMIT = 100
 DEFAULT_METRICS_MAX_BYTES = 64 * 1024**2
 DEFAULT_METRICS_MAX_EVENT_BYTES = 1024**2
@@ -748,10 +747,6 @@ def record_autoscaler_cycle(
             "projected_free_resources": decision.get("projectedFreeResources", {}),
             "resource_deficit": decision.get("resourceDeficit", {}),
             "live_signals": decision.get("liveSignals"),
-            "program_signals": decision.get("programSignals"),
-            "program_wake_plan": _bounded_program_wake_plan(
-                result.get("programWakePlan")
-            ),
             "effective_policy": result.get("effectivePolicy", {}),
             "pressure_scale_up": bool(decision.get("pressureScaleUp")),
             "create_pressure_scale_up": bool(decision.get("createPressureScaleUp")),
@@ -890,28 +885,6 @@ def _bounded_result_summaries(
                 summary[destination] = _string_list(item)
         summaries.append(summary)
     return summaries
-
-
-def _bounded_program_wake_plan(value: Any) -> dict[str, Any]:
-    """Keep autoscaler telemetry useful without persisting an unbounded plan."""
-
-    if not isinstance(value, dict):
-        return {}
-    placements = (
-        value.get("placements") if isinstance(value.get("placements"), list) else []
-    )
-    unplaced = value.get("unplaced") if isinstance(value.get("unplaced"), list) else []
-    limit = DEFAULT_PROGRAM_WAKE_PLAN_SAMPLE_LIMIT
-    return {
-        "mode": str(value.get("mode") or "shadow"),
-        "queued": max(0, int(value.get("queued") or 0)),
-        "placed": max(0, int(value.get("placed") or 0)),
-        "unplaced_count": max(0, int(value.get("unplaced_count") or 0)),
-        "placements": placements[:limit],
-        "unplaced": unplaced[:limit],
-        "placements_truncated": max(0, len(placements) - limit),
-        "unplaced_truncated": max(0, len(unplaced) - limit),
-    }
 
 
 def record_vm_submitted(
@@ -1435,7 +1408,7 @@ def build_program_state_summary(
     *,
     now: Any = None,
 ) -> dict[str, Any]:
-    """Build a bounded current-state view and an aging-first shadow queue."""
+    """Build a bounded current-state view of active program requests."""
 
     now = now or utc_now()
     active = [request for request in requests if not request.is_terminal]
@@ -1450,13 +1423,6 @@ def build_program_state_summary(
         counts[request.state] += 1
         resources[request.state] = resources[request.state] + request.resources
 
-    ready = sorted(
-        (request for request in active if request.state == "ready_to_wake"),
-        key=lambda request: (
-            _timestamp_epoch(request.response_ready_at or request.updated_at),
-            request.request_id,
-        ),
-    )
     completed_wait_ms = [
         duration
         for request in active
@@ -1496,34 +1462,17 @@ def build_program_state_summary(
             now,
         ),
         "oldest_ready_to_wake_seconds": _oldest_program_age_seconds(
-            (request.response_ready_at for request in ready),
+            (
+                request.response_ready_at
+                for request in active
+                if request.state == "ready_to_wake"
+            ),
             now,
         ),
         "model_wait_p50_ms": _percentile(sorted(completed_wait_ms), 0.50),
         "model_wait_p95_ms": _percentile(sorted(completed_wait_ms), 0.95),
         "response_to_wake_p50_ms": _percentile(sorted(completed_wake_ms), 0.50),
         "response_to_wake_p95_ms": _percentile(sorted(completed_wake_ms), 0.95),
-        "shadow_wake_queue": [
-            {
-                "position": position,
-                "request_id": request.request_id,
-                "rollout_id": request.rollout_id,
-                "sandbox_id": request.sandbox_id,
-                "sandbox_generation": request.sandbox_generation,
-                "resources": request.resources.to_dict(),
-                "ready_at": request.response_ready_at,
-                "age_seconds": max(
-                    0,
-                    int(
-                        now.timestamp()
-                        - _timestamp_epoch(
-                            request.response_ready_at or request.updated_at
-                        )
-                    ),
-                ),
-            }
-            for position, request in enumerate(ready[:100], start=1)
-        ],
     }
 
 

@@ -15,6 +15,8 @@ from ucloud_sandboxes.direct_warden import (
     LinuxPidfdHandle,
 )
 
+TEST_TIER = "contract"
+
 
 class ProcessFenceSignalTests(unittest.TestCase):
     def test_system_and_group_pids_are_rejected_before_open(self):

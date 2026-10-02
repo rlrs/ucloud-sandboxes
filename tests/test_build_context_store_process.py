@@ -7,6 +7,8 @@ import unittest
 
 from ucloud_sandboxes.build_context_store import BuildContextBlobStore
 
+TEST_TIER = "contract"
+
 
 def _digest(payload: bytes) -> str:
     return f"sha256:{sha256(payload).hexdigest()}"

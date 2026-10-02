@@ -14,6 +14,8 @@ from ucloud_sandboxes.storage_native import AgentEnvUblkClient, StorageNativeLay
 from ucloud_sandboxes.storage_native_compaction import LocalCheckpointCompactor
 from ucloud_sandboxes.storage_native_daemon import StorageVolumeOwner, StorageVolumeState
 
+TEST_TIER = "contract"
+
 
 class LocalCompactionTests(unittest.TestCase):
     def fixture(self, root, *, blocked=False):

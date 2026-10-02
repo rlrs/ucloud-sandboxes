@@ -85,8 +85,9 @@ worker and a CCX33 builder, both EROFS-enabled:
 
 After both images ran, the worker's verified chunk cache held 129 MB, about
 6% of the two images' ~2.2 GB of content. A Docker worker stores both images
-in full. Distinct images per worker are bounded by the 128 GiB cache and 512
-NBD devices, not by an image store sized for whole images.
+in full. Distinct images per worker are bounded by the 128 GiB cache and 1,024
+NBD devices (one per mounted component), not by an image store sized for whole
+images.
 
 ## Publication cost (2026-09-27, rc55 → rc56)
 

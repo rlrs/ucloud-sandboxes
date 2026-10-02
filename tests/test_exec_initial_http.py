@@ -12,23 +12,34 @@ from tests.test_control_plane import (
     _seed_gateway_node,
 )
 from tests.test_sandbox_exec import FakeSandboxManager
+from ucloud_sandboxes.exec_session_routes import EXEC_SESSION_PREFIX_HEADER
 from ucloud_sandboxes.http_server import HighBacklogThreadingHTTPServer
 from ucloud_sandboxes.node_agent import NodeAgentHandler
+from ucloud_sandboxes.routing import RoutingStore
 from ucloud_sandboxes.sandbox_exec import ExecSessionManager
 from ucloud_sandboxes.telemetry import Telemetry
 
+TEST_TIER = "contract"
+
 
 class InitialExecHttpTests(unittest.TestCase):
-    def test_gateway_preserves_query_output_and_durable_exec_route(self):
+    def _round_trip(self, *, honors_session_prefix: bool) -> list[tuple[str, object]]:
         class Handler(NodeAgentHandler):
             def _check_node_control_authorized(self):
                 return True
+
+            def _start_exec(self, path, query=""):
+                if not honors_session_prefix:
+                    # An older worker ignores the signed route prefix.
+                    del self.headers[EXEC_SESSION_PREFIX_HEADER]
+                return super()._start_exec(path, query)
 
         Handler.exec_manager = ExecSessionManager(FakeSandboxManager())
         Handler.manager = SimpleNamespace(consume_exec_start_timings=lambda: {})
         Handler.telemetry = Telemetry.disabled("initial-exec-test")
         Handler.node_control_bearer_token = ""
         Handler.sandboxes_enabled = True
+        observed: list[tuple[str, object]] = []
         with TemporaryDirectory() as tmp:
             node = HighBacklogThreadingHTTPServer(("127.0.0.1", 0), Handler)
             with _running_server(node) as url:
@@ -63,11 +74,8 @@ class InitialExecHttpTests(unittest.TestCase):
                             self.assertEqual(response.status, 201, payload)
                             self.assertEqual("events" in payload, bool(query))
                             session_id = payload["session"]["id"]
-                            from ucloud_sandboxes.routing import RoutingStore
-
-                            self.assertEqual(
-                                RoutingStore(routes).get_exec(session_id).sandbox_id,
-                                "one",
+                            observed.append(
+                                (session_id, RoutingStore(routes).get_exec(session_id))
                             )
                             initial = payload.get("events", [])
                             after = initial[-1]["sequence"] if initial else 0
@@ -86,3 +94,14 @@ class InitialExecHttpTests(unittest.TestCase):
                             self.assertEqual(output, "marker")
                     finally:
                         connection.close()
+        return observed
+
+    def test_signed_sessions_route_without_a_durable_exec_row(self):
+        for session_id, durable in self._round_trip(honors_session_prefix=True):
+            self.assertTrue(session_id.startswith("xr1."), session_id)
+            self.assertIsNone(durable)
+
+    def test_unsigned_worker_sessions_keep_the_durable_exec_route(self):
+        for session_id, durable in self._round_trip(honors_session_prefix=False):
+            self.assertTrue(session_id.startswith("exec-"), session_id)
+            self.assertEqual(durable.sandbox_id, "one")

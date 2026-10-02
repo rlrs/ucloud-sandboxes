@@ -76,7 +76,6 @@ class WakePlacementPorts:
     refresh_capacity: Callable[[SandboxRoute], bool]
     publish: Callable[[SandboxRoute], dict[str, Any] | None]
     decode_publication: Callable[[SandboxRoute, dict[str, Any]], SandboxRoute | None]
-    observe_owner: Callable[[NodeHeartbeat | None, Sequence[PlacementOccupant]], None]
     observe_consolidation: Callable[[SandboxRoute, SandboxMigration | None], None]
     atomic: Callable[[Callable[[], Any]], Any] | None = None
 
@@ -256,7 +255,6 @@ class WakePlacement:
                 raise self.changed()
             owner = self.ports.owner(route.job_id)
             occupants = self.ports.occupants(owner) if owner is not None else []
-            self.ports.observe_owner(owner, occupants)
             request = ResourceQuantity(
                 vcpu=route.resources.vcpu, memory_mb=route.resources.memory_mb
             )

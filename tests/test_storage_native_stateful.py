@@ -24,6 +24,8 @@ from ucloud_sandboxes.storage_native_registry import (
     StorageSnapshotPublication,
 )
 
+TEST_TIER = "contract"
+
 
 class StorageNativeServiceStateMachine(RuleBasedStateMachine):
     """Model one live authority plus durable tombstones across restarts."""

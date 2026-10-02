@@ -23,6 +23,8 @@ from ucloud_sandboxes.node_runtime import DirectNodeRuntime
 from ucloud_sandboxes.sandbox import SandboxRecord, SandboxSpec
 from ucloud_sandboxes.storage_native_daemon import StorageVolumeState
 
+TEST_TIER = "contract"
+
 
 class _SnapshotService:
     def __init__(self, registry, registration, warden, state):

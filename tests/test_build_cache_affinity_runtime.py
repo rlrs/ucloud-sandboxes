@@ -13,6 +13,8 @@ from ucloud_sandboxes.build_cache import BuildCachePlan
 from ucloud_sandboxes.images import DockerImageRuntime, ImageBuildSpec, ImageManager, ImageStore, build_cache_affinity
 from ucloud_sandboxes.sandbox import CommandResult
 
+TEST_TIER = "contract"
+
 
 class BuildCacheAffinityRuntimeTests(unittest.TestCase):
     def setUp(self):

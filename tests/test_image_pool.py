@@ -414,13 +414,9 @@ class ImagePoolTests(unittest.TestCase):
                 pool.resolve_source("org/repo:latest")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class RegistryHealthGateTests(unittest.TestCase):
     def test_outage_is_cached_then_recovers_without_spending_source_requests(self):
-        from prepare_image_pool import RegistryHealthGate
+        RegistryHealthGate = pool.RegistryHealthGate
         now = [0.0]
         calls = []
         def probe():
@@ -436,3 +432,7 @@ class RegistryHealthGateTests(unittest.TestCase):
         now[0] = 5
         self.assertTrue(gate.ready())
         self.assertEqual(calls, [0, 5])
+
+
+if __name__ == "__main__":
+    unittest.main()

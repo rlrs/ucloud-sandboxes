@@ -2,13 +2,16 @@ import json
 import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Event
 from unittest.mock import Mock, patch
 from urllib.request import Request
 
 from ucloud_sandboxes import control_plane as cp
+from ucloud_sandboxes.gateway import node_rpc
 from tests import test_control_plane as helpers
+from tests.gateway_support import gateway_services
 from ucloud_sandboxes.routing import RoutingStore
 from ucloud_sandboxes.models import ResourceQuantity
 from tests.test_control_plane import (
@@ -18,6 +21,8 @@ from tests.test_control_plane import (
     build_heartbeat,
     post_heartbeat,
 )
+
+TEST_TIER = "contract"
 
 
 class CreateImageWaitTests(unittest.TestCase):
@@ -59,8 +64,8 @@ class CreateImageWaitTests(unittest.TestCase):
                 release.set()
 
     def test_long_pull_read_timeout_does_not_allow_long_connection_or_pool_wait(self):
-        with patch.object(cp._NODE_HTTP_POOL, "request") as send:
-            cp._open_node_request(
+        with patch.object(node_rpc._NODE_HTTP_POOL, "request") as send:
+            node_rpc._open_node_request(
                 Request("http://worker/v1/images/pull", data=b"{}"),
                 timeout=1800,
                 authenticated=True,
@@ -69,6 +74,28 @@ class CreateImageWaitTests(unittest.TestCase):
         self.assertEqual(options["pool_timeout"], 5)
         self.assertEqual(options["timeout"].connect_timeout, 5)
         self.assertEqual(options["timeout"].read_timeout, 1800)
+
+    def test_only_workers_with_an_unknown_cache_cost_an_image_probe(self):
+        handler = object.__new__(cp.ControlPlaneHandler)
+        handler.services = gateway_services()
+        known = build_heartbeat(node_id="known", job_id="known", node_url="http://known",
+                                cached_images=("image:v1",))
+        absent = replace(known, node_id="absent", job_id="absent", node_url="http://absent",
+                         cached_images=())
+        unknown = replace(known, node_id="unknown", job_id="unknown", node_url="http://unknown",
+                          cached_images_known=False)
+        handler._proxy_request = Mock(return_value=cp.ProxiedResponse(
+            200, {}, b'{"images": [{"tag": "image:v1"}]}'))
+        nodes = [unknown, known, absent]
+        self.assertEqual(handler._nodes_with_image("image:v1", nodes), {"known", "unknown"})
+        handler._proxy_request.assert_called_once_with("http://unknown", "/v1/images", method="GET")
+        self.assertEqual(handler._nodes_with_image("image:v1", nodes, probe_uncached=False), {"known"})
+        handler._proxy_request.reset_mock()
+        # Without the heartbeat cache every worker is probed, in order.
+        self.assertEqual(handler._nodes_with_image("image:v1", nodes, use_heartbeat_cache=False),
+                         {"known", "unknown", "absent"})
+        self.assertEqual([call.args[0] for call in handler._proxy_request.call_args_list],
+                         ["http://unknown", "http://known", "http://absent"])
 
     def test_task_failure_is_propagated_and_does_not_leak_capacity(self):
         tasks = cp.CreateImagePullTasks()

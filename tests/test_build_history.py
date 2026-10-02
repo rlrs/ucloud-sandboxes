@@ -9,6 +9,8 @@ import unittest
 
 from ucloud_sandboxes.build_history import BuildHistoryStore, terminal_build_summary
 
+TEST_TIER = "contract"
+
 
 NOW = datetime(2026, 9, 29, tzinfo=timezone.utc).timestamp()
 

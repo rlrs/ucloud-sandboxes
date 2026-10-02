@@ -43,6 +43,7 @@ from .direct_warden import DirectWardenError
 from .hibernation import HibernationError, HibernationState
 from .memory_backing import MemoryBackingBusyError
 from .models import NodeRuntimeMetrics, ResourceQuantity
+from . import phase_timings
 from .resource_admission import (
     dynamic_cpu_pressure_retryable,
     dynamic_pressure_error,
@@ -52,6 +53,7 @@ from .resident_memory import ResidentMemorySampler, ResidentMemoryReclaimer, Res
 from .sandbox import (
     OPERATION_ID_RE,
     SandboxAdmissionClosedError,
+    SandboxBusyError,
     SandboxCapacityUnavailableError,
     SandboxConflictError,
     SandboxDeleteBusyError,
@@ -70,6 +72,7 @@ from .upload_spool import UploadSpool
 from .transition_admission import MemoryDemand, TransitionCost, TransitionKind, TransitionLedger
 from .warm_park import WarmParkDeferred
 from .disk_claims import next_grant
+from . import pause_tier
 
 
 _LOG = logging.getLogger(__name__)
@@ -461,6 +464,8 @@ class DirectSandboxService:
             interval = self.provisioner.network_manager.resolve_interval_seconds
             network_thread.join(timeout=max(2.0, interval * 2))
         self._network_thread = None
+        if self.provisioner.network_manager is not None:
+            self.provisioner.network_manager.stop_pool()
         snapshot_hydration_thread = self._snapshot_hydration_thread
         if snapshot_hydration_thread is not None:
             snapshot_hydration_thread.join(timeout=2.0)
@@ -671,12 +676,24 @@ class DirectSandboxService:
         operation: SandboxOperation,
     ) -> SandboxRecord:
         operation.validate_spec(spec)
-        with (
-            self._startup_demand(spec.id, operation.generation, spec.requested_resources()),
-            self.startup_admission(owner=(spec.id, operation.generation)),
-            self._reserve_active_capacity(spec.id, operation.generation, spec.requested_resources()),
-            self._request_lock(spec.id, operation.generation),
-        ):
+        with ExitStack() as admitted:
+            # Same nesting order as one compound with-statement; each entry is
+            # timed because slot, pressure and lock waits are distinct causes.
+            admitted.enter_context(
+                self._startup_demand(spec.id, operation.generation, spec.requested_resources())
+            )
+            with phase_timings.phase("startup_admission"):
+                admitted.enter_context(
+                    self.startup_admission(owner=(spec.id, operation.generation))
+                )
+            with phase_timings.phase("active_capacity"):
+                admitted.enter_context(
+                    self._reserve_active_capacity(
+                        spec.id, operation.generation, spec.requested_resources()
+                    )
+                )
+            with phase_timings.phase("request_lock"):
+                admitted.enter_context(self._request_lock(spec.id, operation.generation))
             try:
                 registration = self.provisioner.create(
                     spec=spec,
@@ -963,6 +980,7 @@ class DirectSandboxService:
         *,
         operation_id: str,
         background: bool = False,
+        pause: bool = False,
     ) -> SandboxRecord:
         if not OPERATION_ID_RE.fullmatch(operation_id):
             raise ValueError("park operation id is invalid")
@@ -1001,6 +1019,14 @@ class DirectSandboxService:
                 # The timer's observation may precede a wake or exec. Check
                 # again under the sandbox lock before acting on that snapshot.
                 return self._record(registration)
+            if pause:
+                # C1.1: no capture, publication or managed-park observation.
+                # The guest keeps its memory, generation, route and authority.
+                with self.telemetry.span("sandbox.pause", attributes={
+                        "sandbox.id": sandbox_id,
+                        "sandbox.generation": registration.sandbox_generation}):
+                    self.warden.pause(sandbox)
+                return self._record(registration)
             with self.telemetry.span(
                 "sandbox.park",
                 attributes={
@@ -1033,6 +1059,22 @@ class DirectSandboxService:
                     operation_id=f"{operation_id}:publish",
                 )
             return self._record(registration)
+
+    def export_upper(self, sandbox_id: str, *, generation: int, destination: Path, resume: bool, prepare) -> bool:
+        """C3.1 export, fenced like park: the lifecycle lock excludes a park,
+        delete or migration, the Warden lock an exec, and the route generation
+        must own the sandbox. ``prepare(spec, filestore, paused)``: see the Warden."""
+        with self._try_lock(sandbox_id, generation, wait_seconds=2.0) as acquired:
+            if not acquired:
+                raise SandboxBusyError("sandbox lifecycle is busy")
+            registration = self.provisioner.registry.get(sandbox_id)
+            if (registration is None or registration.sandbox_generation != generation
+                    or registration.phase != "owned"):
+                raise SandboxConflictError("commit export no longer owns the sandbox generation")
+            if registration.migration_id:  # an aborted migration keeps this generation here
+                raise SandboxBusyError("sandbox is migrating")
+            return self.warden.export_upper(registration.to_direct_sandbox(), destination, resume=resume,
+                                            prepare=lambda *state: prepare(registration.spec, *state))
 
     def request_storage_publication(self, sandbox_id: str, *, generation: int) -> None:
         registration = self._require_registration(sandbox_id)
@@ -1152,6 +1194,8 @@ class DirectSandboxService:
             ):
                 record = self.warden.reconcile(sandbox)
             if record.state == HibernationState.RUNNING:
+                # Explicit and relay wakes of a paused sandbox thaw it here.
+                self.warden.thaw(sandbox)
                 self.mark_activity(sandbox_id, generation)
                 return self._record(registration)
             if record.state != HibernationState.PARKED:
@@ -2037,9 +2081,11 @@ class DirectSandboxService:
                     # Keep the supervisor timeout within the remaining HTTP
                     # operation budget, including time spent in its FIFO queue.
                     guest_timeout = max(1, min(10000, int(remaining * 1000) - 100))
+                    # Status/log polls (SDK job waits) during a paused model
+                    # wait thaw only for this exchange; a wake ends the pause.
                     with self.warden.exec_lease(
                         sandbox, (MANAGED_PROCESS_BINARY, "ctl", "--timeout", f"{guest_timeout}ms"),
-                        user="0:0",
+                        user="0:0", keep_paused=read_only,
                     ) as command:
                         result = self.process_runner.run(
                             command, input_bytes=request_bytes, timeout_seconds=remaining,
@@ -2103,7 +2149,7 @@ class DirectSandboxService:
         return self._resident_memory.historical((sandbox_id, generation))
 
     def refresh_resident_memory(self, keys=None) -> None:
-        """Sample live managed candidates before their first pressure wait."""
+        """Sample managed candidates before their first pressure wait, and paused ones."""
         registrations = {
             (item.sandbox_id, item.sandbox_generation): item
             for item in self.provisioner.registry.snapshot().records
@@ -2120,7 +2166,7 @@ class DirectSandboxService:
                 for key, item in registrations.items()
                 if item.phase == "owned"
                 and item.spec.parkable
-                and item.spec.managed_process
+                and (item.spec.managed_process or self.warden.is_paused(*key))
             }
         )
         self._resident_memory.retain(keys)
@@ -2131,32 +2177,63 @@ class DirectSandboxService:
         }
         for key in keys:
             registration = registrations.get(key)
-            if registration is None or registration.phase != "owned":
-                continue
-            sandbox = registration.to_direct_sandbox()
-            lifecycle = self.warden.inspect_snapshot(sandbox)
-            if (
-                lifecycle is None
-                or not lifecycle.sentry_pid
-                or not lifecycle.sentry_start_time_ticks
-            ):
-                continue
-            if key not in self._resident_cgroup_paths:
-                try:
-                    config = json.loads((sandbox.bundle / "config.json").read_text())
-                    path = config.get("linux", {}).get("cgroupsPath")
-                    if path is not None and not isinstance(path, str):
-                        continue
-                    self._resident_cgroup_paths[key] = path
-                except (OSError, ValueError, TypeError):
-                    continue
-            self._resident_memory.sample(
-                key,
-                pid=lifecycle.sentry_pid,
-                start_time_ticks=lifecycle.sentry_start_time_ticks,
-                container_id=sandbox.container_id,
-                expected_path=self._resident_cgroup_paths[key],
-            )
+            if registration is not None and registration.phase == "owned":
+                self._sample_resident(key, registration.to_direct_sandbox())
+
+    def _sample_resident(self, key, sandbox):
+        lifecycle = self.warden.inspect_snapshot(sandbox)
+        if (
+            lifecycle is None
+            or not lifecycle.sentry_pid
+            or not lifecycle.sentry_start_time_ticks
+        ):
+            return None
+        # Maintenance replaces this cache concurrently; keep one local read.
+        path = self._resident_cgroup_paths.get(key, self)
+        if path is self:
+            try:
+                config = json.loads((sandbox.bundle / "config.json").read_text())
+                path = config.get("linux", {}).get("cgroupsPath")
+                if path is not None and not isinstance(path, str):
+                    return None
+                self._resident_cgroup_paths[key] = path
+            except (OSError, ValueError, TypeError):
+                return None
+        return self._resident_memory.sample(
+            key,
+            pid=lifecycle.sentry_pid,
+            start_time_ticks=lifecycle.sentry_start_time_ticks,
+            container_id=sandbox.container_id,
+            expected_path=path,
+        )
+
+    def reclaim_paused(self, sandbox_id, generation, *, target_bytes, is_current, budget):
+        """Swap out a paused runtime's memory without any lifecycle lock (C1.1).
+
+        A thaw supersedes it from its first read back, before its marker goes,
+        and so cancels the next window (one already in the kernel may finish,
+        which costs refaults only); losing that race before any window is no
+        stall. Every window takes its bytes from the node's one ReclaimBudget.
+        """
+        registration = self._require_registration(sandbox_id)
+        if registration.sandbox_generation != generation:
+            raise DirectWardenError("paused reclaim no longer owns this generation")
+        key, sandbox = (sandbox_id, generation), registration.to_direct_sandbox()
+
+        def paused():
+            return self.warden.is_paused(*key) and not self.warden.thawing(*key)
+
+        if not paused():
+            return ResidentReclaimResult(0, 0, 0.0, 0, "superseded")
+        captured = self.warden.inspect_snapshot(sandbox)
+        sample = self._sample_resident(key, sandbox)
+        if captured is None or captured.state != HibernationState.RUNNING or sample is None:
+            raise DirectWardenError("paused reclaim requires a measured paused incarnation")
+        return ResidentMemoryReclaimer(self._resident_memory).reclaim(
+            key, sample, target_bytes=target_bytes, swappiness=200,
+            window_bytes=pause_tier.RECLAIM_WINDOW_BYTES, budget=budget,
+            is_current=lambda: (is_current() and paused()
+                                and self.warden.inspect_snapshot(sandbox) == captured))
 
     def mark_activity(self, sandbox_id: str, generation: int) -> None:
         with self._activity_guard:
@@ -2598,6 +2675,8 @@ class DirectSandboxService:
             raise DirectWardenError(
                 f"direct sandbox cannot accept traffic in {record.state.value}"
             )
+        # A paused runtime stays paused: the Warden's exec lease thaws it under
+        # its own lock, so read-only managed control can keep the pause.
         timings["total"] = (time.monotonic() - started) * 1000
         return timings
 

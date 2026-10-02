@@ -11,6 +11,7 @@ from unittest.mock import Mock
 from urllib import error, request
 
 from ucloud_sandboxes import control_plane
+from ucloud_sandboxes.gateway.image_resolution import RegistryManifestResolutionCache
 from ucloud_sandboxes.config import DeploymentConfig
 from ucloud_sandboxes.deploy import (
     REGISTRY_STORAGE_SYSTEMD_UNITS,
@@ -46,6 +47,9 @@ from ucloud_sandboxes.systemd import (
 )
 
 from tests import test_control_plane as gateway_fixtures
+from tests.gateway_support import gateway_services
+
+TEST_TIER = "contract"
 
 
 GIB = 1024**3
@@ -213,11 +217,13 @@ class GatewayDiskPressureTests(unittest.TestCase):
 
     def test_imports_are_not_submitted_while_the_registry_is_full(self) -> None:
         subject = object.__new__(control_plane.ControlPlaneHandler)
-        subject.registry_url = "http://registry.internal:5000"
-        subject.registry_worker_url = "http://registry.internal:5000"
+        subject.services = gateway_services(
+            registry_url="http://registry.internal:5000",
+            registry_worker_url="http://registry.internal:5000",
+            registry_disk_monitor=Mock(refusal=Mock(return_value=usage_at(95))),
+        )
         subject.image_import_submitter = Mock()
-        subject.registry_disk_monitor = Mock(refusal=Mock(return_value=usage_at(95)))
-        subject._resolve_sandbox_image_reference = Mock(
+        subject.services.images.resolve = Mock(
             return_value=("x", {"error_code": "image_id_not_found"}),
         )
         external = "docker.io/library/python:3.12"
@@ -238,23 +244,17 @@ class GatewayDiskPressureTests(unittest.TestCase):
             {"tag": "r/x:latest", "evicted_at": "2026-09-27T12:00:00"}
             if image_id == "task-1" else None
         )
-        cache = control_plane.RegistryManifestResolutionCache()
+        subject = gateway_services(registry_disk_monitor=monitor).images
+        cache = subject.manifest_cache = RegistryManifestResolutionCache()
         cache.put("ucloud-managed/x", "latest", "sha256:" + "1" * 64)
 
-        class Handler(control_plane.ControlPlaneHandler):
-            pass
-
-        subject = object.__new__(Handler)
-        Handler.registry_disk_monitor = monitor
-        Handler.registry_manifest_cache = cache
-
-        error_payload = subject._evicted_image_error("task-1")
-        flushed = subject._registry_manifest_cache_current()
+        error_payload = subject.evicted_image_error("task-1")
+        flushed = subject.manifest_cache_current()
 
         self.assertEqual(error_payload["error_code"], "image_evicted")
         self.assertFalse(error_payload["retryable"])
         self.assertTrue(error_payload["rebuild_required"])
-        self.assertIsNone(subject._evicted_image_error("task-2"))
+        self.assertIsNone(subject.evicted_image_error("task-2"))
         self.assertEqual(flushed.get("ucloud-managed/x", "latest"), "")
 
 

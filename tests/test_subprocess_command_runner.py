@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 from ucloud_sandboxes.direct_warden import SubprocessCommandRunner
 
+TEST_TIER = "contract"
+
 
 @unittest.skipUnless(sys.platform == "linux" and hasattr(os, "pidfd_open"), "Linux pidfd integration")
 class SubprocessCommandRunnerTests(unittest.TestCase):

@@ -15,6 +15,8 @@ from scripts import benchmark_sandbox_density as benchmark
 from ucloud_sandboxes.sandbox import SandboxOperation, SandboxSpec
 from ucloud_sandboxes.sandbox_exec import SandboxExecSpec
 
+TEST_TIER = "contract"
+
 
 class FakeNode:
     def __init__(self, *, fail_create=False, corrupt_wake=False, fail_delete=False):

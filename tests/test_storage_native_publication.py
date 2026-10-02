@@ -12,6 +12,8 @@ from ucloud_sandboxes.storage_native_registry import RegistrySnapshotPublisher
 from ucloud_sandboxes.storage_native_s3 import S3SnapshotPublisher
 from ucloud_sandboxes.telemetry import Telemetry
 
+TEST_TIER = "contract"
+
 
 class PublicationCancellationTests(unittest.TestCase):
     def test_stream_chunks_remain_immutable_across_buffer_reuse_and_partial_tail(self):

@@ -1,19 +1,19 @@
 """Read admission exceptions reach their retryable HTTP contract, before parent errors."""
 
 import asyncio
-import importlib.util
-from unittest import TestCase, skipUnless
+from unittest import TestCase
 
 from tests import test_managed_start_retry as fixtures
+from tests.support import requires_sdk
 from ucloud_sandboxes.managed_process import (
     ManagedProcessError,
     ManagedProcessReadUnavailable,
 )
 
+TEST_TIER = "contract"
 
-@skipUnless(
-    importlib.util.find_spec("ucloud_sandboxes_sdk"), "released SDK unavailable"
-)
+
+@requires_sdk()
 class ManagedReadHttpTests(TestCase):
     def setUp(self):
         self.fixture = fixtures.ManagedStartRetryTests()

@@ -17,6 +17,8 @@ from ucloud_sandboxes.direct_registry import (
 from ucloud_sandboxes.direct_warden import DirectSandbox
 from ucloud_sandboxes.sandbox import NodeDrainState, SandboxSpec
 
+TEST_TIER = "contract"
+
 
 class DirectRegistryTests(unittest.TestCase):
     def spec(self, sandbox_id: str = "sandbox") -> SandboxSpec:

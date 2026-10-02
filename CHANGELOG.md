@@ -2,6 +2,157 @@
 
 ## Unreleased
 
+- Continue splitting `ControlPlaneHandler` into `ucloud_sandboxes/gateway/` (plan C6.1, PR4–PR6):
+  - `heartbeats`: `HeartbeatIngest` validates, persists and reconciles worker heartbeats. It runs the deployment and identity checks, the retired-epoch cleanup and the snapshot inventory reconcile, and it releases routes the worker no longer reports. The handler schedules image warmups only when a heartbeat is accepted.
+  - `placement`: `Placement` ranks workers and reserves one for creates, wakes and migrations. `_GATEWAY_SCHEDULING_LOCK`, the per-host placement file lock, `InflightCreatePlacements` and the scoring and fit rules move with it. The lock order is unchanged: the process lock, then the file lock.
+  - `image_resolution`: `ImageResolution` resolves image ids and tags to digest-pinned worker references. It owns the image inventory cache, the Registry status cache, the managed-manifest cache and the eviction epoch that flushes that cache.
+
+  `build_server` wires them once through `build_services`. The inventory, Registry status and manifest caches and the eviction epoch were handler class attributes and are now per-server instance state, so in-process test servers no longer share them. A gateway process runs one server, so there is no wire, schema, HTTP response, telemetry-name or behavior change. Code that imported the moved names from `control_plane` must import them from `ucloud_sandboxes.gateway.placement` or `ucloud_sandboxes.gateway.image_resolution`, for example `_GATEWAY_SCHEDULING_LOCK`, `InflightCreatePlacements`, `RegistryLayerMetadataCache`, `RegistryManifestResolutionCache`, `IMAGE_REFERENCE_KIND_HEADER` and `MANAGED_REGISTRY_DIGEST_PROTECTION_UNAVAILABLE_ERROR_CODE`. `scripts/qualify_build_optimization.py` also records source hashes for `gateway/registry_refs.py` and `gateway/image_resolution.py`. The package shrinks by 64 lines.
+- **Metadata zone in layout 2 (C2.12).** Layout-2 components (`immutable_environments.preserve_mtimes`, still off by default) are now built with `mkfs.erofs -T 0 --mkfs-time --MZ`. Inodes and directory blocks go into one metadata zone, so attach-time metadata hints cover few chunks and fit the default 32 MiB budget. On the 13.5k-inode scientific rootfs that is 37 instead of 272 chunks, and `find` after attach makes zero remote reads instead of 144. No feature bit changes, so workers and gateways need nothing new. Builders need erofs-utils 1.9+: the builder bootstrap reads the whole `mkfs.erofs --help` once and refuses a mkfs without `--mkfs-time` or `--MZ` ("layout-2 publication requires erofs-utils 1.9+ (mkfs.erofs <option>)"), which supersedes the earlier 1.8+ check. mkfs stages the zone in an unlinked temporary file; the builder points `TMPDIR` at the build's own scratch directory, so it never lands in /tmp. The walker completeness proofs now include the builder's exact layout-2 image when mkfs is 1.9+. A new Python-path test shows layout 1 overflowing the attach budget (155 hint chunks, 128 prefetched, later reads go remote) while layout 2 fits (6 chunks, zero remote reads).
+- C1.1 pause-tier follow-ups (all behind `sandbox.direct_pause_tier`; replaces the "Not yet implemented" line and corrects the reclaim pacing and zswap bullets of the C1.1 entry):
+  - **Thaw prefetch.** Before `runsc resume`, the Warden reads a RAM-backed sandbox's application-memory file back in parallel when the sandbox cgroup holds at least 32 MiB of swap. It reads SEEK_DATA extents in 4 MiB pieces with 1 MiB `preadv` calls.
+    - Limits: 8 readers per thaw and 64 per node (each reader holds a node slot for its whole life), at most 1 GiB and 2 s per thaw.
+    - No prefetch for file-backed memory, read-only status and log exchanges, hibernate captures, or failed-pause rollbacks.
+    - A delete cancels a running prefetch. Errors only log, and the thaw still resumes.
+    - Once a thaw starts reading back, any in-flight reclaim of that sandbox stops at its next window.
+  - **Node reclaim budget.** At most 2 paused reclaims run at once, sharing 512 MiB/s. Before, up to cpu_count reclaims could each run at 256 MiB/s. Only the `memory.reclaim` write runs at nice 19, and only where the agent can restore its priority.
+  - **Escalation to hibernate.** Reclaim stops short of the last 10% of swap (`SwapTotal`/`SwapFree`).
+    - What swap cannot hold, plus any wait whose reclaim failed or freed less than one 16 MiB window, hibernates the best-ranked paused waits through the durable park path: at most 2 at a time, with no background upload.
+    - The pause marker is rechecked under the exclusive lifecycle lease, so activity wins. A thaw that beats a planned reclaim is not a stall.
+    - Waits holding less than 16 MiB, or more swapped than resident, are not escalated.
+  - **zswap is opt-in.** New `sandbox.direct_pause_tier_zswap` (strict boolean, default false, requires the pause tier). Without it, a pause-tier node writes zswap `enabled=N`; with it, zswap uses zstd. Measure the profile first: a full reclaim through zswap was 2–5× slower, and random heaps do not compress.
+  - **Metrics.** `ResidentWaitMetrics` gains `pause_reclaim_stalls`, `pause_escalations`, `thaw_prefetches`, `thaw_prefetched_bytes` and `thaw_prefetch_ms_total`. Readers default them to 0; upgrade gateways before nodes.
+  - **Correction.** `runsc pause` does not freeze the cgroup, and the Warden does not write `cgroup.freeze`.
+
+  Rollout: these follow-ups have no flags of their own and are active wherever the pause tier is on. A pause-tier node that relied on zswap must set `direct_pause_tier_zswap=true` after measuring its profile. Watch `thaw_prefetch_ms_total / thaw_prefetches` (it should stay under 2 s), `pause_reclaim_stalls` and `pause_escalations`.
+- C3.1 commit, worker and builder halves (no gateway route yet). Nodes with a checkpoint registry serve the node-control POST /v1/sandboxes/{id}/commit-export and advertise it as sandbox-commit-export-v1. The export is fenced by the route generation and the lifecycle and Warden locks. It freezes the sandbox (a stale pause marker is not trusted), runs `runsc tar rootfs-upper`, restores the recorded pause state, and stages the raw upper as one content-addressed blob in commits/<sha256(image_id)[:32]>. It is idempotent per operation_id, refuses too-large exports (413) and missing scratch space (503, retryable) before any pause, and a restart sweep clears leftover staging. Builders gain FreshEnvironmentBuilder.publish_commit. It filters the upper in the keyless preparation child under the new commit_policy rules: mount escapes, malformed members, the size and member bounds, and live relay tokens fail; host-written, identity, volatile, build-residue and caller paths are dropped and counted. Whiteout and opaque encodings are normalized to OCI. It then publishes a signed ucloud-environment-erofs-commit-v1 component under its own signing domain, a deterministic gzip OCI layer, a root that extends the parent root, and last the annotated manifest. Workers and gateways now parse commit components.
+- Node agents send their own heartbeats (C4.4, node side). One long-lived thread in serve-direct-node-agent and serve-builder-agent replaces the 20 s oneshot `ucloud-sandbox-heartbeat.timer`. It POSTs the same heartbeat GET /v1/heartbeat serves, with provider labels merged in, to the same gateway URL with the same token, so the gateway needs no change. The first heartbeat goes out as soon as the agent serves. After that it sends every interval ±20% (the deployment's heartbeat_interval_seconds). Transport errors, sampling errors, 408, 429 and 5xx retry after 1 s, doubling up to one interval; any other rejection waits a full interval. Every attempt takes a fresh sample. Sending stops when serving does, and a sample taken while serving ends is never sent. New strict flags: --heartbeat-url, --heartbeat-bearer-token-file, --heartbeat-interval-seconds and repeatable --heartbeat-label. VM init puts them in the node unit and, before the agent restarts, disables and removes any older release's timer and service; init fails if systemd cannot stop the timer. The agent-heartbeat command is removed. Heartbeat POSTs no longer follow redirects. The heartbeat token is read once at agent start. In the local fleet harness, heartbeats go through each agent's real sender, and node.start() returns once the gateway has accepted the new agent's heartbeat.
+- **Tests: local fleet harness, second slice (C8.4).** Six scenario modules exercise the public contract end to end. They cover S2 (crash replay), S3 (worker loss), S4 (signed exec routing), S8 (create burst), S10 (delete races) and S13 (drain and admission):
+  - `test_local_fleet_crash.py`: SIGKILL of the node agent during create (planned, quota_ready, after `runsc create`, before `runsc start`), delete, park and wake. Each operation replays exactly once, reuses its storage device and reaps orphan sentries.
+  - `test_local_fleet_worker_loss.py`: a silent worker answers 503, a reboot 410 node_lost, and a quarantined worker serves existing work but admits none.
+  - `test_local_fleet_exec_routing.py`: signed sessions are routed without reading the routing store, and give 503, 404 or 410 after silence, deletion, replacement or reboot. Unsigned workers keep the durable route.
+  - `test_local_fleet_burst.py`: 20 concurrent creates never overbook disk, reselect around a closed worker, and queue their refused demand.
+  - `test_local_fleet_delete.py`: a delete wins over a slow create, a failed delete stays durable intent, and generation fencing holds.
+  - `test_local_fleet_drain.py`: drain fences new work, survives a restart and is owned by its token; live admission follows the host sample.
+
+  The harness changes:
+  - `LocalFleet(node_processes=True)` forks each node agent from a preloaded zygote so a test can SIGKILL it. Agents die with the zygote, which exits with the test process.
+  - One-shot `fail`, `hang` and `hang-after` faults on the fake runsc and mount commands, plus storage-daemon holds.
+  - `node.reboot()`, `fleet.expire_heartbeat()`, `fleet.routing_calls()`, the `node.requests` log and a settable host sample.
+  - Fleet roots move to /dev/shm when it allows exec.
+
+  No production code changed.
+- Speed up the node create pipeline (plan C5.2, first part). A create now makes three durable registry commits instead of four: `plan`, `commit_rootfs` and `commit_owned`. The storage quota (project ID, MiB, path) is recorded on `commit_rootfs`. Storage prepare is keyed by owner, so a crash before that commit replays it from `planned` and gets the same volume and project. Registrations left in `quota_ready` by earlier releases still advance, and earlier releases advance `planned` records as before. New network leases take a pre-created netns+veth pair from a durable pool of 32 per node. The slot moves from `pool` to `leases` in the lease's single durable write, and the namespace is then bind-mounted under the lease's name, so a pool hit runs no `ip` process. A background thread refills the pool, deferring to in-flight creates. Interrupted hand-offs are finished on the lease's next ensure or dropped on release, and unverified pool pairs are rebuilt at start. Earlier releases ignore `pool`; a slot one of them leases is dropped from the pool on the next read. Restore probes the host veth with `if_nametoindex` instead of two `ip link show` processes. The per-create host firewall check is kept and reported as `network_host_rules_ms`. With fakes on tmpfs, 32 concurrent creates fall from 309 / 313 ms to 191 / 198 ms (p50 / p99). Registry write transactions now dominate. See `docs/benchmarks/create-pipeline-2026-10-01/`.
+- RL-scale qualification on a disposable Hetzner VM (kernel 7.0.0-30, erofs-utils 1.9, pinned runsc), recorded in `docs/benchmarks/rl-scale-qualification-2026-10-02/`.
+  - **Walker (C2.2).** The EROFS metadata walker is qualified on erofs-utils 1.9. On a 13.5k-inode scientific rootfs (production flags, with and without `--mkfs-time`, and `--MZ`), a kernel mount, fsck and dump read no non-data block outside its ranges, and an overwrite proof leaves the tree unchanged.
+  - **Walker tests.** They now accept the empty `trusted.overlay.origin` that erofs-utils 1.9 adds to directories holding whiteouts, and they cover `--MZ` images when mkfs supports them.
+  - **`qualify_environment.py --prefetch`.** It publishes signed metadata hints, exports backend metrics, and replays startup traces on a fresh cache with a second live guest; the replay had zero demand misses.
+  - **`qualify_environment_layers.py`.** It runs again under the project's Python 3.10.
+  - **Finding, `--MZ`.** It packs a real image's metadata into 37 instead of 272 chunks, so a `find` after attach makes zero remote reads; without it, the 32 MiB hint budget is exceeded.
+  - **Finding, thaw prefetch.** The pause tier needs it. Guest refault from swap took 3.6–5.0 s for 640 MiB; an 8-thread host prefetch took 0.8–0.95 s.
+  - **Finding, reclaim.** A full-target `memory.reclaim` with zswap on compresses and then writes everything back, 2–3× slower than without zswap.
+  - **Finding, `runsc pause`.** It does not freeze the cgroup.
+  - **Finding, host-bound listener.** A guest listener created with `--host-uds=create` makes checkpoint fail and destroys the sandbox, so the in-guest agent should dial out with `--host-uds=open`.
+- Add an off switch and heartbeat export for immutable-environment prefetch (plan C2.2, C2.3). `immutable_environments.prefetch_enabled` (strict boolean, default `true`) reaches workers through the bootstrap. When it is `false` the backend starts as `serve-environment-io --disable-prefetch` and only demand-loads, with no metadata-hint or startup-trace replay or recording. Bootstrap never restarts a live backend, so a change applies to newly provisioned workers. The artifact backend RPC now accepts `{"method": "metrics"}`, with a 1 s client timeout and counters behind their own lock rather than the attach guard. Each EROFS worker heartbeat carries the backend's counters as `runtime_metrics.environment_io`, which appears in each node's gateway `actual_usage`. The map has a strict, exact schema (`models.ENVIRONMENT_IO_METRICS`): integer counters, float `*_seconds` totals and the running `prefetch_enabled` mode. The field is `null` on Docker workers, while the backend is unreachable, and while it predates the RPC. Upgrade gateways before workers. Remove the duplicate `python -m ucloud_sandboxes.environment_backend` entry point, since `serve-environment-io` is the only one, and the unused `EnvironmentBackendClient.mounted()`. See `docs/immutable-environments.md`.
+- Add a power-of-k create placement library (plan C4.3, `placement_choice.py`). The gateway does not use it yet. Each API process samples k = 3 eligible workers uniformly from its fresh fleet view and scores them by node pressure, by in-flight creates per the per-node create target, and by image residency. In-flight creates are the heartbeat's count plus `api_processes` × this process's own unconfirmed creates. A per-process overlay charges each unconfirmed create, keyed by its exact sandbox incarnation. The charge ends when a heartbeat reports the create, when the worker boot it targeted is retired, when a definite node reject releases it, or after a 60 s TTL. Fit uses the same rules as reservation time: disk, storage devices and memory, with CPU used only for ranking. Dynamic-claim workers are charged the initial claim. `pack` fills the best sampled worker up to a per-node group budget, for C3.2 group creates. In a herding simulation (10 workers, 8 or 32 processes, 300 creates/s), the peak excess of one worker's concurrent creates over the fleet mean falls from 32–160 to 12–15. Node rejects on a near-full fleet fall from 1,156 to 46. Both are measured against the lexicographic ranking given the same stale view. The package line budget rises to 103,330; wiring the library deletes the whole-fleet route scan per create, `InflightCreatePlacements`, worker capacity revisions and the advisory placement turns.
+- **EROFS layer components can keep file mtimes (layout 2, C2.11).** Python's timestamp `.pyc` caches stay valid on immutable images. On the scientific stack the first import fell from 3.74 s, with 943 recompiled files written to the sandbox layer, to 1.42 s from a cold cache with no rewrites.
+  - **Readers:** workers and gateways now accept layer format layout 1 or 2 and still reject any other value.
+  - **Writers:** `immutable_environments.preserve_mtimes` (strict bool, default false; not rendered while false, so the previous release can still read the config) turns layout-2 publication on. Builders then get `--environment-preserve-mtimes` and run `mkfs.erofs -T 0 --mkfs-time`. The builder bootstrap reads the whole `mkfs.erofs --help` output and refuses an erofs-utils without `--mkfs-time` (1.8+). `publish-environment` and `serve-builder-agent` accept the same flag.
+  - **Timestamps:** builder-owned views (squashed groups, selective extractions, prepared views, allowlisted views) set directory and whiteout times to 0. A borrowed single Docker diff and the whole-image merged rootfs keep Docker's times.
+  - **Keys:** the layout is part of each layer-group key, so layout-2 groups never reuse layout-1 components. Existing layout-1 components, roots and certificates stay valid.
+  - **Qualification:** shared-image qualification requires all of an image's components to share one known layout. Under layout 2 it compares whole-second file and symlink mtimes with the source tar headers, not directory times.
+  - **Rollout:** ship readers everywhere with the flag off. Then enable it and replace the builders. Republish base and foundation images first, then task images. Workers must not roll back below this release while layout-2 images are in use.
+- Add the C1.1 pause tier behind `sandbox.direct_pause_tier` (default off; needs `sandbox.swap_gb` > 0). On a pause-tier node, idle-timer parks and relay model waits `runsc pause` the sandbox in place. Explicit API parks (durable park, drain, offload moves) still hibernate. A relay wait also hibernates when the Aries rule says it should: predicted remaining wait x resident bytes > 300 s (the five-minute rule) x footprint (resident + swapped bytes). If that capture is refused for disk space, the wait pauses instead.
+  - A pause changes no ownership. The Warden journal stays RUNNING/LIVE and the route stays `running`. A marker under `runtime_root/warden-paused/` is written durably before `runsc pause` and removed only after `runsc resume`, so a frozen runtime always has a marker.
+  - The Warden exec lease thaws under its lifecycle fence before every runsc exec (exec, files, managed control). Explicit and relay wakes thaw too, and a hibernate capture thaws first. Read-only managed status and log exchanges thaw only for the exchange and re-pause under the same fence, so SDK `JobHandle.wait()` polling does not end a model-wait pause. Paused sandboxes survive a node-agent restart and stay paused.
+  - Under measured memory pressure only (headroom or PSI; drain's closed admission does not count), the relay-parking loop swaps paused sandboxes out with `memory.reclaim "<bytes> swappiness=200"`: 16 MiB windows paced to 256 MiB/s per sandbox, run on the existing resident-reclaim executor. Sandboxes are ranked by expected idle time x resident bytes, and every pause marker is adopted, including after restarts. A window is cancelled on thaw, stop or a journal change, or when the cgroup stops shrinking.
+  - With the flag, vm_init passes `--pause-tier`, mounts the RAM application-memory tmpfs swappable and sized RAM x 0.95 + SwapTotal, and enables zstd zswap in front of the swapfile. `MemoryBackingStore` refuses a mount whose swap policy differs from the flag.
+  - Heartbeat memory observations now report `memory.current` + `memory.swap.current`.
+  - `ResidentWaitMetrics` gains `paused_sandboxes`, `pauses`, `thaws`, `thaw_ms_total`, `thaw_ms_max`, `pause_reclaims`, `pause_reclaimed_bytes`, `pause_reclaim_ms_total` and `pause_reclaim_cancellations`. Readers default them to 0. Every node on this release sends them (as 0 when the flag is off), so upgrade gateways before nodes.
+  - Direct exec start timings no longer include a separate `thaw` entry; thaw time is part of `exec_lease`.
+  - The hibernation record, runtime-fingerprint, artifact-file and manifest codecs, and `ResidentWaitMetrics.from_dict`, now derive their keys and defaults from dataclass fields. The wire and journal formats are unchanged.
+
+  Rollout: deploy everywhere with the flag off, gateways first. Then enable it only on fresh workers with `swap_gb` sized from the W0 interference matrix. Rollback: turn the flag off and restart the agent; activity still thaws any remaining paused sandbox. Before downgrading below this release, thaw all paused sandboxes.
+
+  Not yet implemented: thaw prefetch, a node-wide reclaim budget, and escalating from pause to hibernate under memory pressure once swap is full.
+- Make the test suite green, hermetic and fast (C8.1/C8.3). `scripts/run_tests.py` runs each test module in its own process across a pool. It gives every test a faulthandler watchdog (default 120 s) that dumps stacks and names the unfinished test, cleans up each child's process group (leaked processes, a dead runner, SIGINT/SIGTERM), and installs the same warning filter as `python -m unittest`. It also supports `--tier unit|contract|linux|live` (each module's `TEST_TIER`; unmarked modules are `unit`), `--json` per-test timings, and `--no-fsync` via eatmydata. `scripts/check.sh` and CI use it, and the PostgreSQL CI job runs the whole `contract` tier. Fixtures create directories with explicit modes (`tests/support.make_dirs`), so the suite passes under umask 0002, 0022 and 0077. Tests that need the SDK are order-independent and skip with a reason, or by minimum SDK version (`requires_sdk`). Five modules no longer re-run TestCase classes they imported. Build-deadline and metrics tests use injected clocks.
+- Fix shutdown hangs on Python 3.10, where a psycopg timed wait can consume a cancellation that races readiness. The model relay's maintenance loop, placement LISTEN/NOTIFY hints and the placement completion poller now repeat cancellation until they stop. `cancel_until_done` in `shared_control/model.py` is shared with `PostgresRelayState.aclose`.
+- Placement waits and placement worker RPCs that hit their total timeout now take the retryable path on Python 3.10. Before, they raised `asyncio.TimeoutError`, which is not the builtin `TimeoutError`: client waits now return the retryable 504 `placement_wait_timeout`, and the worker defers or completes the command instead of leaving it until its lease expires.
+- `StorageNativeNodeServer.serve_forever` accepts `poll_interval`; the default of 0.5 s is unchanged.
+- Start splitting `ControlPlaneHandler` into `ucloud_sandboxes/gateway/` (plan C6.1, PR1–PR3):
+  - `request_parsing`, `auth` and `node_rpc` (the worker HTTP pools, bounded proxy RPCs and their error contract) move out unchanged.
+  - `RegistryReferences` owns the route, snapshot and pull Registry owners.
+  - `FleetView` owns the freshness-filtered heartbeat reads and the heartbeat image-cache hits.
+
+  `build_server` builds them once into `GatewayServices` (`BoundHandler.services`). Per-request transport state stays on the handler, behind the `Exchange` protocol: the reusable worker origin and whether a streamed upload consumed the body. There is no wire, schema or behavior change. Code that imported the moved names from `control_plane` must import them from `ucloud_sandboxes.gateway.registry_refs` or `ucloud_sandboxes.gateway.node_rpc` instead: `release_registry_route_references`, `_persist_registry_image_protection`, `_managed_registry_build_tag`, `_open_node_request` and the `_NODE_*_POOL` pools. The CLI and `scripts/` are updated. The dead `_sandbox_request_wakes` is deleted.
+- Remove the unshipped shared-control scheduling qualification store
+  (`qualification.py`, `dispatcher.py`, `fixtures.py`, `schema.sql`), its
+  `qualification-migrate`/`qualification-status` commands, benchmark script and
+  doc. The PostgreSQL contract and database crash checks now cover only the live
+  relay and shared pool. Delete the unapplied July gVisor patches and correct
+  stale rootfs, NBD, Docker store and exec-route documentation. Add
+  `tests/test_package_budget.py`, which fails when `ucloud_sandboxes/` exceeds
+  its checked-in line budget.
+- Remove the shadow-only program scheduler (`program_scheduler.py`) and its
+  outputs:
+  - the per-wake shadow plan (`program_wake_shadow_plan` events), which read
+    every fleet route on each response-ready wake for portable parks;
+  - the per-cycle wake plan, program demand signals and calibration
+    (`program_wake_plan`, `program_signals`);
+  - `programs.shadow_wake_queue` and its dashboard panels.
+
+  Program request phases still fence relay delivery, keep active model waits
+  and deliveries local during cold offload, and are reported in metrics.
+  `node_pressure_score` moves to `resource_admission.py` and
+  `observed_memory_mb` to `consolidation.py`.
+
+  The policy schema no longer accepts `program_aware_autoscaling_enabled`,
+  `model_wait_capacity_weight` or `model_wait_max_headroom_nodes`. Re-render
+  `deployment.json` with `scripts/hetzner_prod/make_config.py` before
+  upgrading; rolling back to an earlier release requires restoring those keys.
+  Lower the package line budget to 102,000.
+- Warm immutable environment components on attach (plan C2.2, C2.3). At publication, builders walk each EROFS image with a strict reader of the on-disk format. They attach a separately signed metadata hint as an annotation on the component manifest; older workers ignore it. The hint lists the 256 KiB chunks that hold metadata and how many metadata bytes each holds. Images with unqualified layouts publish the unchanged hint-free manifest. On attach, the artifact backend fetches the densest hinted chunks (32 MiB, capped at a quarter of the cache) as verified ranges of up to 4 MiB, concurrently with the mount. `ensure` waits up to 5 s after the mount for them. The first attach of a component on a node records a startup chunk trace, which later attaches replay in the background. Prefetch uses at most a quarter of the miss slots and yields to waiting demand misses. It never fails an attach, and a reader that joins a bulk read keeps a demand read's single 30 s budget. Trace replays share at most half the cache, and metadata is never starved by them. The backend RPC now serves each request on its own thread, so one attach's wait no longer delays other components' liveness checks or drops. Node-local traces are bounded to 4,096. See `docs/immutable-environments.md`.
+- **Tests: local fleet E2E harness (C8.4, first slice).** `tests/harness/` runs the real gateway (`control_plane.build_server`, real tokens) and real direct node agents over loopback HTTP, with heartbeats relayed node → gateway. Each node runs the real DirectSandboxService, Warden, hibernation journal, OverlayRootfsManager and storage-native service over its unix socket. Routing is SQLite, or PostgreSQL through `ucloud-postgres-routing-v1`. Only root or kernel boundaries are faked:
+  - a stdlib `fake_runsc` that refuses any invocation it does not model;
+  - a fake /proc cgroup line;
+  - a copy-based overlay mount;
+  - directory-backed block devices with hard-link seals;
+  - local-directory images;
+  - a libc pidfd shim, used only when the interpreter lacks `os.pidfd_open`.
+
+  The fake runsc's `delete` signals only the recorded `sandbox.pid`, so the Warden's PID fence has to reap the sentry itself. Its `exec` forwards signals and reports a signalled command as 128 + signal, like `runsc exec`.
+
+  `tests/test_local_fleet.py` adds five scenarios in about 9 s, one of them also run against PostgreSQL:
+  - create → exec → files → delete, with no runtime, storage, mount or journal residue;
+  - exec session events, replay, stdin and signal;
+  - park → wake keeping disk and tmpfs state;
+  - quarantine and delete of a crashed sentry;
+  - node-agent restart.
+
+  The scenarios pin three current behaviours as product findings:
+  - worker loss shows up only on the next request; heartbeats and the status view keep reporting "running";
+  - a missing file returns 503 instead of 404;
+  - uv's CPython 3.10 cannot fence sentries.
+- Route exec sessions by a signed prefix instead of a durable row. The gateway
+  passes `X-UCloud-Exec-Session-Prefix` (HMAC over sandbox, generation and worker
+  job) on exec start; current workers name sessions under it, so polls, stdin,
+  signals and closes skip the routing database and the per-exec SERIALIZABLE
+  route upsert. Lost, replaced and silent owners keep their 410/404/503 answers;
+  older workers keep the durable route. No SDK change. The gateway's routed
+  exec-session metric now counts only unsigned sessions.
+- Report per-phase node create timings (admission waits, image resolve, storage,
+  network, OCI build, rootfs, guest files, init install, `runsc create`/`start`,
+  journal and registry commits) in the create response `timings.manager.phases`
+  and the gateway's `node.timings` trace event.
+
+- Add the RL-scale W0 measurement tools. `scripts/bench_rl_scale.py` is an
+  SDK-driven benchmark with one `ucloud-rl-scale-bench/v1` report schema. It
+  covers cold and warm time to first command, burst completion, creation rate,
+  density at p99 tool latency, and park/wake, and its `merge` command builds a
+  baseline from single-scenario reports. Node-side metrics and fork stay
+  explicit nulls. `runtime/gvisor/spike_rl_scale.py` is a root-only spike probe
+  for S1, S2 (page sharing), S4, S6, S7 and S8. See `runtime/gvisor/README.md`.
+
 - Pipeline image building and filesystem publication with separate bounded
   admission phases. Allow up to two additional finishing builds while retaining
   four preparation/build slots; publish live capacity to the gateway and retain

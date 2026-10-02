@@ -177,4 +177,9 @@ It checks the main Python package, shell scripts, managed-process Go code, and
 SDK checkout. It fails if ShellCheck or the SDK checkout is absent. For a
 deliberately reduced run, set `UCLOUD_CHECK_ALLOW_MISSING_SHELLCHECK=1` and/or
 `UCLOUD_CHECK_ALLOW_MISSING_SDK=1`; the output identifies omitted checks. For a
-main-package-only test run, use `uv run python -m unittest`.
+main-package-only test run, use `uv run python scripts/run_tests.py`. It runs
+each test module in its own process in parallel, with a per-test watchdog, and
+selects tiers with `--tier unit|contract|linux|live` (each module's
+`TEST_TIER`; unmarked modules are `unit`). Add `--no-fsync` when `eatmydata` is
+installed, and `--json PATH` for per-test timings. `uv run python -m unittest`
+still runs the same suite serially.

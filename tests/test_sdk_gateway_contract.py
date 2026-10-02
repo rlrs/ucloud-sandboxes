@@ -3,11 +3,11 @@ import json
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-import sys
 from tempfile import TemporaryDirectory
 from threading import Thread
 import unittest
 
+from tests.support import sdk_skip_reason
 from ucloud_sandboxes.control_plane import build_server
 from ucloud_sandboxes.control_state import ControlStateStore
 from ucloud_sandboxes.deployment import package_version
@@ -18,14 +18,11 @@ from ucloud_sandboxes.models import (
     utc_now,
 )
 
+TEST_TIER = "contract"
 
-SDK_SOURCE = Path(__file__).parents[1] / "ucloud-sandboxes-sdk" / "src"
-SDK_AVAILABLE = SDK_SOURCE.is_dir()
-if SDK_AVAILABLE:
-    sys.path.insert(0, str(SDK_SOURCE))
-    sdk = importlib.import_module("ucloud_sandboxes_sdk")
-else:
-    sdk = None
+
+SDK_UNAVAILABLE = sdk_skip_reason()
+sdk = None if SDK_UNAVAILABLE else importlib.import_module("ucloud_sandboxes_sdk")
 
 IMAGE = "registry.example/contract@sha256:" + "a" * 64
 
@@ -111,7 +108,7 @@ class RuntimeBoundaryHandler(BaseHTTPRequestHandler):
         return
 
 
-@unittest.skipUnless(SDK_AVAILABLE, "sibling ucloud-sandboxes-sdk is unavailable")
+@unittest.skipIf(SDK_UNAVAILABLE, SDK_UNAVAILABLE)
 class SdkGatewayContractTests(unittest.TestCase):
     def test_create_get_list_delete_lifecycle_preserves_identity(self) -> None:
         self._check_lifecycle()

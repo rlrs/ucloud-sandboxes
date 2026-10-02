@@ -16,7 +16,7 @@ class EnvironmentContractTests(unittest.TestCase):
         )
 
     def test_new_contracts_require_capable_nodes_during_placement(self):
-        from ucloud_sandboxes.control_plane import _sandbox_required_capabilities
+        from ucloud_sandboxes.gateway.placement import _sandbox_required_capabilities
         from ucloud_sandboxes.capabilities import (
             ENVIRONMENT_CONTRACT_CAPABILITY,
             STATIC_FILE_MANAGEMENT_CAPABILITY,

@@ -16,7 +16,6 @@ from .models import (
     SandboxNode,
     SandboxPlacementRequest,
     LiveScaleSignals,
-    ProgramScaleSignals,
     ScaleAction,
     ScaleDecision,
     ScalePolicy,
@@ -39,7 +38,6 @@ def evaluate_scale(
     *,
     now: datetime | None = None,
     live_signals: LiveScaleSignals | None = None,
-    program_signals: ProgramScaleSignals | None = None,
 ) -> ScaleDecision:
     if now is None:
         now = utc_now()
@@ -137,7 +135,7 @@ def evaluate_scale(
         *demand.placement_requests,
         *demand.prepared_placement_requests,
     )
-    demand_placement_requests = tuple(
+    placement_requests = tuple(
         request
         for request in all_demand_placement_requests
         if request.resources.fits_within(maximum_request)
@@ -154,7 +152,6 @@ def evaluate_scale(
                 for request in demand.placement_requests
                 if request.resources.fits_within(maximum_request)
             ),
-            include_disk=True,
         )
         if demand.placement_requests
         else demand.pending_resources
@@ -165,7 +162,6 @@ def evaluate_scale(
             for request in demand.prepared_placement_requests
             if request.resources.fits_within(maximum_request)
         ),
-        include_disk=True,
     )
     # A pending cold start is future resident demand, not a permanent charge
     # for its sandbox limit. Once assigned, its transient worker reservation
@@ -181,37 +177,7 @@ def evaluate_scale(
     demand_resources = replace(demand_resources,
         memory_mb=demand_resources.memory_mb + resident_forecast)
     forecast_node_memory = _forecast_node_memory(nodes, policy)
-    program_placement_requests: tuple[SandboxPlacementRequest, ...] = ()
-    if policy.program_aware_autoscaling_enabled and program_signals is not None:
-        program_placement_requests = tuple(
-            request
-            for request in program_signals.ready_placement_requests
-            if request.resources.fits_within(maximum_request)
-        )
-        unschedulable_placements += sum(
-            request.count
-            for request in program_signals.ready_placement_requests
-            if not request.resources.fits_within(maximum_request)
-        )
-        if program_signals.ready_placement_requests:
-            program_resources = _add_resources(
-                _placement_request_resources(
-                    program_placement_requests,
-                    include_disk=False,
-                ),
-                program_signals.weighted_model_wait_resources,
-            )
-        else:
-            program_resources = _dynamic_program_resources(program_signals)
-        demand_resources = _add_resources(
-            demand_resources,
-            program_resources,
-        )
     desired_resources = _add_resources(demand_resources, policy.warm_resources)
-    placement_requests = (
-        *demand_placement_requests,
-        *program_placement_requests,
-    )
     soft_drain = plan_soft_drain(
         nodes,
         policy,
@@ -627,7 +593,6 @@ def evaluate_scale(
         resource_deficit=resource_deficit,
         reasons=tuple(reasons),
         live_signals=live_signals,
-        program_signals=program_signals,
         pressure_scale_up=pressure_scale_up,
         create_pressure_scale_up=create_pressure_scale_up,
         effective_scale_down_idle_seconds=effective_scale_down_idle_seconds,
@@ -1006,14 +971,8 @@ def _nodes_for_unplaced_requests(
             for index, (job_id, available, total) in enumerate(bins):
                 if job_id in excluded:
                     continue
-                available_for_request = available
-                if job_id == placement.owned_job_id and placement.owned_disk_mb > 0:
-                    available_for_request = replace(
-                        available,
-                        disk_mb=available.disk_mb + placement.owned_disk_mb,
-                    )
-                if dynamic_request_fits(requested, available_for_request, total):
-                    fitting.append((index, job_id, available_for_request, total))
+                if dynamic_request_fits(requested, available, total):
+                    fitting.append((index, job_id, available, total))
             if fitting:
                 index, job_id, available, total = min(
                     fitting,
@@ -1031,8 +990,6 @@ def _nodes_for_unplaced_requests(
                     if requested.disk_mb > 0
                     else remaining
                 )
-                if job_id == placement.owned_job_id and placement.owned_disk_mb > 0:
-                    batch = 1
                 bins[index] = (
                     job_id,
                     reserve_dynamic_resources(
@@ -1062,8 +1019,6 @@ def _nodes_for_unplaced_requests(
 
 def _placement_request_resources(
     requests: tuple[SandboxPlacementRequest, ...],
-    *,
-    include_disk: bool,
 ) -> ResourceQuantity:
     """Aggregate exact schedulable shapes without weakening hard disk ownership."""
 
@@ -1076,30 +1031,8 @@ def _placement_request_resources(
             (item.resources.memory_mb for item in requests),
             default=0,
         ),
-        disk_mb=(
-            sum(item.resources.disk_mb * item.count for item in requests)
-            if include_disk
-            else 0
-        ),
+        disk_mb=sum(item.resources.disk_mb * item.count for item in requests),
     )
-
-
-def _dynamic_program_resources(
-    signals: ProgramScaleSignals,
-) -> ResourceQuantity:
-    """Keep predictive headroom without adding every ready CPU/RAM limit."""
-
-    ready = ResourceQuantity(
-        vcpu=max(
-            (item.resources.vcpu for item in signals.ready_placement_requests),
-            default=0.0,
-        ),
-        memory_mb=max(
-            (item.resources.memory_mb for item in signals.ready_placement_requests),
-            default=0,
-        ),
-    )
-    return _add_resources(ready, signals.weighted_model_wait_resources)
 
 
 def _projected_provisioning_resources(

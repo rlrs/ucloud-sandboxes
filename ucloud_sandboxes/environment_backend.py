@@ -4,10 +4,11 @@ This owns kernel mounts/devices only. Image references, retention and scheduling
 remain with the existing image store/registry. A restarted backend never adopts
 an old live filesystem: lost kernel exports are an explicit admission fence.
 """
-from contextlib import contextmanager
+from dataclasses import dataclass
 import errno
 import fcntl
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -15,13 +16,18 @@ import socket
 import socketserver
 import stat
 import subprocess
-from threading import RLock
+from threading import Lock, RLock
+import time
 
-from .environment_artifact import canonical_bytes, require_digest
+from .environment_artifact import CHUNK_BYTES, canonical_bytes, require_digest
 from .environment_cache import VerifiedEnvironmentCache
 from .environment_nbd import EnvironmentReadWorkers, ReadOnlyEnvironmentDevice
+from .environment_trace import LocalTraceStore, MAX_TRACE_CHUNKS, trace_order
 
+_LOG = logging.getLogger(__name__)
 MAX_RPC_BYTES = 64 * 1024
+# Per socket op: a stalled backend costs a heartbeat half the gateway's 2 s wake read.
+METRICS_TIMEOUT_SECONDS = 1.0
 NO_BLOCK_DEVICE = "no available environment block device"
 
 
@@ -77,9 +83,28 @@ def mount_has_dependents(path, *, include_bind_mounts=True):
     return False
 
 
+@dataclass(frozen=True)
+class PrefetchPolicy:
+    """Attach-time prefetch bounds (C2.2 metadata hints, C2.3 startup traces).
+
+    Each budget is also capped at a quarter of the chunk cache, so a prefetch
+    never evicts most of what other components use.
+    """
+    metadata_bytes: int = 32 * 1024 ** 2
+    metadata_seconds: float = 30.0
+    # ensure() waits at most this long for metadata before reporting ready.
+    metadata_wait_seconds: float = 5.0
+    trace_bytes: int = 256 * 1024 ** 2
+    trace_seconds: float = 120.0
+    trace_window_seconds: float = 30.0
+    trace_window_chunks: int = MAX_TRACE_CHUNKS
+    enabled: bool = True
+
+
 class EnvironmentBackend:
     def __init__(self, root, registry, *, devices=None, device_factory=ReadOnlyEnvironmentDevice,
-                 mount=None, unmount=None, mounted=_mounted, referenced=mount_has_dependents, cache_bytes=1024 ** 3):
+                 mount=None, unmount=None, mounted=_mounted, referenced=mount_has_dependents, cache_bytes=1024 ** 3,
+                 prefetch=PrefetchPolicy(), traces=None, cache_options=None):
         self.root, self.registry = Path(root), registry
         if not self.root.is_absolute():
             raise ValueError("environment backend root must be absolute")
@@ -94,7 +119,10 @@ class EnvironmentBackend:
             # mixing a failed filesystem with a newly bound block device.
             if any(mounted(path) for path in self.mounts.iterdir()):
                 raise RuntimeError("environment backend lost with retained mounts; fence and drain affected sandboxes")
-            self.cache = VerifiedEnvironmentCache(self.root / "cache", registry, max_bytes=cache_bytes)
+            self.cache = VerifiedEnvironmentCache(self.root / "cache", registry, max_bytes=cache_bytes,
+                                                  **(cache_options or {}))
+            # Node-local and disposable like the cache; replaceable for C2.7.
+            self.traces = traces if traces is not None else LocalTraceStore(self.root / "traces")
             self.workers = EnvironmentReadWorkers()
         except BaseException:
             os.close(self._lock_fd)
@@ -108,9 +136,71 @@ class EnvironmentBackend:
         self._referenced = referenced
         self._guard = RLock()
         self._active = {}
+        self._components = {}  # Attached digest -> authenticated component.
+        # Attached digest -> (metadata job, ready deadline). Every caller of
+        # ensure, not only the attaching one, waits until that deadline.
+        self._warming = {}
         self._closed = False
+        self.prefetch = prefetch
+        # Not the attach guard: heartbeats read metrics while an attach holds
+        # it across a registry load and mount.
+        self._counter_guard = Lock()
+        self._counters = {name: 0 for name in (
+            "metadata_hint_present", "metadata_hint_absent", "metadata_hint_unsupported",
+            "trace_hint_present", "trace_hint_absent", "trace_hint_invalid", "trace_recordings_started",
+            "metadata_prefetch_wait_timeouts", "prefetch_start_failures")}
+
+    def _count(self, name):
+        with self._counter_guard:
+            self._counters[name] += 1
+
+    def metrics(self):
+        """Exactly models.ENVIRONMENT_IO_METRICS, exported in node heartbeats."""
+        with self._counter_guard:
+            counters = dict(self._counters)
+        # A single len() read of the attach-guarded map: at most one attach stale.
+        return self.cache.metrics() | counters | {"active_components": len(self._active),
+                                                  "prefetch_enabled": self.prefetch.enabled}
 
     def ensure(self, digest):
+        """Attach and mount a component, warming its metadata before return.
+
+        Waiting is bounded by the prefetch policy and never fails the attach.
+        """
+        target = self._attach(digest)
+        with self._guard:
+            job, ready_by = self._warming.get(digest, (None, 0.0))
+        remaining = ready_by - time.monotonic()
+        # Outside the guard: the threaded RPC server lets other components'
+        # attach, liveness checks and drops proceed meanwhile.
+        if job is not None and remaining > 0 and not job.wait(remaining):
+            self._count("metadata_prefetch_wait_timeouts")
+        return target
+
+    def _start_prefetch(self, digest, component):
+        """Schedule hint and trace prefetch; returns the metadata job, if any."""
+        policy, budget = self.prefetch, self.cache.max_bytes // 4
+        lookup = getattr(self.registry, "metadata_hint", None)
+        status, hint = lookup(digest) if lookup is not None else ("absent", None)
+        self._count(f"metadata_hint_{status}")
+        metadata = None
+        if hint is not None:
+            max_bytes = min(policy.metadata_bytes, budget)
+            metadata = self.cache.prefetch(
+                component, hint.prefetch_order(max_bytes=max_bytes, max_chunks=max_bytes // CHUNK_BYTES),
+                kind="metadata", max_bytes=max_bytes, deadline_seconds=policy.metadata_seconds)
+        status, trace = self.traces.load(component)
+        self._count(f"trace_hint_{status}")
+        if trace is not None:
+            # Lower priority than metadata on the same bounded miss pool.
+            self.cache.prefetch(component, trace_order(trace), kind="trace",
+                                max_bytes=min(policy.trace_bytes, budget), deadline_seconds=policy.trace_seconds)
+        elif self.cache.record_startup(component, self.traces.save, window_seconds=policy.trace_window_seconds,
+                                       max_chunks=policy.trace_window_chunks):
+            self._count("trace_recordings_started")
+        return metadata
+
+    def _attach(self, digest):
         require_digest(digest)
         with self._guard:
             if self._closed:
@@ -148,6 +238,16 @@ class EnvironmentBackend:
             # Record ownership before invoking mount: an interrupted command
             # can have mounted successfully even if no acknowledgment arrived.
             self._active[digest] = selected
+            self._components[digest] = component
+            metadata = None
+            if self.prefetch.enabled:
+                # Concurrent with the mount, whose superblock read joins the
+                # first bulk range. A hint is never a reason to fail attach.
+                try:
+                    metadata = self._start_prefetch(digest, component)
+                except Exception:
+                    self._count("prefetch_start_failures")
+                    _LOG.warning("environment prefetch for %s did not start", digest, exc_info=True)
             try:
                 self._mount(selected.path, target)
             except BaseException:
@@ -158,6 +258,8 @@ class EnvironmentBackend:
                 except Exception:
                     pass
                 raise
+            if metadata is not None:
+                self._warming[digest] = (metadata, time.monotonic() + self.prefetch.metadata_wait_seconds)
             return str(target)
 
     def drop(self, digest):
@@ -176,8 +278,15 @@ class EnvironmentBackend:
                     return False
             # A failed close may be retried after unmount already succeeded;
             # do not inspect the now-unmounted directory's parent filesystem.
+            component = self._components.get(digest)
+            if component is not None:
+                # Detached: stop warming it and forget an unfinished window.
+                self.cache.cancel_prefetch(component)
+                self.cache.stop_recording(component)
             device.close()
             del self._active[digest]
+            self._components.pop(digest, None)
+            self._warming.pop(digest, None)
             target.rmdir()
             (self.root / (digest[7:] + ".json")).unlink(missing_ok=True)
             return True
@@ -210,20 +319,27 @@ class _Handler(socketserver.StreamRequestHandler):
             if len(raw) > MAX_RPC_BYTES or not raw.endswith(b"\n"):
                 raise ValueError("environment request exceeds its bound")
             request = json.loads(raw)
-            if not isinstance(request, dict) or set(request) != {"method", "digest"}:
+            method = request.get("method") if isinstance(request, dict) else None
+            if method == "metrics" and set(request) == {"method"}:
+                result = self.server.backend.metrics()
+            elif method in ("ensure", "drop") and set(request) == {"method", "digest"}:
+                result = getattr(self.server.backend, method)(request["digest"])
+            else:
                 raise ValueError("invalid environment backend request")
-            method = request["method"]
-            if method not in {"ensure", "drop"}:
-                raise ValueError("unsupported environment backend method")
-            result = getattr(self.server.backend, method)(request["digest"])
             response = {"result": result}
         except (ValueError, OSError, RuntimeError, subprocess.CalledProcessError) as exc:
             response = {"error": str(exc)}
         self.wfile.write(canonical_bytes(response) + b"\n")
 
 
-class EnvironmentBackendServer(socketserver.UnixStreamServer):
-    """Serialized lifecycle RPC; block reads use separate bounded worker pools."""
+class EnvironmentBackendServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+    """Lifecycle RPC; block reads use separate bounded worker pools.
+
+    The backend guard serializes attach and drop. A thread per request only
+    keeps one attach's bounded metadata wait from delaying every other
+    ensure (each composition's liveness check) and drop on the node.
+    """
+    daemon_threads = True
     def __init__(self, path, backend):
         self.backend = backend
         path = Path(path)
@@ -237,15 +353,16 @@ class EnvironmentBackendServer(socketserver.UnixStreamServer):
 
 
 class EnvironmentBackendClient:
+    """One connection per call. Image-store leases, not connections, own mounts."""
+
     def __init__(self, path, *, timeout=120):
         self.path, self.timeout = str(path), timeout
 
-    def _call(self, method, digest):
-        require_digest(digest)
+    def _call(self, request, timeout=None):
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
-            stream.settimeout(self.timeout)
+            stream.settimeout(self.timeout if timeout is None else timeout)
             stream.connect(self.path)
-            stream.sendall(canonical_bytes({"method": method, "digest": digest}) + b"\n")
+            stream.sendall(canonical_bytes(request) + b"\n")
             with stream.makefile("rb") as reader:
                 raw = reader.readline(MAX_RPC_BYTES + 1)
             if len(raw) > MAX_RPC_BYTES or not raw.endswith(b"\n"):
@@ -256,45 +373,22 @@ class EnvironmentBackendClient:
             return response["result"]
 
     def ensure(self, digest):
-        return Path(self._call("ensure", digest))
+        return Path(self._call({"method": "ensure", "digest": require_digest(digest)}))
 
     def drop(self, digest):
-        return self._call("drop", digest)
+        return self._call({"method": "drop", "digest": require_digest(digest)})
 
-    @contextmanager
-    def mounted(self, digest):
-        # Lifecycle ownership belongs to the image-store lease, not this short
-        # frontend RPC connection. Closing the connection never unmounts bytes.
-        yield self.ensure(digest)
+    def metrics(self):
+        return self._call({"method": "metrics"}, METRICS_TIMEOUT_SECONDS)
 
 
-def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3):
+def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetch=True):
     if os.geteuid() != 0 or registry is None:
         raise ValueError("the artifact I/O backend requires root and registry trust")
-    backend = EnvironmentBackend(root, registry, cache_bytes=cache_bytes)
+    backend = EnvironmentBackend(root, registry, cache_bytes=cache_bytes, prefetch=PrefetchPolicy(enabled=prefetch))
     try:
         with EnvironmentBackendServer(socket_path, backend) as server:
             server.serve_forever()
     finally:
         backend.close()
 
-
-def main(argv=None):
-    import argparse
-    from .environment_config import configured_environment_registry
-    parser = argparse.ArgumentParser(description="Nodewide authenticated immutable environment I/O")
-    parser.add_argument("--root", required=True, type=Path)
-    parser.add_argument("--socket", required=True, type=Path)
-    parser.add_argument("--registry-url", required=True)
-    parser.add_argument("--repository", required=True)
-    parser.add_argument("--trusted-keys", required=True, type=Path)
-    parser.add_argument("--cache-bytes", type=int, default=1024 ** 3)
-    args = parser.parse_args(argv)
-    if os.geteuid() != 0:
-        parser.error("the artifact I/O backend requires root")
-    registry = configured_environment_registry(args.registry_url, args.repository, args.trusted_keys)
-    serve_backend(registry, root=args.root, socket_path=args.socket, cache_bytes=args.cache_bytes)
-
-
-if __name__ == "__main__":
-    main()

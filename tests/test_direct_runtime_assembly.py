@@ -26,6 +26,8 @@ from ucloud_sandboxes.storage_native_daemon import (
     StorageVolumeOwner,
 )
 
+TEST_TIER = "contract"
+
 
 class DirectRuntimeAssemblyTests(unittest.TestCase):
     def test_split_and_ram_runtime_start_over_real_storage_wire(self):
@@ -48,7 +50,9 @@ class DirectRuntimeAssemblyTests(unittest.TestCase):
                     socket, native, require_root_peer=False
                 )
                 storage_thread = Thread(
-                    target=storage_server.serve_forever, daemon=True
+                    target=storage_server.serve_forever,
+                    kwargs={"poll_interval": 0.01},
+                    daemon=True,
                 )
                 storage_thread.start()
                 stack.callback(storage_thread.join, 2)
@@ -151,7 +155,7 @@ class DirectRuntimeAssemblyTests(unittest.TestCase):
                     reflink,
                 )
                 stack.callback(server.RequestHandlerClass.manager.stop)
-                thread = Thread(target=server.serve_forever, daemon=True)
+                thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
                 thread.start()
                 stack.callback(thread.join, 2)
                 stack.callback(server.shutdown)

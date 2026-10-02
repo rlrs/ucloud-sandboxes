@@ -9,7 +9,15 @@ import time
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from scripts import live_inventory_load as load
+from tests.support import sdk_skip_reason, skip_module
+
+TEST_TIER = "contract"
+
+# The script under test imports the SDK at module level.
+if (SDK_UNAVAILABLE := sdk_skip_reason()) is None:
+    from scripts import live_inventory_load as load
+else:
+    load_tests = skip_module(__name__, SDK_UNAVAILABLE)
 
 
 class IsolatedInventoryTests(unittest.IsolatedAsyncioTestCase):
@@ -61,7 +69,7 @@ class IsolatedInventoryTests(unittest.IsolatedAsyncioTestCase):
                 self.wfile.write(body)
 
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        thread = Thread(target=server.serve_forever, daemon=True)
+        thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
         thread.start()
         try:
             with tempfile.TemporaryDirectory() as directory:

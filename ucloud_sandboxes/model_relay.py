@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from contextlib import suppress
 from dataclasses import dataclass, field
 import hashlib
 import json
@@ -15,7 +14,7 @@ from aiohttp import web
 from opentelemetry.trace import SpanKind
 
 from .deployment import service_health
-from .shared_control.model import DatabaseAdmissionUnavailable
+from .shared_control.model import DatabaseAdmissionUnavailable, cancel_until_done
 from .telemetry import Telemetry, trace_id_hex
 
 
@@ -264,9 +263,8 @@ def create_model_relay_app(
         try:
             yield
         finally:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
+            # A consumed cancel would leave the loop sleeping between passes.
+            await cancel_until_done(task)
 
     app.cleanup_ctx.append(maintain_state)
 

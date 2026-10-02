@@ -12,6 +12,8 @@ from unittest.mock import patch
 from ucloud_sandboxes.direct_registry import DirectRegistryError, DirectSandboxRegistry
 from tests import test_published_workspace_capacity as published
 
+TEST_TIER = "contract"
+
 
 class RegistryHotPathTests(unittest.TestCase):
     def setUp(self):

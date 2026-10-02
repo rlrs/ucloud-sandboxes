@@ -25,6 +25,8 @@ from ucloud_sandboxes.models import ResourceQuantity, SandboxInventoryEntry, utc
 from ucloud_sandboxes.registry import heartbeat_to_dict
 from ucloud_sandboxes.routing import RoutingStore, SandboxRoute
 
+TEST_TIER = "contract"
+
 
 def route(sandbox_id="agent", **kwargs):
     return SandboxRoute(

@@ -13,6 +13,8 @@ from ucloud_sandboxes.models import ResourceQuantity
 from ucloud_sandboxes.routing import SandboxRouteAllocation, SandboxRouteConflictError
 from ucloud_sandboxes.shared_control.routing_repository import PostgresRoutingStore
 
+TEST_TIER = "contract"
+
 DSN = os.environ.get("UCLOUD_TEST_POSTGRES_DSN")
 
 

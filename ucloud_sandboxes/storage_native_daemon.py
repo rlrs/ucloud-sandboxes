@@ -3938,7 +3938,7 @@ class StorageNativeNodeServer:
         self.telemetry = telemetry or Telemetry.disabled("storage-native-server")
         self._server: _StorageNativeUnixServer | None = None
 
-    def serve_forever(self) -> None:
+    def serve_forever(self, poll_interval: float = 0.5) -> None:
         self._prepare_socket()
         server = _StorageNativeUnixServer(
             self.socket_path,
@@ -3949,7 +3949,7 @@ class StorageNativeNodeServer:
         self._server = server
         os.chmod(self.socket_path, 0o600)
         try:
-            server.serve_forever()
+            server.serve_forever(poll_interval)
         finally:
             server.server_close()
             self._server = None

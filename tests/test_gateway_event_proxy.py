@@ -15,6 +15,8 @@ from ucloud_sandboxes.gateway_response_proxy import encode_response
 from ucloud_sandboxes.models import NodeHeartbeat, ResourceQuantity, utc_now
 from ucloud_sandboxes.routing import ExecRoute, SandboxRoute
 
+TEST_TIER = "contract"
+
 
 @contextmanager
 def running(server):
@@ -115,7 +117,7 @@ class AsyncGatewayEventTests(unittest.TestCase):
             deployment_id="test",
             total_resources=ResourceQuantity(vcpu=32, memory_mb=98304),
         )
-        handler.store.receive_heartbeat(self.heartbeat)
+        handler.services.heartbeats.store.receive_heartbeat(self.heartbeat)
         handler.routing_store.upsert_sandbox(SandboxRoute(
             sandbox_id='s', node_id='node', job_id='job', node_url=self.heartbeat.node_url,
             resources=ResourceQuantity(vcpu=1, memory_mb=1024), spec={'id': 's'},
@@ -267,7 +269,7 @@ class AsyncGatewayEventTests(unittest.TestCase):
     def test_stale_worker_has_same_retry_boundary(self):
         from datetime import timedelta
 
-        self.gateway.RequestHandlerClass.store.receive_heartbeat(
+        self.gateway.RequestHandlerClass.services.heartbeats.store.receive_heartbeat(
             replace(
                 self.heartbeat,
                 received_at=utc_now() - timedelta(seconds=500),
@@ -277,7 +279,7 @@ class AsyncGatewayEventTests(unittest.TestCase):
         # receive_heartbeat records receipt itself; exercise the canonical
         # resolver with a stale read, preserving real routing and HTTP layers.
         with patch.object(
-            self.gateway.RequestHandlerClass.store,
+            self.gateway.RequestHandlerClass.services.fleet.store,
             "get_heartbeat",
             return_value=replace(
                 self.heartbeat,

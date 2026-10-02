@@ -26,7 +26,7 @@ from uuid import uuid4
 from prepare_image_pool import SourceResolver, public_registry_headers, register_import_alias, registry_parts
 from plan_flat_image_delta import CheckedWriter, verified_tar
 from stage_source_image import PublicBlobRedirect, mount_source_layers, publication_repositories
-from ucloud_sandboxes.flat_image_qualification import SCANNER, compare_snapshot, qualification_key
+from ucloud_sandboxes.flat_image_qualification import SCANNER, compare_snapshot, qualification_key, qualified_layout
 from ucloud_sandboxes.oci_flat_delta import FileEntry, index_flat_tar, plan_flat_delta, validate_flat_index, write_flat_delta
 
 
@@ -283,7 +283,7 @@ def prepare(args):
     sys.path.insert(0, str(args.sdk_wheel))
     import ucloud_sandboxes_sdk as sdk
     from ucloud_sandboxes.config import DeploymentConfig
-    from ucloud_sandboxes.control_plane import _persist_registry_image_protection
+    from ucloud_sandboxes.gateway.registry_refs import _persist_registry_image_protection
     from ucloud_sandboxes.environment_artifact import bind_source_layers, load_image_environment, require_digest
     from ucloud_sandboxes.environment_config import environment_registry_from_deployment
     from ucloud_sandboxes.environment_dependencies import EnvironmentDependencyResolver
@@ -308,8 +308,7 @@ def prepare(args):
     anchor_digest = args.anchor.split('@')[1]
     _, anchor_environment = load_image_environment(registry, anchor_repo, anchor_digest)
     anchor_components = [registry.load(d) for d in anchor_environment.components]
-    if any(component.format.get('layout') != 1 for component in anchor_components):
-        raise ValueError('unknown anchor filesystem format')
+    qualified_layout([component.format for component in anchor_components])
     anchor_manifest, _ = registry.client.manifest_document(anchor_repo, anchor_digest)
     if len(anchor_manifest['layers']) != 1 and not (args.export_inputs or args.anchor_filesystem_source):
         raise ValueError('anchor must be a single flat OCI layer')

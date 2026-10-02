@@ -8,12 +8,15 @@ from unittest.mock import patch
 from threading import Thread
 import unittest
 
-from tests.test_environment_artifact import EnvironmentArtifactTests
+# Import the module, not the TestCase: discovery would rerun it here.
+from tests import test_environment_artifact as artifact_fixtures
 from ucloud_sandboxes.environment_backend import EnvironmentBackend, EnvironmentBackendClient, EnvironmentBackendServer, mount_has_dependents
 from ucloud_sandboxes.environment_nbd import EnvironmentReadWorkers, ReadOnlyEnvironmentDevice, ReadOnlyNbdExport, REQUEST, REPLY, REQUEST_MAGIC, REPLY_MAGIC
 
+TEST_TIER = "contract"
 
-class EnvironmentBackendTests(EnvironmentArtifactTests):
+
+class EnvironmentBackendTests(artifact_fixtures.EnvironmentArtifactTests):
     def test_bind_view_gc_preserves_backing_and_overlay_dependency_fences(self):
         device = self.root.stat().st_dev
         identity = f"{os.major(device)}:{os.minor(device)}"
@@ -123,7 +126,7 @@ class EnvironmentBackendTests(EnvironmentArtifactTests):
         self.addCleanup(backend.close)
         endpoint = self.root / "backend.sock"
         server = EnvironmentBackendServer(endpoint, backend)
-        thread = Thread(target=server.serve_forever, daemon=True)
+        thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
         thread.start()
         self.addCleanup(lambda: (server.shutdown(), thread.join(), server.server_close()))
         first = EnvironmentBackendClient(endpoint)

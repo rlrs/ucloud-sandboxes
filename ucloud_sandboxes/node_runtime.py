@@ -14,7 +14,11 @@ from uuid import uuid4
 from .background_io import PressureSampler
 from .direct_service import DirectSandboxService
 from .direct_registry import DirectRegistryConflictError
-from .warm_park import WarmParkDeferred, WarmParkPolicy
+from .warm_park import WarmParkDeferred, WarmParkPolicy, decide_resident_wait
+from .pause_tier import (
+    ESCALATION_CONCURRENCY, PausedWait, ReclaimBudget, advised_wait_seconds, park_tier,
+    reclaim_stalled, relief_plan, swap_room_bytes,
+)
 from .transition_admission import MemoryDemand
 from .managed_process import (
     ManagedProcessLogChunk,
@@ -22,6 +26,7 @@ from .managed_process import (
     ManagedProcessStart,
 )
 from .models import ResourceQuantity
+from . import phase_timings
 from .sandbox import (
     OPERATION_ID_RE,
     NodeDrainSnapshot,
@@ -168,10 +173,7 @@ class DirectExecRuntime:
                 user=user,
             )
             started = time.monotonic()
-            try:
-                argv = lease.__enter__()
-            except Exception:
-                raise
+            argv = lease.__enter__()
             self.owner._record_exec_start_timing(
                 "exec_lease",
                 (time.monotonic() - started) * 1000,
@@ -289,10 +291,12 @@ class DirectNodeRuntime:
         service: DirectSandboxService,
     ) -> None:
         self.service = service
-        memory_backing_root = getattr(
-            getattr(getattr(service, "warden", None), "config", None),
-            "application_memory_root", None,
-        )
+        warden_config = getattr(getattr(service, "warden", None), "config", None)
+        memory_backing_root = getattr(warden_config, "application_memory_root", None)
+        # C1.1: disposable pause scheduling metadata; Warden markers are the
+        # truth. With the flag on it replaces WarmParkPolicy's park role.
+        self._paused = {} if getattr(warden_config, "pause_tier", False) else None
+        self._reclaim_budget = ReclaimBudget() if self._paused is not None else None
         self._warm_parks = WarmParkPolicy(
             PressureSampler(memory_backing_root=memory_backing_root).sample,
             demand=getattr(service, "warm_park_demand", lambda: MemoryDemand()),
@@ -363,7 +367,11 @@ class DirectNodeRuntime:
             executor.shutdown(wait=False, cancel_futures=True)
 
     def resident_wait_snapshot(self):
-        return {**self._warm_parks.snapshot(), **self.service.resident_demand_snapshot()}
+        snapshot = {**self._warm_parks.snapshot(), **self.service.resident_demand_snapshot()}
+        if self._paused is not None:  # Readers accept these before writers emit them.
+            warden = self.service.warden
+            snapshot.update(warden.pause_stats.snapshot(), paused_sandboxes=len(warden.paused_keys()))
+        return snapshot
 
     def _relay_parking_loop(self) -> None:
         next_sample = 0.0
@@ -376,7 +384,104 @@ class DirectNodeRuntime:
                 except (OSError, RuntimeError, ValueError):
                     pass  # Missing observations carry no projected reclaim credit.
                 next_sample = time.monotonic() + 1.0
+            if self._paused is not None:
+                try:
+                    self._reclaim_paused_tick()
+                except (OSError, RuntimeError, ValueError):
+                    pass  # Optional reclaim never stops sampling or relay rechecks.
             self._recheck_relay_parks()
+
+    def _park_executor(self) -> ThreadPoolExecutor:
+        """Caller holds _relay_parking_guard."""
+        if self._relay_park_executor is None:
+            self._relay_park_executor = ThreadPoolExecutor(
+                max_workers=self._relay_park_workers, thread_name_prefix="resident-reclaim")
+        return self._relay_park_executor
+
+    def _reclaim_paused_tick(self) -> None:
+        """Relieve measured pressure: swap paused sandboxes out, else hibernate them.
+
+        Reclaim runs within the node's one ReclaimBudget. When swap nearly
+        fills, or a wait's reclaim stalls, the rest of the deficit escalates
+        the best-ranked paused waits through the durable park path.
+        """
+        markers = set(self.service.warden.paused_keys())
+        with self._relay_parking_guard:
+            for key in self._paused.keys() - markers:
+                self._paused.pop(key)  # Thawed by an activity path.
+            for key in markers - self._paused.keys():  # Restarts; managed waits skip the idle loop.
+                self._paused[key] = PausedWait(time.monotonic())
+            waits = tuple(self._paused.items())
+        # Closed admission (drain) bills unbounded demand so that resident
+        # waits hibernate; swapping paused ones out first would double the I/O.
+        demand = (self._warm_parks.demand() if getattr(self.service, "admission_open", True)
+                  else MemoryDemand())
+        pressure = self._warm_parks.pressure()
+        decision = decide_resident_wait(pressure, demand)
+        if not decision.reclaim or not waits:
+            return
+        for key, wait in waits:  # Sampled each second by refresh_resident_memory.
+            sample = self.service.resident_memory_sample(*key)
+            wait.resident_bytes = None if sample is None else sample.current_bytes
+            wait.swapped_bytes = 0 if sample is None else sample.swap_bytes
+        with self._relay_parking_guard:
+            if self._background_stop.is_set():
+                return
+            reclaims, escalations = relief_plan(
+                decision, self._paused, now=time.monotonic(), swap_room=swap_room_bytes(pressure))
+            reclaiming = sum(bool(wait.reclaiming) for wait in self._paused.values())
+            escalating = sum(wait.escalating for wait in self._paused.values())
+            for key, target in reclaims[:max(0, self._reclaim_budget.concurrency - reclaiming)]:
+                self._paused[key].reclaiming = target
+                self._park_executor().submit(self._reclaim_paused, key, target)
+            for key in escalations[:max(0, ESCALATION_CONCURRENCY - escalating)]:
+                self._paused[key].escalating = True
+                self._park_executor().submit(self._escalate_paused, key)
+
+    def _reclaim_paused(self, key, target) -> None:
+        result = None
+        try:
+            result = self.service.reclaim_paused(
+                *key, target_bytes=target, budget=self._reclaim_budget,
+                is_current=lambda: not self._background_stop.is_set(),
+            )
+        except (RuntimeError, ValueError, OSError):
+            pass  # Optional: the paused wait remains correct.
+        finally:  # Any error still returns the budget slot and counts a stall.
+            stalled = reclaim_stalled(result, target)
+            with self._relay_parking_guard:
+                wait = self._paused.get(key)
+                if wait is not None:
+                    wait.reclaiming, wait.stalled = 0, stalled
+            counts = {"pause_reclaim_stalls": int(stalled)}
+            if result is not None:
+                counts.update(
+                    pause_reclaims=1, pause_reclaimed_bytes=result.reclaimed_bytes,
+                    pause_reclaim_ms_total=result.elapsed_seconds * 1000,
+                    pause_reclaim_cancellations=int(result.reason == "superseded"))
+            self.service.warden.pause_stats.add(**counts)
+
+    def _escalate_paused(self, key) -> None:
+        """Hibernate one paused sandbox through the durable park path.
+
+        No background publication (an idle park's upload is not relief) and no
+        idle-timer recheck: the marker, rechecked under the exclusive
+        lifecycle lease, already proves the sandbox inactive.
+        """
+        record = None
+        try:
+            record, _ = self.park_with_activity_revision(
+                key[0], operation_id=f"pause-escalation:{uuid4().hex}",
+                generation=key[1], escalate=True)
+        except (RuntimeError, ValueError, OSError):
+            pass  # Activity, deletion or a refused capture won; retry next tick.
+        finally:  # Any error still returns the escalation slot.
+            with self._relay_parking_guard:
+                wait = self._paused.get(key)
+                if wait is not None:
+                    wait.escalating = False
+        if record is not None and record.state == "parked":
+            self.service.warden.pause_stats.add(pause_escalations=1)
 
     def _recheck_relay_parks(self) -> None:
         # The relay retains durable intents. Local scheduling never changes
@@ -405,12 +510,7 @@ class DirectNodeRuntime:
                     return  # No unbounded executor queue or blocked HTTP caller.
                 if self._deferred_relay_parks.get(key) is not entry:
                     continue
-                if self._relay_park_executor is None:
-                    self._relay_park_executor = ThreadPoolExecutor(
-                        max_workers=self._relay_park_workers,
-                        thread_name_prefix="resident-reclaim",
-                    )
-                self._relay_park_tasks[key] = self._relay_park_executor.submit(
+                self._relay_park_tasks[key] = self._park_executor().submit(
                     self._recheck_relay_park, key, entry,
                 )
 
@@ -474,6 +574,9 @@ class DirectNodeRuntime:
                 record = self.service.get(registration.sandbox_id)
                 if record is None or record.state != "running":
                     continue
+                if self._paused is not None:
+                    self._idle_pause(registration)
+                    continue
                 try:
                     self.park(
                         registration.sandbox_id,
@@ -494,12 +597,15 @@ class DirectNodeRuntime:
     ) -> tuple[SandboxRecord, dict[str, object]]:
         existing = self.service.get_snapshot(spec.id)
         started = time.monotonic()
-        record = self.service.create(spec, operation=operation)
+        with phase_timings.recording() as phases:
+            record = self.service.create(spec, operation=operation)
         return (
             record,
             {
                 "idempotent": existing is not None and existing == record,
                 "total_ms": max(0, int((time.monotonic() - started) * 1000)),
+                # Nested and repeated phases; not additive. See phase_timings.
+                "phases": dict(phases),
             },
         )
 
@@ -562,6 +668,18 @@ class DirectNodeRuntime:
         )
         return record
 
+    def _idle_pause(self, registration) -> None:
+        key = (registration.sandbox_id, registration.sandbox_generation)
+        if self.service.warden.is_paused(*key):
+            return  # The reclaim tick adopts every marker, restarts included.
+        try:
+            self.park_with_activity_revision(
+                key[0], operation_id=f"idle-park:{uuid4().hex}", background=True,
+                generation=key[1], idle=True,
+            )
+        except (RuntimeError, ValueError):
+            pass  # The idle loop's rejected-tick contract.
+
     def park_with_activity_revision(
         self,
         sandbox_id: str,
@@ -571,6 +689,8 @@ class DirectNodeRuntime:
         relay_request_id: str | None = None,
         generation: int | None = None,
         resource_phase: dict | None = None,
+        idle: bool = False,
+        escalate: bool = False,
     ) -> tuple[SandboxRecord, int]:
         if not isinstance(operation_id, str) or not OPERATION_ID_RE.fullmatch(
             operation_id
@@ -587,13 +707,26 @@ class DirectNodeRuntime:
             if observe_wait is not None:
                 observe_wait(sandbox_id, generation, relay_request_id)
         key = (sandbox_id, generation, relay_request_id)
+        # A pause-tier node replaces WarmParkPolicy: it pauses or hibernates now.
+        warm = relay_request_id is not None and self._paused is None
+        pause, expected = False, None
         if resource_phase is not None:
             if relay_request_id is None or generation is None:
                 raise ValueError("resource phase requires a generation-bound relay park")
-            self._warm_parks.observe_phase(key, resource_phase)
+            if warm:
+                self._warm_parks.observe_phase(key, resource_phase)
+        if self._paused is not None:
+            expected = advised_wait_seconds(resource_phase, time.time())
+            sample = self.service.resident_memory_sample(sandbox_id, generation)
+            resident = sample.current_bytes if sample is not None else 0
+            pause = park_tier(
+                "relay" if relay_request_id is not None else "idle" if idle else "explicit",
+                expected_wait_seconds=expected, resident_bytes=resident,
+                footprint_bytes=resident + (sample.swap_bytes if sample is not None else 0),
+            ) == "pause"
         memory_bytes = 0
         ram_bytes = None
-        if relay_request_id is not None:
+        if warm:
             sample = self._resident_wait_memory_sample(key)
             if sample is not None:
                 memory_bytes = sample.current_bytes
@@ -601,16 +734,16 @@ class DirectNodeRuntime:
         snapshot = self.service.get_snapshot(sandbox_id) if hasattr(self.service, 'get_snapshot') else None
         delay = (
             self._warm_parks.defer(key, memory_bytes=memory_bytes, ram_bytes=ram_bytes, blocking=False)
-            if relay_request_id is not None and (snapshot is None or snapshot.state == 'running')
+            if warm and (snapshot is None or snapshot.state == 'running')
             else nullcontext(None)
         )
         try:
             with delay as cancelled:
-                if relay_request_id is not None and self._reclaim_wait_cache(key, sample, cancelled):
+                if warm and self._reclaim_wait_cache(key, sample, cancelled):
                     # Keep the same live wait. Actual MemAvailable decides
                     # whether another reclaim/park is needed after settling.
                     raise WarmParkDeferred(0.25)
-                if relay_request_id is not None and not self._warm_parks.ready(key, memory_bytes=memory_bytes, ram_bytes=ram_bytes):
+                if warm and not self._warm_parks.ready(key, memory_bytes=memory_bytes, ram_bytes=ram_bytes):
                     if cancelled is None or not cancelled.is_set():
                         raise WarmParkDeferred(0.25)
                 # Join a concurrent park/wake and then re-evaluate the stable
@@ -621,6 +754,8 @@ class DirectNodeRuntime:
                     join_transition=True,
                     transition_timeout_seconds=60.0,
                 ):
+                    if escalate and not self.service.warden.is_paused(sandbox_id, generation):
+                        raise SandboxConflictError("pause escalation lost to activity")
                     if relay_request_id is not None:
                         if cancelled is not None and cancelled.is_set():
                             raise SandboxConflictError("relay park was superseded by wake")
@@ -628,17 +763,27 @@ class DirectNodeRuntime:
                             raise SandboxConflictError("relay park was superseded by durable wake")
                     # Waiting for lifecycle authority can outlast the deficit.
                     # Recheck before starting irreversible checkpoint work.
-                    if relay_request_id is not None and not self._warm_parks.ready(
+                    if warm and not self._warm_parks.ready(
                         key, memory_bytes=memory_bytes, ram_bytes=ram_bytes,
                     ):
                         raise WarmParkDeferred(0.25)
-                    record = self.service.park(
-                        sandbox_id,
-                        operation_id=operation_id,
-                        background=background,
-                    )
-                    if relay_request_id is not None and record.state == "parked":
+                    try:
+                        record = self.service.park(sandbox_id, operation_id=operation_id,
+                                                   background=background, pause=pause)
+                    except WarmParkDeferred:
+                        if self._paused is None or pause or relay_request_id is None:
+                            raise
+                        # No capture space for a long predicted wait: pause it.
+                        pause = True
+                        record = self.service.park(sandbox_id, operation_id=operation_id,
+                                                   background=background, pause=True)
+                    if warm and record.state == "parked":
                         self._warm_parks.parked(key)
+                    if pause and self.service.warden.is_paused(sandbox_id, generation):
+                        now = time.monotonic()
+                        with self._relay_parking_guard:
+                            self._paused[key[:2]] = PausedWait(
+                                now, None if expected is None else now + expected)
                     activity_revision = self.service.advance_lifecycle_activity_revision()
                     return record, activity_revision
         except WarmParkDeferred as exc:

@@ -40,6 +40,27 @@ class RamFilesystemTests(unittest.TestCase):
         self.assertIn("noswap", self.commands[0][4])
         self.assertEqual((self.root / "live").read_bytes(), b"owned memory")
 
+    def test_pause_tier_mount_is_swappable_and_sized_with_swap(self):
+        swap = 2 * 1024**3
+        size = (1024**3 * 95 // 100 + swap) // 4096 * 4096
+        patch("ucloud_sandboxes.memory_filesystem.Path.read_text",
+              return_value=f"MemTotal: 1048576 kB\nSwapTotal: {swap // 1024} kB\n").start()
+        patch("ucloud_sandboxes.memory_filesystem.os.statvfs",
+              return_value=SimpleNamespace(f_blocks=size // 4096, f_frsize=4096)).start()
+
+        def mount(*command):
+            self.commands.append(command)
+            self.info = {"target": str(self.root), "source": "ucloud-application-memory",
+                         "fstype": "tmpfs", "options": "rw,nodev,nosuid"}
+
+        patch("ucloud_sandboxes.memory_filesystem._run", side_effect=mount).start()
+        record = provision_ram_filesystem(self.root, capacity_bytes=2 * 1024**3, swappable=True)
+        self.assertEqual((record["capacity_bytes"], record["noswap"]), (size, False))
+        self.assertNotIn("noswap", self.commands[0][4])
+        # A live noswap mount never silently changes swap policy, and back.
+        with self.assertRaisesRegex(MemoryFilesystemError, "swap and capacity contract"):
+            provision_ram_filesystem(self.root, capacity_bytes=2 * 1024**3)
+
     def test_unmounted_files_are_never_covered(self):
         self.root.mkdir()
         (self.root / "orphan").touch()

@@ -5,8 +5,11 @@ import sys
 import time
 import unittest
 
+from tests.support import requires_sdk
 from tests.test_sandbox_exec import FakeSandboxManager, BlockingStdin, _install_session
 from ucloud_sandboxes.sandbox_exec import ExecSessionManager, SandboxExecSpec
+
+TEST_TIER = "contract"
 
 
 class ExecBackpressureTests(unittest.TestCase):
@@ -102,11 +105,10 @@ class ExecBackpressureTests(unittest.TestCase):
 
 
 class ExecDuplexHttpTests(unittest.TestCase):
+    # Earlier SDKs write all stdin before draining output (CHANGELOG rc24).
+    @requires_sdk('0.4.27')
     def test_sync_and_async_sdk_feed_stdin_while_draining_bounded_output(self):
-        try:
-            from ucloud_sandboxes_sdk import SandboxClient, AsyncSandboxClient
-        except ImportError:
-            self.skipTest('run with PYTHONPATH=ucloud-sandboxes-sdk/src for SDK integration')
+        from ucloud_sandboxes_sdk import SandboxClient, AsyncSandboxClient
         from types import SimpleNamespace
         from tests.test_control_plane import _running_server
         from ucloud_sandboxes.http_server import HighBacklogThreadingHTTPServer

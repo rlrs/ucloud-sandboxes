@@ -92,8 +92,9 @@ class SelectiveEnvironmentPublicationTests(unittest.TestCase):
         })
         return image_id
 
-    def mkfs(self, image, view, *, exclude_runtime_mounts):
+    def mkfs(self, image, view, *, exclude_runtime_mounts, preserve_mtimes):
         self.assertTrue(exclude_runtime_mounts)
+        self.assertEqual(preserve_mtimes, self.builder.layer_format()["layout"] == 2)
         snapshot = {}
         for path in sorted(view.rglob("*")):
             info = path.lstat()

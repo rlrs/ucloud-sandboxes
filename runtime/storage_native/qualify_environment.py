@@ -4,6 +4,10 @@
 Exercises real OCI HTTP reads, signature/chunk verification, composition,
 OverlayRootfsManager and a live gVisor guest across frontend process replacement.
 The in-process registry is a fixture: this does not claim WAN latency results.
+
+``--prefetch`` publishes signed metadata hints (C2.2), runs the backend with
+its metrics exported, and then attaches again on a fresh chunk cache that
+keeps only the first run's startup traces (C2.3), with a second live guest.
 """
 
 import argparse
@@ -35,10 +39,16 @@ from ucloud_sandboxes.environment_artifact import (
     publish_environment,
     sign_component,
 )
-from ucloud_sandboxes.environment_backend import EnvironmentBackendClient
+from ucloud_sandboxes.environment_backend import (
+    EnvironmentBackend,
+    EnvironmentBackendClient,
+    EnvironmentBackendServer,
+    PrefetchPolicy,
+)
 from ucloud_sandboxes.environment_builder import allowlisted_build_view
 from ucloud_sandboxes.environment_config import configured_environment_registry
 from ucloud_sandboxes.environment_manifest import EnvironmentManifest
+from ucloud_sandboxes.environment_metadata import sign_metadata_hint
 from ucloud_sandboxes.environment_rootfs import EnvironmentRootfsStore
 from ucloud_sandboxes.image_rootfs import OverlayRootfsManager
 from ucloud_sandboxes.managed_registry import RegistryRequestError
@@ -134,15 +144,114 @@ def frontend(path):
         )
 
 
+PREFETCH_METRICS = (
+    "metadata_hint_present", "metadata_prefetch_chunks", "metadata_prefetch_bytes",
+    "metadata_prefetch_seconds", "metadata_prefetch_wait_timeouts", "trace_hint_present",
+    "trace_hint_absent", "trace_prefetch_chunks", "trace_prefetch_bytes", "trace_prefetch_seconds",
+    "trace_recordings_started", "traces_recorded", "trace_chunks_recorded", "prefetch_joined_reads",
+    "prefetch_start_failures", "misses", "downloaded_bytes",
+)
+
+
+def metered_backend(path):
+    """The artifact backend as ``serve_backend`` builds it, exporting metrics.
+
+    Only the trace window is shortened, so that a qualification run closes it.
+    The process is killed, never closed, exactly as the plain backend is.
+    """
+    settings = json.loads(path.read_bytes())
+    registry = configured_environment_registry(settings["url"], "environments", Path(settings["keys"]))
+    backend = EnvironmentBackend(Path(settings["root"]), registry,
+                                 prefetch=PrefetchPolicy(trace_window_seconds=settings["trace_window_seconds"]))
+    server = EnvironmentBackendServer(settings["socket"], backend)
+    Thread(target=server.serve_forever, daemon=True).start()
+    metrics = Path(settings["metrics"])
+    while True:
+        metrics.with_suffix(".tmp").write_text(json.dumps(backend.metrics()))
+        metrics.with_suffix(".tmp").replace(metrics)
+        time.sleep(0.05)
+
+
+def prefetch_metrics(path):
+    time.sleep(0.1)  # Two export periods, so the snapshot postdates the caller's last event.
+    values = json.loads(path.read_text())
+    return {name: values[name] for name in PREFETCH_METRICS}
+
+
+def wait_for(predicate, seconds, what):
+    deadline = time.monotonic() + seconds
+    while not predicate():
+        if time.monotonic() > deadline:
+            raise RuntimeError(what + " did not happen in time")
+        time.sleep(0.05)
+
+
+def start_backend(command, log_path, socket_path):
+    log = log_path.open("w")
+    backend = subprocess.Popen(command, stdout=log, stderr=log)
+    deadline = time.monotonic() + 10
+    while not socket_path.exists():
+        if backend.poll() is not None or time.monotonic() > deadline:
+            raise RuntimeError("backend failed to start: " + log_path.read_text())
+        time.sleep(0.02)
+    return backend
+
+
+def start_guest(runsc, bundle, identifier, directory):
+    """Run the fixture guest until it reports GUEST_READY; returns (process, seconds)."""
+    started = time.monotonic()
+    guest = subprocess.Popen(
+        runsc + ["run", "--bundle=" + str(bundle), identifier],
+        stdout=(directory / "guest.stdout").open("w"),
+        stderr=(directory / "guest.stderr").open("w"),
+        text=True,
+    )
+    deadline = time.monotonic() + 15
+    while "GUEST_READY" not in (directory / "guest.stdout").read_text():
+        if guest.poll() is not None or time.monotonic() > deadline:
+            raise RuntimeError(
+                "guest failed to become live: " + (directory / "guest.stderr").read_text()
+            )
+        time.sleep(0.05)
+    return guest, time.monotonic() - started
+
+
+def finish_guest(guest, directory):
+    guest.wait(timeout=10)
+    stdout, stderr = (directory / "guest.stdout").read_text(), (directory / "guest.stderr").read_text()
+    assert guest.returncode == 0 and "GUEST_OK" in stdout, stderr
+
+
+def unmount_under(root):
+    """Unmount only mounts under this freshly allocated qualification directory."""
+    mounts = [
+        line.split()[4].replace("\\040", " ")
+        for line in Path("/proc/self/mountinfo").read_text().splitlines()
+        if line.split()[4].startswith(str(root) + "/")
+    ]
+    errors = []
+    for mount in sorted(mounts, key=lambda value: (value.count("/"), value), reverse=True):
+        completed = subprocess.run(["umount", mount], capture_output=True, text=True, timeout=20)
+        if completed.returncode:
+            errors.append(completed.stderr)
+    return errors
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runsc", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--layers", action="store_true", help="Also qualify shared layers against Docker overlay2")
+    parser.add_argument("--prefetch", action="store_true",
+                        help="Publish metadata hints and qualify startup-trace replay on a fresh cache")
     parser.add_argument("--frontend", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--metered-backend", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.frontend:
         frontend(args.frontend)
+        return 0
+    if args.metered_backend:
+        metered_backend(args.metered_backend)
         return 0
     if os.geteuid() != 0 or not args.runsc or not args.output:
         parser.error("requires root, --runsc and --output on an isolated Linux host")
@@ -226,7 +335,13 @@ def main():
             component = sign_component(
                 image, source_image="sha256:" + "1" * 64, signing_key=key
             )
-            components.append(registry.publish(image, component, tag=name))
+            hint = None
+            if args.prefetch:
+                hint, walked = sign_metadata_hint(image, component, key)
+                result.setdefault("metadata_hints", {})[name] = {
+                    "image_bytes": walked.image_bytes, "metadata_bytes": walked.metadata_bytes,
+                    "chunks": len(hint.chunks), "chunk_count": hint.chunk_count, "complete": hint.complete}
+            components.append(registry.publish(image, component, tag=name, metadata=hint))
             total_bytes += image.stat().st_size
         environment_root = publish_environment(
             registry,
@@ -298,33 +413,21 @@ def main():
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         Thread(target=server.serve_forever, daemon=True).start()
         url = "http://127.0.0.1:" + str(server.server_port)
-        log = (root / "backend.log").open("w")
-        backend = subprocess.Popen(
-            [
-                sys.executable,
-                "-m",
-                "ucloud_sandboxes.environment_backend",
-                "--root",
-                str(root / "backend"),
-                "--socket",
-                str(root / "backend.sock"),
-                "--registry-url",
-                url,
-                "--repository",
-                "environments",
-                "--trusted-keys",
-                str(root / "keys.json"),
-            ],
-            stdout=log,
-            stderr=log,
-        )
-        deadline = time.monotonic() + 10
-        while not (root / "backend.sock").exists():
-            if backend.poll() is not None or time.monotonic() > deadline:
-                raise RuntimeError(
-                    "backend failed to start: " + (root / "backend.log").read_text()
-                )
-            time.sleep(0.02)
+
+        def backend_command(directory):
+            if not args.prefetch:
+                return [sys.executable, "-m", "ucloud_sandboxes.cli", "serve-environment-io",
+                        "--root", str(directory / "backend"), "--socket", str(directory / "backend.sock"),
+                        "--environment-registry-url", url, "--environment-registry-repository", "environments",
+                        "--environment-trusted-keys", str(directory / "keys.json")]
+            (directory / "backend.json").write_text(json.dumps({
+                "root": str(directory / "backend"), "socket": str(directory / "backend.sock"), "url": url,
+                "keys": str(directory / "keys.json"), "metrics": str(directory / "metrics.json"),
+                "trace_window_seconds": 8.0}))
+            return [sys.executable, str(Path(__file__).resolve()), "--metered-backend",
+                    str(directory / "backend.json")]
+
+        backend = start_backend(backend_command(root), root / "backend.log", root / "backend.sock")
         config = {
             "ociVersion": "1.0.2",
             "root": {"path": "rootfs", "readonly": False},
@@ -383,6 +486,10 @@ def main():
         )
         metadata = json.loads(created.stdout)
         result["cold_materialize_seconds"] = time.monotonic() - started
+        result["cold_materialize_blob_bytes"] = fixture.downloaded_bytes
+        if args.prefetch:
+            result["prefetch_after_materialize"] = prefetch_metrics(root / "metrics.json")
+            assert result["prefetch_after_materialize"]["metadata_hint_present"] == len(components)
         identifier = metadata["container_id"]
         bundle = Path(metadata["bundle"])
         merged = bundle / "rootfs"
@@ -392,20 +499,7 @@ def main():
             not (merged / "delete-me").exists() and not (merged / "opaque/old").exists()
         )
         assert (merged / "opaque/new").read_text() == "visible"
-        guest = subprocess.Popen(
-            runsc + ["run", "--bundle=" + str(bundle), identifier],
-            stdout=(root / "guest.stdout").open("w"),
-            stderr=(root / "guest.stderr").open("w"),
-            text=True,
-        )
-        deadline = time.monotonic() + 15
-        while "GUEST_READY" not in (root / "guest.stdout").read_text():
-            if guest.poll() is not None or time.monotonic() > deadline:
-                raise RuntimeError(
-                    "guest failed to become live: "
-                    + (root / "guest.stderr").read_text()
-                )
-            time.sleep(0.05)
+        guest, result["guest_ready_seconds"] = start_guest(runsc, bundle, identifier, root)
         settings.update(
             image_id=metadata["image_id"], fingerprint=metadata["fingerprint"]
         )
@@ -429,12 +523,11 @@ def main():
                 for digest in components
             }
         ) == len(components)
-        guest.wait(timeout=10)
-        stdout, stderr = (
-            (root / "guest.stdout").read_text(),
-            (root / "guest.stderr").read_text(),
-        )
-        assert guest.returncode == 0 and "GUEST_OK" in stdout, stderr
+        finish_guest(guest, root)
+        if args.prefetch:
+            wait_for(lambda: prefetch_metrics(root / "metrics.json")["traces_recorded"] == len(components),
+                     30, "startup trace recording")
+            result["prefetch_after_guest"] = prefetch_metrics(root / "metrics.json")
         # Default gVisor root:self keeps guest writes in its disk-backed upper;
         # independently qualify the canonical host overlay's copy-up semantics.
         assert (merged / "etc/hello").read_text() == "immutable\n"
@@ -469,6 +562,38 @@ def main():
             and "lost with retained mounts" in replacement.stderr
         )
         result["backend_loss_fenced"] = True
+        if args.prefetch:
+            # C2.3 replay: a fresh backend and chunk cache that keep only the
+            # first run's startup traces. Release the first run's mounts so
+            # no new export can bind a device under its filesystems.
+            subprocess.run(runsc + ["delete", "--force", identifier], capture_output=True, timeout=20)
+            if unmount_under(root):
+                raise RuntimeError("could not release the first run's mounts")
+            replay = root / "replay"
+            replay.mkdir(mode=0o700)
+            shutil.copy2(root / "keys.json", replay / "keys.json")
+            shutil.copytree(root / "backend/traces", replay / "backend/traces")
+            (replay / "backend").chmod(0o700)
+            traces = len(list((replay / "backend/traces").glob("*.json")))
+            backend = start_backend(backend_command(replay), replay / "backend.log", replay / "backend.sock")
+            (replay / "frontend.json").write_text(json.dumps(
+                {"root": str(replay), "url": url, "image_ref": settings["image_ref"], "config": config}))
+            before, started = fixture.downloaded_bytes, time.monotonic()
+            created = subprocess.run(command[:-1] + [str(replay / "frontend.json")], check=True,
+                                     capture_output=True, text=True, timeout=30)
+            replay_result = {"traces": traces, "cold_materialize_seconds": time.monotonic() - started,
+                             "cold_materialize_blob_bytes": fixture.downloaded_bytes - before,
+                             "after_materialize": prefetch_metrics(replay / "metrics.json")}
+            metadata = json.loads(created.stdout)
+            identifier = metadata["container_id"]
+            guest, replay_result["guest_ready_seconds"] = start_guest(
+                runsc, Path(metadata["bundle"]), identifier, replay)
+            finish_guest(guest, replay)
+            replay_result.update(http_blob_bytes=fixture.downloaded_bytes - before,
+                                 after_guest=prefetch_metrics(replay / "metrics.json"))
+            result["trace_replay"] = replay_result
+            assert traces == len(components) == replay_result["after_materialize"]["trace_hint_present"]
+            assert replay_result["after_guest"]["trace_prefetch_chunks"] > 0
         result["passed"] = True
     except Exception as exc:
         result["passed"] = False
@@ -489,21 +614,7 @@ def main():
         if guest is not None and guest.poll() is None:
             guest.kill()
             guest.wait()
-        # Only mounts under this freshly allocated qualification directory.
-        mounts = [
-            line.split()[4].replace("\\040", " ")
-            for line in Path("/proc/self/mountinfo").read_text().splitlines()
-            if line.split()[4].startswith(str(root) + "/")
-        ]
-        cleanup = []
-        for mount in sorted(
-            mounts, key=lambda value: (value.count("/"), value), reverse=True
-        ):
-            completed = subprocess.run(
-                ["umount", mount], capture_output=True, text=True, timeout=20
-            )
-            if completed.returncode:
-                cleanup.append(completed.stderr)
+        cleanup = unmount_under(root)
         if backend is not None:
             backend.terminate()
             backend.wait(timeout=10)

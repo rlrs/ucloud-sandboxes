@@ -15,6 +15,8 @@ from ucloud_sandboxes.models import ResourceQuantity, SandboxInventoryEntry, utc
 from ucloud_sandboxes.registry import heartbeat_to_dict
 from ucloud_sandboxes.routing import RoutingStore, SandboxRoute
 
+TEST_TIER = "contract"
+
 
 class FleetReaderTests(unittest.TestCase):
     def test_render_preserves_shared_inputs_and_rechecks_external_inventory(self):

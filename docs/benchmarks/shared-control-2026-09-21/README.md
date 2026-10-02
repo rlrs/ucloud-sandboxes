@@ -1,8 +1,8 @@
 # Shared-control qualification, 21 September 2026
 
 This qualifies the first PostgreSQL result/wake implementation, not the complete
-production backend. See [implementation scope](../../shared-control-qualification.md)
-and [system design](../../shared-control-plane-design.md).
+production backend. The qualification store and benchmark script have since
+been removed; see [system design](../../shared-control-plane-design.md).
 
 All reported trials completed their response/state checks. These are local
 macOS tests with PostgreSQL 17, four logical nodes, two dispatchers/pools with

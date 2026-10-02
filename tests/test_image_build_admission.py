@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event, Lock
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -18,6 +19,8 @@ from ucloud_sandboxes.images import (
 )
 from ucloud_sandboxes.sandbox import CommandResult
 from ucloud_sandboxes.build_deadline import build_execution_deadline
+
+TEST_TIER = "contract"
 
 
 def record(name, *, phase="preparing_solving", status="running", owner=None):
@@ -187,7 +190,13 @@ class PhaseAdmissionTests(unittest.TestCase):
             self.assertEqual(manager.get_build(rows[0].build_id).admission_phase, "released")
 
     def test_finish_slot_wait_consumes_execution_deadline_without_releasing_early(self):
-        with TemporaryDirectory() as temporary:
+        # The budget clock moves only when the test moves it, so host load
+        # cannot spend the budget before the build reaches the finishing slot.
+        now = [1000.0]
+        clock = SimpleNamespace(monotonic=lambda: now[0])
+        with TemporaryDirectory() as temporary, patch(
+            "ucloud_sandboxes.build_deadline.time", clock
+        ):
             runtime = ControlledRuntime()
             runtime.arm("first", release=True)
             runtime.arm("second", release=True)
@@ -199,15 +208,30 @@ class PhaseAdmissionTests(unittest.TestCase):
                 return "sha256:" + "a" * 64
             manager = self.manager(Path(temporary), runtime, builds=1, finishing=1,
                                    publisher=publish, build_execution_timeout_seconds=3)
+            enter_finishing = manager.build_store.try_enter_finishing
+            attempts, polled = [], Event()
+            def observed(build_id, **kwargs):
+                entered = enter_finishing(build_id, **kwargs)
+                if build_id != first.build_id:
+                    attempts.append(entered)
+                    if len(attempts) >= 3:
+                        polled.set()
+                return entered
             first = self.submit(manager, "first")[0]
             try:
                 self.assertTrue(publisher_entered.wait(2))
                 manager.build_execution_timeout_seconds = 0.1
-                second = self.submit(manager, "second")[0]
-                done = self.wait(manager, second)
+                with patch.object(manager.build_store, "try_enter_finishing", observed):
+                    second = self.submit(manager, "second")[0]
+                    self.assertTrue(polled.wait(5))
+                    # Inside its budget the wait keeps polling the held slot.
+                    self.assertFalse(manager.get_build(second.build_id).terminal)
+                    now[0] += 0.1
+                    done = self.wait(manager, second)
                 self.assertEqual(done.status, "failed")
                 self.assertIn("server execution deadline", done.error)
-                self.assertGreaterEqual(done.timings["phases"]["finishing_wait_ms"], 80)
+                self.assertIn("finishing_wait_ms", done.timings["phases"])
+                self.assertNotIn(True, attempts)
                 self.assertEqual(manager.active_build_count(), 1)
                 self.assertEqual(manager.build_admission_snapshot()["available_build_slots"], 1)
             finally:

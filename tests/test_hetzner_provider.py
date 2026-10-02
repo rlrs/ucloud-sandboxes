@@ -17,6 +17,8 @@ from ucloud_sandboxes.providers.hetzner import (
     MANAGED_SERVER_LABEL_SELECTOR,
 )
 
+TEST_TIER = "contract"
+
 
 def server_payload(
     *,

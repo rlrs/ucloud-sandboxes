@@ -6,6 +6,8 @@ from aiohttp import ClientSession, web
 from ucloud_sandboxes.model_relay import create_model_relay_app
 from tests.postgres_fixture import postgres_database
 
+TEST_TIER = "contract"
+
 
 class RelayKeepaliveTests(unittest.IsolatedAsyncioTestCase):
     async def test_idle_connections_close_without_interrupting_active_requests(self):

@@ -16,6 +16,8 @@ from ucloud_sandboxes.systemd import (
 )
 from ucloud_sandboxes.registry_sweep import RegistrySweepResult
 
+TEST_TIER = "contract"
+
 
 def completed(command, stdout=""):
     return subprocess.CompletedProcess(command, 0, stdout, "")

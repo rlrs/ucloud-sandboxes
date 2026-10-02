@@ -11,6 +11,8 @@ from tests.test_registry import build_heartbeat
 from ucloud_sandboxes.control_state import ControlStateStore
 from ucloud_sandboxes.models import utc_now
 
+TEST_TIER = "contract"
+
 
 class ControlStatePoolTests(unittest.TestCase):
     def test_concurrent_readers_are_exclusive_and_keep_full_durability(self):

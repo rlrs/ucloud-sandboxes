@@ -4,7 +4,15 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts import live_relay_load_benchmark as benchmark
+from tests.support import sdk_skip_reason, skip_module
+
+TEST_TIER = "contract"
+
+# The script under test imports the SDK at module level.
+if (SDK_UNAVAILABLE := sdk_skip_reason()) is None:
+    from scripts import live_relay_load_benchmark as benchmark
+else:
+    load_tests = skip_module(__name__, SDK_UNAVAILABLE)
 
 
 class ReportWriterTests(unittest.TestCase):
@@ -16,8 +24,9 @@ class ReportWriterTests(unittest.TestCase):
             'counts': {'http_429': 5},
         }
 
-    @unittest.skipIf(benchmark._report_orjson is None, 'optional orjson is unavailable')
     def test_orjson_and_fallback_are_structurally_equivalent(self):
+        if benchmark._report_orjson is None:
+            self.skipTest('optional orjson is unavailable')
         report = self.report()
         self.assertEqual(json.loads(benchmark.encode_report(report)), report)
         with patch.object(benchmark, '_report_orjson', None):

@@ -14,6 +14,8 @@ from ucloud_sandboxes.routing import ExecRoute, RoutingStore, SandboxRouteConfli
 from ucloud_sandboxes.durable_batch import DurableSqliteBatch
 from tests.test_routing import sandbox_route
 
+TEST_TIER = "contract"
+
 
 class RoutingBatchTests(unittest.TestCase):
     def test_queued_writers_enter_in_order_across_commits(self):

@@ -67,7 +67,7 @@ def gateway_process(pipe, root, node_port, asynchronous, concurrency, cpus):
         max_http_request_threads=max(1024, concurrency + 16),
     )
     node_url = f"http://127.0.0.1:{node_port}"
-    server.RequestHandlerClass.store.receive_heartbeat(
+    server.RequestHandlerClass.services.heartbeats.store.receive_heartbeat(
         NodeHeartbeat(
             node_id="worker",
             job_id="job",

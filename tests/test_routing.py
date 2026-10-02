@@ -32,6 +32,8 @@ from ucloud_sandboxes.routing import (
     sandbox_demand_from_routing_state,
 )
 
+TEST_TIER = "contract"
+
 
 def sandbox_route(**values: object) -> SandboxRoute:
     values.setdefault("resources", ResourceQuantity())

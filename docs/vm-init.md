@@ -56,11 +56,49 @@ repositories or installs a substitute artifact from the network.
    storage-native backend; create its cache and device-pool services.
 6. Configure Docker for image operations and the private registry.
 7. Activate the bundled Python runtime and write the role-specific node unit.
-8. Start the node, require `/healthz`, then enable the heartbeat timer.
+8. Disable and remove the heartbeat timer an older release installed, then
+   start the node and require `/healthz`.
 
 The node agent is never started if an artifact or service prerequisite fails.
 The control plane treats the node as unavailable until a fresh authenticated
 heartbeat reports the expected deployment and init versions.
+
+## Heartbeats
+
+The node agent pushes its own heartbeats from one thread in its process. The
+node unit passes `--heartbeat-url`, `--heartbeat-bearer-token-file`,
+`--heartbeat-interval-seconds` (the deployment's `heartbeat_interval_seconds`,
+20 s by default) and one `--heartbeat-label` per provider label.
+
+- The first heartbeat goes out as soon as the agent serves, and sending
+  stops when serving does: a sample taken while serving ends is dropped.
+  Each agent process, including one systemd restarts, announces itself at
+  once.
+- After a delivery, the next waits the interval. Every wait is jittered
+  ±20%.
+- After a transport or sampling error, 408, 429 or 5xx, the next attempt
+  waits 1 s, doubling per consecutive failure up to one interval. Any other
+  rejection waits a full interval.
+- Every attempt samples a fresh heartbeat: the `GET /v1/heartbeat` one, with
+  the provider labels merged over the node's own.
+- The agent reads the heartbeat token once, at start, as it reads the
+  node-control token; a rotated token takes effect when the agent restarts.
+
+Without `--heartbeat-url` the agent only serves `GET /v1/heartbeat`.
+
+**Upgrades.** Every VM init run (fresh image, golden-image clone or `init-vm`
+replay) re-renders the node unit and restarts the agent, so a new release
+always starts with the sender flags. Earlier releases ran a oneshot
+`agent-heartbeat` process from `ucloud-sandbox-heartbeat.timer`; that command
+is gone. Before the node agent restarts, VM init disables and removes the
+timer and its service if they exist, so a re-initialized node never posts
+from both. The node posts nothing from runtime activation, which removes the
+timer's command, until the new agent's first heartbeat: seconds, against the
+gateway's heartbeat TTL. If systemd cannot stop the timer, init fails before
+the agent restarts.
+`scripts/upgrade_owned_builder.py` swaps only the runtime and keeps the unit's
+command line: on a node an earlier release initialized, its timer keeps
+posting through that release's runtime until VM init runs again.
 
 ## Roles
 

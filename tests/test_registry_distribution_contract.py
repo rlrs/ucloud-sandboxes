@@ -7,6 +7,8 @@ import unittest
 
 from ucloud_sandboxes.managed_registry import RegistryClient, RegistryRequestError
 
+TEST_TIER = "contract"
+
 
 REGISTRY_URL = os.environ.get("UCLOUD_TEST_REGISTRY_URL", "").rstrip("/")
 

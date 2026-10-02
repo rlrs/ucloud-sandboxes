@@ -15,6 +15,8 @@ from ucloud_sandboxes.durable_batch import DurableSqliteBatch
 from ucloud_sandboxes.storage_native import AgentEnvUblkClient
 from ucloud_sandboxes.warm_park import WarmParkPolicy
 
+TEST_TIER = "contract"
+
 
 class GroupCommitTests(unittest.TestCase):
     def setUp(self):

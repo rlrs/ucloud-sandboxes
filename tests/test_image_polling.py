@@ -11,10 +11,11 @@ from unittest.mock import Mock
 from ucloud_sandboxes.control_plane import (
     ControlPlaneHandler,
     ProxiedResponse,
-    _node_transport_error_response,
 )
+from ucloud_sandboxes.gateway.node_rpc import _node_transport_error_response
 from ucloud_sandboxes.images import ImageRecord, ImageStore
 from ucloud_sandboxes.models import utc_now
+from tests.gateway_support import gateway_services
 
 
 class ImagePollingTests(unittest.TestCase):
@@ -25,6 +26,7 @@ class ImagePollingTests(unittest.TestCase):
             image_build_metrics_seen = OrderedDict()
 
         h = object.__new__(Handler)
+        h.services = gateway_services()
         h._cached_image_build_records = lambda: []
         return h
 
@@ -83,13 +85,10 @@ class ImagePollingTests(unittest.TestCase):
     def test_published_local_image_avoids_fleet_scan_and_tracks_replacement(self):
         with TemporaryDirectory() as directory:
             store = ImageStore(Path(directory) / "images.sqlite")
-            h = self.handler()
-            h.image_manager = SimpleNamespace(get_image=store.get, store=store)
-            h.registry_url = ""
-            h.registry_worker_url = ""
-            h._cached_raw_image_inventory_across_nodes = Mock(
-                side_effect=AssertionError("fleet scan")
-            )
+            images = gateway_services(
+                image_manager=SimpleNamespace(get_image=store.get, store=store),
+            ).images
+            images.cached_raw_inventory = Mock(side_effect=AssertionError("fleet scan"))
             now = utc_now()
             record = ImageRecord("image", "example:v1", "registry", "ready", now, now)
             store.upsert(record)
@@ -97,21 +96,19 @@ class ImagePollingTests(unittest.TestCase):
             for tag in ("example:v1", "example:v2"):
                 store.upsert(replace(record, tag=tag))
                 self.assertEqual(
-                    h._resolve_sandbox_image_reference("image", reference_kind="name"),
-                    (tag, None),
+                    images.resolve(None, "image", reference_kind="name"), (tag, None),
                 )
-            h._cached_raw_image_inventory_across_nodes.assert_not_called()
+            images.cached_raw_inventory.assert_not_called()
 
     def test_deleted_or_unpublished_local_image_uses_discovery(self):
-        from ucloud_sandboxes.control_plane import ImageInventorySnapshot
+        from ucloud_sandboxes.image_inventory_cache import ImageInventorySnapshot
 
         with TemporaryDirectory() as directory:
             store = ImageStore(Path(directory) / "images.sqlite")
-            h = self.handler()
-            h.image_manager = SimpleNamespace(get_image=store.get, store=store)
-            h.registry_url = ""
-            h.registry_worker_url = ""
-            h._cached_raw_image_inventory_across_nodes = Mock(
+            images = gateway_services(
+                image_manager=SimpleNamespace(get_image=store.get, store=store),
+            ).images
+            images.cached_raw_inventory = Mock(
                 return_value=ImageInventorySnapshot.from_records([], complete=False)
             )
             now = utc_now()
@@ -120,24 +117,20 @@ class ImagePollingTests(unittest.TestCase):
             )
             store.upsert(record)
             for _ in range(2):
-                _, error = h._resolve_sandbox_image_reference(
-                    "image", reference_kind="name"
-                )
+                _, error = images.resolve(None, "image", reference_kind="name")
                 self.assertEqual(error["error_code"], "image_inventory_incomplete")
                 store.delete_by_tags([record.tag])
-            self.assertEqual(h._cached_raw_image_inventory_across_nodes.call_count, 2)
+            self.assertEqual(images.cached_raw_inventory.call_count, 2)
 
     def test_local_managed_image_still_requires_digest_protection(self):
         with TemporaryDirectory() as directory:
             store = ImageStore(Path(directory) / "images.sqlite")
-            h = self.handler()
-            h.image_manager = SimpleNamespace(get_image=store.get, store=store)
-            h.registry_url = "http://registry.example"
-            h.registry_worker_url = ""
-            h._managed_registry_manifest_digest = Mock(return_value="")
-            h._cached_raw_image_inventory_across_nodes = Mock(
-                side_effect=AssertionError("fleet scan")
-            )
+            images = gateway_services(
+                image_manager=SimpleNamespace(get_image=store.get, store=store),
+                registry_url="http://registry.example", registry_worker_url="",
+            ).images
+            images.managed_manifest_digest = Mock(return_value="")
+            images.cached_raw_inventory = Mock(side_effect=AssertionError("fleet scan"))
             now = utc_now()
             store.upsert(
                 ImageRecord(
@@ -149,13 +142,11 @@ class ImagePollingTests(unittest.TestCase):
                     now,
                 )
             )
-            _, error = h._resolve_sandbox_image_reference(
-                "image", reference_kind="name"
-            )
+            _, error = images.resolve(None, "image", reference_kind="name")
             self.assertEqual(
                 error["error_code"], "managed_registry_digest_protection_unavailable"
             )
-            h._managed_registry_manifest_digest.assert_called_once()
+            images.managed_manifest_digest.assert_called_once()
 
     def test_unchanged_observation_has_no_write_transaction(self):
         with TemporaryDirectory() as directory:
@@ -203,8 +194,8 @@ class ImagePollingTests(unittest.TestCase):
             h.image_manager = SimpleNamespace(
                 store=ImageStore(Path(directory) / "images.sqlite")
             )
-            h._image_record_with_registry_digest = lambda value: value
-            h._invalidate_image_inventory_cache = Mock()
+            h.services.images.record_with_digest = lambda value: value
+            h.services.images.invalidate_inventory = Mock()
             now = utc_now()
             image = ImageRecord(
                 "image", "example:latest", "registry", "ready", now, now
@@ -213,19 +204,19 @@ class ImagePollingTests(unittest.TestCase):
                 h._record_successful_build_image(
                     {"status": "succeeded", "image": image.to_dict()}
                 )
-            h._invalidate_image_inventory_cache.assert_called_once()
+            h.services.images.invalidate_inventory.assert_called_once()
             h._record_successful_build_image(
                 {
                     "status": "succeeded",
                     "image": replace(image, labels={"new": "value"}).to_dict(),
                 }
             )
-            self.assertEqual(h._invalidate_image_inventory_cache.call_count, 2)
+            self.assertEqual(h.services.images.invalidate_inventory.call_count, 2)
 
     def test_exact_build_poll_uses_owner_and_recovers_when_owner_loses_build(self):
         h = self.handler()
         nodes = [self.node("a"), self.node("b")]
-        h._ready_heartbeats = lambda: nodes
+        h.services.fleet.ready_heartbeats = lambda: nodes
         calls = []
         owner = "http://b"
 
@@ -255,7 +246,7 @@ class ImagePollingTests(unittest.TestCase):
     def test_restarted_owner_does_not_use_old_hint(self):
         h = self.handler()
         h.image_build_owners["build-id"] = ("b", "b", "old")
-        h._ready_heartbeats = lambda: [self.node("a"), self.node("b", "new")]
+        h.services.fleet.ready_heartbeats = lambda: [self.node("a"), self.node("b", "new")]
         calls = []
 
         def fetch(url, path, **kwargs):
@@ -270,7 +261,7 @@ class ImagePollingTests(unittest.TestCase):
 
     def test_owner_timeout_is_retryable_without_fanout_and_recovers(self):
         h = self.handler()
-        h._ready_heartbeats = lambda: [self.node("owner"), self.node("peer")]
+        h.services.fleet.ready_heartbeats = lambda: [self.node("owner"), self.node("peer")]
         h._write_json = Mock()
         h._record_successful_build_image = Mock()
         running = {"build_id": "build-id", "image_id": "image", "status": "running"}
@@ -300,7 +291,7 @@ class ImagePollingTests(unittest.TestCase):
             with self.subTest(upstream=upstream):
                 h = self.handler()
                 h.image_build_owners["build-id"] = ("owner", "owner", "one")
-                h._ready_heartbeats = lambda: [self.node("owner"), self.node("peer")]
+                h.services.fleet.ready_heartbeats = lambda: [self.node("owner"), self.node("peer")]
                 h._proxy_request = Mock(return_value=ProxiedResponse(
                     upstream, {}, b'{"error":"private upstream detail","retryable":false}'
                 ))
@@ -315,7 +306,7 @@ class ImagePollingTests(unittest.TestCase):
     def test_missing_owner_heartbeat_is_retryable_without_peer_scan(self):
         h = self.handler()
         h.image_build_owners["build-id"] = ("owner", "owner", "one")
-        h._ready_heartbeats = lambda: [self.node("peer")]
+        h.services.fleet.ready_heartbeats = lambda: [self.node("peer")]
         h._proxy_request = Mock()
         h._write_json = Mock()
         h._get_image_build("build-id")
@@ -326,7 +317,7 @@ class ImagePollingTests(unittest.TestCase):
     def test_confirmed_absence_returns_404_after_owner_and_fallback_probes(self):
         h = self.handler()
         h.image_build_owners["build-id"] = ("owner", "owner", "one")
-        h._ready_heartbeats = lambda: [self.node("owner"), self.node("peer")]
+        h.services.fleet.ready_heartbeats = lambda: [self.node("owner"), self.node("peer")]
         h._proxy_request = Mock(return_value=ProxiedResponse(404, {}, b"{}"))
         h._write_json = Mock()
         h._get_image_build("build-id")
@@ -338,7 +329,7 @@ class ImagePollingTests(unittest.TestCase):
         for peer_found in (True, False):
             with self.subTest(peer_found=peer_found):
                 h = self.handler()
-                h._ready_heartbeats = lambda: [self.node("a"), self.node("b")]
+                h.services.fleet.ready_heartbeats = lambda: [self.node("a"), self.node("b")]
                 h._proxy_request = Mock(side_effect=[
                     ProxiedResponse(503, {}, b"{}"),
                     SimpleNamespace(
@@ -361,7 +352,7 @@ class ImagePollingTests(unittest.TestCase):
             with self.subTest(owner_ready=owner_ready):
                 h = self.handler()
                 h.image_build_owners["build-id"] = ("owner", "owner", "one")
-                h._ready_heartbeats = lambda: [self.node("owner")] if owner_ready else []
+                h.services.fleet.ready_heartbeats = lambda: [self.node("owner")] if owner_ready else []
                 terminal = {"build_id": "build-id", "image_id": "image", "status": "succeeded"}
                 h._cached_image_build_records = lambda: [terminal]
                 h._proxy_request = Mock(return_value=ProxiedResponse(504, {}, b"{}"))
@@ -374,7 +365,7 @@ class ImagePollingTests(unittest.TestCase):
 
     def test_image_name_cannot_use_older_terminal_record_during_incomplete_scan(self):
         h = self.handler()
-        h._ready_heartbeats = lambda: [self.node("a"), self.node("b")]
+        h.services.fleet.ready_heartbeats = lambda: [self.node("a"), self.node("b")]
         old = {"build_id": "older", "image_id": "image", "status": "succeeded"}
         h._cached_image_build_records = lambda: [old]
         h._proxy_request = Mock(side_effect=[
@@ -391,7 +382,7 @@ class ImagePollingTests(unittest.TestCase):
         for body in (b"not-json", b"{}", b'{"build":[]}'):
             with self.subTest(body=body):
                 h = self.handler()
-                h._ready_heartbeats = lambda: [self.node("a")]
+                h.services.fleet.ready_heartbeats = lambda: [self.node("a")]
                 h._proxy_request = Mock(return_value=ProxiedResponse(200, {}, body))
                 h._write_json = Mock()
                 h._get_image_build("build-id")
@@ -400,7 +391,7 @@ class ImagePollingTests(unittest.TestCase):
 
     def test_image_name_discovers_all_builders_and_selects_latest(self):
         h = self.handler()
-        h._ready_heartbeats = lambda: [self.node("a"), self.node("b")]
+        h.services.fleet.ready_heartbeats = lambda: [self.node("a"), self.node("b")]
         calls = []
 
         def fetch(url, path, **kwargs):
@@ -423,7 +414,7 @@ class ImagePollingTests(unittest.TestCase):
 
     def test_unknown_build_does_not_enrich_unrelated_results(self):
         h = self.handler()
-        h._ready_heartbeats = lambda: [self.node("a")]
+        h.services.fleet.ready_heartbeats = lambda: [self.node("a")]
         h._proxy_request = lambda *a, **kw: SimpleNamespace(
             status=200, json=lambda: {"build": {"build_id": "unrelated"}}
         )

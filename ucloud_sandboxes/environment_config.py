@@ -1,6 +1,6 @@
 """Bootstrap trust for the optional immutable image adapter."""
 import base64
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import json
 import os
 from pathlib import Path
@@ -52,7 +52,8 @@ def environment_publisher_from_args(args):
     registry = environment_registry_from_args(args)
     key_path = getattr(args, "environment_signing_key", None)
     allowlist = tuple(getattr(args, "environment_allow_path", ()) or ())
-    if registry is None and key_path is None and not allowlist:
+    preserve_mtimes = getattr(args, "environment_preserve_mtimes", False)
+    if registry is None and key_path is None and not allowlist and not preserve_mtimes:
         return None
     if registry is None or key_path is None or not allowlist:
         raise ValueError("environment builder requires registry trust, a signing key, and an explicit immutable path allowlist")
@@ -74,7 +75,7 @@ def environment_publisher_from_args(args):
     root = args.image_file.absolute().parent / "environment-build"
     builder = FreshEnvironmentBuilder(DockerOverlay2RootfsStore(root / "images", docker_binary=args.docker_binary),
                                       registry, key, root / "scratch", preparation_subprocess=True,
-                                      release_published_tag=True)
+                                      release_published_tag=True, preserve_mtimes=preserve_mtimes)
     return lambda spec: builder.publish_image(spec.tag, allowlist=allowlist)
 
 
@@ -88,6 +89,12 @@ class EnvironmentDeploymentConfig:
     builder_enabled: bool = False
     allow_paths: tuple[str, ...] = ()
     cache_bytes: int = 1024 ** 3
+    # Builders publish layout-2 layer components (per-file mtimes kept). Set
+    # only after every worker and gateway runs a release that reads layout 2.
+    preserve_mtimes: bool = False
+    # Off switch for attach-time metadata and startup-trace prefetch (C2.2,
+    # C2.3). A backend reads it once at start; bootstrap never restarts one.
+    prefetch_enabled: bool = True
 
     @classmethod
     def from_dict(cls, raw):
@@ -107,7 +114,7 @@ class EnvironmentDeploymentConfig:
         import re
         if not isinstance(result.repository, str) or not re.fullmatch(r"[a-z0-9]+(?:[._/-][a-z0-9]+)*", result.repository):
             raise ValueError("invalid immutable environment repository")
-        for name in ("worker_enabled", "builder_enabled"):
+        for name in ("worker_enabled", "builder_enabled", "preserve_mtimes", "prefetch_enabled"):
             if not isinstance(getattr(result, name), bool):
                 raise ValueError(f"immutable environment {name} must be boolean")
         for name in ("trusted_keys_file", "signing_key_file"):
@@ -125,6 +132,14 @@ class EnvironmentDeploymentConfig:
         if result.builder_enabled and (not result.signing_key_file or not result.allow_paths):
             raise ValueError("immutable environment builder requires signing_key_file and allow_paths")
         return result
+
+    def to_dict(self):
+        # Older releases reject unknown fields: write the switch only once set,
+        # so a release rollback still reads configs rendered with it off.
+        raw = asdict(self)
+        if not self.preserve_mtimes:
+            del raw["preserve_mtimes"]
+        return raw
 
 
 def environment_registry_from_deployment(config):

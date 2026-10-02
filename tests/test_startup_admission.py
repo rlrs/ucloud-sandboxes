@@ -16,6 +16,8 @@ from ucloud_sandboxes.transition_admission import TransitionCost, TransitionKind
 from ucloud_sandboxes.admission import FairCapacity
 from ucloud_sandboxes.direct_service import DirectSandboxService
 
+TEST_TIER = "contract"
+
 
 def wait_queued(limiter, count):
     deadline = time.monotonic() + 3

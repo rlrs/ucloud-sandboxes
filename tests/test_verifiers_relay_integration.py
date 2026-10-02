@@ -13,10 +13,13 @@ from aiohttp import web
 
 from ucloud_sandboxes.model_relay import create_model_relay_app
 from tests.postgres_fixture import postgres_database
+from tests.support import sdk_skip_reason
+
+TEST_TIER = "contract"
 
 
 HAS_VERIFIERS = importlib.util.find_spec("verifiers") is not None
-HAS_SANDBOX_SDK = importlib.util.find_spec("ucloud_sandboxes_sdk") is not None
+HAS_SANDBOX_SDK = sdk_skip_reason() is None
 
 
 @unittest.skipUnless(

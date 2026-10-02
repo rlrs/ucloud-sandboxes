@@ -51,9 +51,6 @@ data:
     "pressure_scale_down_cooldown_seconds": 300,
     "provisioning_latency_lookback_seconds": 604800,
     "provisioning_scale_down_multiplier": 2.0,
-    "program_aware_autoscaling_enabled": false,
-    "model_wait_capacity_weight": 0.10,
-    "model_wait_max_headroom_nodes": 1,
     "default_node_resources": {
       "vcpu": 32,
       "memory_mb": 98304,
@@ -198,31 +195,21 @@ multiplied by `provisioning_scale_down_multiplier` becomes a lower bound on the
 idle grace. With a 70-second p95 and multiplier `2`, an idle node is retained
 for at least 140 seconds even if `scale_down_idle_seconds` is lower.
 
-The policy does not predict the next tool call for each parked sandbox.
-Instead, the relay supplies an exact `ready_to_wake` signal and a deliberately
-coarse aggregate `model_wait` leading signal. The latter is bounded and
-disabled for action by default, as described below.
-
-## Program-aware wake demand
-
-The gateway persists each relay-bound request in one of four generation-fenced
-phases: `model_wait`, `ready_to_wake`, `waking`, or `acting`. `ready_to_wake`
-is exact hard demand once the parked route has a validated portable snapshot,
-because the response is already committed and the sandbox must run. A local-only
-park remains observable but cannot ask for a remote node that cannot restore it.
-`model_wait` is only a weighted, bounded headroom signal for requests still
-executing on a model worker.
-
-The scheduler always records its wake plan and metrics. With
-`program_aware_autoscaling_enabled=false`, that plan is shadow-only. Enabling
-the setting allows its hard and weighted demand to create or retain nodes; it
-does not change route ownership, disk accounting, or generation fences.
-
 The executing autoscaler reads its complete policy from the `policy` object in
 `deployment.json`; the deployed systemd unit does not add environment-file
 overrides. Changes take effect after an autoscaler service restart. Set a
 feedback feature's `enabled` field to `false` for a shadow rollout: its metrics
 continue to update while that feedback neither creates nor retains nodes.
+
+## Program request phases
+
+The gateway persists each relay-bound request in one of four generation-fenced
+phases: `model_wait`, `ready_to_wake`, `waking`, or `acting`. The phases fence
+relay delivery and keep active model waits and response deliveries local during
+cold offload; they are reported in the metrics snapshot. The policy does not
+predict the next tool call, and the phases add no autoscaler demand. A wake that
+cannot be placed records ordinary pending wake demand, which the autoscaler
+already counts.
 
 ## Knobs
 
@@ -507,7 +494,11 @@ Optional relocation requires:
   concurrent creates or storage errors/queues on either worker;
 - a cached exact image on the destination, normal migration capabilities and
   disk admission, plus room for the full waking CPU/memory shape under the
-  configured utilization targets and PSI/storage pressure limits;
+  configured utilization targets and PSI/storage pressure limits. A fresh
+  `memory_observation` for the exact owner, node boot, generation and spec hash
+  (the resident sampler's last cgroup `memory.current`, copied into the
+  heartbeat inventory) replaces the declared memory only when it is larger; it
+  never weakens the full-shape check;
 - no active migration anywhere, no creating/waking/unknown routes on the
   destination, and expiration of the gateway's 60-second consolidation
   cooldown. The cooldown applies after reservation and successful completion;

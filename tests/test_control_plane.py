@@ -25,6 +25,11 @@ from ucloud_sandboxes.agent import (
 )
 from ucloud_sandboxes import control_plane
 from ucloud_sandboxes.control_state import ControlStateStore
+from ucloud_sandboxes.capabilities import HIBERNATE_LOCAL_CAPABILITY
+from ucloud_sandboxes.gateway import auth, image_resolution, node_rpc, placement, registry_refs
+from ucloud_sandboxes.gateway.image_resolution import RegistryManifestResolutionCache
+from ucloud_sandboxes.image_inventory_cache import ImageInventoryCache, ImageInventorySnapshot
+from tests.gateway_support import gateway_services
 from ucloud_sandboxes.control_plane import (
     build_server as _build_server,
 )
@@ -35,6 +40,7 @@ from ucloud_sandboxes.images import (
     ImageStore,
 )
 from ucloud_sandboxes.managed_registry import (
+    RegistryClient,
     RegistryUsageStore,
 )
 from ucloud_sandboxes.managed_process import ManagedProcessRecord
@@ -59,6 +65,7 @@ from ucloud_sandboxes.routing import (
     SandboxRoute,
     SandboxRouteAllocation,
     SandboxRouteConflictError,
+    route_with_inventory_snapshot,
 )
 from ucloud_sandboxes.sandbox import (
     CommandResult,
@@ -73,6 +80,8 @@ from ucloud_sandboxes.storage_native_registry import (
     PublishedStorageLayer,
     StorageSnapshotPublication,
 )
+
+TEST_TIER = "contract"
 
 
 def build_heartbeat(**kwargs):
@@ -121,9 +130,7 @@ def build_server(*args, **kwargs):
     if not explicit_public_auth:
         server.RequestHandlerClass._check_authorized = lambda _self: True
         server.RequestHandlerClass._check_heartbeat_authorized = lambda _self: True
-    server.RequestHandlerClass._heartbeat_identity_error = lambda _self, _heartbeat: (
-        None
-    )
+    server.RequestHandlerClass.services.heartbeats.identity_error = lambda _heartbeat: None
     return server
 
 
@@ -376,13 +383,11 @@ class ControlPlaneTests(unittest.TestCase):
                 with (
                     patch.object(handler, "_record_program_request_transition", return_value=(object(), True)) as transition,
                     patch.object(handler, "_heartbeat_for_route", side_effect=AssertionError("warm wake needs no inventory")),
-                    patch.object(handler, "_record_program_wake_shadow_plan") as shadow,
                 ):
                     payload = {"request_id": "request"}
                     handler._prepare_program_lifecycle(route, "wake", payload)
                     transition.assert_called_once_with(route, payload, state="waking", response_ready=True)
                     self.assertTrue(handler._program_wake_started)
-                    shadow.assert_not_called()
 
     def test_expected_park_deferral_does_not_write_program_error(self):
         handler = object.__new__(control_plane.ControlPlaneHandler)
@@ -531,13 +536,13 @@ class ControlPlaneTests(unittest.TestCase):
 
     def test_exec_signal_is_available_to_the_public_sdk_route(self) -> None:
         self.assertTrue(
-            control_plane._is_sdk_api_request(  # noqa: SLF001
+            auth._is_sdk_api_request(  # noqa: SLF001
                 "POST",
                 "/v1/exec/exec-123/signal",
             )
         )
         self.assertFalse(
-            control_plane._is_sdk_api_request(  # noqa: SLF001
+            auth._is_sdk_api_request(  # noqa: SLF001
                 "GET",
                 "/v1/exec/exec-123/signal",
             )
@@ -551,7 +556,7 @@ class ControlPlaneTests(unittest.TestCase):
             )
             try:
                 self.assertEqual(
-                    server.RequestHandlerClass.create_target_concurrency_per_node,
+                    server.RequestHandlerClass.services.placement.create_target_concurrency,
                     3,
                 )
             finally:
@@ -954,10 +959,7 @@ class ControlPlaneTests(unittest.TestCase):
                 self.assertTrue(gateway.RequestHandlerClass.metrics_store.flush())
                 wake_events = control_plane.MetricsStore(metrics_file).load_events(
                     max_events=10,
-                    kinds=(
-                        "program_wake_shadow_plan",
-                        "program_wake_actual",
-                    ),
+                    kinds=("program_wake_actual",),
                 )
 
         epoch_lookups = [call.kwargs for call in migrations.call_args_list
@@ -988,16 +990,8 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertTrue(records[0].wake_started_at)
         self.assertTrue(records[0].wake_completed_at)
         self.assertEqual(
-            {event.kind for event in wake_events},
-            {"program_wake_shadow_plan", "program_wake_actual"},
-        )
-        self.assertEqual(
-            sum(event.kind == "program_wake_shadow_plan" for event in wake_events),
-            1,
-        )
-        self.assertEqual(
-            sum(event.kind == "program_wake_actual" for event in wake_events),
-            1,
+            [event.kind for event in wake_events],
+            ["program_wake_actual"],
         )
 
     def test_failed_wake_rolls_route_back_and_deduplicates_program_error(self) -> None:
@@ -1082,7 +1076,7 @@ class ControlPlaneTests(unittest.TestCase):
                 self.assertTrue(gateway.RequestHandlerClass.metrics_store.flush())
                 events = control_plane.MetricsStore(metrics_file).load_events(
                     max_events=20,
-                    kinds=("program_state_transition", "program_wake_shadow_plan"),
+                    kinds=("program_state_transition",),
                 )
 
         self.assertEqual(first["status"], 503)
@@ -1092,10 +1086,6 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(after_first.state, "waking")
         self.assertEqual(after_first.last_error, "HTTP 503: restore validation failed")
         self.assertEqual(after_second.updated_at, after_first.updated_at)
-        self.assertEqual(
-            sum(event.kind == "program_wake_shadow_plan" for event in events),
-            1,
-        )
         self.assertEqual(
             sum(event.kind == "program_state_transition" for event in events),
             3,
@@ -1368,16 +1358,18 @@ class ControlPlaneTests(unittest.TestCase):
                         snapshot_tag=snapshot.publication.tag,
                         storage_snapshot=snapshot.to_dict(),
                     )
-                    candidate = control_plane.route_with_inventory_snapshot(
+                    candidate = route_with_inventory_snapshot(
                         route,
                         observation,
                     )
                     usage_store = RegistryUsageStore(root / "registry-usage.sqlite")
                     handler = object.__new__(control_plane.ControlPlaneHandler)
                     handler.routing_store = routing
-                    handler.registry_usage_store = usage_store
-                    handler.deployment_id = "test-deployment"
-                    handler._ensure_registry_snapshot_reference(
+                    handler.services = gateway_services(
+                        routing_store=routing, usage_store=usage_store,
+                        deployment_id="test-deployment",
+                    )
+                    handler.services.registry_refs.ensure_snapshot_reference(
                         candidate,
                         repository=snapshot.publication.repository,
                         tag=snapshot.publication.tag,
@@ -1406,7 +1398,7 @@ class ControlPlaneTests(unittest.TestCase):
                         RuntimeError,
                         "reconcile commit acknowledgement lost",
                     ):
-                        handler._reconcile_heartbeat_inventory(
+                        handler.services.heartbeats.reconcile_inventory(
                             heartbeat,
                             [observation],
                             [candidate],
@@ -1491,7 +1483,7 @@ class ControlPlaneTests(unittest.TestCase):
                             usage_store.acquire_reference(
                                 snapshot.publication.repository,
                                 snapshot.publication.tag,
-                                control_plane._registry_snapshot_reference_owner(  # noqa: SLF001
+                                registry_refs._registry_snapshot_reference_owner(  # noqa: SLF001
                                     route,
                                     deployment_id="test-deployment",
                                 ),
@@ -1619,7 +1611,7 @@ class ControlPlaneTests(unittest.TestCase):
                 usage_store.acquire_reference(
                     snapshot.publication.repository,
                     snapshot.publication.tag,
-                    control_plane._registry_snapshot_reference_owner(  # noqa: SLF001
+                    registry_refs._registry_snapshot_reference_owner(  # noqa: SLF001
                         route,
                         deployment_id="test-deployment",
                     ),
@@ -1708,9 +1700,9 @@ class ControlPlaneTests(unittest.TestCase):
             )
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = routing
-            handler.registry_usage_store = None
-            handler.heartbeat_ttl_seconds = 120
-            handler.store = ControlStateStore(root / "control.sqlite")
+            handler.services = gateway_services(
+                store=ControlStateStore(root / "control.sqlite"), routing_store=routing,
+            )
             handler._read_json_body = lambda: {}
             writes: list[tuple[dict, object]] = []
             handler._write_json = lambda payload, *, status=200, **_kwargs: (
@@ -1774,17 +1766,17 @@ class ControlPlaneTests(unittest.TestCase):
             )
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = routing
-            handler.registry_usage_store = None
-            handler.heartbeat_ttl_seconds = 120
-            handler.store = ControlStateStore(root / "control.sqlite")
+            handler.services = gateway_services(
+                store=ControlStateStore(root / "control.sqlite"), routing_store=routing,
+            )
             handler._read_json_body = lambda: {}
             writes: list[tuple[dict, object]] = []
             handler._write_json = lambda payload, *, status=200, **_kwargs: (
                 writes.append((payload, status))
             )
             released_snapshots: list[tuple[SandboxRoute, SandboxRoute | None]] = []
-            handler._ensure_registry_snapshot_reference = lambda *_args, **_kwargs: None
-            handler._release_registry_snapshot_reference = (
+            handler.services.registry_refs.ensure_snapshot_reference = lambda *_args, **_kwargs: None
+            handler.services.registry_refs.release_snapshot_reference = (
                 lambda released, *, keep_route=None: released_snapshots.append(
                     (released, keep_route)
                 )
@@ -1914,12 +1906,9 @@ class ControlPlaneTests(unittest.TestCase):
             heartbeats.upsert_heartbeat(legacy_destination)
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = routing
-            handler.store = heartbeats
-            handler.heartbeat_ttl_seconds = 120
-            handler.registry_usage_store = None
-            handler.registry_url = ""
-            handler.registry_worker_url = ""
-            handler.registry_layer_cache = None
+            handler.services = gateway_services(
+                store=heartbeats, routing_store=routing, registry_url="", registry_worker_url="",
+            )
             handler._write_json = lambda *_args, **_kwargs: None
             handler._prepare_migration_destination_image = lambda *_args: True
             paths: list[str] = []
@@ -1937,7 +1926,7 @@ class ControlPlaneTests(unittest.TestCase):
                     updated_at=utc_now(),
                     capabilities=(
                         *legacy_destination.capabilities,
-                        control_plane.HIBERNATE_LOCAL_CAPABILITY,
+                        HIBERNATE_LOCAL_CAPABILITY,
                         control_plane.RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX
                         + snapshot.manifest.runtime.node_compatibility_sha256,
                     ),
@@ -2039,12 +2028,13 @@ class ControlPlaneTests(unittest.TestCase):
                     )
                     handler = object.__new__(control_plane.ControlPlaneHandler)
                     handler.routing_store = routing
+                    handler.services = gateway_services()
                     ensured: list[SandboxRoute] = []
                     released: list[tuple[SandboxRoute, SandboxRoute | None]] = []
-                    handler._ensure_registry_route_reference = lambda route, *, touch: (
+                    handler.services.registry_refs.ensure_route_reference = lambda route, *, touch: (
                         ensured.append(route)
                     )
-                    handler._release_registry_route_reference = (
+                    handler.services.registry_refs.release_route_reference = (
                         lambda route, *, keep_route=None: released.append(
                             (route, keep_route)
                         )
@@ -2115,8 +2105,7 @@ class ControlPlaneTests(unittest.TestCase):
             )
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = routing
-            handler.store = heartbeats
-            handler.heartbeat_ttl_seconds = 120
+            handler.services = gateway_services(store=heartbeats, routing_store=routing)
 
             selected = handler._select_migration_destination(
                 route,
@@ -2195,7 +2184,7 @@ class ControlPlaneTests(unittest.TestCase):
                 return
 
         node = ThreadingHTTPServer(("127.0.0.1", 0), KeepAliveNode)
-        pool = control_plane.urllib3.PoolManager(
+        pool = node_rpc.urllib3.PoolManager(
             num_pools=1,
             maxsize=2,
             block=True,
@@ -2203,13 +2192,13 @@ class ControlPlaneTests(unittest.TestCase):
         )
         with _running_server(node) as node_url:
             try:
-                with patch.object(control_plane, "_NODE_EXEC_EVENT_HTTP_POOL", pool):
+                with patch.object(node_rpc, "_NODE_EXEC_EVENT_HTTP_POOL", pool):
                     for _ in range(2):
                         req = request.Request(
                             f"{node_url}/v1/exec/session/events",
                             headers={"Authorization": "Bearer node-secret"},
                         )
-                        with control_plane._open_node_request(
+                        with node_rpc._open_node_request(
                             req,
                             timeout=5,
                             authenticated=True,
@@ -2233,13 +2222,13 @@ class ControlPlaneTests(unittest.TestCase):
                 else:
                     self._write_json({'payload': self._read_json_body()})
         node = HighBacklogThreadingHTTPServer(('127.0.0.1', 0), Node)
-        pool = control_plane.urllib3.PoolManager(num_pools=1, maxsize=1, block=True, retries=False)
+        pool = node_rpc.urllib3.PoolManager(num_pools=1, maxsize=1, block=True, retries=False)
         with _running_server(node) as node_url:
             try:
-                with patch.object(control_plane, '_NODE_HTTP_POOL', pool):
+                with patch.object(node_rpc, '_NODE_HTTP_POOL', pool):
                     for path in ('/ok', '/ok', '/reject', '/ok'):
                         req = request.Request(node_url + path, data=b'{"value":1}', method='POST')
-                        with control_plane._open_node_request(req, timeout=5, authenticated=True, allow_body_keep_alive=True) as response:
+                        with node_rpc._open_node_request(req, timeout=5, authenticated=True, allow_body_keep_alive=True) as response:
                             self.assertEqual(response.status, 503 if path == '/reject' else 200)
                             response.read()
             finally:
@@ -2280,7 +2269,7 @@ class ControlPlaneTests(unittest.TestCase):
                 return
 
         node = ThreadingHTTPServer(("127.0.0.1", 0), EarlyRejectingNode)
-        pool = control_plane.urllib3.PoolManager(
+        pool = node_rpc.urllib3.PoolManager(
             num_pools=1,
             maxsize=1,
             block=True,
@@ -2288,7 +2277,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
         with _running_server(node) as node_url:
             try:
-                with patch.object(control_plane, "_NODE_HTTP_POOL", pool):
+                with patch.object(node_rpc, "_NODE_HTTP_POOL", pool):
                     for index in range(2):
                         req = request.Request(
                             f"{node_url}/v1/sandboxes",
@@ -2296,7 +2285,7 @@ class ControlPlaneTests(unittest.TestCase):
                             method="POST",
                             headers={"Authorization": "Bearer node-secret"},
                         )
-                        with control_plane._open_node_request(
+                        with node_rpc._open_node_request(
                             req,
                             timeout=5,
                             authenticated=True,
@@ -2311,62 +2300,43 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(len(set(client_ports)), 2)
 
     def test_image_inventory_coalesces_repeated_reads(self) -> None:
-        class CachedHandler(control_plane.ControlPlaneHandler):
-            pass
-
-        CachedHandler.image_inventory_cache = control_plane.ImageInventoryCache(
-            ttl_seconds=5.0,
-            clock=lambda: 0.0,
-        )
-        handler = object.__new__(CachedHandler)
-        handler.registry_url = ""
-        handler.registry_worker_url = ""
+        images = gateway_services(registry_url="", registry_worker_url="").images
+        images.inventory_cache = ImageInventoryCache(ttl_seconds=5.0, clock=lambda: 0.0)
         loads = 0
-        payloads: list[dict[str, object]] = []
 
-        def load_images() -> control_plane.ImageInventorySnapshot:
+        def load_images(_ex) -> ImageInventorySnapshot:
             nonlocal loads
             loads += 1
-            return control_plane.ImageInventorySnapshot.from_records(
+            return ImageInventorySnapshot.from_records(
                 [{"id": "image-one", "tag": "busybox:latest"}],
                 complete=True,
             )
 
-        handler._load_raw_image_inventory_across_nodes = load_images
-        handler._write_json = lambda payload: payloads.append(payload)
-
-        handler._list_images_across_nodes()
-        handler._list_images_across_nodes()
+        images.load_raw_inventory = load_images
+        payloads = [images.inventory(None), images.inventory(None)]
 
         self.assertEqual(loads, 1)
         self.assertEqual(payloads[0], payloads[1])
         self.assertTrue(payloads[0]["complete"])
 
-        handler._invalidate_image_inventory_cache()
-        handler._list_images_across_nodes()
+        images.invalidate_inventory()
+        payloads.append(images.inventory(None))
 
         self.assertEqual(loads, 2)
         self.assertEqual(payloads[1], payloads[2])
 
     def test_image_id_resolution_and_listing_share_inventory_snapshot(self) -> None:
-        class CachedHandler(control_plane.ControlPlaneHandler):
-            pass
-
-        CachedHandler.image_inventory_cache = control_plane.ImageInventoryCache(
-            ttl_seconds=5.0,
-            clock=lambda: 0.0,
-        )
-        handler = object.__new__(CachedHandler)
-        handler.image_manager = Mock(get_image=Mock(return_value=None))
-        handler.registry_url = ""
-        handler.registry_worker_url = ""
+        images = gateway_services(
+            image_manager=Mock(get_image=Mock(return_value=None)),
+            registry_url="", registry_worker_url="",
+        ).images
+        images.inventory_cache = ImageInventoryCache(ttl_seconds=5.0, clock=lambda: 0.0)
         loads = 0
-        payloads: list[dict[str, object]] = []
 
-        def load_images() -> control_plane.ImageInventorySnapshot:
+        def load_images(_ex) -> ImageInventorySnapshot:
             nonlocal loads
             loads += 1
-            return control_plane.ImageInventorySnapshot.from_records(
+            return ImageInventorySnapshot.from_records(
                 [
                     {
                         "id": "image-one",
@@ -2378,23 +2348,17 @@ class ControlPlaneTests(unittest.TestCase):
                 complete=True,
             )
 
-        handler._load_raw_image_inventory_across_nodes = load_images
-        handler._write_json = lambda payload: payloads.append(payload)
+        images.load_raw_inventory = load_images
 
-        resolved, resolution_error = handler._resolve_sandbox_image_reference(
-            "image-one"
-        )
-        handler._list_images_across_nodes()
+        resolved, resolution_error = images.resolve(None, "image-one")
+        payload = images.inventory(None)
 
         self.assertEqual(resolved, "busybox:latest")
         self.assertIsNone(resolution_error)
         self.assertEqual(loads, 1)
-        self.assertEqual(payloads[0]["images"][0]["id"], "image-one")
+        self.assertEqual(payload["images"][0]["id"], "image-one")
 
     def test_incomplete_image_inventory_miss_is_retryable_then_recovers(self) -> None:
-        class CachedHandler(control_plane.ControlPlaneHandler):
-            pass
-
         class EmptyImageManager:
             def get_image(self, image_id):
                 return None
@@ -2404,21 +2368,19 @@ class ControlPlaneTests(unittest.TestCase):
                 return []
 
         now = [0.0]
-        CachedHandler.image_inventory_cache = control_plane.ImageInventoryCache(
-            ttl_seconds=5.0,
-            clock=lambda: now[0],
-        )
-        handler = object.__new__(CachedHandler)
-        handler.image_manager = EmptyImageManager()
-        handler.registry_url = ""
-        handler.registry_worker_url = ""
+        handler = object.__new__(control_plane.ControlPlaneHandler)
         heartbeat = build_heartbeat(
             node_id="node-one",
             job_id="job-one",
             node_url="http://node-one:8090",
             cached_images=("image-one",),
         )
-        handler._ready_heartbeats = lambda: [heartbeat]
+        handler.services = gateway_services(
+            image_manager=EmptyImageManager(), registry_url="", registry_worker_url="",
+        )
+        images = handler.services.images
+        images.inventory_cache = ImageInventoryCache(ttl_seconds=5.0, clock=lambda: now[0])
+        handler.services.fleet.ready_heartbeats = lambda: [heartbeat]
         responses = iter(
             (
                 control_plane.ProxiedResponse(503, {}, b'{"error":"offline"}'),
@@ -2441,84 +2403,71 @@ class ControlPlaneTests(unittest.TestCase):
                 ),
             )
         )
+        # The inventory reads workers through the request's own Exchange.
         handler._proxy_request = lambda *_args, **_kwargs: next(responses)
 
-        unresolved, unavailable = handler._resolve_sandbox_image_reference(
-            "image-one",
-            reference_kind="name",
-        )
+        unresolved, unavailable = images.resolve(handler, "image-one", reference_kind="name")
 
         self.assertEqual(unresolved, "image-one")
         self.assertIsNotNone(unavailable)
         assert unavailable is not None
         self.assertEqual(unavailable["error_code"], "image_inventory_incomplete")
         self.assertTrue(unavailable["retryable"])
+        self.assertFalse(images.inventory(handler)["complete"])
+
+        plain_tag, plain_tag_error = images.resolve(handler, "busybox", reference_kind="registry")
+        self.assertEqual(plain_tag, "busybox")
+        self.assertIsNone(plain_tag_error)
+
+        explicit_digest = "busybox@sha256:" + "a" * 64
+        pinned, pinned_error = images.resolve(
+            handler, explicit_digest, reference_kind="registry",
+        )
+        self.assertEqual(pinned, explicit_digest)
+        self.assertIsNone(pinned_error)
 
         written: list[tuple[dict[str, object], dict[str, object]]] = []
         handler._write_json = lambda payload, **kwargs: written.append(
             (payload, kwargs)
         )
-        handler._list_images_across_nodes()
-        self.assertFalse(written[0][0]["complete"])
-
-        plain_tag, plain_tag_error = handler._resolve_sandbox_image_reference(
-            "busybox",
-            reference_kind="registry",
-        )
-        self.assertEqual(plain_tag, "busybox")
-        self.assertIsNone(plain_tag_error)
-
-        explicit_digest = "busybox@sha256:" + "a" * 64
-        pinned, pinned_error = handler._resolve_sandbox_image_reference(
-            explicit_digest,
-            reference_kind="registry",
-        )
-        self.assertEqual(pinned, explicit_digest)
-        self.assertIsNone(pinned_error)
-
         handler._write_image_resolution_error(unavailable)
-        self.assertEqual(written[1][1]["status"], HTTPStatus.SERVICE_UNAVAILABLE)
+        self.assertEqual(written[0][1]["status"], HTTPStatus.SERVICE_UNAVAILABLE)
         self.assertEqual(
-            written[1][1]["headers"],
+            written[0][1]["headers"],
             {"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
         )
 
         now[0] += 0.501
-        _unresolved, malformed = handler._resolve_sandbox_image_reference(
-            "image-one",
-            reference_kind="name",
-        )
+        _unresolved, malformed = images.resolve(handler, "image-one", reference_kind="name")
         self.assertIsNotNone(malformed)
         assert malformed is not None
         self.assertEqual(malformed["error_code"], "image_inventory_incomplete")
 
         now[0] += 0.501
-        resolved, recovered_error = handler._resolve_sandbox_image_reference(
-            "image-one",
-            reference_kind="name",
-        )
+        resolved, recovered_error = images.resolve(handler, "image-one", reference_kind="name")
         self.assertEqual(resolved, "busybox:latest")
         self.assertIsNone(recovered_error)
 
     def test_image_reference_kind_header_controls_bare_resolution(self) -> None:
         handler = object.__new__(control_plane.ControlPlaneHandler)
-        handler.image_manager = Mock(get_image=Mock(return_value=None))
-        handler.registry_url = ""
-        handler.registry_worker_url = ""
+        handler.services = gateway_services(
+            image_manager=Mock(get_image=Mock(return_value=None)),
+            registry_url="", registry_worker_url="",
+        )
         cache_reads = 0
 
-        def complete_empty_inventory() -> control_plane.ImageInventorySnapshot:
+        def complete_empty_inventory(_ex) -> ImageInventorySnapshot:
             nonlocal cache_reads
             cache_reads += 1
-            return control_plane.ImageInventorySnapshot.from_records(
+            return ImageInventorySnapshot.from_records(
                 [],
                 complete=True,
             )
 
-        handler._cached_raw_image_inventory_across_nodes = complete_empty_inventory
+        handler.services.images.cached_raw_inventory = complete_empty_inventory
 
         handler.headers = {
-            control_plane.IMAGE_REFERENCE_KIND_HEADER: "registry",
+            image_resolution.IMAGE_REFERENCE_KIND_HEADER: "registry",
         }
         registry_ref, registry_error = handler._resolve_request_image_reference(
             "busybox"
@@ -2530,7 +2479,7 @@ class ControlPlaneTests(unittest.TestCase):
         for explicit_auto in (False, True):
             with self.subTest(explicit_auto=explicit_auto):
                 handler.headers = (
-                    {control_plane.IMAGE_REFERENCE_KIND_HEADER: "auto"}
+                    {image_resolution.IMAGE_REFERENCE_KIND_HEADER: "auto"}
                     if explicit_auto
                     else {}
                 )
@@ -2540,7 +2489,7 @@ class ControlPlaneTests(unittest.TestCase):
                 self.assertEqual(auto_ref, "busybox")
                 self.assertIsNone(auto_error)
 
-        handler.headers = {control_plane.IMAGE_REFERENCE_KIND_HEADER: "name"}
+        handler.headers = {image_resolution.IMAGE_REFERENCE_KIND_HEADER: "name"}
         name_ref, name_error = handler._resolve_request_image_reference("busybox")
         self.assertEqual(name_ref, "busybox")
         self.assertIsNotNone(name_error)
@@ -2548,7 +2497,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(name_error["error_code"], "image_id_not_found")
         self.assertFalse(name_error["retryable"])
 
-        handler.headers = {control_plane.IMAGE_REFERENCE_KIND_HEADER: "invalid"}
+        handler.headers = {image_resolution.IMAGE_REFERENCE_KIND_HEADER: "invalid"}
         _invalid_ref, invalid_error = handler._resolve_request_image_reference(
             "busybox"
         )
@@ -2560,13 +2509,13 @@ class ControlPlaneTests(unittest.TestCase):
     def test_managed_registry_digest_protection_failures_have_transient_code(
         self,
     ) -> None:
-        handler = object.__new__(control_plane.ControlPlaneHandler)
-        handler.image_manager = Mock(get_image=Mock(return_value=None))
-        handler.registry_url = "http://registry.example"
-        handler.registry_worker_url = ""
-        handler._managed_registry_manifest_digest = lambda _image: ""
-        handler._cached_raw_image_inventory_across_nodes = lambda: (
-            control_plane.ImageInventorySnapshot.from_records(
+        images = gateway_services(
+            image_manager=Mock(get_image=Mock(return_value=None)),
+            registry_url="http://registry.example", registry_worker_url="",
+        ).images
+        images.managed_manifest_digest = lambda _image: ""
+        images.cached_raw_inventory = lambda _ex: (
+            ImageInventorySnapshot.from_records(
                 [
                     {
                         "id": "gateway-image",
@@ -2578,7 +2527,7 @@ class ControlPlaneTests(unittest.TestCase):
                 complete=True,
             )
         )
-        handler._enrich_image_inventory_records = lambda records, *, image_id=None: [
+        images.enrich_records = lambda records, *, image_id=None: [
             dict(record)
             for record in records
             if image_id is None or record.get("id") == image_id
@@ -2586,14 +2535,8 @@ class ControlPlaneTests(unittest.TestCase):
 
         digest_ref = "registry.example/team/image@sha256:" + "a" * 64
         cases = (
-            handler._resolve_sandbox_image_reference(
-                digest_ref,
-                reference_kind="registry",
-            ),
-            handler._resolve_sandbox_image_reference(
-                "gateway-image",
-                reference_kind="name",
-            ),
+            images.resolve(None, digest_ref, reference_kind="registry"),
+            images.resolve(None, "gateway-image", reference_kind="name"),
         )
 
         for _resolved, resolution_error in cases:
@@ -2601,7 +2544,7 @@ class ControlPlaneTests(unittest.TestCase):
             assert resolution_error is not None
             self.assertEqual(
                 resolution_error["error_code"],
-                control_plane.MANAGED_REGISTRY_DIGEST_PROTECTION_UNAVAILABLE_ERROR_CODE,
+                image_resolution.MANAGED_REGISTRY_DIGEST_PROTECTION_UNAVAILABLE_ERROR_CODE,
             )
             self.assertTrue(resolution_error["retryable"])
 
@@ -2613,8 +2556,9 @@ class ControlPlaneTests(unittest.TestCase):
                 root,
                 registry_url="http://registry.example",
             )
-            gateway.RequestHandlerClass._managed_registry_manifest_digest = (
-                lambda _self, _image: ""
+            # Set after build_server: the request reads the shared use case.
+            gateway.RequestHandlerClass.services.images.managed_manifest_digest = (
+                lambda _image: ""
             )
             digest_ref = "registry.example/team/image@sha256:" + "a" * 64
             with _running_server(gateway) as base:
@@ -2623,7 +2567,7 @@ class ControlPlaneTests(unittest.TestCase):
                     method="POST",
                     payload={"image": digest_ref},
                     headers={
-                        control_plane.IMAGE_REFERENCE_KIND_HEADER: "registry",
+                        image_resolution.IMAGE_REFERENCE_KIND_HEADER: "registry",
                     },
                     allow_error=True,
                 )
@@ -2631,7 +2575,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(response["status"], HTTPStatus.SERVICE_UNAVAILABLE)
         self.assertEqual(
             response["body"]["error_code"],
-            control_plane.MANAGED_REGISTRY_DIGEST_PROTECTION_UNAVAILABLE_ERROR_CODE,
+            image_resolution.MANAGED_REGISTRY_DIGEST_PROTECTION_UNAVAILABLE_ERROR_CODE,
         )
         self.assertTrue(response["body"]["retryable"])
         self.assertEqual(response["headers"]["Retry-After"], "1")
@@ -2641,17 +2585,11 @@ class ControlPlaneTests(unittest.TestCase):
         )
 
     def test_image_id_resolution_enriches_only_matching_raw_records(self) -> None:
-        class CachedHandler(control_plane.ControlPlaneHandler):
-            pass
-
-        CachedHandler.image_inventory_cache = control_plane.ImageInventoryCache(
-            ttl_seconds=5.0,
-            clock=lambda: 0.0,
-        )
-        handler = object.__new__(CachedHandler)
-        handler.image_manager = Mock(get_image=Mock(return_value=None))
-        handler.registry_url = ""
-        handler.registry_worker_url = ""
+        images = gateway_services(
+            image_manager=Mock(get_image=Mock(return_value=None)),
+            registry_url="", registry_worker_url="",
+        ).images
+        images.inventory_cache = ImageInventoryCache(ttl_seconds=5.0, clock=lambda: 0.0)
         records = [
             {
                 "id": f"nonmatching-{index}",
@@ -2667,10 +2605,10 @@ class ControlPlaneTests(unittest.TestCase):
                 "source": "registry",
             }
         )
-        handler._load_raw_image_inventory_across_nodes = lambda: (
-            control_plane.ImageInventorySnapshot.from_records(records, complete=True)
+        images.load_raw_inventory = lambda _ex: (
+            ImageInventorySnapshot.from_records(records, complete=True)
         )
-        handler._managed_registry_manifest_digest = lambda _image: ""
+        images.managed_manifest_digest = lambda _image: ""
         checked: list[str] = []
         enriched: list[str] = []
 
@@ -2682,13 +2620,10 @@ class ControlPlaneTests(unittest.TestCase):
             enriched.append(str(record["id"]))
             return dict(record)
 
-        handler._image_record_missing_registry_manifest = manifest_missing
-        handler._image_record_with_registry_digest = enrich
+        images.record_missing_manifest = manifest_missing
+        images.record_with_digest = enrich
 
-        resolved, resolution_error = handler._resolve_sandbox_image_reference(
-            "image-target",
-            reference_kind="name",
-        )
+        resolved, resolution_error = images.resolve(None, "image-target", reference_kind="name")
 
         self.assertEqual(resolved, "registry.example/images/target:latest")
         self.assertIsNone(resolution_error)
@@ -2709,7 +2644,7 @@ class ControlPlaneTests(unittest.TestCase):
 
         store = ExactOnlyHeartbeatStore()
         handler = object.__new__(control_plane.ControlPlaneHandler)
-        handler.store = store
+        handler.services = gateway_services(store=store)
 
         heartbeat = handler._heartbeat_for_route(job_id="missing-job")
 
@@ -2719,12 +2654,10 @@ class ControlPlaneTests(unittest.TestCase):
     def test_managed_manifest_verification_and_protection_are_cached(self) -> None:
         digest = "sha256:" + "a" * 64
         tag = "registry.example/team/image:v1"
-        handler = object.__new__(control_plane.ControlPlaneHandler)
-        handler.registry_url = "http://registry.example"
-        handler.registry_worker_url = ""
-        handler.registry_manifest_cache = control_plane.RegistryManifestResolutionCache(
-            max_entries=8
-        )
+        images = gateway_services(
+            registry_url="http://registry.example", registry_worker_url="",
+        ).images
+        images.manifest_cache = RegistryManifestResolutionCache(max_entries=8)
         record = {
             "id": "image-one",
             "tag": tag,
@@ -2736,20 +2669,20 @@ class ControlPlaneTests(unittest.TestCase):
 
         with (
             patch.object(
-                control_plane.RegistryClient,
+                RegistryClient,
                 "manifest_digest",
                 return_value=digest,
             ) as resolve,
             patch.object(
-                control_plane.RegistryClient,
+                RegistryClient,
                 "ensure_digest_protection_tag",
                 return_value="ucloud-digest-a",
             ) as protect,
         ):
-            self.assertFalse(handler._image_record_missing_registry_manifest(record))
-            first = handler._image_record_with_registry_digest(record)
-            self.assertFalse(handler._image_record_missing_registry_manifest(record))
-            second = handler._image_record_with_registry_digest(record)
+            self.assertFalse(images.record_missing_manifest(record))
+            first = images.record_with_digest(record)
+            self.assertFalse(images.record_missing_manifest(record))
+            second = images.record_with_digest(record)
 
         self.assertEqual(first["manifest_digest"], digest)
         self.assertEqual(second["manifest_digest"], digest)
@@ -2770,13 +2703,31 @@ class ControlPlaneTests(unittest.TestCase):
 
             with _running_server(server) as server_url:
                 endpoint = f"{server_url}/v1/nodes/heartbeat"
-                with patch.object(server.RequestHandlerClass.store, "receive_heartbeat", side_effect=busy):
+                heartbeats = server.RequestHandlerClass.services.heartbeats
+                with patch.object(heartbeats.store, "receive_heartbeat", side_effect=busy):
                     response = post_heartbeat(endpoint, heartbeat)
                 recovered = post_heartbeat(endpoint, heartbeat)
             self.assertEqual(response.status, 503)
             self.assertTrue(response.payload["retryable"])
             self.assertEqual(response.payload["error_code"], "heartbeat_storage_busy")
             self.assertEqual(recovered.status, 200)
+
+    def test_only_an_accepted_heartbeat_schedules_image_warmups(self):
+        with _temporary_root() as root:
+            server = _gateway_server(root)
+            boot = build_heartbeat(job_id="job-1", node_id="node-1", node_epoch="boot-1")
+            with (
+                patch.object(server.RequestHandlerClass, "_schedule_image_warmups") as warmups,
+                _running_server(server) as server_url,
+            ):
+                endpoint = f"{server_url}/v1/nodes/heartbeat"
+                first = post_heartbeat(endpoint, boot)
+                restarted = post_heartbeat(endpoint, replace(boot, node_epoch="boot-2"))
+                # The retired boot is answered with the stored state, unchanged.
+                retired = post_heartbeat(endpoint, boot)
+        self.assertEqual([first.status, restarted.status, retired.status], [200, 200, 200])
+        self.assertEqual(retired.payload["node"]["node_epoch"], "boot-2")
+        self.assertEqual(warmups.call_count, 2)
 
     def test_gateway_stamps_heartbeat_receipt_time_and_enforces_deployment(
         self,
@@ -2844,9 +2795,9 @@ class ControlPlaneTests(unittest.TestCase):
         )
         requested = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
 
-        self.assertFalse(control_plane._node_can_fit(heartbeat, requested, []))
+        self.assertFalse(placement._node_can_fit(heartbeat, requested, []))
         self.assertTrue(
-            control_plane._node_can_fit(
+            placement._node_can_fit(
                 replace(heartbeat, capabilities=("sandbox", "disk-quota")),
                 requested,
                 [],
@@ -2870,42 +2821,40 @@ class ControlPlaneTests(unittest.TestCase):
             capabilities=(
                 "sandbox",
                 "disk-quota",
-                control_plane.HIBERNATE_LOCAL_CAPABILITY,
+                HIBERNATE_LOCAL_CAPABILITY,
             ),
             total_resources=resources,
             inventory_complete=True,
         )
-        handler = object.__new__(control_plane.ControlPlaneHandler)
-        handler._placement_routes = lambda: []
-        handler._nodes_with_image = lambda *_args, **_kwargs: set()
-        handler.registry_layer_cache = None
-        handler.create_target_concurrency_per_node = 4
-        handler._ready_sandbox_heartbeats = lambda **_kwargs: [old_worker, current_worker]
+        selector = gateway_services(create_target_concurrency_per_node=4).placement
+        selector.routes = lambda: []
+        selector.image_locality = lambda *_args, **_kwargs: set()
+        selector.fleet.ready_sandbox_heartbeats = lambda **_kwargs: [old_worker, current_worker]
         requested = ResourceQuantity(vcpu=1, memory_mb=512)
-        parkable_capabilities = control_plane._sandbox_required_capabilities(  # noqa: SLF001
+        parkable_capabilities = placement._sandbox_required_capabilities(  # noqa: SLF001
             {"parkable": True}
         )
 
-        selected = handler._select_node(
+        selected = selector.select(
             requested,
             required_capabilities=parkable_capabilities,
         )
 
-        self.assertEqual(control_plane.HIBERNATE_LOCAL_CAPABILITY, "hibernate-local-v2")
+        self.assertEqual(HIBERNATE_LOCAL_CAPABILITY, "hibernate-local-v2")
         self.assertIsNotNone(selected)
         assert selected is not None
         self.assertEqual(selected.node_id, current_worker.node_id)
 
-        handler._ready_sandbox_heartbeats = lambda **_kwargs: [old_worker]
+        selector.fleet.ready_sandbox_heartbeats = lambda **_kwargs: [old_worker]
         self.assertIsNone(
-            handler._select_node(
+            selector.select(
                 requested,
                 required_capabilities=parkable_capabilities,
             )
         )
-        ordinary = handler._select_node(
+        ordinary = selector.select(
             requested,
-            required_capabilities=control_plane._sandbox_required_capabilities(  # noqa: SLF001
+            required_capabilities=placement._sandbox_required_capabilities(  # noqa: SLF001
                 {"parkable": False}
             ),
         )
@@ -2948,10 +2897,10 @@ class ControlPlaneTests(unittest.TestCase):
             state="creating",
         )
 
-        self.assertTrue(control_plane._node_can_fit(heartbeat, requested, []))
-        self.assertFalse(control_plane._node_can_fit(heartbeat, requested, [inflight]))
+        self.assertTrue(placement._node_can_fit(heartbeat, requested, []))
+        self.assertFalse(placement._node_can_fit(heartbeat, requested, [inflight]))
         self.assertFalse(
-            control_plane._node_can_fit(
+            placement._node_can_fit(
                 replace(
                     heartbeat,
                     runtime_metrics=replace(
@@ -3061,20 +3010,18 @@ class ControlPlaneTests(unittest.TestCase):
                 ),
             ):
                 heartbeats.upsert_heartbeat(replace(heartbeat, capabilities=(
-                    *heartbeat.capabilities, control_plane.HIBERNATE_LOCAL_CAPABILITY,
+                    *heartbeat.capabilities, HIBERNATE_LOCAL_CAPABILITY,
                     control_plane.RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX
                     + snapshot.manifest.runtime.node_compatibility_sha256,
                 )))
 
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = routing
-            handler.store = heartbeats
-            handler.heartbeat_ttl_seconds = 120
-            handler.registry_url = ""
-            handler.registry_worker_url = ""
-            handler.registry_layer_cache = None
+            handler.services = gateway_services(
+                store=heartbeats, routing_store=routing, registry_url="", registry_worker_url="",
+                create_target_concurrency_per_node=4,
+            )
             handler._write_json = lambda *_args, **_kwargs: None
-            handler.create_target_concurrency_per_node = 4
             pull_started = Event()
             release_pull = Event()
 
@@ -3096,7 +3043,7 @@ class ControlPlaneTests(unittest.TestCase):
             wake_thread.start()
             self.assertTrue(pull_started.wait(timeout=1))
             started = monotonic()
-            placement = handler._select_and_reserve_node(
+            placement = handler.services.placement.select_and_reserve(
                 "concurrent-create",
                 ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=1024),
                 image="",
@@ -3106,6 +3053,7 @@ class ControlPlaneTests(unittest.TestCase):
                         {"id": "concurrent-create", "image": "busybox"}
                     )
                 ),
+                lock_timeout=handler.admission_wait_seconds,
             )
             elapsed = monotonic() - started
             release_pull.set()
@@ -3185,8 +3133,7 @@ class ControlPlaneTests(unittest.TestCase):
             writes: list[tuple[dict[str, object], int, dict[str, str]]] = []
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = routing
-            handler.store = heartbeats
-            handler.heartbeat_ttl_seconds = 120
+            handler.services = gateway_services(store=heartbeats, routing_store=routing)
             handler._write_json = lambda payload, status=200, headers=None: (
                 writes.append((payload, status, headers or {}))
             )
@@ -3569,7 +3516,7 @@ class ControlPlaneTests(unittest.TestCase):
                         route.sandbox_id
                     )
                     leases = RegistryUsageStore(usage_file).snapshot().leases
-                    snapshot_key = control_plane._registry_snapshot_reference_key(  # noqa: SLF001
+                    snapshot_key = registry_refs._registry_snapshot_reference_key(  # noqa: SLF001
                         replace(
                             route,
                             state="parked",
@@ -3923,7 +3870,7 @@ class ControlPlaneTests(unittest.TestCase):
             gateway.RequestHandlerClass.admission_wait_seconds = 0.02
             with _running_server(gateway) as base:
                 self.assertTrue(
-                    control_plane._GATEWAY_SCHEDULING_LOCK.acquire(blocking=False)
+                    placement._GATEWAY_SCHEDULING_LOCK.acquire(blocking=False)
                 )
                 started = monotonic()
                 try:
@@ -3940,7 +3887,7 @@ class ControlPlaneTests(unittest.TestCase):
                         allow_error=True,
                     )
                 finally:
-                    control_plane._GATEWAY_SCHEDULING_LOCK.release()
+                    placement._GATEWAY_SCHEDULING_LOCK.release()
                 elapsed = monotonic() - started
                 metrics = self._json_request(f"{base}/v1/metrics")
 
@@ -3976,14 +3923,14 @@ class ControlPlaneTests(unittest.TestCase):
                     )
 
                 self.assertTrue(
-                    control_plane._GATEWAY_SCHEDULING_LOCK.acquire(blocking=False)
+                    placement._GATEWAY_SCHEDULING_LOCK.acquire(blocking=False)
                 )
                 started = monotonic()
                 try:
                     with ThreadPoolExecutor(max_workers=96) as executor:
                         results = list(executor.map(create, range(192)))
                 finally:
-                    control_plane._GATEWAY_SCHEDULING_LOCK.release()
+                    placement._GATEWAY_SCHEDULING_LOCK.release()
                 elapsed = monotonic() - started
 
         self.assertEqual({result["status"] for result in results}, {503})
@@ -4309,8 +4256,8 @@ class ControlPlaneTests(unittest.TestCase):
                         200,
                     )
                     with patch.object(
-                        control_plane.ControlPlaneHandler,
-                        "_resolve_and_protect_managed_manifest",
+                        first_gateway.RequestHandlerClass.services.images,
+                        "resolve_and_protect_manifest",
                         return_value="sha256:" + "a" * 64,
                     ):
                         created = self._json_request(
@@ -4564,7 +4511,7 @@ class ControlPlaneTests(unittest.TestCase):
                             "disk_mb": 1024,
                         },
                         headers={
-                            control_plane.IMAGE_REFERENCE_KIND_HEADER: "name",
+                            image_resolution.IMAGE_REFERENCE_KIND_HEADER: "name",
                         },
                     )
                     route = RoutingStore(route_file).get_sandbox("reselected")
@@ -4600,8 +4547,11 @@ class ControlPlaneTests(unittest.TestCase):
                 self.wfile.write(body)
 
         class BrokenRegistryUsageStore:
+            touched = 0
+
             def touch_images(self, image_refs, *, when=None) -> None:
                 del image_refs, when
+                type(self).touched += 1
                 raise OSError("usage store unavailable")
 
         with _temporary_root() as raw_path:
@@ -4638,7 +4588,7 @@ class ControlPlaneTests(unittest.TestCase):
                         ).status,
                         200,
                     )
-                    gateway.RequestHandlerClass.registry_usage_store = (
+                    gateway.RequestHandlerClass.services.registry_refs.usage_store = (
                         BrokenRegistryUsageStore()
                     )
                     create = self._json_request(
@@ -4699,6 +4649,8 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(create["body"], expected_error)
         self.assertEqual(retry["body"], expected_error)
         self.assertEqual(pull["body"], expected_error)
+        # The injected store, not the tagless-digest refusal, failed each lease.
+        self.assertEqual(BrokenRegistryUsageStore.touched, 3)
         self.assertEqual(CountingNode.post_count, 0)
         self.assertIsNone(RoutingStore(route_file).get_sandbox("blocked-one"))
 
@@ -4717,8 +4669,8 @@ class ControlPlaneTests(unittest.TestCase):
                 registry_usage_file=raw_path / "registry-usage.sqlite",
             )
             try:
-                handler = object.__new__(gateway.RequestHandlerClass)
-                handler.registry_usage_store = RejectingRegistryUsageStore()
+                refs = gateway.RequestHandlerClass.services.registry_refs
+                refs.usage_store = RejectingRegistryUsageStore()
                 image = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"
                 route = _sandbox_route(
                     sandbox_id="external-image",
@@ -4728,13 +4680,13 @@ class ControlPlaneTests(unittest.TestCase):
                     spec={"id": "external-image", "image": image},
                 )
 
-                handler._ensure_registry_image_lease(
+                refs.ensure_image_lease(
                     image,
                     "external-image-pull",
                     touch=True,
                 )
-                handler._ensure_registry_route_reference(route, touch=True)
-                handler._record_registry_image_used(image)
+                refs.ensure_route_reference(route, touch=True)
+                refs.record_image_used(image)
             finally:
                 gateway.server_close()
 
@@ -4750,7 +4702,7 @@ class ControlPlaneTests(unittest.TestCase):
             )
             with _running_server(gateway) as base:
                 with patch.object(
-                    control_plane.RegistryClient,
+                    RegistryClient,
                     "ensure_digest_protection_tag",
                     side_effect=OSError("registry unavailable"),
                 ):
@@ -4774,7 +4726,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(prepared["status"], HTTPStatus.SERVICE_UNAVAILABLE)
         self.assertEqual(
             prepared["body"]["error_code"],
-            control_plane.MANAGED_REGISTRY_DIGEST_PROTECTION_UNAVAILABLE_ERROR_CODE,
+            image_resolution.MANAGED_REGISTRY_DIGEST_PROTECTION_UNAVAILABLE_ERROR_CODE,
         )
         self.assertTrue(prepared["body"]["retryable"])
         self.assertEqual(prepared["headers"]["Retry-After"], "1")
@@ -4918,7 +4870,7 @@ class ControlPlaneTests(unittest.TestCase):
                 RegistryUsageStore(usage_file).acquire_reference(
                     "repo",
                     "v1",
-                    control_plane._registry_route_reference_owner(
+                    registry_refs._registry_route_reference_owner(
                         stored_route,
                         deployment_id="test-deployment",
                     ),
@@ -5187,7 +5139,7 @@ class ControlPlaneTests(unittest.TestCase):
                 RegistryUsageStore(usage_file).acquire_reference(
                     "repo",
                     "v1",
-                    control_plane._registry_route_reference_owner(
+                    registry_refs._registry_route_reference_owner(
                         stored_route,
                         deployment_id="test-deployment",
                     ),
@@ -5258,7 +5210,7 @@ class ControlPlaneTests(unittest.TestCase):
                     repository,
                     tag,
                     owner,
-                ) in control_plane._registry_route_reference_keys(
+                ) in registry_refs._registry_route_reference_keys(
                     route,
                     deployment_id="test-deployment",
                 ):
@@ -5276,7 +5228,7 @@ class ControlPlaneTests(unittest.TestCase):
 
             acquire(source)
             acquire(destination)
-            control_plane.release_registry_route_references(
+            registry_refs.release_registry_route_references(
                 usage_store,
                 source,
                 deployment_id="test-deployment",
@@ -5287,7 +5239,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(
             remaining,
             set(
-                control_plane._registry_route_reference_keys(
+                registry_refs._registry_route_reference_keys(
                     destination,
                     deployment_id="test-deployment",
                 )
@@ -5325,9 +5277,9 @@ class ControlPlaneTests(unittest.TestCase):
             with _running_server(gateway):
                 host, port = gateway.server_address
                 with (
-                    patch.object(control_plane, "DEFAULT_MAX_PROXY_RESPONSE_BYTES", 8),
+                    patch.object(node_rpc, "DEFAULT_MAX_PROXY_RESPONSE_BYTES", 8),
                     patch.object(
-                        control_plane,
+                        node_rpc,
                         "_open_node_request",
                         return_value=OversizedResponse(),
                     ),
@@ -5345,7 +5297,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(read_sizes, [9])
 
     def test_gateway_streams_file_downloads_in_bounded_chunks(self) -> None:
-        body = b"a" * (control_plane.PROXY_STREAM_CHUNK_BYTES * 2 + 7)
+        body = b"a" * (node_rpc.PROXY_STREAM_CHUNK_BYTES * 2 + 7)
         remaining = bytearray(body)
         read_sizes: list[int | None] = []
 
@@ -5384,7 +5336,7 @@ class ControlPlaneTests(unittest.TestCase):
             with _running_server(gateway):
                 host, port = gateway.server_address
                 with patch.object(
-                    control_plane,
+                    node_rpc,
                     "_open_node_request",
                     return_value=StreamingResponse(),
                 ):
@@ -5406,7 +5358,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertGreater(len(read_sizes), 2)
         self.assertTrue(
             all(
-                size is not None and size <= control_plane.PROXY_STREAM_CHUNK_BYTES
+                size is not None and size <= node_rpc.PROXY_STREAM_CHUNK_BYTES
                 for size in read_sizes
             )
         )
@@ -5772,7 +5724,7 @@ class ControlPlaneTests(unittest.TestCase):
                         200,
                     )
                     with patch.object(
-                        control_plane.RegistryClient,
+                        RegistryClient,
                         "manifest_digest",
                         side_effect=OSError("registry unavailable"),
                     ):
@@ -5793,6 +5745,7 @@ class ControlPlaneTests(unittest.TestCase):
 
     def test_retryable_node_image_pull_is_retried_within_route_fence(self) -> None:
         handler = object.__new__(control_plane.ControlPlaneHandler)
+        handler.services = gateway_services()
         responses = [
             control_plane.ProxiedResponse(
                 503,
@@ -5845,9 +5798,10 @@ class ControlPlaneTests(unittest.TestCase):
             )
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = store
-            handler._managed_image_requires_digest_cache_identity = lambda _image: False
-            handler._ready_sandbox_heartbeats = lambda **_kwargs: []
-            handler._placement_routes = lambda: []
+            handler.services = gateway_services()
+            handler.services.registry_refs.requires_digest_identity = lambda _image: False
+            handler.services.fleet.ready_sandbox_heartbeats = lambda **_kwargs: []
+            handler.services.placement.routes = lambda: []
             requested = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
             with control_plane._IMAGE_WARMUP_TASKS_GUARD:
                 control_plane._IMAGE_WARMUP_TASKS.add(("prepare-1", "node-1"))

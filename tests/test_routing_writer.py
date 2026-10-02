@@ -11,6 +11,8 @@ from ucloud_sandboxes.models import ResourceQuantity, SandboxInventoryEntry, utc
 from ucloud_sandboxes.routing import RoutingStore, SandboxRoute, SandboxRouteAllocation, ExecRoute, SandboxRouteConflictError
 from ucloud_sandboxes.routing_writer import RoutingWriteProcess
 
+TEST_TIER = "contract"
+
 
 class RoutingWriterTests(unittest.TestCase):
     def setUp(self):

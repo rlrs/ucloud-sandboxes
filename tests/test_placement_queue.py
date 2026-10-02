@@ -7,21 +7,25 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import uuid4
 
 from ucloud_sandboxes.models import ResourceQuantity, utc_now
 from ucloud_sandboxes.routing import SandboxRouteAllocation
 from ucloud_sandboxes.sandbox import SandboxSpec, sandbox_spec_fingerprint
+from ucloud_sandboxes.shared_control import placement_queue
 from ucloud_sandboxes.shared_control.placement_queue import (
     PlacementHints,
     PlacementQueue,
+    PlacementQueueClient,
     PlacementQueueWorker,
 )
 from ucloud_sandboxes.shared_control.routing_repository import (
     PlacementCommandRejected,
     PostgresRoutingStore,
 )
+
+TEST_TIER = "contract"
 
 DSN = os.environ.get("UCLOUD_TEST_POSTGRES_DSN")
 
@@ -413,3 +417,79 @@ class PlacementQueueTests(unittest.IsolatedAsyncioTestCase):
             stop.set()
             release_create.set()
             await asyncio.wait_for(task, 3)
+
+
+async def _blocked(*_args, **_kwargs):
+    await asyncio.Event().wait()
+
+
+class PlacementLoopTerminationTests(unittest.IsolatedAsyncioTestCase):
+    """Python 3.10's wait_for, used inside psycopg, can return a result that
+    raced cancellation (gh-86296); the caller then enters its next wait."""
+
+    async def test_hint_close_ends_listener_that_consumed_one_cancellation(self):
+        entered = asyncio.Event()
+
+        async def connect(*_args, **_kwargs):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                pass  # consumed once, as the raced wait_for does
+            await asyncio.Event().wait()
+
+        hints = PlacementHints(Mock(schema="s"), wake_on={"done"}, fallback_seconds=1)
+        with patch.object(placement_queue, "AsyncConnection", Mock(connect=connect)):
+            hints.start()
+            tasks = hints._tasks
+            await asyncio.wait_for(entered.wait(), 1)
+            await asyncio.wait_for(hints.close(), 2)
+        self.assertTrue(all(task.cancelled() for task in tasks))
+
+    async def test_client_close_ends_poller_that_consumed_one_cancellation(self):
+        writer, reader = Mock(), Mock()
+        writer.open, writer.close = AsyncMock(), AsyncMock()
+        reader.open, reader.close = AsyncMock(), AsyncMock()
+        writer.submit = AsyncMock(return_value=Mock(
+            command_id=uuid4(), deadline=utc_now() + timedelta(seconds=60)))
+        entered, consumed = asyncio.Event(), []
+
+        async def results(_waiters):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                if consumed:
+                    raise
+                consumed.append(True)  # the poller goes on while waiters remain
+            return []
+
+        reader.results = results
+        client = PlacementQueueClient(writer, results_store=reader)
+        with patch.object(placement_queue, "AsyncConnection", Mock(connect=_blocked)):
+            response = asyncio.create_task(
+                client.response("wake", "s", "/wake", {}, b"{}")
+            )
+            await asyncio.wait_for(entered.wait(), 1)
+            await asyncio.wait_for(client.close(), 2)
+            await asyncio.gather(response, return_exceptions=True)
+        self.assertEqual(consumed, [True])
+        self.assertTrue(client._poller.done())
+        self.assertEqual(client.waiters, {})
+
+    async def test_total_rpc_timeout_defers_like_other_transport_failures(self):
+        store = Mock()
+        store.defer, store.complete = AsyncMock(), AsyncMock()
+        session = MagicMock()
+        # aiohttp's total ClientTimeout raises asyncio.TimeoutError, which is
+        # not the builtin TimeoutError before Python 3.11.
+        session.post.return_value.__aenter__.side_effect = asyncio.TimeoutError
+        command = {
+            "command_id": uuid4(), "claim_token": uuid4(), "generation": 1,
+            "path": "/v1/sandboxes/s/wake", "headers": {}, "body": b"{}",
+            "attempts": 0, "deadline": utc_now() + timedelta(seconds=60),
+        }
+        worker = PlacementQueueWorker(store, origin="http://unused", token="test")
+        await worker.execute(session, command)
+        store.defer.assert_awaited_once_with(command)
+        store.complete.assert_not_awaited()

@@ -16,6 +16,8 @@ from ucloud_sandboxes.models import (
 )
 from ucloud_sandboxes.registry import heartbeat_to_dict
 
+TEST_TIER = "contract"
+
 
 def build_heartbeat(**kwargs):
     kwargs.setdefault("deployment_id", "test-deployment")

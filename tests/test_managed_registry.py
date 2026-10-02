@@ -24,6 +24,8 @@ from ucloud_sandboxes.managed_registry import (
     select_prune_candidates,
 )
 
+TEST_TIER = "contract"
+
 
 LEASE_DIGEST = "sha256:" + "d" * 64
 

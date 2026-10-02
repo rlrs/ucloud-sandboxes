@@ -2,23 +2,25 @@
 
 import asyncio
 from dataclasses import replace
-import importlib.util
 import json
 from pathlib import Path
 from threading import Thread
-from unittest import TestCase, skipUnless
+from unittest import TestCase
 from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from tests import test_direct_provisioner as node_fixtures
 from tests import test_managed_growth as growth_fixtures
+from tests.support import requires_sdk
 from ucloud_sandboxes.direct_registry import ManagedPrimaryOwnedError
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
 from ucloud_sandboxes.sandbox import (
     SandboxCapacityUnavailableError,
     SandboxStartupBusyError,
 )
+
+TEST_TIER = "contract"
 
 
 class ManagedStartRetryTests(TestCase):
@@ -166,7 +168,7 @@ class ManagedStartRetryTests(TestCase):
             return original(handler, payload, **kwargs)
 
         server.RequestHandlerClass._write_json = write
-        thread = Thread(target=server.serve_forever, daemon=True)
+        thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
         thread.start()
 
         def close():
@@ -177,15 +179,11 @@ class ManagedStartRetryTests(TestCase):
         self.addCleanup(close)
         return f"http://127.0.0.1:{server.server_address[1]}"
 
-    @skipUnless(
-        importlib.util.find_spec("ucloud_sandboxes_sdk"), "released SDK unavailable"
-    )
+    @requires_sdk()
     def test_released_sync_sdk_retries_typed_queue_response(self):
         self.assert_sdk_pressure_retry(asynchronous=False)
 
-    @skipUnless(
-        importlib.util.find_spec("ucloud_sandboxes_sdk"), "released SDK unavailable"
-    )
+    @requires_sdk()
     def test_released_async_sdk_retries_typed_queue_response(self):
         self.assert_sdk_pressure_retry(asynchronous=True)
 
@@ -224,9 +222,7 @@ class ManagedStartRetryTests(TestCase):
         )
         self.assertEqual(self.fixture.control.call_count, 2)
 
-    @skipUnless(
-        importlib.util.find_spec("ucloud_sandboxes_sdk"), "released SDK unavailable"
-    )
+    @requires_sdk()
     def test_released_sdk_does_not_retry_ambiguous_primary_dispatch(self):
         from ucloud_sandboxes_sdk import SandboxClient, SandboxApiError
 

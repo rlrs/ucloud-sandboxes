@@ -20,6 +20,8 @@ from ucloud_sandboxes.http_server import RequestBodyStream, TRANSFER_CHUNK_BYTES
 from ucloud_sandboxes.sandbox import SandboxStartupBusyError
 from ucloud_sandboxes.upload_spool import UploadSpool
 
+TEST_TIER = "contract"
+
 
 class UploadSpoolTests(unittest.TestCase):
     def test_body_reader_bounds_reads_and_preserves_next_message(self):
@@ -119,9 +121,9 @@ class StreamingUploadTests(unittest.TestCase):
                     yield gateway, service, runner
 
     def test_small_uploads_use_buffered_rpc_without_stream_connection(self):
-        from ucloud_sandboxes import control_plane
+        from ucloud_sandboxes.gateway import node_rpc
         with self.servers() as (gateway, service, runner):
-            with patch.object(control_plane._NODE_FILE_UPLOAD_HTTP_POOL, 'request',
+            with patch.object(node_rpc._NODE_FILE_UPLOAD_HTTP_POOL, 'request',
                               side_effect=AssertionError('small upload opened streaming connection')):
                 for payload in (b'', b'go', b'x' * TRANSFER_CHUNK_BYTES):
                     connection = HTTPConnection(*gateway.server_address, timeout=5)
@@ -139,11 +141,11 @@ class StreamingUploadTests(unittest.TestCase):
             self.assertEqual(service.upload_spool._unwritten_bytes, 0)
 
     def test_truncated_small_upload_never_reaches_worker(self):
-        from ucloud_sandboxes import control_plane
+        from ucloud_sandboxes.gateway import node_rpc
         with self.servers() as (gateway, service, runner):
             connection = HTTPConnection(*gateway.server_address, timeout=5)
             try:
-                with patch.object(control_plane, '_open_node_request',
+                with patch.object(node_rpc, '_open_node_request',
                                   side_effect=AssertionError('partial body was dispatched')):
                     connection.putrequest('PUT', '/v1/sandboxes/small/files?path=/tool')
                     connection.putheader('Content-Length', '8')

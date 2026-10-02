@@ -34,8 +34,10 @@ ever removed those images.
   dropped. Otherwise the gateway would skip the pull for an image it still
   thought was present.
 
-Store size is `sandbox.docker_quota_image_gb`: 256 GB on Hetzner workers. VM
-init grows a snapshot's smaller store to it.
+Store size is `sandbox.docker_quota_image_gb`: 256 GB on Docker-store Hetzner
+workers. EROFS workers (`immutable_environments.worker_enabled`, the production
+default in `scripts/hetzner_prod/make_config.py`) pull no large images and use
+32 GB. VM init grows a snapshot's smaller store to it.
 
 ## Placement: image locality below a load band
 
@@ -43,7 +45,7 @@ Create placement ranked nodes by assigned requested shapes, then live pressure,
 and only then image locality. Every 4-vCPU create added 4/48 to its node's
 assigned shapes, so creates round-robined and each worker pulled most images.
 
-`ControlPlaneHandler._rank_candidates` now computes a load per node: live
+`Placement.rank` (`gateway/placement.py`) now computes a load per node: live
 pressure (0..1) plus in-flight creates ÷ the per-node target concurrency. It
 ranks:
 1. **Not busy first:** load below 0.6 (`_AFFINITY_LOAD_BAND`). Busy nodes keep

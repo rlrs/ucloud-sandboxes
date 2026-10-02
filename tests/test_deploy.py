@@ -27,6 +27,8 @@ from ucloud_sandboxes.vm_init import (
     RUNTIME_KERNEL_MODULES,
 )
 
+TEST_TIER = "contract"
+
 
 class DeployTests(unittest.TestCase):
     def test_native_build_rejects_incomplete_patches_and_wrong_upper_format(self) -> None:

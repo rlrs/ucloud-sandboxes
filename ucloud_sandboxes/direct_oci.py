@@ -755,6 +755,19 @@ class DirectOciConfigBuilder:
         return mounts
 
     @staticmethod
+    def platform_written_paths(spec: SandboxSpec) -> tuple[str, ...]:
+        """Guest paths the linux_host entrypoint writes: commit drops them (C3.1).
+
+        ``ssh-keygen -A`` writes host keys; the SSH user's home is assumed to be
+        /root or /home/<user>, as getent resolves it in stock images.
+        """
+        if not (spec.ssh.enabled or spec.linux_host.enable_sshd):
+            return ()
+        user = spec.ssh.user or "root"  # as the entrypoint's ${UCLOUD_SANDBOX_SSH_USER:-root}
+        home = "/root" if user == "root" else f"/home/{user}"
+        return ("/etc/ssh/ssh_host_*", f"{home}/.ssh/authorized_keys*")
+
+    @staticmethod
     def _linux_host_environment(spec: SandboxSpec) -> dict[str, str]:
         values = {
             "UCLOUD_SANDBOX_ENABLE_CRON": ("1" if spec.linux_host.enable_cron else "0"),

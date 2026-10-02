@@ -11,7 +11,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
 
-from ucloud_sandboxes import cli, control_plane
+from ucloud_sandboxes import cli
+from ucloud_sandboxes.gateway import registry_refs
 from ucloud_sandboxes.agent import build_heartbeat
 from ucloud_sandboxes.autoscaler_state import (
     AutoscalerStateStore,
@@ -47,6 +48,8 @@ from ucloud_sandboxes.providers.hetzner import (
     HetznerCreateProfile,
     HetznerProvider,
 )
+
+TEST_TIER = "contract"
 
 
 def ucloud_config(**values) -> DeploymentConfig:
@@ -587,7 +590,7 @@ class CliTests(unittest.TestCase):
             usage_store.acquire_reference(
                 "repo",
                 "v1",
-                control_plane._registry_route_reference_owner(
+                registry_refs._registry_route_reference_owner(
                     lost_route,
                     deployment_id="prod-a",
                 ),

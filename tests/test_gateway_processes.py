@@ -17,6 +17,8 @@ from ucloud_sandboxes.shared_control.database import (
     process_pool_share,
 )
 
+TEST_TIER = "contract"
+
 
 def _hold_in_child(directory, ready, release):
     locks = HostKeyedLocks(Path(directory))

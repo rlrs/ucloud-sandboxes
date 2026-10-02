@@ -66,12 +66,10 @@ for boot_module in nls_iso8859_1 xfs overlay ublk_drv; do
 done
 
 echo "Stopping workload and test services"
-systemctl disable --now ucloud-sandbox-heartbeat.timer 2>/dev/null || true
 systemctl stop \
   ucloud-sandbox-node.service \
   ucloud-storage-native.service \
-  ucloud-storage-native-backend.service \
-  ucloud-sandbox-heartbeat.service 2>/dev/null || true
+  ucloud-storage-native-backend.service 2>/dev/null || true
 if [[ -f /tmp/ucloud-hetzner-heartbeat.pid ]]; then
   kill "$(cat /tmp/ucloud-hetzner-heartbeat.pid)" 2>/dev/null || true
 fi
@@ -128,8 +126,6 @@ rm -f \
   /etc/ucloud-sandboxes/node.env \
   /etc/ucloud-sandboxes/storage-native-backend.json \
   /etc/ucloud-sandboxes/storage-native-resize-backend.json \
-  /etc/systemd/system/ucloud-sandbox-heartbeat.service \
-  /etc/systemd/system/ucloud-sandbox-heartbeat.timer \
   /etc/systemd/system/ucloud-sandbox-node.service \
   /etc/systemd/system/ucloud-storage-native.service \
   /etc/systemd/system/ucloud-storage-native-backend.service \

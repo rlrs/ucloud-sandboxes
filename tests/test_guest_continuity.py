@@ -32,6 +32,8 @@ from ucloud_sandboxes.registry import heartbeat_to_dict
 from tests.test_control_plane import _gateway_server, _running_server
 from ucloud_sandboxes.routing import RoutingStore
 
+TEST_TIER = "contract"
+
 
 def suspended_job(state="RUNNING"):
     payload = owned_node_job()

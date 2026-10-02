@@ -20,7 +20,7 @@ REPOSITORY = "ucloud-upstream"
 
 
 def publication_repositories(image_id, registry_url, cache_ref=""):
-    from ucloud_sandboxes.control_plane import _managed_registry_build_tag
+    from ucloud_sandboxes.gateway.registry_refs import _managed_registry_build_tag
     from ucloud_sandboxes.managed_registry import registry_repository_tag_from_image_ref
     target, _ = registry_repository_tag_from_image_ref(_managed_registry_build_tag(image_id, registry_url))
     repositories = [target]

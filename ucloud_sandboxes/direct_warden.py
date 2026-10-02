@@ -53,8 +53,10 @@ from .storage_native_daemon import (
     storage_operation_id,
 )
 from .telemetry import Telemetry
+from . import pause_tier
 from .runtime_process import RuntimeProcessIdentityError, owned_runtime_process_ticks
 from . import disk_claims
+from . import phase_timings
 
 
 _SAFE_COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
@@ -313,6 +315,8 @@ class DirectRunscWardenConfig:
     runtime_fingerprint: HibernationRuntimeFingerprint
     application_memory_root: Path | None = None
     reflink_memory_restore: bool = False
+    # C1.1: idle and model-wait parks may `runsc pause` in place.
+    pause_tier: bool = False
     proc_root: Path = Path("/proc")
     network: str = "none"
     command_timeout_seconds: float = 60.0
@@ -459,6 +463,10 @@ class DirectRunscWarden:
         self._idle_memory_scanned = False
         self._capture_overflows: set[tuple[str, int]] = set()
         self._capture_refused_until: dict[tuple[str, int], float] = {}
+        self.pause_stats = pause_tier.PauseStats()
+        # Thaw prefetch readers node-wide, and each in-flight prefetch's cancel.
+        self._prefetch_slots = threading.BoundedSemaphore(pause_tier.PREFETCH_NODE_THREADS)
+        self._prefetches: dict[tuple[str, int], threading.Event] = {}
         self.artifacts = HibernationArtifactStore(
             config.memory_root,
             preserve_incarnation_roots=True,
@@ -473,27 +481,31 @@ class DirectRunscWarden:
             active_memory = self._active_memory_root(sandbox)
             active_memory.mkdir(mode=0o700, parents=True, exist_ok=True)
             self._require_private_directory(active_memory, "active memory directory")
-            self._checked(
-                *self._common(sandbox),
-                "create",
-                f"--bundle={sandbox.bundle}",
-                sandbox.container_id,
-            )
-            try:
+            with phase_timings.phase("runsc_create"):
                 self._checked(
-                    *self._state_prefix(),
-                    "start",
+                    *self._common(sandbox),
+                    "create",
+                    f"--bundle={sandbox.bundle}",
                     sandbox.container_id,
                 )
-                pid, ticks = self._state_identity(sandbox)
-                running = self._journal(sandbox).initialize_running(
-                    sandbox_id=sandbox.sandbox_id,
-                    sandbox_generation=sandbox.sandbox_generation,
-                    spec_sha256=sandbox.spec_sha256,
-                    operation_id=operation_id,
-                    sentry_pid=pid,
-                    sentry_start_time_ticks=ticks,
-                )
+            try:
+                with phase_timings.phase("runsc_start"):
+                    self._checked(
+                        *self._state_prefix(),
+                        "start",
+                        sandbox.container_id,
+                    )
+                with phase_timings.phase("runsc_state"):
+                    pid, ticks = self._state_identity(sandbox)
+                with phase_timings.phase("journal_commit"):
+                    running = self._journal(sandbox).initialize_running(
+                        sandbox_id=sandbox.sandbox_id,
+                        sandbox_generation=sandbox.sandbox_generation,
+                        spec_sha256=sandbox.spec_sha256,
+                        operation_id=operation_id,
+                        sentry_pid=pid,
+                        sentry_start_time_ticks=ticks,
+                    )
             except Exception:
                 self._best_effort_delete(sandbox)
                 raise
@@ -522,18 +534,8 @@ class DirectRunscWarden:
         sandbox: DirectSandbox,
         argv: Sequence[str],
     ) -> CommandResult:
-        if not argv:
-            raise ValueError("exec argv cannot be empty")
-        with self._locked(sandbox):
-            record = self._require_state(sandbox, HibernationState.RUNNING)
-            if record.authority != HibernationAuthority.LIVE:
-                raise DirectWardenError("running sandbox has no live authority")
-            return self._checked(
-                *self._state_prefix(),
-                "exec",
-                sandbox.container_id,
-                *argv,
-            )
+        with self.exec_lease(sandbox, argv) as command:
+            return self._checked(*command)
 
     @contextmanager
     def exec_lease(
@@ -544,8 +546,15 @@ class DirectRunscWarden:
         env: dict[str, str] | None = None,
         working_dir: str | None = None,
         user: str | None = None,
+        keep_paused: bool = False,
     ) -> Iterator[tuple[str, ...]]:
-        """Hold the cross-process lifecycle fence for a streaming runsc exec."""
+        """Hold the cross-process lifecycle fence for a streaming runsc exec.
+
+        A paused runtime thaws first. keep_paused pauses it again under the
+        same fence when the caller's block returns, so a read-only status poll
+        does not end a pause (nor prefetch its memory); an exception leaves it
+        running.
+        """
         if not argv or any(not isinstance(item, str) or "\0" in item for item in argv):
             raise ValueError("exec argv must be a non-empty NUL-free string list")
         if working_dir is not None and (
@@ -564,6 +573,7 @@ class DirectRunscWarden:
             record = self._require_state(sandbox, HibernationState.RUNNING)
             if record.authority != HibernationAuthority.LIVE:
                 raise DirectWardenError("running sandbox has no live authority")
+            thawed = self._thaw_locked(sandbox, prefetch=not keep_paused)
             command = [*self._state_prefix(), "exec"]
             if working_dir is not None:
                 command.append(f"--cwd={working_dir}")
@@ -573,6 +583,11 @@ class DirectRunscWarden:
                 command.append(f"--env={key}={value}")
             command.extend((sandbox.container_id, *argv))
             yield tuple(command)
+            if keep_paused and thawed is not None and self.config.pause_tier:
+                try:  # Best effort: the answered read must not fail late.
+                    self._pause_locked(sandbox, record)
+                except DirectWardenError:
+                    _LOG.warning("could not re-pause %s", sandbox.sandbox_id, exc_info=True)
 
     def inspect(self, sandbox: DirectSandbox) -> HibernationRecord | None:
         """Read one incarnation's durable lifecycle state under its fence."""
@@ -769,6 +784,12 @@ class DirectRunscWarden:
                 # lacks physical space for this sandbox's demonstrated capture.
                 reserving = True
                 reserved = self._reserve_capture_space(sandbox, running.sentry_pid)
+                # Capture starts from a running sentry, exactly as without
+                # pause; a refused reservation leaves a paused guest paused.
+                # No prefetch: the capture reads what it needs, and swapping
+                # pages in first would add RAM under the pressure that may
+                # have escalated this park.
+                self._thaw_locked(sandbox, prefetch=False)
                 reserving = False
                 with self.telemetry.span("sandbox.park.prepare"):
                     hibernating = journal.begin_hibernate(
@@ -1369,6 +1390,10 @@ class DirectRunscWarden:
 
     def delete(self, sandbox: DirectSandbox) -> None:
         """Fence one backend; the storage authority removes its opaque volume."""
+        with self._claims_guard:  # Cancel a running prefetch rather than wait it out.
+            cancel = self._prefetches.get((sandbox.sandbox_id, sandbox.sandbox_generation))
+        if cancel is not None:
+            cancel.set()
         snapshot = self.inspect(sandbox)
         if (
             snapshot is not None
@@ -1446,6 +1471,9 @@ class DirectRunscWarden:
                         finally:
                             handle.close()
             self._delete_runtime(sandbox)
+            # Before the journal goes, so a retried delete still finds it.
+            self._pause_marker(sandbox.sandbox_id, sandbox.sandbox_generation).unlink(
+                missing_ok=True)
 
             # The storage-native quota owner deletes the opaque volume after
             # this lifecycle fence is removed. Do not remount or traverse it:
@@ -1999,12 +2027,7 @@ class DirectRunscWarden:
             "state",
             sandbox.container_id,
         )
-        try:
-            payload = json.loads(result.stdout)
-            pid = int(payload["pid"])
-            status = str(payload["status"])
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise DirectWardenError("runsc state returned invalid JSON") from exc
+        pid, status = self._runsc_state(result)
         if status not in {"running", "paused"}:
             raise DirectWardenError(f"runsc state is not live: {status}")
         try:
@@ -2012,6 +2035,14 @@ class DirectRunscWarden:
         except (ProcessLookupError, ValueError) as exc:
             raise DirectWardenError("cannot read sentry process identity") from exc
         return pid, ticks, status
+
+    @staticmethod
+    def _runsc_state(result: CommandResult) -> tuple[int, str]:
+        try:
+            payload = json.loads(result.stdout)
+            return int(payload["pid"]), str(payload["status"])
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise DirectWardenError("runsc state returned invalid JSON") from exc
 
     def _state_identity(self, sandbox: DirectSandbox) -> tuple[int, int]:
         pid, ticks, _status = self._state_identity_status(sandbox)
@@ -2051,12 +2082,7 @@ class DirectRunscWarden:
             if not any(item["id"] == sandbox.container_id for item in inventory):
                 return None
             raise DirectWardenError("runsc state failed for a listed restore candidate")
-        try:
-            payload = json.loads(result.stdout)
-            pid = int(payload["pid"])
-            status = str(payload["status"])
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise DirectWardenError("runsc state returned invalid JSON") from exc
+        pid, status = self._runsc_state(result)
         if status in {"absent", "stopped"}:
             return None
         if status not in {"running", "paused"}:
@@ -2665,6 +2691,7 @@ class DirectRunscWarden:
             self.config.runtime_root,
             self.config.runtime_root / "warden-locks",
             self.config.runtime_root / "parked-manifests",
+            self.config.runtime_root / "warden-paused",
             self.config.memory_root,
             self.config.bundle_root,
             self.config.journal_root,
@@ -2983,8 +3010,161 @@ class DirectRunscWarden:
                 _LOG.exception("could not return the memory claim of %s to idle", key[0])
         return settled
 
+    # -- Pause tier (C1.1) -------------------------------------------------
+    # A pause keeps the journal RUNNING/LIVE: no authority changes. The marker
+    # is durable before `runsc pause` and removed only after `runsc resume`, so
+    # a paused runtime always has one. A marker on a running runtime (a crash
+    # between the two steps) is harmless: the next thaw proves it running.
+    # `runsc pause` stops the guest inside the Sentry; the cgroup is never
+    # frozen (pause_tier explains why cgroup.freeze is not written either).
+
+    def _pause_marker(self, sandbox_id: str, generation: int) -> Path:
+        return self.config.runtime_root / "warden-paused" / f"{sandbox_id}.sandbox-{generation}"
+
+    def is_paused(self, sandbox_id: str, generation: int) -> bool:
+        """Observation only. Exec leases thaw under the lock; they never trust this."""
+        return os.path.lexists(self._pause_marker(sandbox_id, generation))
+
+    def thawing(self, sandbox_id: str, generation: int) -> bool:
+        """Observation only: a thaw is reading memory back; its marker goes after."""
+        with self._claims_guard:
+            return (sandbox_id, generation) in self._prefetches
+
+    def paused_keys(self) -> list[tuple[str, int]]:
+        """Observation only; dot names are atomic-write temporaries, not markers."""
+        names = [name.rpartition(".sandbox-") for name in os.listdir(
+            self.config.runtime_root / "warden-paused") if not name.startswith(".")]
+        return [(sandbox_id, int(gen)) for sandbox_id, _, gen in names if sandbox_id and gen.isdigit()]
+
+    def pause(self, sandbox: DirectSandbox) -> bool:
+        """Pause a LIVE runtime in place; False when it is not RUNNING."""
+        if not self.config.pause_tier:
+            raise DirectWardenError("the pause tier is disabled on this node")
+        with self._locked(sandbox):
+            record = self._journal(sandbox).load()
+            if record is None or record.state != HibernationState.RUNNING:
+                return False
+            self._pause_locked(sandbox, record)
+            return True
+
+    def _pause_locked(self, sandbox: DirectSandbox, record: HibernationRecord) -> None:
+        marker = self._pause_marker(sandbox.sandbox_id, sandbox.sandbox_generation)
+        self.artifacts._atomic_write_at(marker.parent, marker.name, sandbox.container_id.encode())
+        result = self.runner.run((*self._state_prefix(), "pause", sandbox.container_id),
+                                 timeout=self.config.command_timeout_seconds)
+        # A crashed predecessor's pause is success. Anything else must
+        # leave the original sentry running and the marker gone.
+        if result.returncode != 0 and self._state_identity_status(sandbox) != (
+                record.sentry_pid, record.sentry_start_time_ticks, "paused"):
+            self._thaw_locked(sandbox, prefetch=False)
+            raise DirectWardenError(f"runsc pause failed: {result.stderr}")
+        self.pause_stats.add(pauses=1)
+
+    def thaw(self, sandbox: DirectSandbox) -> float | None:
+        """Resume a paused runtime; milliseconds taken, or None if not paused."""
+        if not self.is_paused(sandbox.sandbox_id, sandbox.sandbox_generation):
+            return None
+        with self._locked(sandbox):
+            return self._thaw_locked(sandbox)
+
+    def _thaw_locked(self, sandbox: DirectSandbox, *, prefetch: bool = True) -> float | None:
+        """Resume under the lock; with prefetch, swapped memory is read back first.
+
+        A crash anywhere before the marker's unlink leaves a paused runtime
+        with its marker, or a running one with a harmless marker; prefetch
+        only reads.
+        """
+        marker = self._pause_marker(sandbox.sandbox_id, sandbox.sandbox_generation)
+        if not os.path.lexists(marker):
+            return None
+        started = time.monotonic()
+        if prefetch:
+            self._prefetch_memory(sandbox)
+        result = self.runner.run((*self._state_prefix(), "resume", sandbox.container_id),
+                                 timeout=self.config.command_timeout_seconds)
+        if result.returncode != 0 and self._state_identity_status(sandbox)[2] != "running":
+            raise DirectWardenError(f"runsc resume of a paused sandbox failed: {result.stderr}")
+        marker.unlink()
+        elapsed_ms = (time.monotonic() - started) * 1000
+        self.pause_stats.add(thaws=1, thaw_ms_total=elapsed_ms, thaw_ms_max=elapsed_ms)
+        return elapsed_ms
+
+    def _prefetch_memory(self, sandbox: DirectSandbox) -> None:
+        """Read swapped application memory back in parallel before resume.
+
+        RAM (tmpfs) memory only: a host read charges page cache to the reader's
+        cgroup, whereas a swapped tmpfs page returns to the cgroup its swap
+        entry names, the sandbox's. Skipped unless that cgroup holds
+        PREFETCH_MIN_SWAP_BYTES of swap: no reclaim moved anything out. Best
+        effort within a byte, reader and time budget; a delete cancels it, and
+        the guest faults in whatever is left.
+        """
+        key = (sandbox.sandbox_id, sandbox.sandbox_generation)
+        record = self._journal(sandbox).load()
+        if record is None or record.sentry_pid is None or self.application_memory_mode(*key) != "ram":
+            return
+        swapped = pause_tier.cgroup_swap_bytes(record.sentry_pid, proc_root=self.config.proc_root)
+        if swapped is None or swapped < pause_tier.PREFETCH_MIN_SWAP_BYTES:
+            return
+        started, cancel = time.monotonic(), threading.Event()
+        with self._claims_guard:
+            self._prefetches[key] = cancel
+        try:
+            fd = os.open(self._active_memory_root(sandbox) / _ACTIVE_APPLICATION_MEMORY,
+                         os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+            try:
+                info = os.fstat(fd)
+                if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                        or info.st_mode & 0o077):
+                    return  # Only ever a privately owned memory file.
+                with self.telemetry.span("sandbox.thaw.prefetch"):
+                    read = pause_tier.prefetch(
+                        fd, pause_tier.memory_pieces(fd), slots=self._prefetch_slots,
+                        cancelled=lambda: cancel.is_set()
+                        or time.monotonic() - started >= pause_tier.PREFETCH_SECONDS)
+            finally:
+                os.close(fd)
+        except (OSError, DirectWardenError):
+            _LOG.warning("thaw prefetch of %s failed", sandbox.sandbox_id, exc_info=True)
+            return
+        finally:
+            with self._claims_guard:
+                self._prefetches.pop(key, None)
+        self.pause_stats.add(thaw_prefetches=1, thaw_prefetched_bytes=read,
+                             thaw_prefetch_ms_total=(time.monotonic() - started) * 1000)
+
+    def export_upper(self, sandbox: DirectSandbox, destination: Path, *, resume: bool,
+                     prepare: Callable[[int, bool], bool]) -> bool:
+        """C3.1: ``runsc tar rootfs-upper`` of a frozen runtime, then its prior state.
+
+        ``prepare(filestore_bytes, paused)`` runs after the state check and
+        before any pause. It durably records and returns the pre-export state
+        (a crashed attempt's record wins), so a replay restores what the first
+        attempt found. The C1.1 marker keeps an interrupted export paused until
+        a thaw or exec. Returns the recorded state.
+        """
+        with self._locked(sandbox):
+            record = self._require_state(sandbox, HibernationState.RUNNING)
+            if record.authority != HibernationAuthority.LIVE:
+                raise DirectWardenError("running sandbox has no live authority")
+            filestore = self._filestore_bytes(sandbox)
+            # A marker alone may outlive a crash before `runsc pause`; only a
+            # frozen runtime may skip the pause.
+            paused = (self.is_paused(sandbox.sandbox_id, sandbox.sandbox_generation)
+                      and self._state_identity_status(sandbox)[2] == "paused")
+            was_paused = prepare(filestore, paused)
+            if not paused:
+                self._pause_locked(sandbox, record)
+            try:
+                self._checked(*self._state_prefix(), "tar", "rootfs-upper", f"--file={destination}",
+                              sandbox.container_id, timeout=self._transfer_timeout_seconds(filestore))
+            finally:
+                if resume and not was_paused:
+                    self._thaw_locked(sandbox)
+            return was_paused
+
     @contextmanager
-    def _try_locked(self, sandbox: DirectSandbox) -> Iterator[bool]:
+    def _try_locked(self, sandbox: DirectSandbox, *, blocking: bool = False) -> Iterator[bool]:
         lock_path = (
             self.config.runtime_root
             / "warden-locks"
@@ -2997,7 +3177,7 @@ class DirectRunscWarden:
         )
         try:
             try:
-                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(descriptor, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
             except BlockingIOError:
                 yield False
                 return
@@ -3010,22 +3190,5 @@ class DirectRunscWarden:
 
     @contextmanager
     def _locked(self, sandbox: DirectSandbox) -> Iterator[None]:
-        lock_path = (
-            self.config.runtime_root
-            / "warden-locks"
-            / f".{sandbox.sandbox_id}.sandbox-{sandbox.sandbox_generation}.warden.lock"
-        )
-        descriptor = os.open(
-            lock_path,
-            os.O_RDWR
-            | os.O_CREAT
-            | getattr(os, "O_CLOEXEC", 0)
-            | getattr(os, "O_NOFOLLOW", 0),
-            0o600,
-        )
-        try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
+        with self._try_locked(sandbox, blocking=True):
             yield
-        finally:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
-            os.close(descriptor)

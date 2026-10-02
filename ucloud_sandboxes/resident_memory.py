@@ -31,6 +31,9 @@ class ResidentMemorySample:
     shared_memory_bytes: int = 0
     # memory.peak: this runtime's high-water mark (0 when the kernel lacks it).
     peak_bytes: int = 0
+    # memory.swap.current: pages a paused runtime (C1.1) moved out. They are
+    # not resident but remain its footprint: a thaw or capture faults them in.
+    swap_bytes: int = 0
 
     @property
     def clean_file_bytes(self) -> int:
@@ -147,6 +150,10 @@ class ResidentMemorySampler:
                 peak = int((path / "memory.peak").read_text().strip())
             except FileNotFoundError:
                 peak = 0
+            try:
+                swap = int((path / "memory.swap.current").read_text().strip())
+            except FileNotFoundError:
+                swap = 0
             counters = {}
             for line in (path / "memory.stat").read_text().splitlines():
                 name, value = line.split()
@@ -183,6 +190,7 @@ class ResidentMemorySampler:
                 time.monotonic(),
                 counters["shmem"],
                 max(peak, current) if peak else 0,
+                max(0, swap),
             )
         except (OSError, ValueError, KeyError):
             with self._guard:
@@ -205,7 +213,11 @@ class ResidentReclaimResult:
 
 
 class ResidentMemoryReclaimer:
-    """Best-effort cache reclaim against one already fenced live incarnation.
+    """Best-effort reclaim against one already fenced live incarnation.
+
+    swappiness=0 evicts clean file cache only. A paused runtime (C1.1) passes
+    swappiness>0 to move its tmpfs/anonymous pages to zswap/swap, paced by the
+    node's ReclaimBudget and stopped once the cgroup no longer shrinks.
 
     The caller's lifecycle check is deliberately short: a blocking kernel
     reclaim write never owns the lifecycle lock. A wake can cancel subsequent
@@ -224,17 +236,24 @@ class ResidentMemoryReclaimer:
         target_bytes: int,
         is_current,
         window_bytes: int = 16 * 1024 * 1024,
+        swappiness: int = 0,
+        budget=None,
     ) -> ResidentReclaimResult:
+        from contextlib import nullcontext
         import errno
         import os
 
-        if target_bytes <= 0 or window_bytes <= 0:
+        if target_bytes <= 0 or window_bytes <= 0 or not 0 <= swappiness <= 200:
             raise ValueError("reclaim byte budgets must be positive")
+
+        def reclaimable(observed):
+            return observed.current_bytes if swappiness else observed.clean_file_bytes
+
         started = time.monotonic()
         requested = 0
         current = sample
         reason = "target_reached"
-        target = min(target_bytes, sample.clean_file_bytes)
+        target = min(target_bytes, reclaimable(sample))
         if target == 0:
             return ResidentReclaimResult(0, 0, 0.0, 0, "no_reclaimable_cache")
         path = self.sampler.cgroup_root / sample.cgroup_path.removeprefix("/")
@@ -267,22 +286,30 @@ class ResidentMemoryReclaimer:
                 ) != (sample.cgroup_device, sample.cgroup_inode):
                     reason = "cgroup_changed"
                     break
+                if swappiness and requested and (
+                        current.current_bytes - observed.current_bytes < window_bytes // 16):
+                    reason = "not_shrinking"
+                    break
                 current = observed
                 if sample.current_bytes - current.current_bytes >= target:
                     break
-                amount = min(window_bytes, target - requested, current.clean_file_bytes)
+                amount = min(window_bytes, target - requested, reclaimable(current))
                 if amount <= 0:
                     reason = "no_reclaimable_cache"
                     break
-                # No anonymous swap-out: tmpfs application memory is deliberately
-                # excluded from the estimate. Unsupported knobs fail closed.
-                if not is_current():
+                # Cache reclaim excludes tmpfs application memory from its
+                # estimate; only a paused runtime swaps. Unsupported knobs
+                # fail closed.
+                if (budget is not None and not budget.admit(amount, is_current)
+                        or not is_current()):
                     reason = "superseded"
                     break
-                payload = f"{amount} swappiness=0".encode("ascii")
+                payload = f"{amount} swappiness={swappiness}".encode("ascii")
                 requested += amount
                 try:
-                    if os.write(reclaim_fd, payload) != len(payload):
+                    with budget.background() if budget is not None else nullcontext():
+                        written = os.write(reclaim_fd, payload)
+                    if written != len(payload):
                         reason = "short_write"
                         break
                 except OSError as exc:

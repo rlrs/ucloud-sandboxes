@@ -2,7 +2,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.tmax_build_smoke import _materialize_tmax_context
+from tests.support import sdk_skip_reason, skip_module
+
+TEST_TIER = "contract"
+
+# The script under test imports the SDK at module level.
+if (SDK_UNAVAILABLE := sdk_skip_reason()) is None:
+    from scripts.tmax_build_smoke import _materialize_tmax_context
+else:
+    load_tests = skip_module(__name__, SDK_UNAVAILABLE)
 
 
 class TMaxTests(unittest.TestCase):

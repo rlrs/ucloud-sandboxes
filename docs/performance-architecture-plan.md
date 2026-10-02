@@ -472,7 +472,7 @@ gateway ownership and speculative placement algorithms.
 - Storage: `direct_warden.py` park/restore and storage validation;
   `hibernation.py` manifest and reservation; `direct_registry.py` registration;
   `image_rootfs.py` preparation/rebind; `storage_native_migration.py` import.
-- Scheduling: `resource_admission.py`, `policy.py`, `program_scheduler.py`,
+- Scheduling: `resource_admission.py`, `policy.py`,
   `warm_park.py`, `background_io.py`, and `direct_service.py` operation admission.
 - Linux documents best-effort [cgroup reclaim](https://docs.kernel.org/admin-guide/cgroup-v2.html)
   and kernel-dependent [EROFS file-backed mounts](https://docs.kernel.org/filesystems/erofs.html).

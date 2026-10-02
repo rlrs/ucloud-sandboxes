@@ -20,6 +20,8 @@ from ucloud_sandboxes.models import InstancePhase, SandboxNode, ProviderInstance
 from ucloud_sandboxes.providers.base import InstanceBootstrapAccess
 from ucloud_sandboxes.vm_init import VmInitOptions
 
+TEST_TIER = "contract"
+
 
 def bootstrap_node(job_id: str) -> SandboxNode:
     instance = ProviderInstance(

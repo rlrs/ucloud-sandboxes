@@ -134,13 +134,15 @@ class ColdOffloadTests(unittest.TestCase):
         from unittest.mock import Mock
         from ucloud_sandboxes.control_plane import ControlPlaneHandler
         from ucloud_sandboxes.routing import RoutingStore, cold_offload_fence
+        from tests.gateway_support import gateway_services
         with TemporaryDirectory() as root:
             store = RoutingStore(Path(root) / 'routing.sqlite')
             route = store.upsert_sandbox(self.route('cold'))
             handler = object.__new__(ControlPlaneHandler)
             handler.routing_store = store
             handler._read_json_body = lambda: {'if_cold': cold_offload_fence(route)}
-            handler._ensure_registry_route_reference = lambda *_, **__: store.upsert_program_request_transition_with_change(
+            handler.services = gateway_services()
+            handler.services.registry_refs.ensure_route_reference = lambda *_, **__: store.upsert_program_request_transition_with_change(
                 route, request_id='arrived-after-selection', rollout_id='rollout', state='model_wait')
             handler._finish_sandbox_detach = Mock()
             responses = []

@@ -147,7 +147,7 @@ def main():
     sys.path.insert(0, str(args.sdk_wheel))
     import ucloud_sandboxes_sdk as sdk
     from ucloud_sandboxes.config import DeploymentConfig
-    from ucloud_sandboxes.control_plane import _persist_registry_image_protection
+    from ucloud_sandboxes.gateway.registry_refs import _persist_registry_image_protection
     from ucloud_sandboxes.environment_artifact import load_image_environment
     from ucloud_sandboxes.environment_config import environment_registry_from_deployment
     from ucloud_sandboxes.environment_dependencies import EnvironmentDependencyResolver

@@ -398,7 +398,7 @@ class DirectNetworkManagerTests(unittest.TestCase):
             lease = manager._lease("sandbox-a", 1, 1)
             lease.namespace_path.parent.mkdir(parents=True)
             lease.namespace_path.touch()
-            with patch.object(manager, "_command_ok", return_value=True):
+            with patch.object(manager, "_interface_present", return_value=True):
                 manager._ensure_kernel_lease(lease)
 
             rendered = [" ".join(command) for command in commands]
@@ -425,7 +425,9 @@ class DirectNetworkManagerTests(unittest.TestCase):
             lease.namespace_path.parent.mkdir(parents=True)
             lease.namespace_path.touch()
             with (
-                patch.object(manager, "_command_ok", side_effect=(True, False)),
+                patch.object(manager, "_interface_present", return_value=True),
+                patch.object(manager, "ip_batch_runner", side_effect=(
+                    None, DirectNetworkError("Cannot find device eth0"), None, None)),
                 patch.object(manager, "_cleanup_kernel_lease") as cleanup,
             ):
                 manager._ensure_kernel_lease(lease)

@@ -21,6 +21,8 @@ from ucloud_sandboxes.managed_process import (
 )
 from ucloud_sandboxes.sandbox import SandboxSpec
 
+TEST_TIER = "contract"
+
 
 class ManagedProcessProtocolTests(unittest.TestCase):
     def test_managed_sandbox_contract_requires_parkable_empty_primary_slot(

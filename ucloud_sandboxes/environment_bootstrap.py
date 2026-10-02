@@ -11,8 +11,7 @@ SERVICE = "ucloud-environment-io.service"
 
 
 def settings(options):
-    enabled = bool(options.environment_registry_url)
-    if not enabled:
+    if not options.environment_registry_url:
         return "", "", ""
     registry_flags = (
         " --environment-registry-url " + shlex.quote(options.environment_registry_url)
@@ -31,7 +30,14 @@ $SUDO install -m 0600 /dev/null {KEY_FILE}
 printf %s {shlex.quote(private)} | base64 -d | $SUDO tee {KEY_FILE} >/dev/null
 $SUDO chown root:root {KEY_FILE}
 '''
-        return (registry_flags + " --environment-signing-key " + KEY_FILE + "".join(
+        preserve = " --environment-preserve-mtimes" if options.environment_preserve_mtimes else ""
+        if preserve:
+            # Layout 2 needs --mkfs-time (1.8+) and --MZ (1.9+). Capture the whole usage: under
+            # pipefail, grep -q exiting at the match can SIGPIPE mkfs and fail a capable builder.
+            setup += ('UCLOUD_MKFS_USAGE="$(mkfs.erofs --help 2>&1 || true)"; for UCLOUD_MKFS_OPTION in --mkfs-time '
+                      '--MZ; do case "$UCLOUD_MKFS_USAGE" in *"$UCLOUD_MKFS_OPTION"*) ;; *) echo "layout-2 publication'
+                      ' requires erofs-utils 1.9+ (mkfs.erofs $UCLOUD_MKFS_OPTION)" >&2; exit 1 ;; esac; done\n')
+        return (registry_flags + " --environment-signing-key " + KEY_FILE + preserve + "".join(
             " --environment-allow-path " + shlex.quote(path) for path in options.environment_allow_paths), setup, "")
     setup += f'''# Never replace the adapter beneath existing sandboxes.
 if [ -e "$UCLOUD_STATE_DIR/direct-runtime/direct-registry.sqlite" ] && [ ! -e "$UCLOUD_STATE_DIR/environment-adapter" ]; then
@@ -58,7 +64,7 @@ Group=root
 PrivateMounts=no
 RuntimeDirectory=ucloud-environment
 RuntimeDirectoryMode=0700
-ExecStart=$UCLOUD_AGENT_BIN serve-environment-io --root $UCLOUD_STATE_DIR/environment-io --socket {SOCKET} --cache-bytes {options.environment_cache_bytes}{registry_flags}
+ExecStart=$UCLOUD_AGENT_BIN serve-environment-io --root $UCLOUD_STATE_DIR/environment-io --socket {SOCKET} --cache-bytes {options.environment_cache_bytes}{"" if options.environment_prefetch_enabled else " --disable-prefetch"}{registry_flags}
 Restart=no
 
 [Install]
@@ -74,7 +80,8 @@ def validate(options):
     supplied = bool(options.environment_registry_url)
     if not supplied:
         if any((options.environment_repository, options.environment_trusted_keys_json,
-                options.environment_signing_key_pem, options.environment_allow_paths)):
+                options.environment_signing_key_pem, options.environment_allow_paths,
+                options.environment_preserve_mtimes)):
             raise ValueError("immutable environment bootstrap requires registry URL and producer trust")
         return
     from .environment_config import EnvironmentDeploymentConfig
@@ -82,7 +89,8 @@ def validate(options):
         "trusted_keys_file": TRUST_FILE, "signing_key_file": KEY_FILE if options.role == "builder" else "",
         "repository": options.environment_repository, "worker_enabled": options.role == "sandbox",
         "builder_enabled": options.role == "builder", "allow_paths": options.environment_allow_paths,
-        "cache_bytes": options.environment_cache_bytes,
+        "cache_bytes": options.environment_cache_bytes, "preserve_mtimes": options.environment_preserve_mtimes,
+        "prefetch_enabled": options.environment_prefetch_enabled,
     })
     from .environment_artifact import content_digest
     raw = json.loads(options.environment_trusted_keys_json)
@@ -96,6 +104,8 @@ def validate(options):
     if options.role == "sandbox":
         if options.environment_signing_key_pem:
             raise ValueError("sandbox workers must never receive environment signing keys")
+        if options.environment_preserve_mtimes:
+            raise ValueError("only builders publish environment components")
         if options.environment_cache_bytes > options.direct_disk_headroom_mb * 1024 ** 2 // 2:
             raise ValueError("immutable environment cache must leave half the disk safety headroom free")
     else:

@@ -1,0 +1,610 @@
+{
+  "ext4/baseline": {
+    "sequential": {
+      "creates_per_second": 9.5,
+      "registry_commits_per_create": 4.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 18.0,
+          "p99": 40.0
+        },
+        "network_ensure_ms": {
+          "p50": 32.0,
+          "p99": 142.0
+        },
+        "registry_commit_ms": {
+          "p50": 18.0,
+          "p99": 31.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 0.0,
+          "p99": 13.0
+        },
+        "storage_prepare_ms": {
+          "p50": 5.0,
+          "p99": 13.0
+        },
+        "total_ms": {
+          "p50": 105.32,
+          "p99": 196.24
+        }
+      }
+    },
+    "burst": {
+      "creates_per_second": 23.2,
+      "registry_commits_per_create": 4.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 37.0,
+          "p99": 78.0
+        },
+        "network_ensure_ms": {
+          "p50": 272.0,
+          "p99": 378.0
+        },
+        "registry_commit_ms": {
+          "p50": 272.0,
+          "p99": 601.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 0.0,
+          "p99": 10.0
+        },
+        "storage_prepare_ms": {
+          "p50": 319.0,
+          "p99": 421.0
+        },
+        "total_ms": {
+          "p50": 988.54,
+          "p99": 1370.34
+        }
+      }
+    },
+    "sustained": {
+      "creates_per_second": 27.3,
+      "registry_commits_per_create": 4.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 47.0,
+          "p99": 90.0
+        },
+        "network_ensure_ms": {
+          "p50": 258.0,
+          "p99": 570.0
+        },
+        "registry_commit_ms": {
+          "p50": 673.0,
+          "p99": 972.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 0.0,
+          "p99": 31.0
+        },
+        "storage_prepare_ms": {
+          "p50": 232.0,
+          "p99": 362.0
+        },
+        "total_ms": {
+          "p50": 1175.28,
+          "p99": 1356.6
+        }
+      }
+    },
+    "host_rules_check_ms": {
+      "iptables_save_ms": 1.34,
+      "p50": 2.69,
+      "p99": 3.31,
+      "sysctl_ms": 0.98
+    }
+  },
+  "ext4/commits_only": {
+    "sequential": {
+      "creates_per_second": 11.5,
+      "registry_commits_per_create": 3.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 25.0,
+          "p99": 52.0
+        },
+        "network_ensure_ms": {
+          "p50": 29.0,
+          "p99": 48.0
+        },
+        "network_host_rules_ms": {
+          "p50": 2.0,
+          "p99": 3.0
+        },
+        "registry_commit_ms": {
+          "p50": 21.0,
+          "p99": 45.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 0.0,
+          "p99": 18.0
+        },
+        "storage_prepare_ms": {
+          "p50": 0.0,
+          "p99": 9.0
+        },
+        "total_ms": {
+          "p50": 89.53,
+          "p99": 126.5
+        }
+      }
+    },
+    "burst": {
+      "creates_per_second": 23.6,
+      "registry_commits_per_create": 3.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 57.0,
+          "p99": 92.0
+        },
+        "network_ensure_ms": {
+          "p50": 114.0,
+          "p99": 390.0
+        },
+        "network_host_rules_ms": {
+          "p50": 0,
+          "p99": 34.0
+        },
+        "registry_commit_ms": {
+          "p50": 897.0,
+          "p99": 947.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 0.0,
+          "p99": 39.0
+        },
+        "storage_prepare_ms": {
+          "p50": 0.0,
+          "p99": 24.0
+        },
+        "total_ms": {
+          "p50": 1200.12,
+          "p99": 1340.96
+        }
+      }
+    },
+    "sustained": {
+      "creates_per_second": 26.4,
+      "registry_commits_per_create": 3.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 49.0,
+          "p99": 109.0
+        },
+        "network_ensure_ms": {
+          "p50": 817.0,
+          "p99": 1077.0
+        },
+        "network_host_rules_ms": {
+          "p50": 0,
+          "p99": 3.0
+        },
+        "registry_commit_ms": {
+          "p50": 87.0,
+          "p99": 468.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 1.0,
+          "p99": 36.0
+        },
+        "storage_prepare_ms": {
+          "p50": 0.0,
+          "p99": 19.0
+        },
+        "total_ms": {
+          "p50": 1125.36,
+          "p99": 1369.76
+        }
+      }
+    },
+    "host_rules_check_ms": {
+      "iptables_save_ms": 1.36,
+      "p50": 2.67,
+      "p99": 4.03,
+      "sysctl_ms": 0.98
+    }
+  },
+  "ext4/commits_and_pool": {
+    "sequential": {
+      "creates_per_second": 11.0,
+      "registry_commits_per_create": 3.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 28.0,
+          "p99": 57.0
+        },
+        "network_ensure_ms": {
+          "p50": 24.0,
+          "p99": 46.0
+        },
+        "network_host_rules_ms": {
+          "p50": 2.0,
+          "p99": 3.0
+        },
+        "registry_commit_ms": {
+          "p50": 22.0,
+          "p99": 49.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 0.0,
+          "p99": 6.0
+        },
+        "storage_prepare_ms": {
+          "p50": 0.0,
+          "p99": 13.0
+        },
+        "total_ms": {
+          "p50": 88.16,
+          "p99": 127.06
+        }
+      }
+    },
+    "burst": {
+      "creates_per_second": 30.6,
+      "registry_commits_per_create": 3.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 57.0,
+          "p99": 80.0
+        },
+        "network_ensure_ms": {
+          "p50": 281.0,
+          "p99": 521.0
+        },
+        "network_host_rules_ms": {
+          "p50": 0,
+          "p99": 6.0
+        },
+        "registry_commit_ms": {
+          "p50": 381.0,
+          "p99": 478.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 0.0,
+          "p99": 1.0
+        },
+        "total_ms": {
+          "p50": 677.49,
+          "p99": 1030.44
+        }
+      }
+    },
+    "sustained": {
+      "creates_per_second": 28.6,
+      "registry_commits_per_create": 3.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 44.0,
+          "p99": 134.0
+        },
+        "network_ensure_ms": {
+          "p50": 846.0,
+          "p99": 1174.0
+        },
+        "network_host_rules_ms": {
+          "p50": 0,
+          "p99": 3.0
+        },
+        "registry_commit_ms": {
+          "p50": 32.0,
+          "p99": 321.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 0.0,
+          "p99": 26.0
+        },
+        "storage_prepare_ms": {
+          "p50": 0.0,
+          "p99": 15.0
+        },
+        "total_ms": {
+          "p50": 1026.28,
+          "p99": 1300.82
+        }
+      }
+    },
+    "host_rules_check_ms": {
+      "iptables_save_ms": 1.38,
+      "p50": 2.8,
+      "p99": 3.64,
+      "sysctl_ms": 1.0
+    }
+  },
+  "tmpfs/baseline": {
+    "sequential": {
+      "creates_per_second": 76.5,
+      "registry_commits_per_create": 4.0,
+      "phases": {
+        "network_ensure_ms": {
+          "p50": 10.0,
+          "p99": 11.0
+        },
+        "total_ms": {
+          "p50": 12.94,
+          "p99": 14.37
+        }
+      }
+    },
+    "burst": {
+      "creates_per_second": 97.6,
+      "registry_commits_per_create": 4.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 0.0,
+          "p99": 9.0
+        },
+        "network_ensure_ms": {
+          "p50": 36.0,
+          "p99": 48.0
+        },
+        "oci_build_ms": {
+          "p50": 0.0,
+          "p99": 2.0
+        },
+        "registry_commit_ms": {
+          "p50": 190.0,
+          "p99": 246.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 1.0,
+          "p99": 5.0
+        },
+        "storage_prepare_ms": {
+          "p50": 91.0,
+          "p99": 175.0
+        },
+        "total_ms": {
+          "p50": 308.85,
+          "p99": 312.67
+        }
+      }
+    },
+    "sustained": {
+      "creates_per_second": 109.1,
+      "registry_commits_per_create": 4.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 0.0,
+          "p99": 18.0
+        },
+        "network_ensure_ms": {
+          "p50": 38.0,
+          "p99": 190.0
+        },
+        "oci_build_ms": {
+          "p50": 0.0,
+          "p99": 10.0
+        },
+        "registry_commit_ms": {
+          "p50": 146.0,
+          "p99": 241.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 1.0,
+          "p99": 10.0
+        },
+        "storage_prepare_ms": {
+          "p50": 86.0,
+          "p99": 169.0
+        },
+        "total_ms": {
+          "p50": 290.22,
+          "p99": 305.14
+        }
+      }
+    },
+    "host_rules_check_ms": {
+      "iptables_save_ms": 1.32,
+      "p50": 2.57,
+      "p99": 4.45,
+      "sysctl_ms": 0.96
+    }
+  },
+  "tmpfs/commits_only": {
+    "sequential": {
+      "creates_per_second": 84.9,
+      "registry_commits_per_create": 3.0,
+      "phases": {
+        "network_ensure_ms": {
+          "p50": 9.0,
+          "p99": 10.0
+        },
+        "network_host_rules_ms": {
+          "p50": 2.0,
+          "p99": 2.0
+        },
+        "total_ms": {
+          "p50": 11.51,
+          "p99": 14.46
+        }
+      }
+    },
+    "burst": {
+      "creates_per_second": 108.9,
+      "registry_commits_per_create": 3.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 0.0,
+          "p99": 6.0
+        },
+        "network_ensure_ms": {
+          "p50": 28.0,
+          "p99": 56.0
+        },
+        "network_host_rules_ms": {
+          "p50": 4.0,
+          "p99": 7.0
+        },
+        "oci_build_ms": {
+          "p50": 0.0,
+          "p99": 1.0
+        },
+        "registry_commit_ms": {
+          "p50": 241.0,
+          "p99": 249.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 1.0,
+          "p99": 6.0
+        },
+        "storage_prepare_ms": {
+          "p50": 0.0,
+          "p99": 1.0
+        },
+        "total_ms": {
+          "p50": 273.8,
+          "p99": 275.75
+        }
+      }
+    },
+    "sustained": {
+      "creates_per_second": 125.8,
+      "registry_commits_per_create": 3.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 0.0,
+          "p99": 8.0
+        },
+        "network_ensure_ms": {
+          "p50": 32.0,
+          "p99": 49.0
+        },
+        "network_host_rules_ms": {
+          "p50": 3.0,
+          "p99": 8.0
+        },
+        "oci_build_ms": {
+          "p50": 0.0,
+          "p99": 2.0
+        },
+        "registry_commit_ms": {
+          "p50": 210.0,
+          "p99": 244.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 1.0,
+          "p99": 5.0
+        },
+        "storage_prepare_ms": {
+          "p50": 0.0,
+          "p99": 2.0
+        },
+        "total_ms": {
+          "p50": 249.35,
+          "p99": 275.88
+        }
+      }
+    },
+    "host_rules_check_ms": {
+      "iptables_save_ms": 1.33,
+      "p50": 2.62,
+      "p99": 3.48,
+      "sysctl_ms": 0.95
+    }
+  },
+  "tmpfs/commits_and_pool": {
+    "sequential": {
+      "creates_per_second": 120.5,
+      "registry_commits_per_create": 3.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 0.0,
+          "p99": 1.0
+        },
+        "network_ensure_ms": {
+          "p50": 3.0,
+          "p99": 11.0
+        },
+        "network_host_rules_ms": {
+          "p50": 2.0,
+          "p99": 3.0
+        },
+        "registry_commit_ms": {
+          "p50": 0.0,
+          "p99": 1.0
+        },
+        "total_ms": {
+          "p50": 5.84,
+          "p99": 13.34
+        }
+      }
+    },
+    "burst": {
+      "creates_per_second": 146.5,
+      "registry_commits_per_create": 3.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 1.0,
+          "p99": 3.0
+        },
+        "network_ensure_ms": {
+          "p50": 11.0,
+          "p99": 47.0
+        },
+        "network_host_rules_ms": {
+          "p50": 0,
+          "p99": 41.0
+        },
+        "registry_commit_ms": {
+          "p50": 174.0,
+          "p99": 182.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 0.0,
+          "p99": 2.0
+        },
+        "total_ms": {
+          "p50": 191.09,
+          "p99": 197.67
+        }
+      }
+    },
+    "sustained": {
+      "creates_per_second": 135.0,
+      "registry_commits_per_create": 3.0,
+      "phases": {
+        "guest_files_ms": {
+          "p50": 1.0,
+          "p99": 9.0
+        },
+        "network_ensure_ms": {
+          "p50": 28.0,
+          "p99": 66.0
+        },
+        "network_host_rules_ms": {
+          "p50": 3.0,
+          "p99": 7.0
+        },
+        "oci_build_ms": {
+          "p50": 0.0,
+          "p99": 3.0
+        },
+        "registry_commit_ms": {
+          "p50": 217.0,
+          "p99": 251.0
+        },
+        "rootfs_prepare_ms": {
+          "p50": 1.0,
+          "p99": 5.0
+        },
+        "storage_prepare_ms": {
+          "p50": 0.0,
+          "p99": 1.0
+        },
+        "total_ms": {
+          "p50": 253.55,
+          "p99": 270.39
+        }
+      }
+    },
+    "host_rules_check_ms": {
+      "iptables_save_ms": 1.45,
+      "p50": 2.97,
+      "p99": 4.17,
+      "sysctl_ms": 1.06
+    }
+  }
+}

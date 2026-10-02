@@ -33,14 +33,7 @@ from .usage_history import (
     record_inventory_usage,
 )
 
-from .agent import (
-    build_heartbeat,
-    default_node_id,
-    detect_job_id,
-    fetch_node_agent_heartbeat,
-    post_heartbeat,
-    post_heartbeat_with_headers,
-)
+from .agent import default_node_id, detect_job_id, fetch_node_agent_heartbeat
 from .autoscaler_state import (
     AutoscalerStateError,
     AutoscalerProcessLock,
@@ -50,11 +43,7 @@ from .autoscaler_state import (
     ProviderOperationOutcome,
     stable_provider_operation_id,
 )
-from .capabilities import (
-    STORAGE_NATIVE_CAPABILITY,
-    STORAGE_NATIVE_DETACH_CAPABILITY,
-    merge_capabilities,
-)
+from .capabilities import STORAGE_NATIVE_CAPABILITY, STORAGE_NATIVE_DETACH_CAPABILITY
 from .bootstrap import (
     VmBootstrapIntent,
     VmBootstrapRecord,
@@ -68,7 +57,8 @@ from .bootstrap import (
 from .config import DeploymentConfig
 from .cold_offload import plan_cold_offload
 from .control_state import ControlStateStore, QUARANTINE_REASON, QUARANTINE_EPOCH
-from .control_plane import build_server, release_registry_route_references
+from .control_plane import build_server
+from .heartbeat_sender import DEFAULT_HEARTBEAT_INTERVAL_SECONDS, HeartbeatSenderConfig
 from .deployment import (
     AGENT_VERSION_LABEL,
     BUILDER_LABEL,
@@ -87,6 +77,7 @@ from .deploy import (
     run_remote_script_over_ssh,
     stage_file_over_ssh,
 )
+from .gateway.registry_refs import release_registry_route_references
 from .images import DEFAULT_MAX_ACTIVE_IMAGE_BUILDS, DockerImageRuntime, ImageRecord, ImageStore
 from .managed_registry import (
     RegistryClient,
@@ -179,12 +170,6 @@ from .policy import (
     unreachable_node_lease_expired,
     unreachable_node_reference,
     unreachable_node_stop_ready,
-)
-from .program_scheduler import (
-    WakeNodeCandidate,
-    build_program_scale_signals,
-    node_pressure_score,
-    plan_shadow_wake_queue,
 )
 from .reconcile import (
     build_create_intents,
@@ -310,75 +295,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     inspect_job.set_defaults(func=cmd_inspect_job)
 
-    agent_heartbeat = subparsers.add_parser(
-        "agent-heartbeat",
-        help="Emit or submit one VM node heartbeat.",
-    )
-    agent_heartbeat.add_argument("--deployment-id", required=True)
-    agent_heartbeat.add_argument("--job-id", help="UCloud VM job id.")
-    agent_heartbeat.add_argument(
-        "--node-id", help="Stable node id. Defaults to hostname."
-    )
-    agent_heartbeat.add_argument(
-        "--node-url",
-        help="URL the control plane can use to reach this node agent.",
-    )
-    agent_heartbeat.add_argument(
-        "--active",
-        type=int,
-        default=0,
-        help="Currently active sandboxes on this node.",
-    )
-    agent_heartbeat.add_argument(
-        "--draining",
-        action="store_true",
-        help="Mark node as draining.",
-    )
-    agent_heartbeat.add_argument(
-        "--capability",
-        action="append",
-        default=[],
-        help="Advertise a node capability, e.g. sandbox or image-build.",
-    )
-    add_node_version_args(agent_heartbeat)
-    add_resource_args(agent_heartbeat)
-    agent_heartbeat.add_argument(
-        "--label",
-        action="append",
-        default=[],
-        help="Heartbeat label as key=value. Repeat for multiple labels.",
-    )
-    agent_heartbeat.add_argument(
-        "--post-url",
-        help="Control-plane heartbeat URL, e.g. http://127.0.0.1:8080/v1/nodes/heartbeat.",
-    )
-    agent_heartbeat.add_argument(
-        "--bearer-token-file",
-        type=Path,
-        help="Read a bearer token from this file when posting the heartbeat.",
-    )
-    agent_heartbeat.add_argument(
-        "--from-node-agent-url",
-        help=(
-            "Fetch the live heartbeat from a running node-agent /v1/heartbeat "
-            "instead of building a static heartbeat from CLI flags."
-        ),
-    )
-    agent_heartbeat.add_argument(
-        "--node-control-bearer-token-file",
-        type=Path,
-        help="Authenticate the local node-agent heartbeat fetch with this token.",
-    )
-    agent_heartbeat.add_argument(
-        "--control-state-file",
-        type=Path,
-        help="Local control-state database to upsert into when explicitly supplied.",
-    )
-    agent_heartbeat.add_argument(
-        "--output", choices=("text", "json"), default="text", help="Output format."
-    )
-    agent_heartbeat.set_defaults(func=cmd_agent_heartbeat)
-
     from .environment_config import add_environment_registry_args
 
     environment_key = subparsers.add_parser("provision-environment-key", help="Provision or recover an owned immutable image producer key.")
@@ -391,6 +307,8 @@ def build_parser() -> argparse.ArgumentParser:
     environment_io.add_argument("--root", type=Path, required=True)
     environment_io.add_argument("--socket", type=Path, required=True)
     environment_io.add_argument("--cache-bytes", type=int, default=1024 ** 3)
+    environment_io.add_argument("--disable-prefetch", action="store_true",
+                                help="Demand-load only: no attach-time metadata or startup-trace prefetch.")
     add_environment_registry_args(environment_io)
     environment_io.set_defaults(func=cmd_serve_environment_io)
 
@@ -402,6 +320,7 @@ def build_parser() -> argparse.ArgumentParser:
     publish_environment.add_argument("--docker-binary", default="docker")
     publish_environment.add_argument("--environment-signing-key", type=Path, required=True)
     publish_environment.add_argument("--environment-allow-path", action="append", default=[])
+    publish_environment.add_argument("--environment-preserve-mtimes", action="store_true")
     add_environment_registry_args(publish_environment)
     publish_environment.set_defaults(func=cmd_publish_environment)
 
@@ -455,6 +374,10 @@ def build_parser() -> argparse.ArgumentParser:
     direct_node_agent.add_argument(
         "--reflink-memory-restore", action="store_true",
         help="Use the qualified file-backed reflink restore capability with split checkpoints.",
+    )
+    direct_node_agent.add_argument(
+        "--pause-tier", action="store_true",
+        help="Pause idle and model-wait sandboxes in place instead of hibernating (C1.1).",
     )
     direct_node_agent.add_argument(
         "--workspace-initial-grant-mb", type=int, default=0,
@@ -533,6 +456,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         required=True,
     )
+    add_heartbeat_sender_args(direct_node_agent)
     add_telemetry_args(direct_node_agent)
     direct_node_agent.set_defaults(func=cmd_serve_direct_node_agent)
 
@@ -558,6 +482,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_environment_registry_args(builder_agent)
     builder_agent.add_argument("--environment-signing-key", type=Path)
     builder_agent.add_argument("--environment-allow-path", action="append", default=[])
+    builder_agent.add_argument("--environment-preserve-mtimes", action="store_true")
     builder_agent.add_argument("--max-active-image-builds", type=int, default=DEFAULT_MAX_ACTIVE_IMAGE_BUILDS)
     builder_agent.add_argument("--max-finishing-image-builds", type=int, default=0,
                                help="Additional bounded publication/cleanup slots; 0 disables pipelining.")
@@ -571,6 +496,7 @@ def build_parser() -> argparse.ArgumentParser:
     builder_agent.add_argument(
         "--node-control-bearer-token-file", type=Path, required=True
     )
+    add_heartbeat_sender_args(builder_agent)
     add_telemetry_args(builder_agent)
     builder_agent.set_defaults(func=cmd_serve_builder_agent)
 
@@ -957,6 +883,32 @@ def add_resource_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_heartbeat_sender_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--heartbeat-url", default="", help="Gateway /v1/nodes/heartbeat URL to push "
+                        "to; without it the node only serves GET /v1/heartbeat.")
+    parser.add_argument("--heartbeat-bearer-token-file", type=Path)
+    parser.add_argument("--heartbeat-interval-seconds", type=float,
+                        help=f"Default {DEFAULT_HEARTBEAT_INTERVAL_SECONDS}.")
+    parser.add_argument("--heartbeat-label", action="append", default=[], metavar="KEY=VALUE",
+                        help="Merged over the node's own heartbeat labels; repeatable.")
+
+
+def heartbeat_sender_config_from_args(args: argparse.Namespace) -> HeartbeatSenderConfig | None:
+    interval = args.heartbeat_interval_seconds
+    if not args.heartbeat_url:
+        if args.heartbeat_bearer_token_file is not None or args.heartbeat_label or interval is not None:
+            raise ValueError("heartbeat token, interval and labels require --heartbeat-url")
+        return None
+    if args.heartbeat_bearer_token_file is None:
+        raise ValueError("--heartbeat-url requires --heartbeat-bearer-token-file")
+    return HeartbeatSenderConfig(
+        url=args.heartbeat_url,
+        bearer_token=read_required_token_file(args.heartbeat_bearer_token_file, "heartbeat bearer token"),
+        interval_seconds=DEFAULT_HEARTBEAT_INTERVAL_SECONDS if interval is None else interval,
+        labels=parse_labels(args.heartbeat_label),
+    )
+
+
 def add_telemetry_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--telemetry-otlp-endpoint", default="")
     parser.add_argument("--telemetry-cloud-provider", default="")
@@ -1047,78 +999,6 @@ def cmd_inspect_job(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_agent_heartbeat(args: argparse.Namespace) -> int:
-    labels = parse_labels(getattr(args, "label", []))
-    if args.from_node_agent_url:
-        node_control_token = read_required_token_file(
-            getattr(args, "node_control_bearer_token_file", None),
-            "node control bearer token",
-        )
-        heartbeat = fetch_node_agent_heartbeat(
-            args.from_node_agent_url,
-            bearer_token=node_control_token,
-        )
-        if labels:
-            heartbeat = replace(heartbeat, labels={**heartbeat.labels, **labels})
-    else:
-        job_id = args.job_id or detect_job_id()
-        if not job_id:
-            raise ValueError("job id is required via --job-id or UCLOUD_JOB_ID.")
-        heartbeat = build_heartbeat(
-            job_id=job_id,
-            node_id=args.node_id,
-            active_sandboxes=args.active,
-            draining=args.draining,
-            node_url=args.node_url,
-            agent_version=args.agent_version,
-            deployment_id=args.deployment_id,
-            init_version=args.init_version,
-            capabilities=merge_capabilities(tuple(args.capability)),
-            total_resources=resource_quantity_from_args(args),
-            used_resources=ResourceQuantity(),
-            labels=labels,
-        )
-
-    result: dict[str, Any] = {"heartbeat": heartbeat_to_dict(heartbeat)}
-    if args.control_state_file:
-        store = ControlStateStore(args.control_state_file)
-        store.upsert_heartbeat(heartbeat)
-        result["controlStateFile"] = str(args.control_state_file)
-    if args.post_url:
-        if args.bearer_token_file:
-            token = args.bearer_token_file.read_text(encoding="utf-8").strip()
-            if not token:
-                raise ValueError("bearer token file is empty.")
-            post_result = post_heartbeat_with_headers(
-                args.post_url,
-                heartbeat,
-                {"Authorization": f"Bearer {token}"},
-            )
-        else:
-            post_result = post_heartbeat(args.post_url, heartbeat)
-        result["post"] = {
-            "status": post_result.status,
-            "payload": post_result.payload,
-        }
-        if post_result.status >= 400:
-            raise ValueError(f"heartbeat POST failed with HTTP {post_result.status}")
-
-    if args.output == "json":
-        print_json(result)
-    else:
-        print(f"Heartbeat: node={heartbeat.node_id} job={heartbeat.job_id}")
-        if heartbeat.node_url:
-            print(f"Node URL: {heartbeat.node_url}")
-        print(f"Active: {heartbeat.active_sandboxes}, draining: {heartbeat.draining}")
-        if args.control_state_file:
-            print(f"Wrote: {args.control_state_file}")
-        if args.post_url:
-            print(f"Posted: {args.post_url}")
-        if not args.control_state_file and not args.post_url:
-            print_json(heartbeat_to_dict(heartbeat))
-    return 0
-
-
 def cmd_publish_environment(args: argparse.Namespace) -> int:
     from .environment_builder import publish_from_args
     return publish_from_args(args)
@@ -1133,8 +1013,8 @@ def cmd_provision_environment_key(args: argparse.Namespace) -> int:
 def cmd_serve_environment_io(args: argparse.Namespace) -> int:
     from .environment_backend import serve_backend
     from .environment_config import environment_registry_from_args
-    serve_backend(environment_registry_from_args(args), root=args.root,
-                  socket_path=args.socket, cache_bytes=args.cache_bytes)
+    serve_backend(environment_registry_from_args(args), root=args.root, socket_path=args.socket,
+                  cache_bytes=args.cache_bytes, prefetch=not args.disable_prefetch)
     return 0
 
 
@@ -1304,6 +1184,7 @@ def cmd_serve_builder_agent(args: argparse.Namespace) -> int:
     if not job_id:
         raise ValueError("job id is required via --job-id or UCLOUD_JOB_ID.")
     node_id = args.node_id or default_node_id(job_id)
+    heartbeat = heartbeat_sender_config_from_args(args)
     telemetry = telemetry_from_args(
         args,
         "ucloud-sandboxes-builder",
@@ -1340,9 +1221,11 @@ def cmd_serve_builder_agent(args: argparse.Namespace) -> int:
         ),
         telemetry=telemetry,
         environment_publisher=environment_publisher_from_args(args),
+        heartbeat=heartbeat,
     )
     host, port = server.server_address
     print(f"Serving builder node agent on http://{host}:{port}")
+    print(f"Heartbeat push: {heartbeat.url if heartbeat else 'off (GET /v1/heartbeat only)'}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -1386,6 +1269,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
     if not job_id:
         raise ValueError("job id is required via --job-id or UCLOUD_JOB_ID.")
     node_id = args.node_id or default_node_id(job_id)
+    heartbeat = heartbeat_sender_config_from_args(args)
     telemetry = telemetry_from_args(
         args,
         "ucloud-sandboxes-worker",
@@ -1416,6 +1300,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         storage_native_socket=args.storage_native_socket.absolute(),
         split_memory_backing=args.split_memory_backing,
         reflink_memory_restore=args.reflink_memory_restore,
+        pause_tier=args.pause_tier,
         workspace_initial_grant_mb=args.workspace_initial_grant_mb,
         application_memory_root=(args.application_memory_root.absolute()
                                  if args.application_memory_root is not None else None),
@@ -1448,9 +1333,11 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
             "node control bearer token",
         ),
         telemetry=telemetry,
+        heartbeat=heartbeat,
     )
     host, port = server.server_address
     print(f"Serving direct-runsc node agent on http://{host}:{port}")
+    print(f"Heartbeat push: {heartbeat.url if heartbeat else 'off (GET /v1/heartbeat only)'}")
     print(f"Direct state root: {state_root}")
     print(
         "Direct image cache root: "
@@ -4265,37 +4152,11 @@ def run_reconcile_cycle(
             ),
             effective_policy,
         )
-    program_scale_signals = build_program_scale_signals(
-        list(program_requests),
-        list(sandbox_routes),
-        effective_policy,
-        pending_wake_sandbox_ids=pending_wake_sandbox_ids,
-        heartbeats=(node.heartbeat for node in sandbox_nodes if node.heartbeat is not None),
-        provider_ready_seconds=(live_scale_signals.provisioning_p95_seconds
-            if live_scale_signals is not None and live_scale_signals.provisioning_samples else None),
-    )
-    program_wake_plan = plan_shadow_wake_queue(
-        list(program_requests),
-        list(sandbox_routes),
-        [
-            WakeNodeCandidate(
-                node_id=node.heartbeat.node_id,
-                job_id=node.job_id,
-                available=node.heartbeat.free_resources,
-                total=node.heartbeat.total_resources,
-                pressure=node_pressure_score(node.heartbeat),
-                heartbeat=node.heartbeat,
-            )
-            for node in sandbox_nodes
-            if node.is_schedulable and node.heartbeat is not None
-        ],
-    )
     decision = evaluate_scale(
         sandbox_nodes,
         sandbox_demand,
         effective_policy,
         live_signals=live_scale_signals,
-        program_signals=program_scale_signals,
     )
     builder_decision = evaluate_builder_scale(
         builder_nodes,
@@ -4368,7 +4229,6 @@ def run_reconcile_cycle(
                 sandbox_demand,
                 effective_policy,
                 live_signals=live_scale_signals,
-                program_signals=program_scale_signals,
             )
             builder_decision = evaluate_builder_scale(
                 counterfactual_builder_nodes,
@@ -5041,7 +4901,6 @@ def run_reconcile_cycle(
         "nodes": [node_to_dict(node) for node in nodes],
         "decision": scale_decision_to_dict(decision),
         "effectivePolicy": dashboard_scale_policy_to_dict(effective_policy),
-        "programWakePlan": program_wake_plan,
         "builderDecision": scale_decision_to_dict(builder_decision),
         "pendingImageBuilds": builder_pending,
         "activeImageBuilds": active_image_builds,
@@ -6658,11 +6517,6 @@ def scale_decision_to_dict(decision: Any) -> dict[str, Any]:
             if decision.live_signals is not None
             else None
         ),
-        "programSignals": (
-            decision.program_signals.to_dict()
-            if decision.program_signals is not None
-            else None
-        ),
         "pressureScaleUp": decision.pressure_scale_up,
         "createPressureScaleUp": decision.create_pressure_scale_up,
         "effectiveScaleDownIdleSeconds": (decision.effective_scale_down_idle_seconds),
@@ -6720,12 +6574,9 @@ def dashboard_scale_policy_to_dict(policy: ScalePolicy) -> dict[str, Any]:
         "provisioning_scale_down_multiplier": (
             policy.provisioning_scale_down_multiplier
         ),
-        "program_aware_autoscaling_enabled": (policy.program_aware_autoscaling_enabled),
         "parked_wake_consolidation_enabled": policy.parked_wake_consolidation_enabled,
         "drain_on_park_enabled": policy.drain_on_park_enabled,
         "drain_on_park_moves_per_cycle": policy.drain_on_park_moves_per_cycle,
-        "model_wait_capacity_weight": policy.model_wait_capacity_weight,
-        "model_wait_max_headroom_nodes": policy.model_wait_max_headroom_nodes,
         "default_node_resources": policy.default_node_resources.to_dict(),
     }
 
@@ -7010,6 +6861,7 @@ def vm_init_options_for_job(
             "environment_repository": selected_environment.repository,
             "environment_trusted_keys_json": json.dumps({key: base64.b64encode(value).decode("ascii") for key, value in trusted_keys.items()}),
             "environment_cache_bytes": selected_environment.cache_bytes,
+            "environment_prefetch_enabled": selected_environment.prefetch_enabled,
             "environment_allow_paths": selected_environment.allow_paths,
         }
         if role == "builder":
@@ -7023,6 +6875,7 @@ def vm_init_options_for_job(
             if len(payload) > 16384:
                 raise ValueError("environment signing key is too large")
             environment_options["environment_signing_key_pem"] = payload.decode("ascii")
+            environment_options["environment_preserve_mtimes"] = selected_environment.preserve_mtimes
     s3_access_key_id = ""
     s3_secret_access_key = ""
     s3_security_token = ""
@@ -7144,6 +6997,8 @@ def vm_init_options_for_job(
         direct_reflink_memory_restore=(
             role == "sandbox" and config.sandbox.direct_reflink_memory_restore
         ),
+        direct_pause_tier=role == "sandbox" and config.sandbox.direct_pause_tier,
+        direct_pause_tier_zswap=role == "sandbox" and config.sandbox.direct_pause_tier_zswap,
         direct_workspace_initial_grant_mb=(
             config.sandbox.direct_workspace_initial_grant_mb if role == "sandbox" else 0
         ),
@@ -7197,6 +7052,8 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "directSplitMemoryBacking": options.direct_split_memory_backing,
         "directRamMemoryBacking": options.direct_ram_memory_backing,
         "directReflinkMemoryRestore": options.direct_reflink_memory_restore,
+        "directPauseTier": options.direct_pause_tier,
+        "directPauseTierZswap": options.direct_pause_tier_zswap,
         "directWorkspaceInitialGrantMb": options.direct_workspace_initial_grant_mb,
         "storageNativeRegistryUrl": options.storage_native_registry_url,
         "storageNativeRepository": options.storage_native_repository,

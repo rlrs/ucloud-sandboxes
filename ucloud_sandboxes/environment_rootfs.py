@@ -26,6 +26,7 @@ from .image_rootfs import (
     _atomic_write, _mount_present, _require_private_directory,
 )
 from .managed_registry import manifest_digest_from_image_ref, registry_host_from_image_ref, registry_repository_tag_from_image_ref
+from .models import environment_io_metrics
 
 _LOG = logging.getLogger(__name__)
 
@@ -306,6 +307,13 @@ class EnvironmentRootfsStore:
                     "environment_devices_total": self._block_devices,
                     "environment_devices_in_use": in_use,
                     "environment_devices_free": max(0, self._block_devices - in_use)}
+
+    def io_metrics(self):
+        """Nodewide backend counters for heartbeats; None while unavailable."""
+        try:
+            return environment_io_metrics(self.backend.metrics())
+        except (OSError, RuntimeError, ValueError):
+            return None
 
 
 class EnvironmentImageRuntime:

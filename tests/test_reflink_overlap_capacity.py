@@ -11,7 +11,10 @@ from ucloud_sandboxes.direct_registry import (
     DirectSandboxRegistry,
 )
 from ucloud_sandboxes.direct_warden import DirectSandbox
-from tests.test_direct_registry import DirectRegistryTests
+# Import the module, not the TestCase: discovery would rerun it here.
+from tests import test_direct_registry as registry_fixtures
+
+TEST_TIER = "contract"
 
 MIB = 1024**2
 DIGEST = 'a' * 64
@@ -22,13 +25,13 @@ class ReflinkOverlapCapacityTests(unittest.TestCase):
         self.directory = TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name).resolve()
-        self.spec = DirectRegistryTests().spec('one')
+        self.spec = registry_fixtures.DirectRegistryTests().spec('one')
         self.base = self.spec.requested_resources().disk_mb
         self.registry = DirectSandboxRegistry(self.root / 'registry.sqlite', hard_disk_capacity_mb=self.base + 100)
         self._owned('one')
 
     def _plan(self, name):
-        return self.registry.plan(spec=DirectRegistryTests().spec(name), sandbox_generation=1,
+        return self.registry.plan(spec=registry_fixtures.DirectRegistryTests().spec(name), sandbox_generation=1,
                                   operation_id='create:' + name, runtime_compatibility_sha256='b' * 64)
 
     def _owned(self, name):
@@ -107,7 +110,7 @@ class ReflinkOverlapCapacityTests(unittest.TestCase):
         self.registry.hard_disk_capacity_mb = 2*self.base
         self.reserve(size=1)
         with self.assertRaisesRegex(DirectRegistryConflictError, 'capacity exhausted'):
-            self.registry.plan_import(spec=DirectRegistryTests().spec('imported'), sandbox_generation=2,
+            self.registry.plan_import(spec=registry_fixtures.DirectRegistryTests().spec('imported'), sandbox_generation=2,
                 operation_id='import:two', runtime_compatibility_sha256='b'*64,
                 migration_id='migration:two', migration_sha256='c'*64)
         self.assertIsNone(self.registry.get('imported'))

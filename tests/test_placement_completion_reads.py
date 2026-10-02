@@ -1,6 +1,7 @@
 """Completed replies retain database access while submission admission is full."""
 
 import asyncio
+from datetime import timedelta
 import json
 import os
 from pathlib import Path
@@ -9,14 +10,17 @@ import unittest
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
+from ucloud_sandboxes.models import utc_now
 from ucloud_sandboxes.shared_control.database import postgres_transaction_observer
-from ucloud_sandboxes.shared_control.model import TransactionSample
+from ucloud_sandboxes.shared_control.model import TransactionSample, cancel_until_done
 from ucloud_sandboxes.shared_control.placement_queue import (
     IsolatedPlacementResponses,
     PlacementQueue,
     PlacementQueueClient,
 )
 from ucloud_sandboxes.shared_control.routing_repository import PostgresRoutingStore
+
+TEST_TIER = "contract"
 
 DSN = os.environ.get("UCLOUD_TEST_POSTGRES_DSN")
 
@@ -114,6 +118,29 @@ class CompletionReaderLifecycleTests(unittest.IsolatedAsyncioTestCase):
         writer.close.assert_awaited_once()
         reader.close.assert_awaited_once()
         reader.results.assert_not_called()
+
+    async def test_wait_past_deadline_returns_retryable_timeout(self):
+        writer, reader = Mock(), Mock()
+        writer.open, writer.close = AsyncMock(), AsyncMock()
+        reader.open, reader.close = AsyncMock(), AsyncMock()
+        reader.results = AsyncMock(return_value=[])
+        accepted = Mock()
+        accepted.command_id = uuid4()
+        # Past the 60 s completion grace, the wait is bounded at one millisecond.
+        accepted.deadline = utc_now() - timedelta(seconds=120)
+        writer.submit = AsyncMock(return_value=accepted)
+        client = PlacementQueueClient(writer, results_store=reader)
+        try:
+            status, _headers, body = await asyncio.wait_for(
+                client.response("wake", "s", "/wake", {}, b"{}"), 1
+            )
+        finally:
+            await client.close()
+        self.assertEqual(status, 504)
+        payload = json.loads(body)
+        self.assertEqual(payload["error_code"], "placement_wait_timeout")
+        self.assertTrue(payload["retryable"])
+        self.assertEqual(client.waiters, {})
 
     def test_shared_observer_reports_existing_phase_metric(self):
         telemetry = Mock()
@@ -239,9 +266,7 @@ class CompletionReaderPostgresTests(unittest.IsolatedAsyncioTestCase):
         import psycopg
         from psycopg import sql
 
-        for task in self.tasks:
-            task.cancel()
-        await asyncio.gather(*self.tasks, return_exceptions=True)
+        await cancel_until_done(*self.tasks)
         await self.client.close()
         await self.worker.close()
         self.routing.close()
@@ -265,9 +290,11 @@ class CompletionReaderPostgresTests(unittest.IsolatedAsyncioTestCase):
         return task
 
     async def wait_until(self, predicate):
-        async with asyncio.timeout(2):
+        async def until():
             while not predicate():
                 await asyncio.sleep(0.005)
+
+        await asyncio.wait_for(until(), 2)
 
     async def test_partial_open_failure_recreates_pools_and_next_request_completes(
         self,

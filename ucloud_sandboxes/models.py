@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import MISSING, asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from enum import Enum
 import math
@@ -362,26 +362,30 @@ class ResidentWaitMetrics:
     unknown_transition_memory_costs: int | None = None
     admitted_ram_backing_bytes: int | None = None
     pending_ram_backing_bytes: int | None = None
+    # Pause tier (C1.1). Readers accept these before pause-tier nodes emit them.
+    paused_sandboxes: int = 0
+    pauses: int = 0
+    thaws: int = 0
+    thaw_ms_total: int = 0
+    thaw_ms_max: int = 0
+    pause_reclaims: int = 0
+    pause_reclaimed_bytes: int = 0
+    pause_reclaim_ms_total: int = 0
+    pause_reclaim_cancellations: int = 0
+    pause_reclaim_stalls: int = 0
+    pause_escalations: int = 0
+    thaw_prefetches: int = 0
+    thaw_prefetched_bytes: int = 0
+    thaw_prefetch_ms_total: int = 0
 
     @classmethod
     def from_dict(cls, raw: object) -> "ResidentWaitMetrics | None":
         if not isinstance(raw, dict):
             return None
-        raw = dict(raw)
-        for name in (
-            "cache_reclaim_inflight",
-            "cache_reclaim_attempts",
-            "cache_reclaimed_bytes",
-            "cache_refault_backoffs",
-        ):
-            raw.setdefault(name, 0)
-        optional = {
-            "admitted_demand_bytes", "pending_demand_bytes",
-            "unknown_transition_memory_costs",
-            "admitted_ram_backing_bytes", "pending_ram_backing_bytes",
-        }
-        for name in optional:
-            raw.setdefault(name, None)
+        # Every defaulted field was added after the first writers shipped.
+        raw = {item.name: item.default for item in fields(cls)
+               if item.default is not MISSING} | raw
+        optional = {item.name for item in fields(cls) if item.default is None}
         if set(raw) != {item.name for item in fields(cls)}:
             return None
         if not isinstance(raw["reason"], str) or raw["reason"] not in {
@@ -402,9 +406,35 @@ class ResidentWaitMetrics:
         return cls(**raw)
 
 
+# Exactly EnvironmentBackend.metrics() (docs/immutable-environments.md#metrics).
+# Agents report None for a backend whose names differ, never a partial map. A
+# gateway rejects any other set: a new name needs readers of the old set first.
+ENVIRONMENT_IO_METRICS = frozenset((
+    "hits", "misses", "downloaded_bytes", "corruptions", "fetch_retries", "cached_bytes", "pending_misses",
+    "active_components", "prefetch_enabled", "prefetch_joined_reads", "prefetch_jobs_active",
+    "prefetch_ranges_inflight", "metadata_hint_present", "metadata_hint_absent", "metadata_hint_unsupported",
+    "trace_hint_present", "trace_hint_absent", "trace_hint_invalid", "trace_recordings_started",
+    "traces_recorded", "trace_chunks_recorded", "metadata_prefetch_wait_timeouts", "prefetch_start_failures",
+    *(f"{kind}_prefetch_{name}" for kind in ("metadata", "trace") for name in (
+        "jobs", "chunks", "bytes", "failed_chunks", "skipped_chunks", "truncated", "seconds")),
+))
+
+
+def environment_io_metrics(raw: object) -> dict[str, int | float | bool] | None:
+    """Every name, non-negative; ``*_seconds`` are floats, ``prefetch_enabled`` a bool."""
+    if not isinstance(raw, dict) or set(raw) != ENVIRONMENT_IO_METRICS:
+        return None
+    for name, value in raw.items():
+        kind = bool if name == "prefetch_enabled" else float if name.endswith("_seconds") else int
+        if type(value) is not kind or not math.isfinite(value) or value < 0:
+            return None
+    return dict(raw)
+
+
 # Additive telemetry fields must be accepted consistently on the wire and in
 # canonical persisted heartbeat records during a rolling upgrade.
 NODE_RUNTIME_METRIC_DEFAULTS = {
+    "environment_io": None,
     "memory_backing": None,
     "resource_evidence": None,
     "resident_wait": None,
@@ -495,6 +525,9 @@ class NodeRuntimeMetrics:
     resource_evidence: ResourceEvidence | None = None
     memory_backing: MemoryBackingCapacity | None = None
     resident_wait: ResidentWaitMetrics | None = None
+    # None on Docker workers and while the backend is unreachable or predates
+    # its metrics RPC (it outlives agent upgrades).
+    environment_io: dict[str, int | float | bool] | None = None
 
     @classmethod
     def from_dict(cls, raw: object) -> "NodeRuntimeMetrics | None":
@@ -538,11 +571,17 @@ class NodeRuntimeMetrics:
             memory_backing = MemoryBackingCapacity.from_dict(memory_backing)
             if memory_backing is None:
                 return None
+        environment_io = raw["environment_io"]
+        if environment_io is not None:
+            environment_io = environment_io_metrics(environment_io)
+            if environment_io is None:
+                return None
         values: dict[str, object] = {
             "collected_at": collected_at,
             "resource_evidence": evidence,
             "resident_wait": resident_wait,
             "memory_backing": memory_backing,
+            "environment_io": environment_io,
         }
         for name in float_fields:
             value = raw[name]
@@ -564,6 +603,7 @@ class NodeRuntimeMetrics:
             "resource_evidence",
             "resident_wait",
             "memory_backing",
+            "environment_io",
         }
         for name in integer_fields:
             value = raw[name]
@@ -818,8 +858,6 @@ class SandboxPlacementRequest:
     resources: ResourceQuantity
     count: int = 1
     excluded_job_ids: tuple[str, ...] = ()
-    owned_job_id: str = ""
-    owned_disk_mb: int = 0
     # The image, when known, lets the autoscaler forecast usage from history.
     image: str = ""
 
@@ -917,64 +955,6 @@ class LiveScaleSignals:
 
 
 @dataclass(frozen=True)
-class ProgramScaleCalibration:
-    """Observed prospective demand, kept separate from action-enabled policy."""
-
-    resources: ResourceQuantity
-    observed_memory_sandboxes: int
-    unknown_memory_sandboxes: int
-    known_wait_sandboxes: int
-    unknown_wait_sandboxes: int
-    wait_samples: int
-    provider_ready_seconds: float | None
-
-    def to_dict(self):
-        return {**asdict(self), "resources": self.resources.to_dict(),
-                "mode": "shadow", "cpu_basis": "declared_limit"}
-
-
-@dataclass(frozen=True)
-class ProgramScaleSignals:
-    """Current rollout phases reduced into bounded autoscaler demand."""
-
-    model_wait_requests: int = 0
-    ready_to_wake_requests: int = 0
-    waking_requests: int = 0
-    acting_requests: int = 0
-    model_wait_sandboxes: int = 0
-    ready_to_wake_sandboxes: int = 0
-    model_wait_resources: ResourceQuantity = ResourceQuantity()
-    ready_to_wake_resources: ResourceQuantity = ResourceQuantity()
-    weighted_model_wait_resources: ResourceQuantity = ResourceQuantity()
-    effective_resources: ResourceQuantity = ResourceQuantity()
-    ready_placement_requests: tuple[SandboxPlacementRequest, ...] = ()
-    oldest_model_wait_seconds: int = 0
-    oldest_ready_to_wake_seconds: int = 0
-    action_enabled: bool = False
-    calibration: ProgramScaleCalibration | None = None
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "model_wait_requests": self.model_wait_requests,
-            "ready_to_wake_requests": self.ready_to_wake_requests,
-            "waking_requests": self.waking_requests,
-            "acting_requests": self.acting_requests,
-            "model_wait_sandboxes": self.model_wait_sandboxes,
-            "ready_to_wake_sandboxes": self.ready_to_wake_sandboxes,
-            "model_wait_resources": self.model_wait_resources.to_dict(),
-            "ready_to_wake_resources": self.ready_to_wake_resources.to_dict(),
-            "weighted_model_wait_resources": (
-                self.weighted_model_wait_resources.to_dict()
-            ),
-            "effective_resources": self.effective_resources.to_dict(),
-            "oldest_model_wait_seconds": self.oldest_model_wait_seconds,
-            "oldest_ready_to_wake_seconds": self.oldest_ready_to_wake_seconds,
-            "action_enabled": self.action_enabled,
-            "calibration": self.calibration.to_dict() if self.calibration else None,
-        }
-
-
-@dataclass(frozen=True)
 class ScalePolicy:
     min_nodes: int = 0
     max_nodes: int = 10
@@ -1007,12 +987,9 @@ class ScalePolicy:
     pressure_scale_down_cooldown_seconds: int = 300
     provisioning_latency_lookback_seconds: int = 7 * 24 * 60 * 60
     provisioning_scale_down_multiplier: float = 2.0
-    program_aware_autoscaling_enabled: bool = False
     parked_wake_consolidation_enabled: bool = False
     drain_on_park_enabled: bool = True
     drain_on_park_moves_per_cycle: int = 4
-    model_wait_capacity_weight: float = 0.10
-    model_wait_max_headroom_nodes: int = 1
     default_node_resources: ResourceQuantity = ResourceQuantity(
         vcpu=32.0,
         memory_mb=98304,
@@ -1047,7 +1024,6 @@ class ScaleDecision:
     projected_free_resources: ResourceQuantity = ResourceQuantity()
     resource_deficit: ResourceQuantity = ResourceQuantity()
     live_signals: LiveScaleSignals | None = None
-    program_signals: ProgramScaleSignals | None = None
     pressure_scale_up: bool = False
     create_pressure_scale_up: bool = False
     effective_scale_down_idle_seconds: int = 0

@@ -17,10 +17,18 @@ import time
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from scripts.live_relay_load_benchmark import AGENT, uploaded_tool_probe, with_lease_renewal, parse_args, ContinuationObserver, response_window, retry_control, safe_error, summary, meets_useful_action_slo
-from scripts.live_relay_load_benchmark import resource_sample, resource_summary, FleetHealthQualification
-from scripts.live_relay_load_benchmark import finish_primary
-from scripts.live_relay_load_benchmark import MeasuredRelayClient, guest_retry_summary, response_retry_summary
+from tests.support import sdk_skip_reason, skip_module
+
+TEST_TIER = "contract"
+
+# The script under test imports the SDK at module level.
+if (SDK_UNAVAILABLE := sdk_skip_reason()) is None:
+    from scripts.live_relay_load_benchmark import AGENT, uploaded_tool_probe, with_lease_renewal, parse_args, ContinuationObserver, response_window, retry_control, safe_error, summary, meets_useful_action_slo
+    from scripts.live_relay_load_benchmark import resource_sample, resource_summary, FleetHealthQualification
+    from scripts.live_relay_load_benchmark import finish_primary
+    from scripts.live_relay_load_benchmark import MeasuredRelayClient, guest_retry_summary, response_retry_summary
+else:
+    load_tests = skip_module(__name__, SDK_UNAVAILABLE)
 
 
 class RetryEvidenceTests(unittest.IsolatedAsyncioTestCase):
@@ -535,7 +543,7 @@ class RelayLoadBenchmarkTests(unittest.TestCase):
             def log_message(self, *_args):
                 pass
         server = ThreadingHTTPServer(('127.0.0.1', 0), Echo)
-        thread = Thread(target=server.serve_forever, daemon=True)
+        thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
         thread.start()
         try:
             with TemporaryDirectory() as directory:

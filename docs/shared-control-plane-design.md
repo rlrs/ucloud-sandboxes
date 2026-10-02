@@ -11,8 +11,8 @@ See the earlier [relay qualification results](benchmarks/relay-load-2026-09-22/R
 
 The relay has a selectable [PostgreSQL backend](postgres-relay.md), durable
 park/wake dispatch and an idle cutover command. Routing moved as one authority;
-provider journals remain separate. The earlier
-[scheduling qualification slice](shared-control-qualification.md) is historical;
+provider journals remain separate. The earlier scheduling qualification slice
+([evidence](benchmarks/shared-control-2026-09-21/README.md)) is historical;
 its separate ownership prototype was removed in favor of the existing routing
 domain backed by PostgreSQL.
 
@@ -43,7 +43,7 @@ the simplified SQLite path under matched load, stop and revisit the choice.
 ## What the evidence establishes
 
 - Current placement uses `_GATEWAY_SCHEDULING_LOCK` and a file-backed placement
-  lock in `control_plane.py`. `RoutingStore` has additional Python locks and
+  lock in `gateway/placement.py`. `RoutingStore` has additional Python locks and
   SQLite write transactions. Selected requests waited over six seconds for
   placement while their actual worker restore took about 0.6 seconds.
 - A 40-sample profile found the placement-lock owner entering `BEGIN IMMEDIATE`
@@ -501,11 +501,11 @@ selected architecture buys sufficient concurrency without compromising recovery.
 | Current module | Change |
 | --- | --- |
 | `routing.py` | Replace broad mutable snapshots with the domain transaction API; retain immutable value types and identity validation |
-| `control_plane.py` | Remove fleet placement locks after database qualification; await shared operations without keeping worker threads or transactions occupied |
+| `control_plane.py`, `gateway/placement.py` | Remove fleet placement locks after database qualification; await shared operations without keeping worker threads or transactions occupied |
 | `control_state.py` | Upsert one validated node observation and changed inventory rows; stop decoding the fleet inside heartbeat writes |
 | `model_relay.py` | Replace the authoritative in-memory queue/lock with database transitions; retain local socket waiters and transport handling |
 | `cli.py` | Wire database pools and dispatcher lifecycle; keep HTTP/network work asynchronous |
-| `program_scheduler.py`, `resource_admission.py` | Keep scheduling policy as testable functions over bounded candidate views, separate from atomic reservations |
+| `resource_admission.py` | Keep scheduling policy as testable functions over bounded candidate views, separate from atomic reservations |
 | `autoscaler_state.py` | Preserve provider operation journal semantics while changing persistence; do not silently broaden controller leadership |
 | `direct_registry.py`, `direct_service.py`, `node_runtime.py` | Keep local durability; add versioned lifecycle ordering and qualify adaptive worker admission separately |
 

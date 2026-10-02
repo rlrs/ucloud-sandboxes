@@ -102,7 +102,9 @@ def main():
     if output.exists() or (args.output_root / args.phase).exists():
         raise ValueError("Phase already exists; do not reuse image IDs or replace evidence")
     receipt["gateway_imported_source_sha256"] = {}
-    for name in ("environment_builder", "control_plane", "node_agent", "images", "build_cache"):
+    # The gateway's build tagging and digest protection live in gateway/ (C6.1).
+    for name in ("environment_builder", "control_plane", "gateway.registry_refs",
+                 "gateway.image_resolution", "node_agent", "images", "build_cache"):
         module = importlib.import_module("ucloud_sandboxes." + name)
         receipt["gateway_imported_source_sha256"][name] = hashlib.sha256(inspect.getsource(module).encode()).hexdigest()
     receipt["started_at"] = datetime.now(timezone.utc).isoformat()

@@ -122,7 +122,6 @@ DASHBOARD_HTML = """<!doctype html>
               <span class="eyebrow">Autoscaler</span>
               <h2 id="overviewDecisionTitle">No decision</h2>
             </div>
-            <span id="overviewDecisionBadge" class="inline-badge badge-muted">No cycle</span>
           </div>
           <p id="autoscalerSummary" class="decision-summary">No cycle</p>
           <div id="overviewDecisionReasons" class="decision-reasons"></div>
@@ -319,7 +318,6 @@ DASHBOARD_HTML = """<!doctype html>
           <div class="eyebrow">Autoscaler</div>
           <div class="decision-title-row">
             <h2 id="schedulerDecisionTitle">Waiting for a decision</h2>
-            <span id="schedulerModeBadge" class="inline-badge badge-muted">Unknown</span>
           </div>
           <p id="schedulerDecisionDetail" class="workspace-copy">No data</p>
           <div id="schedulerReasons" class="reason-list"></div>
@@ -333,14 +331,6 @@ DASHBOARD_HTML = """<!doctype html>
             <span>Provisioning</span>
             <strong id="schedulerProvisioningValue">-</strong>
           </div>
-          <div class="stat-box">
-            <span>Wake plan</span>
-            <strong id="schedulerWakePlanValue">-</strong>
-          </div>
-          <div class="stat-box">
-            <span>Unplaced</span>
-            <strong id="schedulerUnplacedValue">-</strong>
-          </div>
         </div>
       </section>
 
@@ -353,35 +343,35 @@ DASHBOARD_HTML = """<!doctype html>
           <span id="programFlowSummary" class="section-summary">No program requests loaded</span>
         </div>
         <div class="program-flow">
-          <button class="flow-stage is-selected" type="button" data-program-state="all" aria-pressed="true">
+          <div class="flow-stage">
             <span class="flow-index">All</span>
             <strong id="flowAllValue">-</strong>
             <small>active requests</small>
-          </button>
+          </div>
           <span class="flow-arrow" aria-hidden="true">→</span>
-          <button class="flow-stage" type="button" data-program-state="model_wait" aria-pressed="false">
+          <div class="flow-stage">
             <span class="flow-index">Model wait</span>
             <strong id="flowModelWaitValue">-</strong>
             <small id="flowModelWaitDetail">waiting on model</small>
-          </button>
+          </div>
           <span class="flow-arrow" aria-hidden="true">→</span>
-          <button class="flow-stage" type="button" data-program-state="ready_to_wake" aria-pressed="false">
+          <div class="flow-stage">
             <span class="flow-index">Ready</span>
             <strong id="flowReadyValue">-</strong>
             <small id="flowReadyDetail">ready to wake</small>
-          </button>
+          </div>
           <span class="flow-arrow" aria-hidden="true">→</span>
-          <button class="flow-stage" type="button" data-program-state="waking" aria-pressed="false">
+          <div class="flow-stage">
             <span class="flow-index">Waking</span>
             <strong id="flowWakingValue">-</strong>
             <small>waking</small>
-          </button>
+          </div>
           <span class="flow-arrow" aria-hidden="true">→</span>
-          <button class="flow-stage" type="button" data-program-state="acting" aria-pressed="false">
+          <div class="flow-stage">
             <span class="flow-index">Acting</span>
             <strong id="flowActingValue">-</strong>
             <small>acting</small>
-          </button>
+          </div>
         </div>
       </section>
 
@@ -399,8 +389,6 @@ DASHBOARD_HTML = """<!doctype html>
               <thead><tr><th>Stage</th><th>vCPU</th><th>Memory</th><th>Hard disk</th></tr></thead>
               <tbody>
                 <tr><th>Immediate demand</th><td id="equationImmediateCpu">-</td><td id="equationImmediateMemory">-</td><td id="equationImmediateDisk">-</td></tr>
-                <tr><th>Response-ready demand</th><td id="equationReadyCpu">-</td><td id="equationReadyMemory">-</td><td id="equationReadyDisk">-</td></tr>
-                <tr><th>Predictive model demand</th><td id="equationPredictiveCpu">-</td><td id="equationPredictiveMemory">-</td><td id="equationPredictiveDisk">-</td></tr>
                 <tr class="supply-row"><th>Already prepared</th><td id="equationPreparedCpu">-</td><td id="equationPreparedMemory">-</td><td id="equationPreparedDisk">-</td></tr>
                 <tr class="supply-row"><th>Free after commitments</th><td id="equationFreeCpu">-</td><td id="equationFreeMemory">-</td><td id="equationFreeDisk">-</td></tr>
                 <tr class="deficit-row"><th>Uncovered demand</th><td id="equationDeficitCpu">-</td><td id="equationDeficitMemory">-</td><td id="equationDeficitDisk">-</td></tr>
@@ -418,52 +406,11 @@ DASHBOARD_HTML = """<!doctype html>
             <span class="read-only-badge">Read only</span>
           </summary>
           <dl id="policyValues" class="policy-values">
-            <div><dt>Program action</dt><dd>-</dd></div>
+            <div><dt>Node range</dt><dd>-</dd></div>
           </dl>
         </details>
       </section>
 
-      <section class="event-panel queue-panel" aria-label="Shadow wake queue">
-        <div class="queue-toolbar">
-          <div>
-            <div class="eyebrow">Queue</div>
-            <h2>Wake placement</h2>
-          </div>
-          <label class="inline-search">
-            <span class="visually-hidden">Search wake queue</span>
-            <input id="programSearchInput" type="search" autocomplete="off" spellcheck="false" placeholder="Rollout, request, sandbox, or node">
-          </label>
-          <label class="inline-select">
-            <span class="visually-hidden">Wake result filter</span>
-            <select id="programResultFilter">
-              <option value="all">All results</option>
-              <option value="unplaced">Unplaced first</option>
-              <option value="local">Local wakes</option>
-              <option value="migration">Migrations</option>
-            </select>
-          </label>
-          <span id="programQueueSummary" class="section-summary">No queue loaded</span>
-        </div>
-        <div class="table-wrap">
-          <table class="program-table">
-            <thead>
-              <tr>
-                <th>Position</th>
-                <th>Age</th>
-                <th>Rollout / Request</th>
-                <th>Sandbox</th>
-                <th>Requested</th>
-                <th>Planned node</th>
-                <th>Path</th>
-                <th>Result</th>
-              </tr>
-            </thead>
-            <tbody id="programQueueRows">
-              <tr><td colspan="8" class="empty-cell">No wake queue loaded</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
     </section>
 
     <section id="nodesPage" class="workspace-page" role="tabpanel" aria-labelledby="nodesTab" hidden>
@@ -1102,11 +1049,6 @@ h1, h2, p {
   margin-bottom: 12px;
 }
 
-.flow-stage:hover, .flow-stage.is-selected {
-  border-color: color-mix(in srgb, var(--blue) 55%, var(--line));
-  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
-}
-
 .flow-stage span, .flow-stage strong, .flow-stage small {
   display: block;
 }
@@ -1168,10 +1110,6 @@ h1, h2, p {
   font-weight: 800;
 }
 
-.queue-panel {
-  min-width: 0;
-}
-
 .queue-toolbar {
   flex-wrap: wrap;
   padding: 12px 14px;
@@ -1200,11 +1138,11 @@ h1, h2, p {
   padding: 0 10px;
 }
 
-.program-table, .node-table {
+.node-table {
   min-width: 1080px;
 }
 
-.program-table td:nth-child(3), .program-table td:nth-child(4), .program-table td:nth-child(6), .node-table td:nth-child(2) {
+.node-table td:nth-child(2) {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 11px;
 }
@@ -1990,7 +1928,7 @@ tbody tr {
   border-radius: 8px;
 }
 
-.node-table, .program-table, .sandbox-table, .registry-table {
+.node-table, .sandbox-table, .registry-table {
   min-width: 1080px;
 }
 
@@ -3128,7 +3066,7 @@ th {
   letter-spacing: -0.04em;
 }
 
-.flow-panel, .capacity-equation-card, .policy-card, .queue-panel, .image-supply-grid > *, .registry-full-grid > *, .registry-builds-panel, .sandbox-list-panel, .nodes-page .event-panel, #nodesPage > .event-panel {
+.flow-panel, .capacity-equation-card, .policy-card, .image-supply-grid > *, .registry-full-grid > *, .registry-builds-panel, .sandbox-list-panel, .nodes-page .event-panel, #nodesPage > .event-panel {
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
@@ -3458,11 +3396,11 @@ th {
   margin-left: 0;
 }
 
-.capacity-equation-table thead th, .capacity-equation-table tbody th, .capacity-equation-table td, .node-table th, .sandbox-table th, .registry-table th, .program-table th, .event-panel th {
+.capacity-equation-table thead th, .capacity-equation-table tbody th, .capacity-equation-table td, .node-table th, .sandbox-table th, .registry-table th, .event-panel th {
   background: transparent;
 }
 
-.capacity-equation-table thead th, .node-table thead th, .sandbox-table thead th, .registry-table thead th, .program-table thead th, .event-panel thead th {
+.capacity-equation-table thead th, .node-table thead th, .sandbox-table thead th, .registry-table thead th, .event-panel thead th {
   background: var(--surface-soft);
 }
 
@@ -4537,15 +4475,6 @@ small, .legend, .fleet-signal-grid small, .stat-box small, .meter-label, .equati
   color: var(--text);
 }
 
-.flow-stage:hover {
-  background: color-mix(in srgb, var(--blue) 5%, transparent);
-}
-
-.flow-stage.is-selected {
-  background: color-mix(in srgb, var(--blue) 9%, transparent);
-  box-shadow: inset 0 -2px var(--blue);
-}
-
 .flow-stage strong {
   font-variant-numeric: tabular-nums;
   margin: 9px 0 7px;
@@ -4622,7 +4551,7 @@ th, td {
   border-color: var(--line-soft);
 }
 
-th, .capacity-equation-table thead th, .node-table thead th, .sandbox-table thead th, .registry-table thead th, .program-table thead th, .event-panel thead th {
+th, .capacity-equation-table thead th, .node-table thead th, .sandbox-table thead th, .registry-table thead th, .event-panel thead th {
   background: var(--surface-soft);
   color: var(--muted);
 }
@@ -4636,7 +4565,7 @@ tbody tr:hover {
   background: color-mix(in srgb, var(--blue) 5%, transparent);
 }
 
-.sandbox-id, .sandbox-image, .sandbox-node, .node-table td:nth-child(2), .program-table td:nth-child(3), .program-table td:nth-child(4) {
+.sandbox-id, .sandbox-image, .sandbox-node, .node-table td:nth-child(2) {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.71rem;
   letter-spacing: -0.01em;
@@ -4845,7 +4774,6 @@ tbody tr:hover {
 DASHBOARD_JS = """
 const MAX_HISTORY = 4320;
 const DEFAULT_REFRESH_INTERVAL_MS = 2000;
-const MAX_PROGRAM_ROWS = 200;
 const MAX_NODE_ROWS = 250;
 const MAX_REGISTRY_REPOSITORY_ROWS = 250;
 
@@ -4863,7 +4791,6 @@ const state = {
   appliedSequence: 0,
   resizeFrame: null,
   lastSandboxRefreshAt: 0,
-  programStateFilter: "all",
 };
 
 let palette = {
@@ -4919,7 +4846,6 @@ document.addEventListener("DOMContentLoaded", () => {
     "wakeLatencyValue",
     "wakeLatencyDetail",
     "overviewDecisionTitle",
-    "overviewDecisionBadge",
     "overviewDecisionReasons",
     "overviewSupplyValue",
     "overviewProjectedValue",
@@ -4963,13 +4889,10 @@ document.addEventListener("DOMContentLoaded", () => {
     "downloadSnapshotButton",
     "schedulerPage",
     "schedulerDecisionTitle",
-    "schedulerModeBadge",
     "schedulerDecisionDetail",
     "schedulerReasons",
     "schedulerReadyNodesValue",
     "schedulerProvisioningValue",
-    "schedulerWakePlanValue",
-    "schedulerUnplacedValue",
     "programFlowSummary",
     "flowAllValue",
     "flowModelWaitValue",
@@ -4983,12 +4906,6 @@ document.addEventListener("DOMContentLoaded", () => {
     "equationImmediateCpu",
     "equationImmediateMemory",
     "equationImmediateDisk",
-    "equationReadyCpu",
-    "equationReadyMemory",
-    "equationReadyDisk",
-    "equationPredictiveCpu",
-    "equationPredictiveMemory",
-    "equationPredictiveDisk",
     "equationPreparedCpu",
     "equationPreparedMemory",
     "equationPreparedDisk",
@@ -4999,10 +4916,6 @@ document.addEventListener("DOMContentLoaded", () => {
     "equationDeficitMemory",
     "equationDeficitDisk",
     "policyValues",
-    "programSearchInput",
-    "programResultFilter",
-    "programQueueSummary",
-    "programQueueRows",
     "nodesPage",
     "nodesPageDetail",
     "nodesReadyValue",
@@ -5073,7 +4986,6 @@ document.addEventListener("DOMContentLoaded", () => {
   els.tokenInput.value = savedToken;
   restoreSelectPreference(els.sandboxStateFilter, "ucloud.dashboard.sandboxState");
   restoreSelectPreference(els.nodeStateFilter, "ucloud.dashboard.nodeState");
-  restoreSelectPreference(els.programResultFilter, "ucloud.dashboard.programResult");
   restoreSelectPreference(els.registryFilterSelect, "ucloud.dashboard.registryFilter");
   applyTheme(localStorage.getItem("ucloud.dashboard.theme") || preferredTheme());
   document.querySelectorAll("canvas").forEach((canvas) => {
@@ -5115,26 +5027,10 @@ document.addEventListener("DOMContentLoaded", () => {
     persistSelectPreference(els.registryFilterSelect, "ucloud.dashboard.registryFilter");
     renderRegistryPage(state.lastSnapshot || {});
   });
-  els.programSearchInput.addEventListener("input", renderProgramQueue);
-  els.programResultFilter.addEventListener("change", () => {
-    persistSelectPreference(els.programResultFilter, "ucloud.dashboard.programResult");
-    renderProgramQueue();
-  });
   els.nodeSearchInput.addEventListener("input", renderNodesPage);
   els.nodeStateFilter.addEventListener("change", () => {
     persistSelectPreference(els.nodeStateFilter, "ucloud.dashboard.nodeState");
     renderNodesPage();
-  });
-  document.querySelectorAll("[data-program-state]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.programStateFilter = button.dataset.programState || "all";
-      document.querySelectorAll("[data-program-state]").forEach((item) => {
-        const selected = item === button;
-        item.classList.toggle("is-selected", selected);
-        item.setAttribute("aria-pressed", String(selected));
-      });
-      renderProgramQueue();
-    });
   });
   window.addEventListener("resize", scheduleChartRedraw);
   document.addEventListener("visibilitychange", () => {
@@ -5542,9 +5438,7 @@ function renderMetrics(snapshot) {
   const programs = snapshot.programs || {};
   const programStates = programs.states || {};
   const sandboxStates = sandboxes.states || {};
-  const wakePlan = autoscaler.program_wake_plan || {};
 
-  const blockedWakes = asNumber(wakePlan.unplaced_count);
   const staleNodes = (Array.isArray(nodes.items) ? nodes.items : []).filter(
     (node) => (node.capabilities || []).includes("sandbox") && (!node.fresh || !node.agent_version_compatible)
   ).length;
@@ -5552,7 +5446,7 @@ function renderMetrics(snapshot) {
   const sandboxAttention = asNumber(sandboxes.pending) + asNumber(sandboxes.stale_routes)
     + asNumber(sandboxStates.failed) + asNumber(sandboxStates.error) + asNumber(sandboxStates.migrating);
   const imageAttention = asNumber(images.failed_builds) + asNumber(images.active_builds);
-  setNavBadge("schedulerNavBadge", blockedWakes || asNumber(programStates.ready_to_wake), blockedWakes ? "bad" : "");
+  setNavBadge("schedulerNavBadge", asNumber(programStates.ready_to_wake), "");
   setNavBadge("nodesNavBadge", fleetAttention, fleetAttention ? "warn" : "");
   setNavBadge("sandboxesNavBadge", sandboxAttention, sandboxAttention ? "warn" : "");
   setNavBadge("registryNavBadge", registry.configured && !registry.ok ? "!" : imageAttention, registry.configured && !registry.ok || asNumber(images.failed_builds) ? "bad" : "");
@@ -5576,7 +5470,7 @@ function renderMetrics(snapshot) {
   setText(
     "readyWakeDetail",
     asNumber(programStates.ready_to_wake) > 0
-      ? `${formatAge(programs.oldest_ready_to_wake_seconds)} oldest, ${asNumber(wakePlan.unplaced_count)} unplaced`
+      ? `${formatAge(programs.oldest_ready_to_wake_seconds)} oldest`
       : "no response-ready work"
   );
 
@@ -5673,11 +5567,8 @@ function renderOverviewOperational(snapshot) {
   const decision = creates > 0 ? `Create ${formatInteger(creates)} node${creates === 1 ? "" : "s"}`
     : stops > 0 ? `Stop ${formatInteger(stops)} node${stops === 1 ? "" : "s"}`
       : "Hold current capacity";
-  const actionEnabled = Boolean((autoscaler.program_signals || {}).action_enabled || policy.program_aware_autoscaling_enabled);
 
   setText("overviewDecisionTitle", decision);
-  els.overviewDecisionBadge.textContent = actionEnabled ? "Active policy" : "Shadow policy";
-  els.overviewDecisionBadge.className = `inline-badge ${actionEnabled ? "badge-ok" : "badge-muted"}`;
   setText("overviewSupplyValue", `${formatInteger(autoscaler.ready_nodes)} / ${formatInteger(autoscaler.provisioning_nodes)} / ${formatInteger(autoscaler.unreachable_nodes)}`);
   setText("overviewProjectedValue", formatResources(autoscaler.projected_free_resources || {}));
   setText("overviewDeficitValue", formatResources(autoscaler.resource_deficit || {}));
@@ -5731,7 +5622,6 @@ function renderHealth(snapshot) {
   const scaleDown = execution.scale_down || {};
   const blockedStopJobs = Array.isArray(scaleDown.blocked_job_ids) ? scaleDown.blocked_job_ids : [];
   const registry = snapshot.registry || {};
-  const wakePlan = autoscaler.program_wake_plan || {};
   const recent = ((snapshot.events || {}).recent || []);
   const volumeErrors = (Array.isArray(nodes.items) ? nodes.items : []).reduce(
     (total, node) => total + asNumber((node.actual_usage || {}).storage_error_volumes),
@@ -5742,17 +5632,11 @@ function renderHealth(snapshot) {
   let title = "Service is healthy";
   let detail = "Current hard demand fits projected ready capacity.";
 
-  const projectionErrors = recent.filter((event) =>
-    ["program_state_projection_error", "program_wake_shadow_plan_error"].includes(event.kind)
-  ).length;
+  const projectionErrors = recent.filter((event) => event.kind === "program_state_projection_error").length;
   if (projectionErrors > 0) {
     severity = "bad";
-    title = "Program scheduling telemetry is degraded";
-    detail = `${projectionErrors} recent projection or shadow-plan error(s) need attention.`;
-  } else if (asNumber(wakePlan.unplaced_count) > 0) {
-    severity = "bad";
-    title = "Ready work cannot be placed";
-    detail = `${formatInteger(wakePlan.unplaced_count)} wake request(s) have no current hard fit.`;
+    title = "Program state telemetry is degraded";
+    detail = `${projectionErrors} recent program state projection error(s) need attention.`;
   } else if (resourceHasPositiveValue(autoscaler.resource_deficit)) {
     severity = "warn";
     title = "Capacity is catching up";
@@ -5784,7 +5668,7 @@ function renderHealth(snapshot) {
   }
 
   if (asNumber(states.ready_to_wake) > 0) {
-    signals.push({ text: `${formatInteger(states.ready_to_wake)} ready`, mode: asNumber(wakePlan.unplaced_count) ? "bad" : "", page: "scheduler" });
+    signals.push({ text: `${formatInteger(states.ready_to_wake)} ready`, mode: "", page: "scheduler" });
   }
   if (asNumber(states.model_wait) > 0) {
     signals.push({ text: `${formatInteger(states.model_wait)} model wait`, mode: "", page: "scheduler" });
@@ -5826,14 +5710,11 @@ function renderSchedulerPage(snapshot) {
   const autoscaler = snapshot.autoscaler || {};
   const programs = snapshot.programs || {};
   const states = programs.states || {};
-  const programSignals = autoscaler.program_signals || {};
-  const wakePlan = autoscaler.program_wake_plan || {};
   const policy = autoscaler.effective_policy || {};
   const actions = Array.isArray(autoscaler.actions) ? autoscaler.actions : [];
   const reasons = Array.isArray(autoscaler.reasons) ? autoscaler.reasons : [];
   const execution = autoscaler.execution || {};
   const scaleDown = execution.scale_down || {};
-  const enabled = Boolean(programSignals.action_enabled || policy.program_aware_autoscaling_enabled);
   const creates = actionCount(actions, "create");
   const stops = actionCount(actions, "stop");
   const decisionTitle = creates > 0
@@ -5843,8 +5724,6 @@ function renderSchedulerPage(snapshot) {
       : "Hold current capacity";
 
   setText("schedulerDecisionTitle", decisionTitle);
-  els.schedulerModeBadge.textContent = enabled ? "Action enabled" : "Shadow only";
-  els.schedulerModeBadge.className = `inline-badge ${enabled ? "badge-ok" : "badge-muted"}`;
   setText(
     "schedulerDecisionDetail",
     autoscaler.timestamp
@@ -5859,8 +5738,6 @@ function renderSchedulerPage(snapshot) {
   }));
   setText("schedulerReadyNodesValue", formatInteger(autoscaler.ready_nodes));
   setText("schedulerProvisioningValue", formatInteger(autoscaler.provisioning_nodes));
-  setText("schedulerWakePlanValue", `${formatInteger(wakePlan.placed)}/${formatInteger(wakePlan.queued)}`);
-  setText("schedulerUnplacedValue", formatInteger(wakePlan.unplaced_count));
 
   setText("flowAllValue", formatInteger(programs.requests));
   setText("flowModelWaitValue", formatInteger(states.model_wait));
@@ -5876,8 +5753,6 @@ function renderSchedulerPage(snapshot) {
 
   renderCapacityEquation({
     immediate: autoscaler.pending_resources || {},
-    ready: programSignals.ready_to_wake_resources || {},
-    predictive: programSignals.weighted_model_wait_resources || {},
     prepared: autoscaler.prepared_resources || {},
     free: autoscaler.projected_free_resources || {},
     deficit: autoscaler.resource_deficit || {},
@@ -5899,14 +5774,11 @@ function renderSchedulerPage(snapshot) {
   setText("decisionPressureValue", pressureParts.join(" / "));
   setText("decisionIdleGraceValue", `Idle grace ${formatAge(autoscaler.effective_scale_down_idle_seconds)}`);
   renderPolicy(policy);
-  renderProgramQueue();
 }
 
 function renderCapacityEquation(rows) {
   const mapping = [
     ["Immediate", rows.immediate],
-    ["Ready", rows.ready],
-    ["Predictive", rows.predictive],
     ["Prepared", rows.prepared],
     ["Free", rows.free],
     ["Deficit", rows.deficit],
@@ -5921,9 +5793,6 @@ function renderCapacityEquation(rows) {
 
 function renderPolicy(policy) {
   const rows = [
-    ["Program action", policy.program_aware_autoscaling_enabled ? "Enabled" : "Shadow"],
-    ["Model-wait weight", formatPercentPoint(ratioToPercent(policy.model_wait_capacity_weight))],
-    ["Leading headroom", `${formatInteger(policy.model_wait_max_headroom_nodes)} node max`],
     ["Node range", `${formatInteger(policy.min_nodes)}–${formatInteger(policy.max_nodes)}`],
     ["Create limits", `${formatInteger(policy.max_create_per_cycle)} per cycle / ${formatInteger(policy.max_provisioning_nodes)} provisioning`],
     ["Stop limit", `${formatInteger(policy.max_stop_per_cycle)} per cycle`],
@@ -5948,85 +5817,6 @@ function renderPolicy(policy) {
   }));
 }
 
-function renderProgramQueue() {
-  if (!els.programQueueRows) return;
-  const snapshot = state.lastSnapshot || {};
-  const programs = snapshot.programs || {};
-  const autoscaler = snapshot.autoscaler || {};
-  const plan = autoscaler.program_wake_plan || {};
-  const queue = Array.isArray(programs.shadow_wake_queue) ? programs.shadow_wake_queue : [];
-  const placements = Array.isArray(plan.placements) ? plan.placements : [];
-  const unplaced = Array.isArray(plan.unplaced) ? plan.unplaced : [];
-  const byRequest = new Map();
-  for (const item of queue) byRequest.set(String(item.request_id || ""), { ...item });
-  for (const item of placements) {
-    const key = String(item.request_id || "");
-    byRequest.set(key, { ...(byRequest.get(key) || {}), ...item, result: "placed" });
-  }
-  for (const item of unplaced) {
-    const key = String(item.request_id || "");
-    byRequest.set(key, { ...(byRequest.get(key) || {}), ...item, result: "unplaced" });
-  }
-  let rows = [...byRequest.values()];
-  const query = String(els.programSearchInput.value || "").trim().toLowerCase();
-  const resultFilter = String(els.programResultFilter.value || "all");
-  if (!["all", "ready_to_wake"].includes(state.programStateFilter)) rows = [];
-  if (query) {
-    rows = rows.filter((item) => [
-      item.rollout_id,
-      item.request_id,
-      item.sandbox_id,
-      item.node_id,
-      item.job_id,
-      item.reason,
-    ].join(" ").toLowerCase().includes(query));
-  }
-  if (resultFilter === "local") rows = rows.filter((item) => item.local === true);
-  if (resultFilter === "migration") rows = rows.filter((item) => item.local === false && item.result === "placed");
-  if (resultFilter === "unplaced") {
-    rows.sort((a, b) => Number(b.result === "unplaced") - Number(a.result === "unplaced") || asNumber(a.position) - asNumber(b.position));
-  } else {
-    rows.sort((a, b) => asNumber(a.position) - asNumber(b.position));
-  }
-  const shown = rows.slice(0, MAX_PROGRAM_ROWS);
-  const truncated = asNumber(plan.placements_truncated) + asNumber(plan.unplaced_truncated);
-  setText(
-    "programQueueSummary",
-    `${formatInteger(shown.length)} shown, ${formatInteger(plan.queued)} queued, ${formatInteger(plan.unplaced_count)} unplaced${truncated ? `, ${formatInteger(truncated)} sampled out` : ""}`
-  );
-  if (shown.length === 0) {
-    renderEmptyRow(
-      els.programQueueRows,
-      8,
-      state.programStateFilter === "all" || state.programStateFilter === "ready_to_wake"
-        ? "No ready wake requests match the current filter"
-        : "Per-request rows are available for the ready-to-wake phase"
-    );
-    return;
-  }
-  els.programQueueRows.replaceChildren(...shown.map(programQueueRow));
-}
-
-function programQueueRow(item) {
-  const tr = document.createElement("tr");
-  if (item.result === "unplaced") tr.className = "row-alert";
-  appendCell(tr, formatInteger(item.position));
-  appendCell(tr, formatAge(firstNumber(item.ready_age_seconds, item.age_seconds)));
-  appendClassCell(
-    tr,
-    `${item.rollout_id || "-"} / ${item.request_id || "-"}`,
-    "",
-    `${item.rollout_id || ""}\\n${item.request_id || ""}`
-  );
-  appendClassCell(tr, `${item.sandbox_id || "-"} / g${formatInteger(item.sandbox_generation)}`, "");
-  appendCell(tr, formatResources(item.resources || {}));
-  appendClassCell(tr, item.node_id || item.job_id || "-", "");
-  appendCell(tr, item.result === "placed" ? (item.local ? "local" : "migration") : "-");
-  const result = item.result === "unplaced" ? `blocked: ${item.reason || "no hard fit"}` : item.result || "queued";
-  appendCell(tr, result);
-  return tr;
-}
-
 function renderNodesPage() {
   if (!els.nodeRows) return;
   const snapshot = state.lastSnapshot || {};
@@ -6034,13 +5824,6 @@ function renderNodesPage() {
   const resources = (snapshot.resources || {}).sandbox || {};
   const autoscaler = snapshot.autoscaler || {};
   const policy = autoscaler.effective_policy || {};
-  const plan = autoscaler.program_wake_plan || {};
-  const placements = Array.isArray(plan.placements) ? plan.placements : [];
-  const plannedByNode = placements.reduce((counts, item) => {
-    const key = String(item.node_id || "");
-    if (key) counts.set(key, (counts.get(key) || 0) + 1);
-    return counts;
-  }, new Map());
   const query = String(els.nodeSearchInput.value || "").trim().toLowerCase();
   const filter = String(els.nodeStateFilter.value || "all");
   let items = Array.isArray(nodes.items) ? nodes.items.filter((item) => (item.capabilities || []).includes("sandbox")) : [];
@@ -6095,17 +5878,17 @@ function renderNodesPage() {
   setText("nodesVolumeErrorsValue", formatInteger(storage.errors));
   setText(
     "nodesPageDetail",
-    `${formatInteger(nodes.sandbox_ready)} ready of ${formatInteger(nodes.sandbox)} fresh sandbox nodes; ${formatInteger(plan.placed)} shadow wake placement(s).`
+    `${formatInteger(nodes.sandbox_ready)} ready of ${formatInteger(nodes.sandbox)} fresh sandbox nodes.`
   );
   setText("nodeTableSummary", `${formatInteger(shown.length)} shown of ${formatInteger(items.length)} matching`);
   if (shown.length === 0) {
     renderEmptyRow(els.nodeRows, 8, "No nodes match the current filter");
     return;
   }
-  els.nodeRows.replaceChildren(...shown.map((item) => nodeRow(item, plannedByNode.get(String(item.node_id || "")) || 0)));
+  els.nodeRows.replaceChildren(...shown.map((item) => nodeRow(item)));
 }
 
-function nodeRow(item, plannedWakes) {
+function nodeRow(item) {
   const tr = document.createElement("tr");
   const stateInfo = nodeState(item);
   const stateCell = document.createElement("td");
@@ -6117,7 +5900,7 @@ function nodeRow(item, plannedWakes) {
   stateCell.append(stateWrapper);
   tr.append(stateCell);
   appendClassCell(tr, `${item.node_id || "-"}\\n${item.job_id || "-"}`, "", item.node_url || "");
-  appendCell(tr, `${formatInteger(item.active_sandboxes)} sandboxes${plannedWakes ? `, +${plannedWakes} planned` : ""}`);
+  appendCell(tr, `${formatInteger(item.active_sandboxes)} sandboxes`);
   tr.append(resourceMeterCell(item, "vcpu", "cpu_percent"));
   tr.append(resourceMeterCell(item, "memory_mb", "memory_percent"));
   const free = item.free_resources || {};
@@ -6241,7 +6024,6 @@ async function copyDiagnostics() {
     `Health: ${els.healthTitle.textContent}`,
     `Nodes: ${asNumber((snapshot.nodes || {}).sandbox_ready)} ready / ${asNumber(autoscaler.provisioning_nodes)} provisioning`,
     `Programs: ${asNumber(programs.requests)} requests, ${asNumber((programs.states || {}).ready_to_wake)} ready`,
-    `Wake plan: ${asNumber((autoscaler.program_wake_plan || {}).placed)} placed / ${asNumber((autoscaler.program_wake_plan || {}).unplaced_count)} unplaced`,
     `Decision: ${actionSummary(autoscaler.actions)}`,
     `Reasons: ${(autoscaler.reasons || []).join("; ") || "none"}`,
   ].join("\\n");

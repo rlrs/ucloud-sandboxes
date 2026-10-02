@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 from tests.test_storage_native_registry import FakeRegistry
 from tests import test_storage_native_migration as migration_fixtures
 from tests import test_direct_provisioner as provisioner_fixtures
+from tests.support import make_dirs
 from tests.test_split_memory_lifecycle import FakeQuota
 from ucloud_sandboxes.checkpoint_components import WorkspaceCaptureRef
 from ucloud_sandboxes.checkpoint_registry import (
@@ -19,8 +20,8 @@ from ucloud_sandboxes.checkpoint_registry import (
     canonical_bytes,
     sparse_extents,
 )
-from ucloud_sandboxes.control_plane import (
-    ControlPlaneHandler,
+from ucloud_sandboxes.gateway.registry_refs import (
+    RegistryReferences,
     release_registry_snapshot_reference,
 )
 from ucloud_sandboxes.direct_service import DirectSandboxService
@@ -39,6 +40,8 @@ from ucloud_sandboxes.storage_native_registry import (
     StorageSnapshotPublication,
     PublishedStorageLayer,
 )
+
+TEST_TIER = "contract"
 
 
 class StreamRegistry(FakeRegistry):
@@ -160,7 +163,7 @@ class CheckpointRegistryTests(unittest.TestCase):
         destination = (
             destination_root / self.generation.parent.name / self.generation.name
         )
-        destination.parent.mkdir(parents=True)
+        make_dirs(destination.parent)
         self.store.restore_memory(
             snapshot.memory_publication,
             destination,
@@ -280,9 +283,10 @@ class CheckpointRegistryTests(unittest.TestCase):
             snapshot_tag=snapshot.reference.tag,
         )
         usage = Mock()
-        handler = SimpleNamespace(registry_usage_store=usage, deployment_id="test")
-        ControlPlaneHandler._ensure_registry_snapshot_reference(
-            handler,
+        RegistryReferences(
+            registry_url=None, registry_worker_url=None, usage_store=usage,
+            deployment_id="test", dependency_resolver=None,
+        ).ensure_snapshot_reference(
             route,
             repository=snapshot.reference.repository,
             tag=snapshot.reference.tag,
@@ -317,8 +321,7 @@ class CheckpointRegistryTests(unittest.TestCase):
             )
 
     def import_provisioner(self):
-        root = self.root / "destination"
-        root.mkdir()
+        root = make_dirs(self.root / "destination")
         images = provisioner_fixtures.FakeImageStore(root)
         images.image = replace(
             images.image, rootfs_identity_sha256=self.local.runtime.rootfs_sha256

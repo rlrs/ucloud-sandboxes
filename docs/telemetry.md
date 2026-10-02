@@ -123,6 +123,11 @@ queue from local mount, release, or device pressure. Publication saturation is
 diagnostic only: another VM cannot make an existing local checkpoint portable,
 so it is excluded from autoscaling's actionable storage-pressure signal.
 
+Immutable-environment (EROFS) workers also export their nodewide image I/O
+counters as `environment_io`: chunk-cache hits, misses and downloaded bytes,
+plus metadata and startup-trace prefetch. See
+[immutable environments](immutable-environments.md#metrics).
+
 From a source checkout, the wrapper resolves the live SSH port through the
 active UCloud project and returns the same report in one command:
 

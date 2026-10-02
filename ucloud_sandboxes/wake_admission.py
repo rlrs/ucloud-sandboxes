@@ -38,7 +38,6 @@ class WakeAdmissionDecision:
     # None requires the normal refresh/publication/relocation decision. It is
     # never permission to dispatch an unreserved worker wake.
     route: SandboxRoute | None = None
-    owner_view: WakeOwnerView | None = None
 
 
 class WakeAdmission:
@@ -123,7 +122,7 @@ class WakeAdmission:
                 ):
                     admitted[current.sandbox_id] = current
                     waking = replace(current, state="waking")
-                    decision = WakeAdmissionDecision(waking, view)
+                    decision = WakeAdmissionDecision(waking)
                     views[requested.job_id] = replace(
                         view,
                         occupants=tuple(

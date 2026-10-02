@@ -8,6 +8,8 @@ from ucloud_sandboxes.agent import post_heartbeat
 from ucloud_sandboxes.models import ResourceQuantity
 from ucloud_sandboxes.routing import RoutingStore
 
+TEST_TIER = "contract"
+
 
 class ProvisioningAdmissionTests(unittest.TestCase):
     _request = helpers.ControlPlaneTests._json_request

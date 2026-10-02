@@ -13,6 +13,8 @@ from ucloud_sandboxes.routing import (
 )
 from ucloud_sandboxes.models import ResourceQuantity
 
+TEST_TIER = "contract"
+
 DSN = os.environ.get("UCLOUD_TEST_POSTGRES_DSN")
 
 

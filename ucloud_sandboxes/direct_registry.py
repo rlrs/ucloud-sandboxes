@@ -952,10 +952,16 @@ class DirectSandboxRegistry:
         expected_revision: int,
         image_id: str,
         sandbox: DirectSandbox,
+        quota: tuple[int, int, Path] | None = None,
     ) -> DirectSandboxRegistration:
-        return self._commit_rootfs(
-            sandbox_id, expected_revision, "quota_ready", image_id, sandbox
-        )
+        # From ``planned``, ``quota`` (project ID, MiB, path) rides on this
+        # commit: its prepare is owner-keyed, so a crash before here replays it.
+        # Without it, this advances ``quota_ready`` from an earlier release.
+        fields = {} if quota is None else {
+            "quota_project_id": quota[0], "quota_total_mb": quota[1], "quota_path": str(quota[2])}
+        return self._commit_rootfs(sandbox_id, expected_revision,
+                                   "quota_ready" if quota is None else "planned",
+                                   image_id, sandbox, **fields)
 
     def commit_import_rootfs(
         self,
@@ -1445,6 +1451,7 @@ class DirectSandboxRegistry:
         expected_phase: str,
         image_id: str,
         sandbox: DirectSandbox,
+        **quota: Any,
     ) -> DirectSandboxRegistration:
         return self._transition(
             sandbox_id,
@@ -1456,6 +1463,7 @@ class DirectSandboxRegistry:
             container_id=sandbox.container_id,
             bundle=str(sandbox.bundle),
             memory_directory=sandbox.memory_directory,
+            **quota,
         )
 
     def _transition(

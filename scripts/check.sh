@@ -24,7 +24,15 @@ else
   exit 1
 fi
 
-UV_PROJECT_ENVIRONMENT="$root_project_venv" uv run python -m unittest
+# One process per test module, in parallel, with a per-test watchdog.
+test_runner_flags=()
+if command -v eatmydata >/dev/null 2>&1; then
+  # fsync becomes a no-op. Suite durability tests kill processes, never the
+  # kernel, so what they observe through the page cache is unchanged.
+  test_runner_flags+=(--no-fsync)
+fi
+UV_PROJECT_ENVIRONMENT="$root_project_venv" uv run python scripts/run_tests.py \
+  ${test_runner_flags[@]+"${test_runner_flags[@]}"}
 uv build --out-dir "$check_root/root-dist"
 root_wheels=("$check_root"/root-dist/*.whl)
 if [ "${#root_wheels[@]}" -ne 1 ] || [ ! -f "${root_wheels[0]}" ]; then

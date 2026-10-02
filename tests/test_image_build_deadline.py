@@ -4,6 +4,7 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -22,6 +23,8 @@ from ucloud_sandboxes.images import (
     ImageStore,
 )
 from ucloud_sandboxes.sandbox import CommandResult
+
+TEST_TIER = "contract"
 
 
 class BuildDeadlineTests(unittest.TestCase):
@@ -188,10 +191,15 @@ class BuildProcessDeadlineTests(unittest.TestCase):
             self.assertIsNone(manager.get_image("shared-budget"))
 
     def test_publication_uses_same_budget_and_cannot_publish_late_success(self):
-        with TemporaryDirectory() as raw:
+        # Stages spend the budget only through this clock, never host load.
+        now = [1000.0]
+        clock = SimpleNamespace(monotonic=lambda: now[0])
+        with TemporaryDirectory() as raw, patch(
+            "ucloud_sandboxes.build_deadline.time", clock
+        ):
             class Runtime(DockerImageRuntime):
                 def build(self, spec, **kwargs):
-                    time.sleep(0.06)
+                    now[0] += 0.06
                     return CommandResult(argv=("fixture-build",), exit_code=0)
 
             seen = []
@@ -200,7 +208,7 @@ class BuildProcessDeadlineTests(unittest.TestCase):
                 seen.append(remaining_build_execution_seconds())
                 # A legacy callback that returns after expiry must not record a
                 # successful image, even though arbitrary Python is not preempted.
-                time.sleep(0.1)
+                now[0] += 0.1
                 return "sha256:" + "a" * 64
 
             manager = self._manager(Path(raw), Runtime(buildx_direct_push=True),
@@ -208,8 +216,9 @@ class BuildProcessDeadlineTests(unittest.TestCase):
             record = self._submit(manager, "late-publish", push=True)
             done = manager.wait_for_build(record.build_id, timeout_seconds=5)
             self.assertEqual(done.status, "failed")
+            self.assertIn("server execution deadline", done.error)
             self.assertEqual(len(seen), 1)
-            self.assertLess(seen[0], 0.08)
+            self.assertAlmostEqual(seen[0], 0.06)
             self.assertIsNone(manager.get_image("late-publish"))
             self.assertEqual(manager.active_build_count(), 0)
 

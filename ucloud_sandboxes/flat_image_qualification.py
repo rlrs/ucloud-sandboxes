@@ -1,12 +1,14 @@
-"""Offline source-to-sandbox qualification for the existing layout-1 EROFS format.
+"""Offline source-to-sandbox qualification for the layout-1 and layout-2 EROFS formats.
 
-The deployed mkfs contract uses -T 0. This validates that platform filesystem,
-not Docker's original timestamps, and does not change any import/alias path.
+Layout 1 (mkfs -T 0) zeroes every inode time. Layout 2 (-T 0 --mkfs-time --MZ) keeps
+file and symlink mtimes, which this checks against the source tar headers. It
+validates the platform filesystem and does not change any import/alias path.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import math
 import stat
 import tarfile
 
@@ -17,6 +19,11 @@ RUNTIME_TREES = frozenset({'/dev', '/proc', '/sys', '/run', '/tmp'})
 RUNTIME_FILES = frozenset({'/etc/hostname', '/etc/hosts', '/etc/resolv.conf', '/.ucloud-init'})
 RUNTIME_MTIMES = frozenset({'/', '/etc'})
 SCAN_OUTPUT = '/tmp/ucloud-filesystem-proof.json.gz'
+TIMESTAMP_CONTRACTS = {
+    1: 'layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace',
+    2: 'layout-2 mkfs -T 0 --mkfs-time --MZ; whole-second file and symlink mtimes match the source; '
+       'directory times are not compared',
+}
 
 
 def excluded(path):
@@ -24,7 +31,33 @@ def excluded(path):
             or any(path == root or path.startswith(root + '/') for root in RUNTIME_TREES))
 
 
-def expected_filesystem(index):
+def qualified_layout(layer_formats):
+    """The one layout, with a known timestamp contract, of every component."""
+    layouts = {f.get('layout') for f in layer_formats}
+    if (len(layouts) != 1 or any(type(value) is not int or value not in TIMESTAMP_CONTRACTS for value in layouts)
+            or any(set(f.get('excludes', [])) != {'dev', 'proc', 'sys', 'run'} for f in layer_formats)):
+        raise ValueError('qualification requires one known EROFS layout')
+    return layouts.pop()
+
+
+def _times(layout, kind, mtime):
+    # Layout 2 compares whole seconds, the precision a .pyc check reads;
+    # extractors round fractional PAX times differently. Builder-owned views
+    # zero directory times, and borrowed Docker diffs keep Docker's.
+    if layout == 1:
+        return {'mtime_ns': 0}
+    return {} if kind == tarfile.DIRTYPE else {'mtime_ns': math.floor(mtime) * 10**9}
+
+
+def _observed(row, layout):
+    if layout == 1 or 'mtime_ns' not in row:
+        return row
+    if stat.S_ISDIR(row.get('mode', 0)):
+        return {k: v for k, v in row.items() if k != 'mtime_ns'}
+    return row | {'mtime_ns': row['mtime_ns'] // 10**9 * 10**9}
+
+
+def expected_filesystem(index, *, layout):
     """Derive contents/metadata independently of the delta selection algorithm."""
     validate_flat_index(index)
     if SCAN_OUTPUT.lstrip('/') in index:
@@ -39,7 +72,7 @@ def expected_filesystem(index):
             continue
         inode = index[entry.linkname] if entry.kind == tarfile.LNKTYPE else entry
         row = {'mode': kinds[entry.kind] | inode.mode, 'uid': inode.uid, 'gid': inode.gid,
-               'mtime_ns': 0, 'xattrs': {
+               **_times(layout, entry.kind, inode.mtime), 'xattrs': {
                    key[len('SCHILY.xattr.'):]: value.encode('utf-8', 'surrogateescape').hex()
                    for key, value in inode.pax if key.startswith('SCHILY.xattr.')}}
         if entry.kind in {tarfile.REGTYPE, tarfile.LNKTYPE}:
@@ -51,12 +84,12 @@ def expected_filesystem(index):
             row['link'] = entry.linkname
         expected[absolute] = row
     # Complete filesystem exports can omit the default root header.
-    expected.setdefault('/', {'mode': stat.S_IFDIR | 0o755, 'uid': 0, 'gid': 0,
-                              'mtime_ns': 0, 'xattrs': {}})
+    directory = _times(layout, tarfile.DIRTYPE, 0)
+    expected.setdefault('/', {'mode': stat.S_IFDIR | 0o755, 'uid': 0, 'gid': 0, **directory, 'xattrs': {}})
     # The default workspace is created by DirectOciConfigBuilder only when
     # absent. Existing source workspace contents and metadata remain checked.
     expected.setdefault('/workspace', {'mode': stat.S_IFDIR | 0o1777, 'uid': 0, 'gid': 0,
-                                      'mtime_ns': 0, 'xattrs': {}})
+                                      **directory, 'xattrs': {}})
     return expected
 
 
@@ -65,16 +98,14 @@ def startup_mtimes(index):
 
 
 def compare_snapshot(index, snapshot, *, layer_formats):
-    if not layer_formats or any(f.get('layout') != 1 or set(f.get('excludes', [])) != {'dev', 'proc', 'sys', 'run'}
-                                for f in layer_formats):
-        raise ValueError('qualification requires the known layout-1 EROFS format')
+    layout = qualified_layout(layer_formats)
     if snapshot.get('errors'):
         raise ValueError('filesystem scan had unreadable entries')
     expected_exclusions = RUNTIME_TREES | (RUNTIME_FILES - {'/.ucloud-init'}) | {SCAN_OUTPUT}
     if set(snapshot.get('excluded', [])) != expected_exclusions:
         raise ValueError('filesystem scanner exclusions changed')
-    expected = expected_filesystem(index)
-    actual = {path: row for path, row in snapshot['entries'].items() if not excluded(path)}
+    expected = expected_filesystem(index, layout=layout)
+    actual = {path: _observed(row, layout) for path, row in snapshot['entries'].items() if not excluded(path)}
     count, sample = 0, []
     volatile_mtimes = startup_mtimes(index)
     for path in sorted(expected.keys() | actual.keys()):
@@ -90,7 +121,7 @@ def compare_snapshot(index, snapshot, *, layer_formats):
             'difference_count': count, 'difference_sample': sample,
             'runtime_contract_version': 3,
             'created_runtime_workspace': 'workspace' not in index,
-            'timestamp_contract': 'layout-1 mkfs -T 0; startup modifies root, etc and a newly created workspace',
+            'timestamp_contract': TIMESTAMP_CONTRACTS[layout],
             'excluded_runtime_trees': sorted(RUNTIME_TREES),
             'excluded_runtime_files': sorted(RUNTIME_FILES), 'scanner_output': SCAN_OUTPUT}
 
@@ -103,7 +134,8 @@ def qualification_key(index, components, runtime_config, worker_bundle_digest):
     describe provenance, not filesystem bytes; component order, formats, sizes,
     range hashes, producer identity and runtime configuration remain in the key.
     """
-    expected = expected_filesystem(index)
+    layout = qualified_layout([component.unsigned().get('format', {}) for component in components])
+    expected = expected_filesystem(index, layout=layout)
     for path in startup_mtimes(index):
         if path in expected:
             expected[path] = {k: v for k, v in expected[path].items() if k != 'mtime_ns'}

@@ -29,6 +29,8 @@ from ucloud_sandboxes.routing import (
     SandboxRoute,
 )
 
+TEST_TIER = "contract"
+
 
 def build_heartbeat(**kwargs):
     kwargs.setdefault("deployment_id", "test-deployment")
@@ -46,11 +48,19 @@ def sandbox_route(**values: object) -> SandboxRoute:
 
 
 class MetricsTests(unittest.TestCase):
+    def frozen_now(self):
+        """Pin the snapshot clock to the fixture clock, so ages are exact."""
+        now = utc_now()
+        clock = patch("ucloud_sandboxes.metrics.utc_now", return_value=now)
+        clock.start()
+        self.addCleanup(clock.stop)
+        return now
+
     def test_kernel_io_stalls_trigger_headroom_without_cpu_or_queue_saturation(self):
         from tests.test_policy import node
         from ucloud_sandboxes.models import SandboxDemand
         from ucloud_sandboxes.policy import evaluate_scale
-        now = utc_now()
+        now = self.frozen_now()
         events = [MetricEvent(
             timestamp=(now - timedelta(seconds=offset)).isoformat(), kind="node_heartbeat",
             data={"job_id": "worker", "capabilities": ["sandbox"], "active_workloads": 64,
@@ -75,7 +85,7 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(build_live_scale_signals(events, policy).pressure_samples, 0)
 
     def test_file_backed_working_set_requests_capacity_before_reclaim_stalls(self):
-        now = utc_now()
+        now = self.frozen_now()
         events = [MetricEvent(
             timestamp=(now - timedelta(seconds=offset)).isoformat(),
             kind="node_heartbeat",
@@ -232,7 +242,7 @@ class MetricsTests(unittest.TestCase):
         self.assertLessEqual(physical_bytes, max_bytes)
 
     def test_builds_live_pressure_and_provisioning_signals(self) -> None:
-        now = utc_now()
+        now = self.frozen_now()
         heartbeat_data = {
             "job_id": "job-1",
             "active_workloads": 1,
@@ -278,7 +288,7 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(signals.scale_up_wait_p95_seconds, 72.0)
 
     def test_builder_pressure_does_not_drive_sandbox_scaling(self) -> None:
-        now = utc_now()
+        now = self.frozen_now()
         for capabilities in (["sandbox"], ["sandbox", "image-build"], None):
             with self.subTest(capabilities=capabilities):
                 worker = {
@@ -321,7 +331,7 @@ class MetricsTests(unittest.TestCase):
                 self.assertEqual(signals.cpu_utilization, 0.99)
 
     def test_image_materialization_queue_is_live_pressure(self) -> None:
-        now = utc_now()
+        now = self.frozen_now()
         events = [
             MetricEvent(
                 timestamp=(now - timedelta(seconds=offset)).isoformat(),
@@ -348,7 +358,7 @@ class MetricsTests(unittest.TestCase):
     def test_snapshot_publication_queue_is_diagnostic_not_scale_pressure(
         self,
     ) -> None:
-        now = utc_now()
+        now = self.frozen_now()
         events = [
             MetricEvent(
                 timestamp=(now - timedelta(seconds=offset)).isoformat(),
@@ -371,7 +381,7 @@ class MetricsTests(unittest.TestCase):
         self.assertIsNone(signals.storage_queue_utilization)
 
     def test_healthy_live_observations_remain_visible_without_pressure(self) -> None:
-        now = utc_now()
+        now = self.frozen_now()
         events = [
             MetricEvent(
                 timestamp=(now - timedelta(seconds=offset)).isoformat(),
@@ -397,8 +407,8 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(signals.cpu_utilization, 0.2)
         self.assertEqual(signals.memory_utilization, 0.3)
 
-    def test_snapshot_exposes_aging_first_program_wake_queue(self) -> None:
-        now = utc_now()
+    def test_snapshot_summarizes_active_program_states(self) -> None:
+        now = self.frozen_now()
         requests = [
             ProgramRequestState(
                 request_id="newer",
@@ -446,10 +456,8 @@ class MetricsTests(unittest.TestCase):
         programs = snapshot["programs"]
         self.assertEqual(programs["states"]["model_wait"], 1)
         self.assertEqual(programs["states"]["ready_to_wake"], 2)
-        self.assertEqual(
-            programs["shadow_wake_queue"][0]["request_id"],
-            "older",
-        )
+        self.assertNotIn("shadow_wake_queue", programs)
+        self.assertEqual(programs["oldest_ready_to_wake_seconds"], 20)
         self.assertEqual(
             programs["resources"]["ready_to_wake"]["memory_mb"],
             3072,
@@ -500,7 +508,7 @@ class MetricsTests(unittest.TestCase):
             self.assertGreater(event.data["original_bytes"], 160)
             self.assertEqual(loaded, [event])
 
-    def test_autoscaler_cycle_bounds_wake_plan_and_exposes_policy(self) -> None:
+    def test_autoscaler_cycle_bounds_execution_and_exposes_policy(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
             record_autoscaler_cycle(
@@ -575,34 +583,19 @@ class MetricsTests(unittest.TestCase):
                             "request": {"secret": "must-not-be-persisted"},
                         }
                     ],
-                    "programWakePlan": {
-                        "mode": "action",
-                        "queued": 300,
-                        "placed": 150,
-                        "unplaced_count": 150,
-                        "placements": [
-                            {"request_id": f"placed-{index}"} for index in range(150)
-                        ],
-                        "unplaced": [
-                            {"request_id": f"unplaced-{index}"} for index in range(150)
-                        ],
-                    },
                     "effectivePolicy": {
-                        "program_aware_autoscaling_enabled": True,
-                        "model_wait_capacity_weight": 0.25,
+                        "parked_wake_consolidation_enabled": True,
+                        "target_cpu_utilization": 0.7,
                     },
                 },
             )
 
             event = store.load_events()[0]
 
-        wake_plan = event.data["program_wake_plan"]
-        self.assertEqual(len(wake_plan["placements"]), 100)
-        self.assertEqual(len(wake_plan["unplaced"]), 100)
-        self.assertEqual(wake_plan["placements_truncated"], 50)
-        self.assertEqual(wake_plan["unplaced_truncated"], 50)
+        self.assertNotIn("program_wake_plan", event.data)
+        self.assertNotIn("program_signals", event.data)
         self.assertTrue(
-            event.data["effective_policy"]["program_aware_autoscaling_enabled"]
+            event.data["effective_policy"]["parked_wake_consolidation_enabled"]
         )
         execution = event.data["execution"]
         self.assertTrue(execution["controller_lock_held"])
@@ -634,7 +627,7 @@ class MetricsTests(unittest.TestCase):
         self.assertNotIn("must-not-be-persisted", json.dumps(event.data))
 
     def test_snapshot_aggregates_live_routes_and_schedulable_demand(self) -> None:
-        now = utc_now()
+        now = self.frozen_now()
         heartbeat = build_heartbeat(
             job_id="job-1",
             node_id="node-1",
@@ -701,7 +694,7 @@ class MetricsTests(unittest.TestCase):
         )
 
     def test_recent_route_on_fresh_node_counts_as_provisional_running(self) -> None:
-        now = utc_now()
+        now = self.frozen_now()
         heartbeat = build_heartbeat(
             job_id="job-1",
             node_id="node-1",
@@ -769,7 +762,7 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(snapshot["sandboxes"]["stale_routes"], 0)
 
     def test_includes_recent_node_metric_samples(self) -> None:
-        now = utc_now()
+        now = self.frozen_now()
         heartbeat = build_heartbeat(
             job_id="job-1",
             node_id="node-1",
@@ -817,7 +810,7 @@ class MetricsTests(unittest.TestCase):
         )
 
     def test_builds_vm_lifecycle_summary(self) -> None:
-        now = utc_now()
+        now = self.frozen_now()
         with TemporaryDirectory() as raw_dir:
             store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
             store.append(

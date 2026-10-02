@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path
 import logging
@@ -21,6 +22,7 @@ from .checkpoint_registry import RegistryCheckpointStore
 from .direct_network import DirectNetworkManager
 from .direct_oci import DirectOciConfigBuilder
 from .disk_claims import DiskClaimPolicy
+from . import phase_timings
 from .direct_registry import (
     DirectRegistryError,
     DirectSandboxRegistration,
@@ -145,6 +147,9 @@ class DirectSandboxProvisioner:
                 first_id,
                 first_error,
             )
+        if self.network_manager is not None:
+            # After recovery, so refill never competes with it.
+            self.network_manager.start_pool()
         return tuple(results)
 
     def create(
@@ -154,21 +159,23 @@ class DirectSandboxProvisioner:
         sandbox_generation: int,
         operation_id: str,
     ) -> DirectSandboxRegistration:
-        self._validate_spec(spec)
+        with phase_timings.phase("validate_spec"):
+            self._validate_spec(spec)
         # Resolve immutable image metadata and validate the full OCI translation
         # before persisting an operation or reserving node capacity.
-        with self.overlays.resolve(spec.image) as image:
+        with ExitStack() as resolved:
+            with phase_timings.phase("image_resolve"):
+                image = resolved.enter_context(self.overlays.resolve(spec.image))
             split = self.warden.memory_backing is not None and spec.parkable
-            registration = self.registry.plan(
-                spec=spec,
-                sandbox_generation=sandbox_generation,
-                operation_id=operation_id,
-                runtime_compatibility_sha256=self.runtime_compatibility_sha256,
-                split_memory_backing=split,
-                initial_claim=self.disk_claim_policy.initial_claim(spec) if split else None,
-            )
-            if registration.phase == "planned":
-                registration = self._prepare_quota(registration)
+            with phase_timings.phase("registry_commit"):
+                registration = self.registry.plan(
+                    spec=spec,
+                    sandbox_generation=sandbox_generation,
+                    operation_id=operation_id,
+                    runtime_compatibility_sha256=self.runtime_compatibility_sha256,
+                    split_memory_backing=split,
+                    initial_claim=self.disk_claim_policy.initial_claim(spec) if split else None,
+                )
             return self._advance(registration, image=image)
 
     def reconcile(self, sandbox_id: str) -> DirectSandboxRegistration:
@@ -660,9 +667,8 @@ class DirectSandboxProvisioner:
             raise DirectRegistryError(
                 "direct registration belongs to another runtime compatibility"
             )
-        if registration.phase == "planned":
-            registration = self._prepare_quota(registration)
-        if registration.phase == "quota_ready" and image is None:
+        unrooted = registration.phase in {"planned", "quota_ready"}
+        if unrooted and image is None:
             with self.overlays.resolve(registration.spec.image) as image:
                 return self._advance(
                     registration,
@@ -670,101 +676,117 @@ class DirectSandboxProvisioner:
                     config=config,
                     host_rules_ready=host_rules_ready,
                 )
-        network_namespace_path = self._network_namespace(
-            registration,
-            host_rules_ready=host_rules_ready,
-        )
-        if registration.phase == "quota_ready":
-            assert image is not None
-            config = config or self.oci.build(
-                registration.spec,
-                image,
-                network_namespace_path=network_namespace_path,
+        # Three durable commits: plan, rootfs, owned. Quota is not one of
+        # them: prepare is idempotent and keyed by (sandbox, generation), so a
+        # crash before commit_rootfs replays it from ``planned`` and receives
+        # the same volume and project ID.
+        quota = None
+        if registration.phase == "planned":
+            with phase_timings.phase("storage_prepare"):
+                quota = self._prepare_quota(registration)
+        with phase_timings.phase("network_ensure"):
+            network_namespace_path = self._network_namespace(
+                registration,
+                host_rules_ready=host_rules_ready,
             )
+        if unrooted:
+            assert image is not None
+            with phase_timings.phase("oci_build"):
+                config = config or self.oci.build(
+                    registration.spec,
+                    image,
+                    network_namespace_path=network_namespace_path,
+                )
             # A crash can leave a mounted overlay only before rootfs_ready commits.
             # No runsc backend is allowed to exist at this phase.
             if registration.memory_reference is not None:
                 config.setdefault("annotations", {})[
                     "dev.gvisor.internal.application-memory-directory"
                 ] = registration.memory_reference.allocation_id
-            self.overlays.discard_unregistered(
-                sandbox_id=registration.sandbox_id,
-                sandbox_generation=registration.sandbox_generation,
-                workspace_directory=registration.workspace_directory,
-            )
-            lease = self.overlays.prepare(
-                sandbox_id=registration.sandbox_id,
-                sandbox_generation=registration.sandbox_generation,
-                image=image,
-                config_template=config,
-                spec_sha256=registration.spec_sha256,
-                workspace_directory=registration.workspace_directory,
-                memory=registration.memory_reference,
-            )
-            expected_path = Path(registration.quota_path)
+            with phase_timings.phase("rootfs_prepare"):
+                self.overlays.discard_unregistered(
+                    sandbox_id=registration.sandbox_id,
+                    sandbox_generation=registration.sandbox_generation,
+                    workspace_directory=registration.workspace_directory,
+                )
+                lease = self.overlays.prepare(
+                    sandbox_id=registration.sandbox_id,
+                    sandbox_generation=registration.sandbox_generation,
+                    image=image,
+                    config_template=config,
+                    spec_sha256=registration.spec_sha256,
+                    workspace_directory=registration.workspace_directory,
+                    memory=registration.memory_reference,
+                )
+            expected_path = quota[2] if quota else Path(registration.quota_path)
             if lease.writable != expected_path:
                 raise DirectWardenError(
                     "overlay writable path does not match quota ownership"
                 )
-            registration = self.registry.commit_rootfs(
-                registration.sandbox_id,
-                expected_revision=registration.revision,
-                image_id=lease.image.image_id,
-                sandbox=lease.sandbox,
-            )
+            with phase_timings.phase("registry_commit"):
+                registration = self.registry.commit_rootfs(
+                    registration.sandbox_id,
+                    expected_revision=registration.revision,
+                    image_id=lease.image.image_id,
+                    sandbox=lease.sandbox,
+                    quota=quota,
+                )
         if registration.phase == "rootfs_ready":
             sandbox = registration.to_direct_sandbox()
-            # The public SDK defaults to an unprivileged OCI user and a
-            # /workspace file API target. Establish that directory inside the
-            # quota-accounted overlay before the backend can start.
-            self.oci.prepare_workspace(
-                sandbox.bundle / "rootfs",
-                spec=registration.spec,
-            )
-            prepared_config = json.loads(
-                (sandbox.bundle / "config.json").read_text(encoding="utf-8")
-            )
-            self.oci.prepare_working_directory(
-                sandbox.bundle / "rootfs",
-                directory=prepared_config["process"]["cwd"],
-            )
-            self.oci.prepare_network_files(
-                sandbox.bundle / "rootfs",
-                spec=registration.spec,
-                relay_hosts=(
-                    self.network_manager.hosts_for_policy(
-                        registration.spec.network_policy
-                    )
-                    if self.network_manager is not None
-                    else {}
-                ),
-            )
-            # Keep the init binary inside the quota-accounted rootfs. A bind
-            # mount here is not executable under gVisor on production nodes.
-            # This is deliberately replayed so startup repairs a crash between
-            # committing the rootfs and creating the runsc backend.
-            self.oci.install_init(
-                sandbox.bundle / "rootfs",
-                enabled=(
-                    registration.spec.security.init
-                    and not registration.spec.managed_process
-                ),
-            )
-            self.oci.install_managed_init(
-                sandbox.bundle / "rootfs",
-                enabled=(
-                    registration.spec.managed_process
-                    or registration.spec.filesystem.management_helper == "static"
-                ),
-            )
+            with phase_timings.phase("guest_files"):
+                # The public SDK defaults to an unprivileged OCI user and a
+                # /workspace file API target. Establish that directory inside the
+                # quota-accounted overlay before the backend can start.
+                self.oci.prepare_workspace(
+                    sandbox.bundle / "rootfs",
+                    spec=registration.spec,
+                )
+                prepared_config = json.loads(
+                    (sandbox.bundle / "config.json").read_text(encoding="utf-8")
+                )
+                self.oci.prepare_working_directory(
+                    sandbox.bundle / "rootfs",
+                    directory=prepared_config["process"]["cwd"],
+                )
+                self.oci.prepare_network_files(
+                    sandbox.bundle / "rootfs",
+                    spec=registration.spec,
+                    relay_hosts=(
+                        self.network_manager.hosts_for_policy(
+                            registration.spec.network_policy
+                        )
+                        if self.network_manager is not None
+                        else {}
+                    ),
+                )
+            with phase_timings.phase("init_install"):
+                # Keep the init binary inside the quota-accounted rootfs. A bind
+                # mount here is not executable under gVisor on production nodes.
+                # This is deliberately replayed so startup repairs a crash between
+                # committing the rootfs and creating the runsc backend.
+                self.oci.install_init(
+                    sandbox.bundle / "rootfs",
+                    enabled=(
+                        registration.spec.security.init
+                        and not registration.spec.managed_process
+                    ),
+                )
+                self.oci.install_managed_init(
+                    sandbox.bundle / "rootfs",
+                    enabled=(
+                        registration.spec.managed_process
+                        or registration.spec.filesystem.management_helper == "static"
+                    ),
+                )
             record = self.warden.inspect(sandbox)
             if record is None:
                 # Covers a crash after runsc create but before journal commit.
                 self.warden.discard_unjournaled(sandbox)
-                record = self.warden.create(
-                    sandbox,
-                    operation_id=registration.operation_id,
-                )
+                with phase_timings.phase("runtime_create"):
+                    record = self.warden.create(
+                        sandbox,
+                        operation_id=registration.operation_id,
+                    )
             elif record.state not in {
                 HibernationState.RUNNING,
                 HibernationState.PARKED,
@@ -777,10 +799,11 @@ class DirectSandboxProvisioner:
                 raise DirectWardenError(
                     f"new direct sandbox settled in {record.state.value}"
                 )
-            registration = self.registry.commit_owned(
-                registration.sandbox_id,
-                expected_revision=registration.revision,
-            )
+            with phase_timings.phase("registry_commit"):
+                registration = self.registry.commit_owned(
+                    registration.sandbox_id,
+                    expected_revision=registration.revision,
+                )
         if registration.phase == "owned":
             record = self.warden.inspect(registration.to_direct_sandbox())
             if record is None:
@@ -815,7 +838,8 @@ class DirectSandboxProvisioner:
     def _prepare_quota(
         self,
         registration: DirectSandboxRegistration,
-    ) -> DirectSandboxRegistration:
+    ) -> tuple[int, int, Path]:
+        """Prepare owner-keyed storage; return the quota commit_rootfs records."""
         total_mb = self._quota_total_mb(registration)
         # A dynamic claim starts both allocations at what it charges; the
         # spec's maximums remain the device and project ceilings.
@@ -844,13 +868,7 @@ class DirectSandboxProvisioner:
             record,
             total_mb=total_mb,
         )
-        return self.registry.commit_quota(
-            registration.sandbox_id,
-            expected_revision=registration.revision,
-            project_id=record.accounting_id,
-            total_mb=total_mb,
-            quota_path=expected,
-        )
+        return record.accounting_id, total_mb, expected
 
     def _drop_storage(
         self,

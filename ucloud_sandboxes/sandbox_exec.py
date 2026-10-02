@@ -10,11 +10,16 @@ import time
 from typing import Any
 from uuid import uuid4
 
+from .exec_session_routes import valid_session_prefix
 from .models import utc_now
 from .telemetry import Telemetry
 
 
-def new_exec_session_id() -> str:
+def new_exec_session_id(prefix: str | None = None) -> str:
+    """Name a session under a gateway route prefix, or as an unrouted exec."""
+
+    if prefix is not None and valid_session_prefix(prefix):
+        return f"{prefix}.{uuid4().hex}"
     return f"exec-{uuid4().hex}"
 
 
@@ -200,7 +205,9 @@ class ExecSessionManager:
         self._terminal: OrderedDict[str, ExecSession] = OrderedDict()
         self._lock = RLock()
 
-    def start(self, spec: SandboxExecSpec) -> ExecSession:
+    def start(
+        self, spec: SandboxExecSpec, *, session_prefix: str | None = None
+    ) -> ExecSession:
         timings = {}
         timer = _ExecStartTimer(timings)
         spec.validate()
@@ -232,7 +239,7 @@ class ExecSessionManager:
             raise
         now = utc_now()
         session = ExecSession(
-            id=new_exec_session_id(),
+            id=new_exec_session_id(session_prefix),
             spec=spec,
             argv=argv,
             status="running",

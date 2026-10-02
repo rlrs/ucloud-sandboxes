@@ -44,8 +44,11 @@ def tree_identity(root):
                                for key in os.listxattr(path, follow_symlinks=False)
                                if key.startswith("user.") or key == "security.capability"}
             if stat.S_ISREG(info.st_mode):
+                digest = hashlib.sha256()  # hashlib.file_digest needs Python 3.11.
                 with path.open("rb") as source:
-                    entry["sha256"] = hashlib.file_digest(source, "sha256").hexdigest()
+                    while block := source.read(1 << 20):
+                        digest.update(block)
+                entry["sha256"] = digest.hexdigest()
                 hardlinks.setdefault((info.st_dev, info.st_ino), []).append(relative)
             elif stat.S_ISLNK(info.st_mode):
                 entry["target"] = os.readlink(path)

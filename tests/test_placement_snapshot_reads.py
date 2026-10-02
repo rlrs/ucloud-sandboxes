@@ -7,6 +7,8 @@ from tests.test_control_plane import build_heartbeat, _sandbox_route
 from ucloud_sandboxes.control_state import ControlStateStore
 from ucloud_sandboxes.routing import RoutingStore
 
+TEST_TIER = "contract"
+
 
 class PlacementSnapshotReadsTests(unittest.TestCase):
     def test_owner_aliases_are_ordered_deduplicated_and_fresh(self):

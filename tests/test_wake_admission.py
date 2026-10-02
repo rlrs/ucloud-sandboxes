@@ -13,6 +13,8 @@ from ucloud_sandboxes.models import NodeHeartbeat, ResourceQuantity, utc_now
 from ucloud_sandboxes.routing import RoutingStore, wake_pending_demand_id
 from ucloud_sandboxes.wake_admission import WakeAdmission
 
+TEST_TIER = "contract"
+
 
 class WakeAdmissionTests(unittest.TestCase):
     def setUp(self):
@@ -85,8 +87,6 @@ class WakeAdmissionTests(unittest.TestCase):
         self.assertEqual(self.demands, [0, 1024, 2048])
         self.assertEqual(self.reads, [("owner", "job"), ("placement", "job")])
         self.assertEqual(results[0].route, results[1].route)
-        self.assertEqual(results[0].owner_view.occupants[0].state, "parked")
-        self.assertEqual(results[2].owner_view.occupants[0].state, "waking")
         self.assertEqual(
             [
                 self.store.get_sandbox_readonly(row.sandbox_id).state

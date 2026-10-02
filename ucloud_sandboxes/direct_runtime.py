@@ -9,7 +9,7 @@ from typing import Mapping, Sequence
 from .checkpoint_registry import RegistryCheckpointStore
 from .managed_registry import RegistryClient
 from .memory_backing import MemoryBackingStore
-from .direct_network import DirectNetworkManager
+from .direct_network import NETWORK_POOL_SIZE, DirectNetworkManager
 from .direct_oci import DirectOciConfigBuilder
 from .direct_provisioner import DirectSandboxProvisioner
 from .disk_claims import DiskClaimPolicy
@@ -47,6 +47,7 @@ def build_direct_runtime_service(
     storage_native_socket: Path,
     split_memory_backing: bool = False,
     reflink_memory_restore: bool = False,
+    pause_tier: bool = False,
     workspace_initial_grant_mb: int = 0,
     application_memory_root: Path | None = None,
     memory_backing_hard_capacity_bytes: int = 0,
@@ -167,6 +168,7 @@ def build_direct_runtime_service(
             state_root / "network-slots.json",
             allowed_tcp_egress=network_allow_tcp,
             network_relays=network_relays,
+            pool_size=NETWORK_POOL_SIZE,
         )
         if network == "sandbox"
         else None
@@ -193,6 +195,7 @@ def build_direct_runtime_service(
             state_root / "memory-backing.sqlite",
             hard_capacity_bytes=memory_backing_hard_capacity_bytes,
             active_root=application_memory_root,
+            ram_swappable=pause_tier,
         )
     checkpoint_store = (
         RegistryCheckpointStore(
@@ -219,6 +222,7 @@ def build_direct_runtime_service(
             memory_root=volume_mount_root,
             application_memory_root=application_memory_root,
             reflink_memory_restore=reflink_memory_restore,
+            pause_tier=pause_tier,
             bundle_root=state_root / "bundles",
             journal_root=state_root / "journals",
             runtime_fingerprint=fingerprint,

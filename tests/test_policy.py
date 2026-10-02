@@ -10,7 +10,6 @@ from ucloud_sandboxes.models import (
     LiveScaleSignals,
     NodeHeartbeat,
     NodeRuntimeMetrics,
-    ProgramScaleSignals,
     ResourceQuantity,
     SandboxDemand,
     SandboxNode,
@@ -565,52 +564,6 @@ class ScalePolicyTests(unittest.TestCase):
 
         self.assertEqual(decision.resource_deficit, ResourceQuantity())
         self.assertEqual(decision.creates, 1)
-
-    def test_ready_wake_shape_reuses_its_existing_hard_disk_reservation(
-        self,
-    ) -> None:
-        requested = ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192)
-        decision = evaluate_scale(
-            [
-                node(
-                    "source",
-                    total_resources=ResourceQuantity(
-                        vcpu=4,
-                        memory_mb=8192,
-                        disk_mb=8192,
-                    ),
-                    used_resources=ResourceQuantity(disk_mb=8192),
-                )
-            ],
-            demand(),
-            ScalePolicy(
-                max_nodes=2,
-                max_create_per_cycle=1,
-                program_aware_autoscaling_enabled=True,
-            ),
-            program_signals=ProgramScaleSignals(
-                ready_to_wake_sandboxes=1,
-                ready_to_wake_resources=ResourceQuantity(
-                    vcpu=requested.vcpu,
-                    memory_mb=requested.memory_mb,
-                ),
-                effective_resources=ResourceQuantity(
-                    vcpu=requested.vcpu,
-                    memory_mb=requested.memory_mb,
-                ),
-                ready_placement_requests=(
-                    SandboxPlacementRequest(
-                        resources=requested,
-                        owned_job_id="source",
-                        owned_disk_mb=requested.disk_mb,
-                    ),
-                ),
-                action_enabled=True,
-            ),
-        )
-
-        self.assertEqual(decision.resource_deficit, ResourceQuantity())
-        self.assertEqual(decision.creates, 0)
 
     def test_gateway_create_saturation_amplifies_confirmed_node_pressure(self) -> None:
         decision = evaluate_scale(

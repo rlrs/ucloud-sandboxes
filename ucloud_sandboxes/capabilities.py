@@ -16,16 +16,7 @@ RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX = "runtime-compatibility-sha256:"
 RUNTIME_CPU_CAPABILITY_PREFIX = "runtime-cpu-features-sha256:"
 STORAGE_NATIVE_MIGRATION_CAPABILITY = "sandbox-migrate-storage-native-v1"
 STORAGE_NATIVE_DETACH_CAPABILITY = "sandbox-detach-published-v1"
-
-
-def merge_capabilities(*groups: tuple[str, ...]) -> tuple[str, ...]:
-    values: list[str] = []
-    for group in groups:
-        for capability in group:
-            cleaned = capability.strip()
-            if cleaned:
-                values.append(cleaned)
-    return tuple(dict.fromkeys(values))
+COMMIT_EXPORT_CAPABILITY = "sandbox-commit-export-v1"
 
 
 def has_capability(capabilities: tuple[str, ...], capability: str) -> bool:

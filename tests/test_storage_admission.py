@@ -11,6 +11,8 @@ from ucloud_sandboxes.storage_native_daemon import (
     StorageNativeConflictError, StorageNativeNodeClient, StorageNativeNodeServer, StorageVolumeOwner, StorageVolumeState,
 )
 
+TEST_TIER = "contract"
+
 
 class StorageAdmissionIsolationTests(unittest.TestCase):
     def test_blocked_publication_does_not_block_metadata_or_local_restore(self):
@@ -19,7 +21,7 @@ class StorageAdmissionIsolationTests(unittest.TestCase):
             service, *_ = fixtures.StorageNativeNodeServiceTests()._service(root, publisher=True)
             service.config = replace(service.config, max_concurrent_operations=1)
             server = StorageNativeNodeServer(root / 'socket' / 'storage.sock', service, require_root_peer=False)
-            thread = Thread(target=server.serve_forever, daemon=True)
+            thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
             thread.start()
             client = StorageNativeNodeClient(server.socket_path, timeout_seconds=2)
             entered, release = Event(), Event()

@@ -13,6 +13,7 @@ from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.images import DEFAULT_MAX_ACTIVE_IMAGE_BUILDS
 from ucloud_sandboxes.models import NodeHeartbeat, ResourceQuantity, utc_now
 from ucloud_sandboxes.registry import heartbeat_to_dict
+from tests.gateway_support import gateway_services
 
 
 class BuilderSelectionTests(unittest.TestCase):
@@ -39,7 +40,8 @@ class BuilderSelectionTests(unittest.TestCase):
             physical_disk_free_mb=240000,
         )
         self.handler = object.__new__(ControlPlaneHandler)
-        self.handler._ready_heartbeats = Mock(return_value=[self.busy, self.idle])
+        self.handler.services = gateway_services()
+        self.handler.services.fleet.ready_heartbeats = Mock(return_value=[self.busy, self.idle])
         self.handler._proxy_request = Mock(side_effect=self.probe)
 
     def probe(self, url, path, **kwargs):
@@ -96,19 +98,19 @@ class BuilderSelectionTests(unittest.TestCase):
         self.assertEqual(self.handler._select_builder_node(image_id="again"), self.idle)
 
     def test_single_full_builder_leaves_new_work_pending(self):
-        self.handler._ready_heartbeats.return_value = [self.busy]
+        self.handler.services.fleet.ready_heartbeats.return_value = [self.busy]
         self.assertIsNone(self.handler._select_builder_node(image_id="only"))
         self.assertEqual(self.handler._proxy_request.call_count, 2)
 
     def test_single_full_builder_still_receives_existing_build_retry(self):
-        self.handler._ready_heartbeats.return_value = [self.busy]
+        self.handler.services.fleet.ready_heartbeats.return_value = [self.busy]
         self.handler._proxy_request.side_effect = None
         self.handler._proxy_request.return_value = self.response(200, {"build": {"status": "running"}})
         self.assertEqual(self.handler._select_builder_node(image_id="existing"), self.busy)
 
     def test_all_full_builders_leave_work_unassigned_until_a_peer_frees(self):
         self.idle = replace(self.idle, active_image_builds=4)
-        self.handler._ready_heartbeats.return_value = [self.busy, self.idle]
+        self.handler.services.fleet.ready_heartbeats.return_value = [self.busy, self.idle]
         with (
             patch.dict(control_plane._BUILDER_DISPATCH_COUNTS, {}, clear=True),
             patch.dict(control_plane._BUILDER_DISPATCH_INFLIGHT, {}, clear=True),
@@ -124,12 +126,12 @@ class BuilderSelectionTests(unittest.TestCase):
 
     def test_burst_uses_live_load_instead_of_stale_periodic_heartbeat(self):
         stale = replace(self.busy, active_image_builds=0, physical_disk_free_mb=999999)
-        self.handler._ready_heartbeats.return_value = [stale, self.idle]
+        self.handler.services.fleet.ready_heartbeats.return_value = [stale, self.idle]
         self.assertEqual(self.handler._select_builder_node(image_id="burst"), self.idle)
 
     def test_live_capacity_can_reopen_or_close_a_periodically_full_builder(self):
         stale = replace(self.busy, labels={BUILD_ADMISSION_CAPACITY_LABEL: "4"})
-        self.handler._ready_heartbeats.return_value = [stale]
+        self.handler.services.fleet.ready_heartbeats.return_value = [stale]
         self.busy = replace(self.busy, labels={BUILD_ADMISSION_CAPACITY_LABEL: "6"})
         self.assertEqual(self.handler._select_builder_node(image_id="new"), self.busy)
         for capacity in ("4", "0", "bad"):
@@ -141,7 +143,7 @@ class BuilderSelectionTests(unittest.TestCase):
         stale = replace(self.busy, labels={
             BUILD_ADMISSION_CAPACITY_LABEL: "6", "controller-owned": "keep",
         })
-        self.handler._ready_heartbeats.return_value = [stale]
+        self.handler.services.fleet.ready_heartbeats.return_value = [stale]
         # The live legacy node is full at four; the periodic six-slot hint
         # must not survive refresh and dispatch another build to it.
         self.assertIsNone(self.handler._select_builder_node(image_id="new"))
@@ -154,7 +156,7 @@ class BuilderSelectionTests(unittest.TestCase):
         for capacity in ("0", "bad"):
             with self.subTest(capacity=capacity):
                 owner = replace(self.busy, labels={BUILD_ADMISSION_CAPACITY_LABEL: capacity})
-                self.handler._ready_heartbeats.return_value = [owner]
+                self.handler.services.fleet.ready_heartbeats.return_value = [owner]
                 self.handler._proxy_request.side_effect = None
                 self.handler._proxy_request.return_value = self.response(
                     200, {"build": {"status": "running"}},
@@ -171,7 +173,7 @@ class BuilderSelectionTests(unittest.TestCase):
                     active_image_builds=4, labels={BUILD_ADMISSION_CAPACITY_LABEL: "6"}),
         ]
         sampled = Barrier(8)
-        self.handler._ready_heartbeats.return_value = nodes
+        self.handler.services.fleet.ready_heartbeats.return_value = nodes
 
         def probe(url, path, **kwargs):
             current = next(node for node in nodes if node.node_url == url)
@@ -219,7 +221,7 @@ class BuilderSelectionTests(unittest.TestCase):
             for i in range(4)
         ]
         sampled = Barrier(20)
-        self.handler._ready_heartbeats.return_value = nodes
+        self.handler.services.fleet.ready_heartbeats.return_value = nodes
 
         def probe(url, path, **kwargs):
             current = next(h for h in nodes if h.node_url == url)
@@ -247,9 +249,9 @@ class BuilderSelectionTests(unittest.TestCase):
             self.assertTrue(all(v == 0 for v in control_plane._BUILDER_DISPATCH_INFLIGHT.values()))
 
     def test_selection_counts_dispatch_still_waiting_for_builder_acceptance(self):
-        self.handler._ready_heartbeats.return_value = [self.idle, replace(self.idle, job_id="3", node_id="c-idle", node_url="http://third")]
+        self.handler.services.fleet.ready_heartbeats.return_value = [self.idle, replace(self.idle, job_id="3", node_id="c-idle", node_url="http://third")]
         self.handler._proxy_request.side_effect = lambda url, path, **kw: self.response(
-            200, {"heartbeat": heartbeat_to_dict(next(h for h in self.handler._ready_heartbeats() if h.node_url == url))},
+            200, {"heartbeat": heartbeat_to_dict(next(h for h in self.handler.services.fleet.ready_heartbeats() if h.node_url == url))},
         )
         # Builds pack onto a builder until its slots are full; dispatches it
         # has not acknowledged yet count toward that.

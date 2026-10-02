@@ -6,12 +6,13 @@ import sqlite3
 from tempfile import TemporaryDirectory
 import unittest
 
+from tests.gateway_support import gateway_services
 from tests.test_control_plane import build_heartbeat, _sandbox_route
-from ucloud_sandboxes import control_plane
+from ucloud_sandboxes.gateway.placement import _node_can_fit_available
 from ucloud_sandboxes.control_state import ControlStateStore
 from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
-from ucloud_sandboxes.program_scheduler import node_pressure_score
+from ucloud_sandboxes.resource_admission import node_pressure_score
 from ucloud_sandboxes.runtime_metrics import sample_node_runtime_metrics
 
 
@@ -20,16 +21,15 @@ class IoPressurePlacementTests(unittest.TestCase):
         quiet = self.heartbeat("quiet")
         busy = replace(quiet, node_id="busy", job_id="busy", node_url="http://busy:8090",
                        runtime_metrics=replace(quiet.runtime_metrics, memory_working_set_mb=88000))
-        handler = object.__new__(control_plane.ControlPlaneHandler)
-        handler._placement_routes = lambda: []
-        handler._ready_sandbox_heartbeats = lambda **_kwargs: [busy, quiet]
-        handler._nodes_with_image = lambda *_args, **_kwargs: {"busy", "quiet"}
-        handler.registry_layer_cache = None
-        handler.create_target_concurrency_per_node = 4
+        placement = gateway_services().placement
+        placement.routes = lambda: []
+        placement.fleet.ready_sandbox_heartbeats = lambda **_kwargs: [busy, quiet]
+        placement.image_locality = lambda *_args, **_kwargs: {"busy", "quiet"}
+        placement.create_target_concurrency = 4
         requested = ResourceQuantity(1, 1024, 4096)
-        self.assertEqual(handler._select_node(requested, image="image").node_id, "quiet")
-        handler._ready_sandbox_heartbeats = lambda **_kwargs: [busy]
-        self.assertEqual(handler._select_node(requested, image="image").node_id, "busy")
+        self.assertEqual(placement.select(requested, image="image").node_id, "quiet")
+        placement.fleet.ready_sandbox_heartbeats = lambda **_kwargs: [busy]
+        self.assertEqual(placement.select(requested, image="image").node_id, "busy")
 
     def heartbeat(self, node, *, io=0, memory=0, used_disk=0):
         return build_heartbeat(
@@ -48,17 +48,16 @@ class IoPressurePlacementTests(unittest.TestCase):
     def test_placement_uses_stall_headroom_and_inflight_reservations(self):
         busy = self.heartbeat("busy", io=75, used_disk=500000)
         quiet = self.heartbeat("quiet")
-        handler = object.__new__(control_plane.ControlPlaneHandler)
+        placement = gateway_services().placement
         routes = []
-        handler._placement_routes = lambda: routes
-        handler._ready_sandbox_heartbeats = lambda **_kwargs: [busy, quiet]
-        handler._nodes_with_image = lambda *_args, **_kwargs: {"busy", "quiet"}
-        handler.registry_layer_cache = None
-        handler.create_target_concurrency_per_node = 4
+        placement.routes = lambda: routes
+        placement.fleet.ready_sandbox_heartbeats = lambda **_kwargs: [busy, quiet]
+        placement.image_locality = lambda *_args, **_kwargs: {"busy", "quiet"}
+        placement.create_target_concurrency = 4
         requested = ResourceQuantity(1, 1024, 4096)
         chosen = []
         for index in range(8):
-            node = handler._select_node(requested, image="image")
+            node = placement.select(requested, image="image")
             chosen.append(node.node_id)
             routes.append(_sandbox_route(
                 sandbox_id=str(index), node_id=node.node_id, job_id=node.job_id,
@@ -73,20 +72,19 @@ class IoPressurePlacementTests(unittest.TestCase):
         self.assertGreaterEqual(counts["quiet"], counts["busy"])
         self.assertGreater(counts["busy"], 0)
         # Even extreme I/O PSI only affects ranking; it cannot close admission.
-        handler._ready_sandbox_heartbeats = lambda **_kwargs: [self.heartbeat("busy", io=99)]
-        self.assertIsNotNone(handler._select_node(requested, image="image"))
+        placement.fleet.ready_sandbox_heartbeats = lambda **_kwargs: [self.heartbeat("busy", io=99)]
+        self.assertIsNotNone(placement.select(requested, image="image"))
 
     def test_completed_creates_remain_visible_to_load_balancing(self):
-        handler = object.__new__(control_plane.ControlPlaneHandler)
+        placement = gateway_services().placement
         routes = []
         nodes = [self.heartbeat(str(n), io=40 if n == 3 else 0) for n in range(4)]
-        handler._placement_routes = lambda: routes
-        handler._ready_sandbox_heartbeats = lambda **_kwargs: nodes
-        handler._nodes_with_image = lambda *_args, **_kwargs: {n.node_id for n in nodes}
-        handler.registry_layer_cache = None
-        handler.create_target_concurrency_per_node = 4
+        placement.routes = lambda: routes
+        placement.fleet.ready_sandbox_heartbeats = lambda **_kwargs: nodes
+        placement.image_locality = lambda *_args, **_kwargs: {n.node_id for n in nodes}
+        placement.create_target_concurrency = 4
         for index in range(256):
-            node = handler._select_node(ResourceQuantity(1, 1024, 4096), image="image")
+            node = placement.select(ResourceQuantity(1, 1024, 4096), image="image")
             routes.append(_sandbox_route(
                 sandbox_id=str(index), node_id=node.node_id, job_id=node.job_id,
                 node_url=node.node_url, state="running",
@@ -103,7 +101,7 @@ class IoPressurePlacementTests(unittest.TestCase):
         # Actual rc19 pressure run: balanced 35/36/37/38 owners, then three
         # heartbeats captured a startup CPU wave. They stayed cached while
         # the fourth worker accumulated 73 owners versus 55 on its peer.
-        handler = object.__new__(control_plane.ControlPlaneHandler)
+        placement = gateway_services().placement
         nodes = [replace(self.heartbeat(str(i)), runtime_metrics=replace(
             self.heartbeat(str(i)).runtime_metrics,
             cpu_percent=(98, 97, 84, 98)[i], cpu_count=32,
@@ -117,14 +115,13 @@ class IoPressurePlacementTests(unittest.TestCase):
                            state="running", spec={"image": "image"})
             for node, count in zip(nodes, (35, 36, 37, 38)) for i in range(count)
         ]
-        handler._placement_routes = lambda: routes
-        handler._ready_sandbox_heartbeats = lambda **_kwargs: nodes
-        handler._nodes_with_image = lambda *_args, **_kwargs: {n.node_id for n in nodes}
-        handler.registry_layer_cache = None
-        handler.create_target_concurrency_per_node = 4
+        placement.routes = lambda: routes
+        placement.fleet.ready_sandbox_heartbeats = lambda **_kwargs: nodes
+        placement.image_locality = lambda *_args, **_kwargs: {n.node_id for n in nodes}
+        placement.create_target_concurrency = 4
         selected = []
         for i in range(256 - len(routes)):
-            node = handler._select_node(request, image="image")
+            node = placement.select(request, image="image")
             self.assertIsNotNone(node)
             selected.append(node.node_id)
             routes.append(_sandbox_route(
@@ -137,9 +134,9 @@ class IoPressurePlacementTests(unittest.TestCase):
         self.assertEqual(set(selected), {str(i) for i in range(4)})
         # The other gateway paths keep their prior conservative admission
         # contract. This change is specifically create placement + recheck.
-        self.assertFalse(control_plane._node_can_fit_available(nodes[0], request,
+        self.assertFalse(_node_can_fit_available(nodes[0], request,
                                                                nodes[0].total_resources))
-        self.assertTrue(control_plane._node_can_fit_available(nodes[0], request,
+        self.assertTrue(_node_can_fit_available(nodes[0], request,
                           nodes[0].total_resources, check_cpu=False))
 
     def test_partial_memory_reclaim_is_a_ranking_signal(self):
@@ -149,22 +146,21 @@ class IoPressurePlacementTests(unittest.TestCase):
     def test_image_cache_affinity_does_not_hide_idle_worker(self):
         busy = self.heartbeat("busy", io=75)
         quiet = replace(self.heartbeat("quiet"), cached_images=())
-        handler = object.__new__(control_plane.ControlPlaneHandler)
-        handler._placement_routes = lambda: []
-        handler._ready_sandbox_heartbeats = lambda **_kwargs: [busy, quiet]
-        handler._nodes_with_image = lambda *_args, **_kwargs: {"busy"}
-        handler.registry_layer_cache = None
-        handler.create_target_concurrency_per_node = 4
+        placement = gateway_services().placement
+        placement.routes = lambda: []
+        placement.fleet.ready_sandbox_heartbeats = lambda **_kwargs: [busy, quiet]
+        placement.image_locality = lambda *_args, **_kwargs: {"busy"}
+        placement.create_target_concurrency = 4
         requested = ResourceQuantity(1, 1024, 4096)
-        self.assertEqual(handler._select_node(requested, image="image").node_id, "quiet")
+        self.assertEqual(placement.select(requested, image="image").node_id, "quiet")
         # Retain locality when both nodes have comparable pressure/headroom.
         busy = self.heartbeat("busy")
-        self.assertEqual(handler._select_node(requested, image="image").node_id, "busy")
+        self.assertEqual(placement.select(requested, image="image").node_id, "busy")
 
     def test_image_locality_outranks_assigned_shapes_below_the_load_band(self):
         warm = self.heartbeat("warm")
         empty = replace(self.heartbeat("empty"), cached_images=())
-        handler = object.__new__(control_plane.ControlPlaneHandler)
+        placement = gateway_services().placement
         requested = ResourceQuantity(4, 8192, 10240)
         # The warm node already runs ten large sandboxes of this image.
         routes = [
@@ -173,14 +169,13 @@ class IoPressurePlacementTests(unittest.TestCase):
                            state="running", spec={"image": "image"})
             for i in range(10)
         ]
-        handler._placement_routes = lambda: routes
-        handler._ready_sandbox_heartbeats = lambda **_kwargs: [warm, empty]
-        handler._nodes_with_image = lambda *_args, **_kwargs: {"warm"}
-        handler.registry_layer_cache = None
-        handler.create_target_concurrency_per_node = 8
+        placement.routes = lambda: routes
+        placement.fleet.ready_sandbox_heartbeats = lambda **_kwargs: [warm, empty]
+        placement.image_locality = lambda *_args, **_kwargs: {"warm"}
+        placement.create_target_concurrency = 8
         chosen = []
         for index in range(8):
-            node = handler._select_node(requested, image="image")
+            node = placement.select(requested, image="image")
             chosen.append(node.node_id)
             routes.append(_sandbox_route(
                 sandbox_id=f"new-{index}", node_id=node.node_id, job_id=node.job_id,

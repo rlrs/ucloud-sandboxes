@@ -3,12 +3,13 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from tests.test_environment_artifact import EnvironmentArtifactTests
+# Import the module, not the TestCase: discovery would rerun it here.
+from tests import test_environment_artifact as artifact_fixtures
 from ucloud_sandboxes.environment_artifact import OCI_IMAGE, attach_environment_to_image, canonical_bytes, publish_environment
 from ucloud_sandboxes.environment_dependencies import EnvironmentDependencyResolver
 from ucloud_sandboxes.environment_manifest import EnvironmentManifest
 
-from ucloud_sandboxes.control_plane import _persist_registry_image_protection, _release_registry_reference_keys
+from ucloud_sandboxes.gateway.registry_refs import _persist_registry_image_protection, _release_registry_reference_keys
 from ucloud_sandboxes.managed_registry import RegistryUsageStore, digest_protection_tag
 
 
@@ -57,7 +58,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class EnvironmentCachedDependencyTests(EnvironmentArtifactTests):
+class EnvironmentCachedDependencyTests(artifact_fixtures.EnvironmentArtifactTests):
     def test_cached_closure_recreates_tags_after_owner_release_and_registry_gc(self):
         root = publish_environment(self.registry, source_image=self.component.source_image,
             environment=EnvironmentManifest(self.digest), image_config={}, signing_key=self.key, tag="root")

@@ -28,11 +28,12 @@ _PHASES = frozenset(("docker_build_and_push_ms", "docker_build_ms", "docker_push
                      "immutable_environment_ms", "cleanup_ms", "cache_prepare_ms", "cache_mount_ms",
                      "finishing_wait_ms"))
 _ENVIRONMENT = frozenset(("total_ms", "preflight_ms", "docker_pull_ms", "layer_lock_wait_ms",
-    "component_lookup_ms", "squash_ms", "mkfs_ms", "sign_ms", "publish_component_ms",
+    "component_lookup_ms", "squash_ms", "normalize_times_ms", "mkfs_ms", "sign_ms", "publish_component_ms",
     "groups_reused", "groups_built", "erofs_bytes_built", "preflight_misses", "docker_pull_skipped",
     "selective_materialization_ms", "selective_subprocess_ms", "selective_materializations", "selective_fallbacks",
     "oci_layers_materialized", "oci_download_bytes", "oci_download_bytes_actual",
-    "oci_transfer_ms", "oci_decompress_ms", "oci_extract_ms")) | frozenset(
+    "oci_transfer_ms", "oci_decompress_ms", "oci_extract_ms", "metadata_hint_ms", "metadata_hints",
+    "metadata_hint_unsupported", "metadata_hint_chunks", "metadata_hint_bytes")) | frozenset(
         "selective_fallback_" + reason for reason in FALLBACK_REASONS)
 
 

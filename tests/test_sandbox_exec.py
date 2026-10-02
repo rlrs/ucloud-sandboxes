@@ -16,6 +16,8 @@ from ucloud_sandboxes.sandbox_exec import (
     new_exec_session_id,
 )
 
+TEST_TIER = "contract"
+
 
 class SandboxExecProtocolTests(unittest.TestCase):
     def test_start_timings_separate_capacity_wait_from_thread_cpu_and_child_execution(self):
@@ -138,6 +140,7 @@ class SandboxExecProtocolTests(unittest.TestCase):
         from ucloud_sandboxes.telemetry import Telemetry
 
         handler = object.__new__(NodeAgentHandler)
+        handler.headers = {}
         handler.telemetry = Telemetry.disabled("test")
         handler.exec_manager = Mock()
         handler.exec_manager.start.side_effect = ExecSessionCapacityError("full")

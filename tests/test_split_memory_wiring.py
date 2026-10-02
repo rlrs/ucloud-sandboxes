@@ -12,11 +12,14 @@ from unittest.mock import Mock, patch
 
 from tests import test_direct_provisioner as direct_fixtures
 from tests import test_vm_init as vm_fixtures
+from tests.support import make_dirs
 from ucloud_sandboxes import cli
 from ucloud_sandboxes.config import DeploymentConfig
 from ucloud_sandboxes.direct_service import DirectSandboxService
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
 from ucloud_sandboxes.vm_init import render_vm_init_script
+
+TEST_TIER = "contract"
 
 
 class SplitMemoryWiringTests(unittest.TestCase):
@@ -160,7 +163,7 @@ class SplitMemoryWiringTests(unittest.TestCase):
             root = Path(directory).resolve()
             runner = Overlay2Runner(root / "docker")
             workspace = root / "quota" / "workspace-sandbox.sandbox-1"
-            (workspace / "upper").mkdir(parents=True)
+            make_dirs(workspace / "upper")
             (workspace / "work").mkdir()
             (workspace / "work" / "stale").write_text("source scratch")
             (workspace / "upper" / "data").write_text("keep")

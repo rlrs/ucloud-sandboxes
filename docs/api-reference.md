@@ -105,16 +105,7 @@ refreshed.
   "autoscaler": {
     "actions": [],
     "reasons": ["capacity is sufficient"],
-    "program_wake_plan": {
-      "queued": 1,
-      "placed": 1,
-      "unplaced_count": 0,
-      "placements": [{"request_id": "request-1", "node_id": "node-1"}],
-      "placements_truncated": 0,
-      "unplaced_truncated": 0
-    },
     "effective_policy": {
-      "program_aware_autoscaling_enabled": false,
       "target_cpu_utilization": 0.75,
       "target_memory_utilization": 0.8
     }
@@ -153,14 +144,13 @@ refreshed.
 }
 ```
 
-The compact response keeps at most 100 wake placements and 100 unplaced wake
-samples from the latest autoscaler cycle and reports omitted counts. This
-prevents a model-return burst from making every dashboard poll proportional to
-the entire wake queue. `effective_policy` contains only non-secret operational
-knobs and is observational; `/v1/metrics` does not provide a policy mutation
-path. It contains every `ScalePolicy` field, including feedback windows,
-provisioning credit, heartbeat and unreachable leases, idle grace, and warm
-resources.
+`programs` reports counts, resources, ages and latency percentiles per request
+phase; it never lists individual requests, so a model-return burst does not make
+every dashboard poll proportional to the queue. `effective_policy` contains only
+non-secret operational knobs and is observational; `/v1/metrics` does not
+provide a policy mutation path. It contains every `ScalePolicy` field, including
+feedback windows, provisioning credit, heartbeat and unreachable leases, idle
+grace, and warm resources.
 
 The autoscaler object also includes an `execution` section. Its `scale_down`
 object separates requested, planned, blocked, draining, drain-ready,

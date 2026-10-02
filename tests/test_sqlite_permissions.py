@@ -9,6 +9,8 @@ from unittest.mock import patch
 from ucloud_sandboxes.control_state import ControlStateStore
 from ucloud_sandboxes.routing import RoutingStore
 
+TEST_TIER = "contract"
+
 
 class SqlitePermissionTests(unittest.TestCase):
     def test_pooled_reads_check_database_and_new_connections_audit_sidecars(self):

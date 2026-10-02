@@ -1,7 +1,6 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-import json
 import unittest
 
 from ucloud_sandboxes.models import (

@@ -4,14 +4,52 @@ from __future__ import annotations
 
 from datetime import datetime
 import math
+from typing import TYPE_CHECKING, Iterable
 
-from .models import NodeHeartbeat, ResourceQuantity, ScalePolicy
+from .models import NodeHeartbeat, ResourceQuantity, ScalePolicy, parse_iso_datetime
+
+if TYPE_CHECKING:
+    from .routing import SandboxRoute
 
 
 def consolidation_rank(node: NodeHeartbeat) -> tuple[int, str, str]:
     # UCloud job IDs are increasing decimal strings. This remains a stable
     # total order for other providers and does not depend on changing load.
     return len(node.job_id), node.job_id, node.node_id
+
+
+def observed_memory_mb(
+    route: SandboxRoute,
+    heartbeats: Iterable[NodeHeartbeat],
+    *,
+    now: datetime,
+    max_age_seconds: float,
+) -> int | None:
+    """One exact-owner/incarnation observation; it only tightens the memory check."""
+    for heartbeat in heartbeats:
+        if (
+            heartbeat.job_id != route.job_id
+            or heartbeat.node_id != route.node_id
+            or (route.node_epoch and heartbeat.node_epoch != route.node_epoch)
+            or not heartbeat.is_fresh(now, max_age_seconds)
+        ):
+            continue
+        for entry in heartbeat.inventory:
+            if (
+                entry.sandbox_id != route.sandbox_id
+                or entry.generation != route.generation
+                or entry.spec_hash != route.spec_hash
+                or entry.memory_observation is None
+            ):
+                continue
+            sample = entry.memory_observation
+            sampled_at = parse_iso_datetime(sample.sampled_at)
+            if (
+                sampled_at is not None
+                and 0 <= (now - sampled_at).total_seconds() <= max_age_seconds
+            ):
+                return (sample.memory_bytes + 1024**2 - 1) // 1024**2
+    return None
 
 
 def can_consolidate_wake(

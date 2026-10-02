@@ -55,6 +55,8 @@ from ucloud_sandboxes.storage_native_s3_gc import (
 )
 from ucloud_sandboxes.telemetry import Telemetry
 
+TEST_TIER = "contract"
+
 
 class LifecycleBoundaryTests(unittest.TestCase):
     def test_delayed_delete_cannot_destroy_replacement_generation(self):
@@ -115,6 +117,8 @@ class LifecycleBoundaryTests(unittest.TestCase):
                 fixture = direct_fixtures.DirectProvisionerTests()
                 provisioner, *_ = fixture.make(Path(directory).resolve())
                 service = DirectSandboxService(provisioner)
+                # Pressure never clears here; a short bound keeps the bounded wait.
+                service.admission_wait_seconds = .05
                 fixture.create(service, fixture.spec())
                 service.park("sandbox", operation_id="park:test")
                 service.configure_active_capacity(
@@ -374,7 +378,7 @@ class StorageBoundaryTests(unittest.TestCase):
                 require_root_peer=False,
                 telemetry=Telemetry.disabled("test"),
             )
-            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
             thread.start()
             try:
                 client = StorageNativeNodeClient(root / "s.sock")

@@ -24,6 +24,8 @@ from ucloud_sandboxes.models import (
 from ucloud_sandboxes.policy import _nodes_for_unplaced_requests, evaluate_scale
 from ucloud_sandboxes.routing import RoutingStore, sandbox_demand_from_routing_state
 
+TEST_TIER = "contract"
+
 
 class StartupScalingTests(unittest.TestCase):
     def test_batched_placement_preserves_fragmented_disk_and_reusable_memory(self):

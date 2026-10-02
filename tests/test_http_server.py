@@ -10,6 +10,8 @@ from unittest.mock import patch
 from ucloud_sandboxes.http_server import HighBacklogThreadingHTTPServer
 from ucloud_sandboxes.http_server import JsonHttpHandler, RequestBodyTooLargeError
 
+TEST_TIER = "contract"
+
 
 class _NoopHandler:
     def __init__(self, request, client_address, server) -> None:

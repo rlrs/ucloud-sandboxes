@@ -25,6 +25,7 @@ from psycopg.types.json import Jsonb
 from ..models import utc_now
 from ..sandbox import SandboxSpec, sandbox_spec_fingerprint
 from .database import PostgresDatabase
+from .model import cancel_until_done
 from .routing_repository import ROUTING_ADDITIVE_DDL
 
 LOGGER = logging.getLogger(__name__)
@@ -84,9 +85,8 @@ class PlacementHints:
 
     async def close(self):
         tasks, self._tasks = self._tasks, ()
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        # Both loops are unbounded; one consumed cancel would never end them.
+        await cancel_until_done(*tasks)
 
     async def _notify_loop(self):
         while True:
@@ -398,7 +398,7 @@ class PlacementQueueClient:
                     0.001, (submission.deadline - utc_now()).total_seconds() + 60
                 ),
             )
-        except TimeoutError:
+        except asyncio.TimeoutError:  # Not the builtin TimeoutError before 3.11.
             return (
                 504,
                 {"Content-Type": "application/json"},
@@ -438,8 +438,8 @@ class PlacementQueueClient:
         # Wait for startup ownership to settle before closing its pools.
         async with self._ready:
             if self._poller is not None:
-                self._poller.cancel()
-                await asyncio.gather(self._poller, return_exceptions=True)
+                # It polls while waiters remain, and they clear only below.
+                await cancel_until_done(self._poller)
             for waiters in self.waiters.values():
                 for future in waiters:
                     future.cancel()
@@ -626,7 +626,7 @@ class PlacementQueueWorker:
                     )
                     return
             await self._complete(command, status, headers, body)
-        except (aiohttp.ClientError, OSError, TimeoutError):
+        except (aiohttp.ClientError, OSError, asyncio.TimeoutError):
             # Replay only these generation/operation-fenced lifecycle commands.
             # Exec, upload, model inference and arbitrary mutations never enter.
             if command["deadline"] <= utc_now():

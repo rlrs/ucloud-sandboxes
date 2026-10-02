@@ -14,6 +14,8 @@ from hypothesis.stateful import RuleBasedStateMachine, invariant, precondition, 
 from tests.postgres_fixture import postgres_database
 from ucloud_sandboxes.model_relay import RelayWorkerResponse
 
+TEST_TIER = "contract"
+
 _Result = TypeVar("_Result")
 
 

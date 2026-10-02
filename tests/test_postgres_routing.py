@@ -7,7 +7,10 @@ from unittest.mock import patch
 from uuid import uuid4
 from threading import Lock
 
-from tests.test_routing import RoutingStoreTests
+# Import the module, not the TestCase: discovery would rerun it here.
+from tests import test_routing as sqlite_routing
+
+TEST_TIER = "contract"
 
 DSN = os.environ.get("UCLOUD_TEST_POSTGRES_DSN")
 
@@ -107,5 +110,5 @@ for _name in CONTRACTS:
     setattr(
         PostgresRoutingContracts,
         "test_" + _name,
-        getattr(RoutingStoreTests, "test_" + _name),
+        getattr(sqlite_routing.RoutingStoreTests, "test_" + _name),
     )

@@ -26,6 +26,9 @@ from ucloud_sandboxes.storage_native_registry import (
     PublishedStorageLayer,
     StorageSnapshotPublication,
 )
+from tests.support import make_dirs
+
+TEST_TIER = "contract"
 
 
 class StorageNativeMigrationTests(unittest.TestCase):
@@ -63,8 +66,8 @@ class StorageNativeMigrationTests(unittest.TestCase):
         incarnation = root / "sandbox.sandbox-7"
         generation = incarnation / "hibernate-3"
         upper = incarnation / "upper"
-        generation.mkdir(parents=True)
-        upper.mkdir()
+        make_dirs(generation)
+        make_dirs(upper)
         (upper / "workspace").mkdir()
         (upper / "workspace" / "answer.txt").write_text("portable\n")
         (upper / "relative-link").symlink_to("../workspace")
@@ -150,8 +153,8 @@ class StorageNativeMigrationTests(unittest.TestCase):
             root = Path(raw).resolve()
             source_root = root / "source"
             destination_root = root / "destination"
-            source_root.mkdir()
-            destination_root.mkdir()
+            make_dirs(source_root)
+            make_dirs(destination_root)
             registration, source_manifest, source = self.make_source(source_root)
             portable = StorageNativeSandboxManifest.from_local(
                 registration,

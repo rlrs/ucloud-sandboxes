@@ -10,6 +10,7 @@ from unittest.mock import patch
 from tests.test_control_plane import _gateway_server, _sandbox_route, build_heartbeat
 from tests import test_wake_capacity as capacity_fixtures
 from ucloud_sandboxes import control_plane
+from ucloud_sandboxes.gateway import placement
 from ucloud_sandboxes.models import ResourceQuantity
 
 
@@ -23,7 +24,7 @@ class WakeBatchTests(unittest.TestCase):
             capabilities=("sandbox", "disk-quota"),
             total_resources=ResourceQuantity(vcpu=32, memory_mb=98304, disk_mb=1000000),
         ))
-        handler.store.upsert_heartbeat(owner)
+        handler.services.fleet.store.upsert_heartbeat(owner)
         routes = []
         for n in range(count):
             route = _sandbox_route(
@@ -38,7 +39,7 @@ class WakeBatchTests(unittest.TestCase):
     def test_batch_respects_device_capacity_and_deduplicates_wake(self):
         with TemporaryDirectory() as temp:
             handler, routes = self.fixture(Path(temp), 3, device_bound=True)
-            with handler._wake_placement_reservation():
+            with handler.services.placement.reservation():
                 results = handler._reserve_local_wake_batch([
                     (handler, r, None) for r in [routes[0], routes[0], *routes[1:]]
                 ])
@@ -54,7 +55,7 @@ class WakeBatchTests(unittest.TestCase):
             with patch.object(handler.routing_store, "reserve_sandbox_wakes",
                               wraps=handler.routing_store.reserve_sandbox_wakes) as commit:
                 with ThreadPoolExecutor(max_workers=len(routes)) as pool:
-                    with control_plane._GATEWAY_SCHEDULING_LOCK:
+                    with placement._GATEWAY_SCHEDULING_LOCK:
                         futures = [pool.submit(batcher.reserve, handler, r) for r in routes]
                         deadline = time.monotonic() + 5
                         while True:

@@ -240,6 +240,7 @@ class MemoryBackingStore:
         hard_capacity_bytes: int,
         quota: XfsMemoryQuota | None = None,
         active_root: Path | None = None,
+        ram_swappable: bool = False,
     ) -> None:
         if (
             not root.is_absolute()
@@ -265,10 +266,10 @@ class MemoryBackingStore:
             if (
                 len(fields) != 2
                 or fields[0] != "tmpfs"
-                or "noswap" not in fields[1].split(",")
+                or ("noswap" in fields[1].split(",")) == ram_swappable
             ):
                 raise MemoryBackingError(
-                    "active RAM backing requires tmpfs with noswap"
+                    "active RAM backing requires tmpfs, swappable only on pause-tier nodes"
                 )
         self.root = root
         self.journal = journal

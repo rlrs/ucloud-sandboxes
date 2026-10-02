@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from contextlib import contextmanager
+import ctypes
+from dataclasses import dataclass, replace
+import errno
 import fcntl
 import hashlib
 import ipaddress
@@ -17,6 +20,7 @@ import threading
 import time
 from typing import Callable, Mapping, Sequence
 
+from . import phase_timings
 from .network_policy import SandboxNetworkPolicy
 from .relay_network import (
     RELAY_FORWARD_MARK,
@@ -42,6 +46,13 @@ MAX_NETWORK_SLOTS = (NETWORK_CIDR.num_addresses // 2) - 1
 # veth default at 1500 allows small requests through but black-holes larger TLS
 # records when upstream ICMP fragmentation feedback is filtered.
 NETWORK_MTU = 1420
+# Pre-created netns+veth pairs a node keeps for new leases: one burst of the
+# 32 concurrent creates the create gate measures.
+NETWORK_POOL_SIZE = 32
+# The refill defers to in-flight ensures for at most this long per pair, so a
+# sustained create stream still refills slowly instead of never.
+_POOL_YIELD_SECONDS = 1.0
+_POOL_RETRY_SECONDS = 5.0
 DEFAULT_EGRESS_RESOLVE_INTERVAL_SECONDS = 2.0
 DENIED_DESTINATIONS = (
     "10.0.0.0/8",
@@ -55,6 +66,29 @@ DENIED_DESTINATIONS = (
 
 class DirectNetworkError(RuntimeError):
     pass
+
+
+def _write_durably(path: Path, payload: object) -> None:
+    """Replace ``path`` with compact JSON; fsync the file, then its directory."""
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, sort_keys=True, separators=(",", ":"))
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
 
 
 @dataclass(frozen=True)
@@ -119,7 +153,14 @@ class DirectNetworkTcpEgress:
 
 
 class DirectNetworkManager:
-    """Crash-durable owner of direct-runtime netns/veth/NAT slots."""
+    """Crash-durable owner of direct-runtime netns/veth/NAT slots.
+
+    A background thread keeps ``pool_size`` slots in the durable ``pool``,
+    each with a configured pair in namespace ``ucloud-pool-<slot>``. A slot is
+    in ``leases`` or ``pool``, never both, and moves in the write that records
+    its lease, so a pair has one owner. A pooled name a crash leaves behind
+    belongs to the slot's lease: its next ensure attaches it, or release drops it.
+    """
 
     def __init__(
         self,
@@ -133,13 +174,24 @@ class DirectNetworkManager:
         resolver: Callable[[str], Sequence[str]] | None = None,
         ip_batch_runner: Callable[[Sequence[str], str], None] | None = None,
         resolve_interval_seconds: float = DEFAULT_EGRESS_RESOLVE_INTERVAL_SECONDS,
+        pool_size: int = 0,
     ) -> None:
         if not state_path.is_absolute() or not namespace_root.is_absolute():
             raise ValueError("direct network paths must be absolute")
         if resolve_interval_seconds <= 0:
             raise ValueError("direct network resolve interval must be positive")
+        if not 0 <= pool_size <= 1024:
+            raise ValueError("direct network pool size must be in 0..1024")
         self.state_path = state_path
         self.lock_path = state_path.with_suffix(state_path.suffix + ".lock")
+        self.pool_size = pool_size
+        # Only slots this process configured while owning the pool are handed
+        # out; other durable pool slots are rechecked first.
+        self._pool_ready: set[int] = set()
+        self._pool_guard = threading.Lock()
+        self._pool_wake, self._pool_stop = threading.Event(), threading.Event()
+        self._pool_thread: threading.Thread | None = None
+        self._foreground = 0
         self.egress_state_path = state_path.with_suffix(
             state_path.suffix + ".egress.json"
         )
@@ -160,7 +212,8 @@ class DirectNetworkManager:
         self._relay_applied: dict[int, str] = {}
         self._relay_table_ready = False
         self.runner = runner or self._run
-        self.ip_batch_runner = ip_batch_runner or (self._run_ip_batch if runner is None else None)
+        self.ip_batch_runner = ip_batch_runner or (
+            self._run_ip_batch if runner is None else self._split_ip_batch)
         self._host_rules_observed_at = float("-inf")
         self.resolver = resolver or self._resolve_ipv4
         self.resolve_interval_seconds = float(resolve_interval_seconds)
@@ -215,13 +268,17 @@ class DirectNetworkManager:
         if any(ipaddress.IPv4Address(item) not in NETWORK_CIDR for item in avoided):
             raise ValueError("avoided guest IP is outside the direct network")
         key = self._key(sandbox_id, sandbox_generation)
-        with self._lease_locked(key):
+        with self._lease_locked(key), self._foreground_work():
+            pooled = False
             with self._locked():
                 state = self._load()
                 slot = state["leases"].get(key)
                 if slot is None:
+                    slot = self._claim_pooled(state, avoided)
+                    pooled = slot is not None
                     used = {int(item) for item in state["leases"].values()}
-                    slot = next(
+                    used.update(state["pool"])
+                    slot = slot or next(
                         (candidate for candidate in range(1, MAX_NETWORK_SLOTS + 1)
                          if candidate not in used
                          and self._lease(
@@ -233,6 +290,7 @@ class DirectNetworkManager:
                     )
                     if slot is None:
                         raise DirectNetworkError("direct network slot capacity is exhausted")
+                    # One durable write moves a pooled slot to this lease.
                     state["leases"][key] = slot
                     if network_policy.egress == "relay":
                         state.setdefault("policies", {})[key] = network_policy.to_dict()
@@ -254,7 +312,8 @@ class DirectNetworkManager:
                     # No TTL: a later request must take a new kernel snapshot.
                     observed_at = time.monotonic()
                     self._host_rules_observed_at = float("-inf")
-                    self._ensure_host_rules()
+                    with phase_timings.phase("network_host_rules"):  # Deliberate per-create cost.
+                        self._ensure_host_rules()
                     self._host_rules_observed_at = observed_at
                 if network_policy.egress == "relay":
                     addresses = self._resolve_relay(network_policy.relay)
@@ -263,8 +322,123 @@ class DirectNetworkManager:
                         raise DirectNetworkError(
                             "relay has no usable IPv4 address; egress is blocked"
                         )
-            self._ensure_kernel_lease(lease)
+            # A pair the pool configured needs only its name; any other lease,
+            # and a handoff a crash interrupted, is checked and repaired.
+            adopted = self._adopt_pooled(lease)
+            if not (pooled and adopted and self._interface_present(lease.host_interface)):
+                self._ensure_kernel_lease(lease)
             return lease
+
+    def start_pool(self) -> None:
+        """Start the low-priority refill, or the trim of a disabled pool."""
+        if self._pool_thread is not None and self._pool_thread.is_alive():
+            return
+        if self.pool_size == 0:
+            with self._locked():
+                if not self._load()["pool"]:
+                    return
+        self._pool_stop.clear()
+        self._pool_thread = threading.Thread(
+            target=self._pool_loop, name="ucloud-direct-network-pool", daemon=True
+        )
+        self._pool_thread.start()
+
+    def stop_pool(self) -> None:
+        """Stop refilling. Pooled slots stay durable and are rechecked on start."""
+        self._pool_stop.set()
+        self._pool_wake.set()
+        if self._pool_thread is not None:
+            self._pool_thread.join(timeout=10)
+        self._pool_thread = None
+
+    @contextmanager
+    def _foreground_work(self):
+        with self._pool_guard:
+            self._foreground += 1
+        try:
+            yield
+        finally:
+            with self._pool_guard:
+                self._foreground -= 1
+
+    def _claim_pooled(self, state: dict, avoided: set[str]) -> int | None:
+        """Move one configured slot out of ``state["pool"]``."""
+        with self._pool_guard:
+            # A ready slot no longer pooled was leased by an older release.
+            self._pool_ready.intersection_update(state["pool"])
+            slot = min((item for item in self._pool_ready
+                        if self._pool_lease(item).guest_ip not in avoided), default=None)
+            if slot is not None:
+                self._pool_ready.discard(slot)
+                state["pool"].remove(slot)
+                self._pool_wake.set()
+        return slot
+
+    def _pool_loop(self) -> None:
+        # Low priority by deferral, not SCHED_IDLE: this thread shares the GIL
+        # and the state lock with creates, and starving a holder stalls them.
+        owner = self.lock_path.with_name(self.lock_path.name + ".pool")
+        owner.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with owner.open("a+b") as handle:
+            try:
+                # One process owns the pool; others treat pooled slots as used.
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                _LOG.warning("another process owns the direct network pool")
+                return
+            try:
+                while not self._pool_stop.is_set():
+                    try:
+                        progressed = self._refill_one()
+                    except Exception:
+                        _LOG.exception("direct network pool refill failed; retrying")
+                        self._pool_stop.wait(_POOL_RETRY_SECONDS)
+                        continue
+                    if not progressed and self.pool_size == 0:
+                        return
+                    if not progressed:
+                        self._pool_wake.wait()
+                        self._pool_wake.clear()
+            finally:
+                with self._pool_guard:  # Hand-outs end before another owner starts.
+                    self._pool_ready.clear()
+
+    def _refill_one(self) -> bool:
+        """Fill, recheck or trim one pooled slot; False once the pool is settled."""
+        deadline = time.monotonic() + _POOL_YIELD_SECONDS
+        while self._foreground and time.monotonic() < deadline:
+            if self._pool_stop.wait(0.01):
+                return False
+        with self._locked():
+            state = self._load()
+            pool = state["pool"]
+            with self._pool_guard:
+                pending = [slot for slot in pool if slot not in self._pool_ready]
+                trim = len(pool) > self.pool_size
+                if trim:  # Under the state lock, so no hand-out holds it.
+                    slot = (pending or pool)[-1]
+                    self._pool_ready.discard(slot)
+            if not trim and pending:
+                slot = pending[0]
+            elif not trim:
+                used = set(pool).union(state["leases"].values())
+                free = (item for item in range(1, MAX_NETWORK_SLOTS + 1) if item not in used)
+                if len(pool) == self.pool_size or (slot := next(free, None)) is None:
+                    return False
+                # Durable before any kernel object exists, so none is orphaned.
+                state["pool"] = sorted((*pool, slot))
+                self._store(state)
+        if not trim:  # Recreated unless complete; configuration is idempotent.
+            self._ensure_kernel_lease(self._pool_lease(slot))
+            with self._pool_guard:
+                self._pool_ready.add(slot)
+            return True
+        self._cleanup_kernel_lease(self._pool_lease(slot))
+        with self._locked():
+            state = self._load()
+            state["pool"] = [item for item in state["pool"] if item != slot]
+            self._store(state)
+        return True
 
     def release(self, sandbox_id: str, sandbox_generation: int) -> None:
         key = self._key(sandbox_id, sandbox_generation)
@@ -688,45 +862,15 @@ class DirectNetworkManager:
         self,
         resolved: dict[DirectNetworkTcpEgress, tuple[str, ...]],
     ) -> None:
-        self.egress_state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        descriptor, temporary = tempfile.mkstemp(
-            prefix=f".{self.egress_state_path.name}.",
-            dir=self.egress_state_path.parent,
-        )
-        try:
-            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-                json.dump(
-                    {
-                        "version": 1,
-                        "endpoints": {
-                            endpoint.endpoint(): list(addresses)
-                            for endpoint, addresses in sorted(
-                                resolved.items(),
-                                key=lambda item: item[0].endpoint(),
-                            )
-                        },
-                    },
-                    handle,
-                    sort_keys=True,
-                    separators=(",", ":"),
+        _write_durably(self.egress_state_path, {
+            "version": 1,
+            "endpoints": {
+                endpoint.endpoint(): list(addresses)
+                for endpoint, addresses in sorted(
+                    resolved.items(), key=lambda item: item[0].endpoint()
                 )
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, self.egress_state_path)
-            directory = os.open(
-                self.egress_state_path.parent,
-                os.O_RDONLY | os.O_DIRECTORY,
-            )
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
-        finally:
-            try:
-                os.unlink(temporary)
-            except FileNotFoundError:
-                pass
+            },
+        })
 
     @staticmethod
     def _iptables_rule_key(command: Sequence[str]) -> tuple[str, ...]:
@@ -803,23 +947,15 @@ class DirectNetworkManager:
 
     def _ensure_kernel_lease(self, lease: DirectNetworkLease) -> None:
         namespace_exists = lease.namespace_path.exists()
-        interface_exists = self._command_ok(
-            ("ip", "link", "show", "dev", lease.host_interface)
-        )
-        guest_interface_exists = namespace_exists and self._command_ok(
-            (
-                "ip", "-n", lease.namespace, "link", "show", "dev", "eth0",
-            )
-        )
-        if namespace_exists and interface_exists and guest_interface_exists:
+        interface_exists = self._interface_present(lease.host_interface)
+        if namespace_exists and interface_exists:
             try:
+                # Fails without the guest eth0. runsc consumes the external
+                # netns wiring at checkpoint, so recreate a partial pair.
                 self._configure_kernel_lease(lease)
                 return
             except Exception:
-                # runsc consumes the external netns wiring when a sandbox is
-                # checkpointed. Treat any partially reusable lease as broken
-                # and recreate the veth pair before restore.
-                self._cleanup_kernel_lease(lease)
+                pass
         if namespace_exists or interface_exists:
             self._cleanup_kernel_lease(lease)
         self.namespace_root.mkdir(mode=0o755, parents=True, exist_ok=True)
@@ -837,66 +973,86 @@ class DirectNetworkManager:
             raise
 
     def _configure_kernel_lease(self, lease: DirectNetworkLease) -> None:
-        if self.ip_batch_runner is not None:
-            # ip processes each line synchronously and stops at the first
-            # failure. One namespace entry configures the complete guest side.
-            self.ip_batch_runner(("ip", "-batch", "-"),
-                f"link set dev {lease.host_interface} mtu {NETWORK_MTU} up\n"
-                f"address replace {lease.host_ip}/31 dev {lease.host_interface}\n")
-            self.ip_batch_runner(("ip", "-n", lease.namespace, "-batch", "-"),
-                "link set lo up\n"
-                f"link set dev eth0 mtu {NETWORK_MTU} up\n"
-                f"address replace {lease.guest_ip}/31 dev eth0\n"
-                f"route replace default via {lease.host_ip} dev eth0\n")
-            return
-        self._ensure_lease_mtu(lease)
-        self.runner(
-            (
-                "ip", "address", "replace", f"{lease.host_ip}/31",
-                "dev", lease.host_interface,
-            )
-        )
-        self.runner(("ip", "link", "set", lease.host_interface, "up"))
-        self.runner(
-            (
-                "ip", "-n", lease.namespace, "link", "set", "lo", "up",
-            )
-        )
-        self.runner(
-            (
-                "ip", "-n", lease.namespace, "address",
-                "replace", f"{lease.guest_ip}/31", "dev", "eth0",
-            )
-        )
-        self.runner(
-            (
-                "ip", "-n", lease.namespace, "link", "set", "eth0", "up",
-            )
-        )
-        self.runner(
-            (
-                "ip", "-n", lease.namespace, "route",
-                "replace", "default", "via", lease.host_ip, "dev", "eth0",
-            )
-        )
+        # ip processes each line synchronously and stops at the first
+        # failure. One namespace entry configures the complete guest side.
+        self.ip_batch_runner(("ip", "-batch", "-"),
+            f"link set dev {lease.host_interface} mtu {NETWORK_MTU} up\n"
+            f"address replace {lease.host_ip}/31 dev {lease.host_interface}\n")
+        self.ip_batch_runner(("ip", "-n", lease.namespace, "-batch", "-"),
+            "link set lo up\n"
+            f"link set dev eth0 mtu {NETWORK_MTU} up\n"
+            f"address replace {lease.guest_ip}/31 dev eth0\n"
+            f"route replace default via {lease.host_ip} dev eth0\n")
 
-    def _ensure_lease_mtu(self, lease: DirectNetworkLease) -> None:
-        self.runner(
-            (
-                "ip", "link", "set", "dev", lease.host_interface,
-                "mtu", str(NETWORK_MTU),
-            )
-        )
-        self.runner(
-            (
-                "ip", "-n", lease.namespace, "link", "set",
-                "dev", "eth0", "mtu", str(NETWORK_MTU),
-            )
-        )
+    def _split_ip_batch(self, argv: Sequence[str], commands: str) -> None:
+        """Give an injected runner each batch line as its own ip command."""
+        for line in commands.splitlines():
+            self.runner((*argv[:-2], *line.split()))
 
     def _cleanup_kernel_lease(self, lease: DirectNetworkLease) -> None:
+        # Delete the link first: dropping a namespace frees its veth only
+        # asynchronously, which could race a recreation of this name.
         self._run_best_effort(("ip", "link", "delete", lease.host_interface))
         self._run_best_effort(("ip", "netns", "delete", lease.namespace))
+        pooled = self._pool_lease(lease.slot).namespace_path
+        if pooled != lease.namespace_path and pooled.exists():
+            # Left by a crash after this lease took the slot from the pool.
+            self._detach_namespace(pooled)
+
+    def _pool_lease(self, slot: int) -> DirectNetworkLease:
+        name = f"ucloud-pool-{slot}"
+        return replace(self._lease("", 0, slot), namespace=name, namespace_path=self.namespace_root / name)
+
+    def _adopt_pooled(self, lease: DirectNetworkLease) -> bool:
+        """Name the slot's pooled namespace for ``lease``, then drop the pool's name.
+
+        The pool's name is dropped only once the namespace has another name.
+        Otherwise it stays, so cleanup deletes the link before the namespace.
+        """
+        source = self._pool_lease(lease.slot).namespace_path
+        if not source.exists():
+            return False
+        adopted = not lease.namespace_path.exists()
+        if adopted:
+            try:
+                self._attach_namespace(source, lease.namespace_path)
+            except OSError as exc:
+                _LOG.warning("could not attach pooled namespace %s: %s", source, exc)
+                return False
+        elif not os.path.samefile(source, lease.namespace_path):
+            return False
+        self._detach_namespace(source)
+        return adopted
+
+    @staticmethod
+    def _attach_namespace(source: Path, target: Path) -> None:
+        """Bind ``source``'s namespace at ``target``, as ``ip netns attach`` does."""
+        os.close(os.open(target, os.O_RDONLY | os.O_CREAT | os.O_EXCL, 0))
+        libc = ctypes.CDLL(None, use_errno=True)
+        if libc.mount(os.fsencode(source), os.fsencode(target), None, 4096, None):  # MS_BIND
+            code = ctypes.get_errno()
+            os.unlink(target)
+            raise OSError(code, os.strerror(code), str(target))
+
+    @staticmethod
+    def _detach_namespace(path: Path) -> None:
+        """Drop one name, as ``ip netns delete``; the namespace lives while named."""
+        if ctypes.CDLL(None, use_errno=True).umount2(os.fsencode(path), 2):  # MNT_DETACH
+            code = ctypes.get_errno()
+            if code not in {errno.EINVAL, errno.ENOENT}:  # unmounted, or gone
+                raise OSError(code, os.strerror(code), str(path))
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+
+    @staticmethod
+    def _interface_present(name: str) -> bool:
+        try:
+            socket.if_nametoindex(name)
+        except OSError:
+            return False
+        return True
 
     def _lease(
         self,
@@ -933,7 +1089,7 @@ class DirectNetworkManager:
         try:
             raw = json.loads(self.state_path.read_text(encoding="utf-8"))
         except FileNotFoundError:
-            return {"version": NETWORK_STATE_VERSION, "leases": {}}
+            return {"version": NETWORK_STATE_VERSION, "leases": {}, "pool": []}
         if (
             not isinstance(raw, dict)
             or raw.get("version") != NETWORK_STATE_VERSION
@@ -952,31 +1108,17 @@ class DirectNetworkManager:
                 raise DirectNetworkError("invalid persisted relay policy")
         if len(set(raw["leases"].values())) != len(raw["leases"]):
             raise DirectNetworkError("direct network state double-allocates a slot")
+        pool = raw.setdefault("pool", [])
+        if not isinstance(pool, list) or len(set(pool)) != len(pool) or any(
+            type(slot) is not int or not 1 <= slot <= MAX_NETWORK_SLOTS for slot in pool
+        ):
+            raise DirectNetworkError("direct network pool state is invalid")
+        # Releases before the pool ignore it and may lease a pooled slot.
+        raw["pool"] = sorted(set(pool).difference(raw["leases"].values()))
         return raw
 
     def _store(self, state: dict) -> None:
-        self.state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        descriptor, temporary = tempfile.mkstemp(
-            prefix=f".{self.state_path.name}.",
-            dir=self.state_path.parent,
-        )
-        try:
-            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-                json.dump(state, handle, sort_keys=True, separators=(",", ":"))
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, self.state_path)
-            directory = os.open(self.state_path.parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
-        finally:
-            try:
-                os.unlink(temporary)
-            except FileNotFoundError:
-                pass
+        _write_durably(self.state_path, state)
 
     def _lease_locked(self, key: str):
         digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
@@ -985,21 +1127,16 @@ class DirectNetworkManager:
         # a different lock from a later operation for the same incarnation.
         return self._locked(directory / (digest + ".lock"))
 
+    @contextmanager
     def _locked(self, path: Path | None = None):
         lock_path = self.lock_path if path is None else path
-
-        class Lock:
-            def __enter__(self):
-                lock_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                self.handle = lock_path.open("a+b")
-                fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX)
-                return self
-
-            def __exit__(self, *_args):
-                fcntl.flock(self.handle.fileno(), fcntl.LOCK_UN)
-                self.handle.close()
-
-        return Lock()
+        lock_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with lock_path.open("a+b") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     @staticmethod
     def _run(argv: Sequence[str]) -> None:

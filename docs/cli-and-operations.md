@@ -121,7 +121,8 @@ Generated deployments use separate mandatory credentials:
 The control plane removes caller authorization headers before forwarding and
 adds the node-control token itself. Heartbeat rotation is coordinated because
 nodes and the control plane must switch to the same new value before heartbeat
-publication resumes.
+publication resumes. A node agent reads both node tokens when it starts, so a
+node switches when VM init replays or its agent restarts.
 
 Distribute the public HTTPS URL and the contents of `sandbox-api-token` to SDK
 users. Keep `gateway-token` on the control-plane host for operator tooling,

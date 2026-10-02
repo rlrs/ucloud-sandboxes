@@ -132,6 +132,14 @@ immutable_environments = {
     # keep content anywhere (/testbed, /app, /opt/conda).
     "allow_paths": ["*"],
     "cache_bytes": 128 * 1024**3,
+    # Layout-2 components keep file mtimes, so Python's .pyc caches stay
+    # valid (C2.11). Turn on only after every worker and gateway runs a
+    # release that reads layout 2; builders need erofs-utils 1.9+. While
+    # false it is not rendered, so the previous release reads the config.
+    "preserve_mtimes": False,
+    # Off switch for attach-time metadata/trace prefetch. Live backends keep
+    # their mode; newly provisioned workers apply a change.
+    "prefetch_enabled": True,
 }
 if IMMUTABLE_WORKERS:
     raw["immutable_environments"] = immutable_environments

@@ -15,6 +15,9 @@ from ucloud_sandboxes.image_import import (
 from ucloud_sandboxes.routing import RoutingStore
 
 from tests import test_control_plane as gateway_fixtures
+from tests.gateway_support import gateway_services
+
+TEST_TIER = "contract"
 
 EXTERNAL = "aweaiteam/scaleswe:materialsvirtuallab_monty_pr152"
 MANAGED = "registry.internal:5000/ucloud-managed/import-x-1234:latest@sha256:" + "a" * 64
@@ -52,10 +55,12 @@ class ImageImportHelperTests(unittest.TestCase):
 
 def handler(*, resolved=None, failure=""):
     subject = object.__new__(control_plane.ControlPlaneHandler)
-    subject.registry_url = "http://registry.internal:5000"
-    subject.registry_worker_url = "http://registry.internal:5000"
+    subject.services = gateway_services(
+        registry_url="http://registry.internal:5000",
+        registry_worker_url="http://registry.internal:5000",
+    )
     subject.image_import_submitter = Mock()
-    subject._resolve_sandbox_image_reference = Mock(return_value=(
+    subject.services.images.resolve = Mock(return_value=(
         (resolved, None) if resolved else ("x", {"error_code": "image_id_not_found"})
     ))
     subject._image_import_failure = Mock(return_value=failure)
@@ -76,8 +81,8 @@ class ExternalImageImportTests(unittest.TestCase):
     def test_a_published_import_replaces_the_external_reference(self):
         subject = handler(resolved=MANAGED)
         self.assertEqual(subject._external_image_import(EXTERNAL, wait=True), (MANAGED, None))
-        subject._resolve_sandbox_image_reference.assert_called_once_with(
-            import_image_id(EXTERNAL), reference_kind="name",
+        subject.services.images.resolve.assert_called_once_with(
+            subject, import_image_id(EXTERNAL), reference_kind="name",
         )
         subject.image_import_submitter.ensure_submitted.assert_not_called()
 

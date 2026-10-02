@@ -20,7 +20,10 @@ from ucloud_sandboxes.models import (
 )
 from ucloud_sandboxes.routing import RoutingStore
 from ucloud_sandboxes.deployment import package_version
+from tests.gateway_support import gateway_services
 from tests.test_control_plane import _portable_snapshot, _sandbox_route, _prepare_wake_route
+
+TEST_TIER = "contract"
 
 
 class ConsolidationTests(unittest.TestCase):
@@ -265,9 +268,8 @@ class ConsolidationTests(unittest.TestCase):
             pass
 
         handler = object.__new__(Handler)
-        handler.store = store
         handler.routing_store = routing
-        handler.heartbeat_ttl_seconds = 120
+        handler.services = gateway_services(store=store, routing_store=routing)
         handler.wake_consolidation_policy = self.policy
         handler.metrics_store = MetricsStore(root / "metrics.sqlite")
         handler._write_json = lambda *a, **kw: None
@@ -311,9 +313,9 @@ class ConsolidationTests(unittest.TestCase):
                 if condition == "disabled":
                     handler.wake_consolidation_policy = ScalePolicy()
                 elif condition == "cold":
-                    handler.store.upsert_heartbeat(self.destination)
+                    handler.services.fleet.store.upsert_heartbeat(self.destination)
                 elif condition == "busy":
-                    handler.store.upsert_heartbeat(
+                    handler.services.fleet.store.upsert_heartbeat(
                         replace(
                             self.destination,
                             runtime_metrics=replace(
@@ -329,7 +331,7 @@ class ConsolidationTests(unittest.TestCase):
                         cached_images=(route.spec["image"],),
                         used_resources=ResourceQuantity(disk_mb=99999),
                     )
-                    handler.store.upsert_heartbeat(dest)
+                    handler.services.fleet.store.upsert_heartbeat(dest)
                 elif condition == "inflight":
                     handler.routing_store.upsert_sandbox(
                         _sandbox_route(

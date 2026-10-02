@@ -8,10 +8,12 @@ import unittest
 
 from tests import test_control_plane as fixtures
 from tests import test_direct_provisioner as direct_fixtures
+from tests.gateway_support import gateway_services
 from ucloud_sandboxes import control_plane
 from ucloud_sandboxes.control_state import ControlStateStore
 from ucloud_sandboxes.registry import heartbeat_to_dict
 from ucloud_sandboxes.direct_service import DirectSandboxService
+from ucloud_sandboxes.gateway import placement
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, SandboxInventoryEntry, utc_now
 from ucloud_sandboxes.routing import RoutingStore, wake_pending_demand_id
 from ucloud_sandboxes.wake_placement import WakeCapacityRefreshPending, WakeSnapshotPublicationRequired
@@ -82,13 +84,13 @@ class WakeCapacityTests(unittest.TestCase):
             root = Path(directory)
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = RoutingStore(root / "routes.sqlite")
-            handler.store = ControlStateStore(root / "control-state.sqlite")
-            handler.heartbeat_ttl_seconds = 120
+            store = ControlStateStore(root / "control-state.sqlite")
+            handler.services = gateway_services(store=store, routing_store=handler.routing_store)
             source = replace(self.heartbeat(active=64), capabilities=(
                 *self.heartbeat().capabilities, "sandbox-migrate-storage-native-v1",
             ))
-            handler.store.upsert_heartbeat(source)
-            handler.store.upsert_heartbeat(replace(
+            store.upsert_heartbeat(source)
+            store.upsert_heartbeat(replace(
                 source, node_id="destination", job_id="destination-job", node_url="http://dest:8090",
                 runtime_metrics=replace(source.runtime_metrics, storage_ublk_active_devices=0),
             ))
@@ -99,10 +101,10 @@ class WakeCapacityTests(unittest.TestCase):
 
             def queue_publication(url, path, **kwargs):
                 def check_lock():
-                    ok = control_plane._GATEWAY_SCHEDULING_LOCK.acquire(timeout=0.2)
+                    ok = placement._GATEWAY_SCHEDULING_LOCK.acquire(timeout=0.2)
                     acquired.append(ok)
                     if ok:
-                        control_plane._GATEWAY_SCHEDULING_LOCK.release()
+                        placement._GATEWAY_SCHEDULING_LOCK.release()
                 thread = Thread(target=check_lock)
                 thread.start()
                 thread.join(timeout=1)
@@ -121,14 +123,14 @@ class WakeCapacityTests(unittest.TestCase):
             root = Path(directory)
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = RoutingStore(root / "routes.sqlite")
-            handler.store = ControlStateStore(root / "control-state.sqlite")
-            handler.heartbeat_ttl_seconds = 120
+            store = ControlStateStore(root / "control-state.sqlite")
+            handler.services = gateway_services(store=store, routing_store=handler.routing_store)
             source = replace(self.heartbeat(active=64), capabilities=(
                 *self.heartbeat().capabilities, "sandbox-migrate-storage-native-v1",
             ))
-            handler.store.upsert_heartbeat(source)
+            store.upsert_heartbeat(source)
             destination = replace(source, node_id="destination", job_id="dest-job", node_url="http://dest:8090")
-            handler.store.upsert_heartbeat(destination)
+            store.upsert_heartbeat(destination)
             route = handler.routing_store.upsert_sandbox(self.route())
             handler._write_json = Mock()
             handler._refresh_wake_capacity = Mock(return_value=False)
@@ -139,7 +141,7 @@ class WakeCapacityTests(unittest.TestCase):
             pending = handler.routing_store.get_pending(wake_pending_demand_id(route.sandbox_id))
             self.assertEqual(pending.resources, route.resources)
             self.assertEqual(pending.failure_reason, "wake_destination_unavailable")
-            handler.store.upsert_heartbeat(replace(destination, runtime_metrics=replace(
+            store.upsert_heartbeat(replace(destination, runtime_metrics=replace(
                 destination.runtime_metrics, storage_ublk_active_devices=0,
             )))
             self.assertIsNone(fixtures._prepare_wake_route(handler, route))
@@ -151,18 +153,18 @@ class WakeCapacityTests(unittest.TestCase):
             root = Path(directory)
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = RoutingStore(root / "routes.sqlite")
-            handler.store = ControlStateStore(root / "control-state.sqlite")
-            handler.heartbeat_ttl_seconds = 120
+            store = ControlStateStore(root / "control-state.sqlite")
+            handler.services = gateway_services(store=store, routing_store=handler.routing_store)
             source = replace(self.heartbeat(active=64), admission_open=False, draining=True, capabilities=(
                 *self.heartbeat().capabilities, "sandbox-migrate-storage-native-v1",
             ))
-            handler.store.upsert_heartbeat(source)
+            store.upsert_heartbeat(source)
             destination = replace(
                 source, node_id="destination", job_id="dest-job", node_url="http://dest:8090",
                 admission_open=True, draining=False,
                 runtime_metrics=replace(source.runtime_metrics, storage_ublk_active_devices=0),
             )
-            handler.store.upsert_heartbeat(destination)
+            store.upsert_heartbeat(destination)
             route = handler.routing_store.upsert_sandbox(self.route())
             with patch.object(control_plane, '_node_available_resources',
                               wraps=control_plane._node_available_resources) as available:
@@ -174,13 +176,13 @@ class WakeCapacityTests(unittest.TestCase):
             self.assertEqual(selected.node_id, "destination")
             # Even if runtime metrics look healthy, a closed admission gate
             # must not be bypassed by reserving a local wake.
-            handler.store.upsert_heartbeat(replace(
+            store.upsert_heartbeat(replace(
                 source, draining=False, runtime_metrics=destination.runtime_metrics,
             ))
             with self.assertRaises(WakeSnapshotPublicationRequired):
                 handler._wake_placement().reserve(route)
             self.assertEqual(handler.routing_store.get_sandbox(route.sandbox_id).state, "parked")
-            handler.store.upsert_heartbeat(replace(destination, admission_open=False))
+            store.upsert_heartbeat(replace(destination, admission_open=False))
             self.assertIsNone(handler._select_migration_destination(route, requested_node_id="", require_active_resources=True))
 
     def test_fresh_capacity_avoids_publication_after_a_full_worker_parks(self):
@@ -188,10 +190,10 @@ class WakeCapacityTests(unittest.TestCase):
             root = Path(directory)
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = RoutingStore(root / "routes.sqlite")
-            handler.store = ControlStateStore(root / "control-state.sqlite")
-            handler.heartbeat_ttl_seconds = 120
+            store = ControlStateStore(root / "control-state.sqlite")
+            handler.services = gateway_services(store=store, routing_store=handler.routing_store)
             heartbeat = self.heartbeat(active=64)
-            handler.store.upsert_heartbeat(heartbeat)
+            store.upsert_heartbeat(heartbeat)
             route = handler.routing_store.upsert_sandbox(self.route())
             refreshed = replace(heartbeat, runtime_metrics=replace(
                 heartbeat.runtime_metrics, storage_ublk_active_devices=0,
@@ -199,10 +201,10 @@ class WakeCapacityTests(unittest.TestCase):
             acquired = []
             def refresh(url, path, **kwargs):
                 def check_lock():
-                    ok = control_plane._GATEWAY_SCHEDULING_LOCK.acquire(timeout=.2)
+                    ok = placement._GATEWAY_SCHEDULING_LOCK.acquire(timeout=.2)
                     acquired.append(ok)
                     if ok:
-                        control_plane._GATEWAY_SCHEDULING_LOCK.release()
+                        placement._GATEWAY_SCHEDULING_LOCK.release()
                 thread = Thread(target=check_lock)
                 thread.start()
                 thread.join(1)
@@ -218,8 +220,8 @@ class WakeCapacityTests(unittest.TestCase):
             self.assertEqual(fixtures._prepare_wake_route(handler, route).state, "waking")
             self.assertEqual(acquired, [True])
             self.assertEqual(handler._proxy_request.call_count, 1)
-            self.assertEqual(handler.store.load_heartbeats()["job"].runtime_metrics.storage_ublk_active_devices, 0)
-            handler.store.upsert_heartbeat(heartbeat)
+            self.assertEqual(store.load_heartbeats()["job"].runtime_metrics.storage_ublk_active_devices, 0)
+            store.upsert_heartbeat(heartbeat)
             self.assertFalse(handler._refresh_wake_capacity(route))
             self.assertEqual(handler._proxy_request.call_count, 1)
 
@@ -229,12 +231,13 @@ class WakeCapacityTests(unittest.TestCase):
             server = fixtures._gateway_server(root)
             try:
                 handler = object.__new__(server.RequestHandlerClass)
-                handler.store.upsert_heartbeat(self.heartbeat(active=0))
+                handler.services.fleet.store.upsert_heartbeat(self.heartbeat(active=0))
                 route = handler.routing_store.upsert_sandbox(self.route())
                 handler._write_json = Mock()
                 with (
                     patch.object(handler, '_refresh_wake_capacity', side_effect=AssertionError('redundant refresh')),
-                    patch.object(handler, '_placement_routes_for_node', wraps=handler._placement_routes_for_node) as inventory,
+                    patch.object(handler.services.placement, 'routes_for_node',
+                                 wraps=handler.services.placement.routes_for_node) as inventory,
                 ):
                     result = fixtures._prepare_wake_route(handler, route)
                 self.assertEqual(result.state, 'waking')
@@ -246,8 +249,10 @@ class WakeCapacityTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = RoutingStore(Path(directory) / "routes.sqlite")
-            handler.store = ControlStateStore(Path(directory) / "control.sqlite")
-            handler.heartbeat_ttl_seconds = 120
+            handler.services = gateway_services(
+                store=ControlStateStore(Path(directory) / "control.sqlite"),
+                routing_store=handler.routing_store,
+            )
             snapshot = fixtures._portable_snapshot("parked")
             spec = snapshot.manifest.spec
             route = handler.routing_store.upsert_sandbox(replace(
@@ -274,6 +279,7 @@ class WakeCapacityTests(unittest.TestCase):
             root = Path(directory)
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = RoutingStore(root / "routes.sqlite")
+            handler.services = gateway_services(routing_store=handler.routing_store)
             source = handler.routing_store.upsert_sandbox(self.route())
             another = handler.routing_store.upsert_sandbox(fixtures._sandbox_route(
                 sandbox_id="other", node_id="node", job_id="job", node_url="http://node:8090",
@@ -282,7 +288,7 @@ class WakeCapacityTests(unittest.TestCase):
             capabilities = self.heartbeat().capabilities + ("sandbox-migrate-storage-native-v1",)
             source_node = replace(self.heartbeat(), capabilities=capabilities)
             destination = replace(source_node, node_id="destination", job_id="dest-job", node_url="http://dest:8090")
-            handler._ready_sandbox_heartbeats = lambda **_kwargs: [source_node, destination]
+            handler.services.fleet.ready_sandbox_heartbeats = lambda **_kwargs: [source_node, destination]
             # Parked owners themselves need no new device until a wake is reserved.
             self.assertTrue(control_plane._node_has_storage_device_capacity(source_node, [source]))
             self.assertIsNotNone(handler._select_migration_destination(another, requested_node_id=""))
@@ -328,11 +334,11 @@ class WakeCapacityTests(unittest.TestCase):
                 root = Path(directory)
                 handler = object.__new__(control_plane.ControlPlaneHandler)
                 handler.routing_store = RoutingStore(root / 'routes.sqlite')
-                handler.store = ControlStateStore(root / 'control-state.sqlite')
-                handler.heartbeat_ttl_seconds = 120
+                store = ControlStateStore(root / 'control-state.sqlite')
+                handler.services = gateway_services(store=store, routing_store=handler.routing_store)
                 healthy = self.heartbeat(active=0)
                 pressured = replace(healthy, runtime_metrics=replace(healthy.runtime_metrics, **pressure))
-                handler.store.upsert_heartbeat(pressured)
+                store.upsert_heartbeat(pressured)
                 route = handler.routing_store.upsert_sandbox(self.route())
                 handler._write_json = Mock()
                 handler._select_migration_destination = Mock(return_value=None)

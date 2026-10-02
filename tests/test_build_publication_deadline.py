@@ -17,6 +17,8 @@ from ucloud_sandboxes.managed_registry import RegistryClient, _read_response_byt
 from ucloud_sandboxes.direct_warden import DirectWardenError
 from tests.test_image_rootfs import IMAGE_DIGEST, Overlay2Runner, image_store
 
+TEST_TIER = "contract"
+
 
 class TimedOverlayRunner(Overlay2Runner):
     def __init__(self, root, clock):
@@ -100,7 +102,7 @@ class BuildPublicationDeadlineTests(unittest.TestCase):
             with build_execution_deadline(0.1), patch(
                 "ucloud_sandboxes.environment_builder.subprocess.run"
             ) as run:
-                builder._mkfs(root / "out", root, exclude_runtime_mounts=True)
+                builder._mkfs(root / "out", root, exclude_runtime_mounts=True, preserve_mtimes=False)
                 self.assertLessEqual(run.call_args.kwargs["timeout"], 0.1)
                 self.assertGreater(run.call_args.kwargs["timeout"], 0)
 

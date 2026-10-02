@@ -3,7 +3,7 @@ from __future__ import annotations
 from .checkpoint_components import MemoryBackingRef, WorkspaceCaptureRef
 
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 import errno
 from enum import Enum
 import fcntl
@@ -188,34 +188,14 @@ class HibernationRuntimeFingerprint:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "architecture": self.architecture,
-            "boot_config_sha256": self.boot_config_sha256,
-            "cpu_features_sha256": self.cpu_features_sha256,
-            "page_size": self.page_size,
-            "platform": self.platform,
-            "rootfs_sha256": self.rootfs_sha256,
-            "runsc_commit": self.runsc_commit,
-            "runsc_sha256": self.runsc_sha256,
-        }
+        return {item.name: getattr(self, item.name) for item in fields(self)}
 
     @classmethod
     def from_dict(cls, raw: object) -> "HibernationRuntimeFingerprint":
         if not isinstance(raw, dict):
             raise ValueError("runtime fingerprint must be a JSON object")
         _require_exact_keys(
-            "runtime fingerprint",
-            raw,
-            {
-                "architecture",
-                "boot_config_sha256",
-                "cpu_features_sha256",
-                "page_size",
-                "platform",
-                "rootfs_sha256",
-                "runsc_commit",
-                "runsc_sha256",
-            },
+            "runtime fingerprint", raw, {item.name for item in fields(cls)},
         )
         return cls(
             runsc_sha256=_validate_digest("runsc_sha256", raw["runsc_sha256"]),
@@ -254,27 +234,14 @@ class HibernationArtifactFile:
         _validate_nonnegative_int("artifact allocated_bytes", self.allocated_bytes)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "allocated_bytes": self.allocated_bytes,
-            "logical_bytes": self.logical_bytes,
-            "name": self.name,
-            "role": self.role.value,
-        }
+        raw = {item.name: getattr(self, item.name) for item in fields(self)}
+        return {**raw, "role": self.role.value}
 
     @classmethod
     def from_dict(cls, raw: object) -> "HibernationArtifactFile":
         if not isinstance(raw, dict):
             raise ValueError("artifact file must be a JSON object")
-        _require_exact_keys(
-            "artifact file",
-            raw,
-            {
-                "allocated_bytes",
-                "logical_bytes",
-                "name",
-                "role",
-            },
-        )
+        _require_exact_keys("artifact file", raw, {item.name for item in fields(cls)})
         try:
             return cls(
                 name=raw["name"],
@@ -431,22 +398,9 @@ class HibernationManifest:
     def from_dict(cls, raw: object) -> "HibernationManifest":
         if not isinstance(raw, dict):
             raise ValueError("hibernation manifest must be a JSON object")
-        required_keys = {
-            "container_id",
-            "created_ns",
-            "files",
-            "hibernation_generation",
-            "managed_process_sha256",
-            "metadata_sha256",
-            "operation_id",
-            "runtime",
-            "sandbox_generation",
-            "sandbox_id",
-            "spec_sha256",
-            "version",
-        }
-        if raw.get("version") == 3:
-            required_keys |= {"workspace", "memory"}
+        required_keys = {item.name for item in fields(cls)} | {"metadata_sha256"}
+        if raw.get("version") != 3:
+            required_keys -= {"workspace", "memory"}
         if set(raw) != required_keys:
             raise ValueError("hibernation manifest has an invalid schema")
         files_raw = raw["files"]
@@ -1364,62 +1318,26 @@ class HibernationRecord:
             raise ValueError("candidate authority requires a process identity")
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "authority": self.authority.value,
-            "candidate_pid": self.candidate_pid,
-            "candidate_start_time_ticks": self.candidate_start_time_ticks,
-            "hibernation_generation": self.hibernation_generation,
-            "manifest_sha256": self.manifest_sha256,
-            "operation_id": self.operation_id,
-            "operation_kind": self.operation_kind,
-            "recovery_reason": self.recovery_reason,
-            "revision": self.revision,
-            "sandbox_generation": self.sandbox_generation,
-            "sandbox_id": self.sandbox_id,
-            "sentry_pid": self.sentry_pid,
-            "sentry_start_time_ticks": self.sentry_start_time_ticks,
-            "spec_sha256": self.spec_sha256,
-            "state": self.state.value,
-            "updated_ns": self.updated_ns,
-            "version": self.version,
-        }
+        raw = {item.name: getattr(self, item.name) for item in fields(self)}
+        return {**raw, "state": self.state.value, "authority": self.authority.value}
 
     @classmethod
     def from_dict(cls, raw: object) -> "HibernationRecord":
         if not isinstance(raw, dict):
             raise ValueError("hibernation record must be a JSON object")
         _require_exact_keys(
-            "hibernation record",
-            raw,
-            {
-                "authority",
-                "candidate_pid",
-                "candidate_start_time_ticks",
-                "hibernation_generation",
-                "manifest_sha256",
-                "operation_id",
-                "operation_kind",
-                "recovery_reason",
-                "revision",
-                "sandbox_generation",
-                "sandbox_id",
-                "sentry_pid",
-                "sentry_start_time_ticks",
-                "spec_sha256",
-                "state",
-                "updated_ns",
-                "version",
-            },
+            "hibernation record", raw, {item.name for item in fields(cls)},
         )
         try:
             state = HibernationState(raw["state"])
             authority = HibernationAuthority(raw["authority"])
         except (TypeError, ValueError) as exc:
             raise ValueError("hibernation state or authority is invalid") from exc
-        sentry_pid = raw["sentry_pid"]
-        sentry_start_time_ticks = raw["sentry_start_time_ticks"]
-        candidate_pid = raw["candidate_pid"]
-        candidate_start_time_ticks = raw["candidate_start_time_ticks"]
+
+        def optional_positive(label: str) -> int | None:
+            value = raw[label]
+            return None if value is None else _validate_positive_int(label, value)
+
         return cls(
             version=_validate_positive_int("state version", raw["version"]),
             sandbox_id=_validate_safe_id("sandbox_id", raw["sandbox_id"]),
@@ -1436,31 +1354,10 @@ class HibernationRecord:
             operation_id=_validate_safe_id("operation_id", raw["operation_id"]),
             revision=_validate_nonnegative_int("revision", raw["revision"]),
             updated_ns=_validate_positive_int("updated_ns", raw["updated_ns"]),
-            sentry_pid=(
-                None
-                if sentry_pid is None
-                else _validate_positive_int("sentry_pid", sentry_pid)
-            ),
-            sentry_start_time_ticks=(
-                None
-                if sentry_start_time_ticks is None
-                else _validate_positive_int(
-                    "sentry_start_time_ticks", sentry_start_time_ticks
-                )
-            ),
-            candidate_pid=(
-                None
-                if candidate_pid is None
-                else _validate_positive_int("candidate_pid", candidate_pid)
-            ),
-            candidate_start_time_ticks=(
-                None
-                if candidate_start_time_ticks is None
-                else _validate_positive_int(
-                    "candidate_start_time_ticks",
-                    candidate_start_time_ticks,
-                )
-            ),
+            sentry_pid=optional_positive("sentry_pid"),
+            sentry_start_time_ticks=optional_positive("sentry_start_time_ticks"),
+            candidate_pid=optional_positive("candidate_pid"),
+            candidate_start_time_ticks=optional_positive("candidate_start_time_ticks"),
             manifest_sha256=(
                 ""
                 if not raw["manifest_sha256"]

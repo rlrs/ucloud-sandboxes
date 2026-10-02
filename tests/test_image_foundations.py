@@ -11,6 +11,8 @@ import sys
 
 from ucloud_sandboxes.image_foundations import openswe_foundation, terminal_foundation, tmax_foundation, tmax_inline_foundation
 
+TEST_TIER = "contract"
+
 
 BASE = "ubuntu:22.04@sha256:" + "a" * 64
 READY = "registry:5000/base:latest@sha256:" + "b" * 64
@@ -204,7 +206,7 @@ class ImageFoundationTests(unittest.TestCase):
                     "ucloud_sandboxes.managed_registry.RegistryUsageStore": Mock(),
                     "ucloud_sandboxes.environment_dependencies.EnvironmentDependencyResolver": Mock(),
                     "ucloud_sandboxes.images.ImageStore": store,
-                    "ucloud_sandboxes.control_plane._persist_registry_image_protection": True,
+                    "ucloud_sandboxes.gateway.registry_refs._persist_registry_image_protection": True,
                     "ucloud_sandboxes.environment_artifact.load_image_environment": ("root", SimpleNamespace(components=[])),
                     "ucloud_sandboxes.registry_disk.registry_disk_usage": SimpleNamespace(used_bytes=0, available_bytes=1024**4),
                     "ucloud_sandboxes.host_locks.HOST_LOCKS.configure": None,

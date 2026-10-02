@@ -41,9 +41,15 @@ IMAGE_MEDIA_TYPE = "application/vnd.ucloud.environment.image.v1"
 OCI_IMAGE = "application/vnd.oci.image.manifest.v1+json"
 MAX_INDEX_BYTES = 16 * 1024 * 1024
 _MAX_CHUNKS = 65536
+_RETAINED_HINTS = 32  # Verified metadata hints kept by manifest digest (load -> metadata_hint).
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _REPOSITORY = re.compile(r"[a-z0-9]+(?:[._/-][a-z0-9]+)*\Z")
 _SIGNING_DOMAIN = b"ucloud.immutable-environment-component.v1\0"
+# Sandbox commits (C3.1): their own provenance class, schema and signing domain.
+COMMIT_SCHEMA = "ucloud-environment-erofs-commit-v1"
+COMMIT_SOURCE_KIND = "sandbox-commit-v1"
+_COMMIT_DOMAIN = b"ucloud.immutable-environment-commit.v1\0"
+MAX_COMMIT_DEPTH = 8
 
 
 def canonical_bytes(value):
@@ -100,10 +106,11 @@ def _authenticate(component, trusted_keys):
         raise ValueError("environment producer is not trusted")
     try:
         # The schema is part of the signed bytes, so a v1 signature never
-        # authenticates a v2 index or the reverse.
+        # authenticates a v2 index or the reverse; commits also sign under
+        # their own domain.
         Ed25519PublicKey.from_public_bytes(key_bytes).verify(
             base64.b64decode(component.signature, validate=True),
-            _SIGNING_DOMAIN + canonical_bytes(component.unsigned()),
+            _domain(component) + canonical_bytes(component.unsigned()),
         )
     except (ValueError, InvalidSignature) as exc:
         raise ValueError("environment producer signature did not verify") from exc
@@ -143,9 +150,11 @@ class EnvironmentComponent:
 
     @classmethod
     def from_dict(cls, raw):
-        """Parse either component schema; v1 whole-image components stay valid."""
+        """Parse any component schema; v1 whole-image components stay valid."""
         if isinstance(raw, dict) and raw.get("schema") == COMPONENT_SCHEMA_V2:
             return LayerEnvironmentComponent.from_dict(raw)
+        if isinstance(raw, dict) and raw.get("schema") == COMMIT_SCHEMA:
+            return CommitEnvironmentComponent.from_dict(raw)
         if not isinstance(raw, dict) or set(raw) != {
             "schema", "filesystem", "source_kind", "source_image", "image_digest",
             "image_size", "chunks", "producer_key", "signature",
@@ -166,9 +175,16 @@ def layer_chain_id(diff_ids):
     return chain
 
 
+# Layer component layouts. 1: mkfs -T 0 sets every inode time to 0.
+# 2: -T 0 --mkfs-time --MZ keeps file and symlink mtimes, which Python's
+# timestamp .pyc caches check, and packs metadata into one zone (C2.12);
+# builder-owned views zero directory and whiteout times.
+LAYER_LAYOUTS = (1, 2)
+
+
 def require_layer_format(value):
     if (not isinstance(value, dict) or set(value) != {"layout", "mkfs", "compression", "excludes"}
-            or type(value["layout"]) is not int or value["layout"] != 1
+            or type(value["layout"]) is not int or value["layout"] not in LAYER_LAYOUTS
             or not isinstance(value["mkfs"], str) or not 0 < len(value["mkfs"]) <= 256
             or not value["mkfs"].isprintable()
             or not isinstance(value["compression"], str) or len(value["compression"]) > 32
@@ -256,6 +272,65 @@ class LayerEnvironmentComponent:
         return _authenticate(self, trusted_keys)
 
 
+@dataclass(frozen=True)
+class CommitEnvironmentComponent:
+    """EROFS of one sandbox commit's filtered upper (docs/rl-state-primitives.md §3.4).
+
+    The signature attests a deterministic conversion (these bytes come from
+    the filtered tar ``diff_id`` under policy ``policy_sha256``, on parent root
+    ``parent_root``), not benign content. It always sits above its parent's
+    components, never in a fresh build.
+    """
+    diff_id: str
+    parent_root: str
+    policy_sha256: str
+    format: dict = field(hash=False)
+    image_digest: str = ""
+    image_size: int = 0
+    chunks: tuple[Chunk, ...] = ()
+    producer_key: str = ""
+    signature: str = ""
+    schema: str = COMMIT_SCHEMA
+    filesystem: str = "erofs-host-v1"
+    source_kind: str = COMMIT_SOURCE_KIND
+
+    def __post_init__(self):
+        for digest in (self.diff_id, self.parent_root, self.image_digest, self.producer_key):
+            require_digest(digest)
+        if not isinstance(self.policy_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", self.policy_sha256):
+            raise ValueError("invalid commit policy digest")
+        require_layer_format(self.format)
+        if (self.schema != COMMIT_SCHEMA or self.filesystem != "erofs-host-v1"
+                or self.source_kind != COMMIT_SOURCE_KIND):
+            raise ValueError("unqualified immutable environment format/provenance")
+        _require_range_index(self)
+
+    def unsigned(self):
+        return {"schema": self.schema, "filesystem": self.filesystem, "source_kind": self.source_kind,
+                "diff_id": self.diff_id, "parent_root": self.parent_root, "policy_sha256": self.policy_sha256,
+                "format": self.format, "image_digest": self.image_digest, "image_size": self.image_size,
+                "chunks": [chunk.to_dict() for chunk in self.chunks], "producer_key": self.producer_key}
+
+    def to_dict(self):
+        return self.unsigned() | {"signature": self.signature}
+
+    @classmethod
+    def from_dict(cls, raw):
+        if not isinstance(raw, dict) or set(raw) != {
+            "schema", "filesystem", "source_kind", "diff_id", "parent_root", "policy_sha256", "format",
+            "image_digest", "image_size", "chunks", "producer_key", "signature",
+        } or not isinstance(raw["chunks"], list):
+            raise ValueError("invalid environment component schema")
+        return cls(**(raw | {"chunks": tuple(Chunk.from_dict(chunk) for chunk in raw["chunks"])}))
+
+    def authenticate(self, trusted_keys: Mapping[str, bytes]):
+        return _authenticate(self, trusted_keys)
+
+
+def _domain(component):
+    return _COMMIT_DOMAIN if isinstance(component, CommitEnvironmentComponent) else _SIGNING_DOMAIN
+
+
 def _chunk_image(image: Path):
     from .build_deadline import remaining_build_execution_seconds
     chunks, digest = [], hashlib.sha256()
@@ -268,7 +343,7 @@ def _chunk_image(image: Path):
 
 
 def _signed(candidate, signing_key):
-    signature = signing_key.sign(_SIGNING_DOMAIN + canonical_bytes(candidate.unsigned()))
+    signature = signing_key.sign(_domain(candidate) + canonical_bytes(candidate.unsigned()))
     return EnvironmentComponent.from_dict(candidate.to_dict() | {"signature": base64.b64encode(signature).decode("ascii")})
 
 
@@ -293,6 +368,15 @@ def sign_layer_component(image: Path, *, source_layers, parent, layer_format, si
     return _signed(LayerEnvironmentComponent(tuple(source_layers), parent, layer_format, digest,
                                              sum(chunk.size for chunk in chunks), chunks,
                                              _key_id(signing_key), _UNSIGNED), signing_key)
+
+
+def sign_commit_component(image: Path, *, diff_id, parent_root, policy_sha256, layer_format,
+                          signing_key: Ed25519PrivateKey):
+    """Sign the EROFS the builder converted from one filtered commit tar."""
+    chunks, digest = _chunk_image(image)
+    return _signed(CommitEnvironmentComponent(diff_id, parent_root, policy_sha256, layer_format, digest,
+                                              sum(chunk.size for chunk in chunks), chunks,
+                                              _key_id(signing_key), _UNSIGNED), signing_key)
 
 
 def _transient(exc: BaseException) -> bool:
@@ -335,6 +419,7 @@ class EnvironmentArtifactRegistry:
         self.repository = repository
         self.trusted_keys = dict(trusted_keys)
         self._whole_images: set[str] = set()
+        self._metadata: dict[str, tuple] = {}
         self._layout_guard = threading.Lock()
 
     def whole_image(self, component: "EnvironmentComponent") -> bool:
@@ -342,7 +427,17 @@ class EnvironmentArtifactRegistry:
         with self._layout_guard:
             return component.image_digest in self._whole_images
 
-    def publish(self, image: Path, component: EnvironmentComponent, *, tag: str) -> str:
+    def metadata_hint(self, digest: str):
+        """(status, hint) found by the last ``load`` of this component manifest."""
+        with self._layout_guard:
+            return self._metadata.get(digest, ("absent", None))
+
+    def publish(self, image: Path, component: EnvironmentComponent, *, tag: str, metadata=None) -> str:
+        """Publish a signed component; ``metadata`` is its optional signed hint.
+
+        The hint is a manifest annotation, which old workers ignore
+        (environment_metadata). Without one the manifest bytes are unchanged.
+        """
         component.authenticate(self.trusted_keys)
         # One streamed upload of the whole image. A registry handles each blob
         # as a separate upload and commit; per-chunk blobs made publication of
@@ -357,11 +452,16 @@ class EnvironmentArtifactRegistry:
             )
         config = canonical_bytes(component.to_dict())
         config_digest = content_digest(config)
-        _upload_blob(self.client, self.repository, config, config_digest)
-        manifest = canonical_bytes({"schemaVersion": 2, "mediaType": OCI_IMAGE,
+        document = {"schemaVersion": 2, "mediaType": OCI_IMAGE,
             "config": {"mediaType": COMPONENT_MEDIA_TYPE, "digest": config_digest, "size": len(config)},
             "layers": [{"mediaType": IMAGE_MEDIA_TYPE, "digest": component.image_digest,
-                        "size": component.image_size}]})
+                        "size": component.image_size}]}
+        if metadata is not None:
+            from .environment_metadata import METADATA_ANNOTATION
+            metadata.authenticate(self.trusted_keys, component_digest=config_digest, component=component)
+            document["annotations"] = {METADATA_ANNOTATION: metadata.encode()}
+        _upload_blob(self.client, self.repository, config, config_digest)
+        manifest = canonical_bytes(document)
         # The root is the commit point; interrupted chunk uploads are never a
         # partially visible environment and follow ordinary registry blob GC.
         self.client.put_manifest(self.repository, tag, manifest, media_type=OCI_IMAGE)
@@ -409,6 +509,17 @@ class EnvironmentArtifactRegistry:
                 self._whole_images.add(component.image_digest)
         elif document.get("layers") != per_chunk:
             raise ValueError("environment OCI dependency closure differs from signed index")
+        # An absent or unverifiable prefetch hint never rejects the component.
+        from .environment_metadata import read_metadata_hint
+        hint = read_metadata_hint(document, config["digest"], component, self.trusted_keys)
+        with self._layout_guard:
+            # Only the backend reads a hint, right after its own load. A hint
+            # holds up to ~2 MiB of chunk tuples, and builders and gateways
+            # load many components they never prefetch: keep only a few.
+            self._metadata.pop(digest, None)
+            self._metadata[digest] = hint
+            while len(self._metadata) > _RETAINED_HINTS:
+                self._metadata.pop(next(iter(self._metadata)))
         return component
 
 ENVIRONMENT_ANNOTATION = "org.ucloud.immutable-environment.v1"
@@ -487,8 +598,46 @@ def bind_source_layers(components, diff_ids):
         raise ValueError("environment layer components differ from the OCI image layers")
 
 
+def bind_components(digests, components, root_components):
+    """Commit components sit above every other one, each on exactly the ones
+    before it: ``root_components(parent_root)`` lists the digests of that
+    authenticated root, so no builder can splice a commit onto another base."""
+    first = next((index for index, component in enumerate(components)
+                  if isinstance(component, CommitEnvironmentComponent)), len(components))
+    commits = components[first:]
+    if first == 0 or len(commits) > MAX_COMMIT_DEPTH or any(
+            not isinstance(component, CommitEnvironmentComponent) for component in commits):
+        raise ValueError("commit components must follow every other component, at most 8 deep")
+    for index in range(first, len(components)):
+        if tuple(root_components(components[index].parent_root)) != tuple(digests[:index]):
+            raise ValueError("commit component sits on another parent's components")
+
+
+def _bind_commit(registry, signed, components, parent_root, parent_config, source_diff_ids):
+    """The new root extends ``parent_root`` by one commit: R authenticates, its
+    components are an exact prefix, and the diff IDs are R's plus the commit's."""
+    parent = load_environment(registry, parent_root)
+    roots = {parent_root: parent.components}
+
+    def root_components(root):
+        if root not in roots:
+            roots[root] = load_environment(registry, root).components
+        return roots[root]
+
+    bind_components(signed.components, components, root_components)
+    config = json.loads(parent_config) if content_digest(parent_config) == parent.source_image else None
+    rootfs = config.get("rootfs") if isinstance(config, dict) else None
+    commit = components[-1]
+    if (not isinstance(commit, CommitEnvironmentComponent) or not isinstance(rootfs, dict)
+            or not isinstance(rootfs.get("diff_ids"), list)
+            or signed.components[:-1] != parent.components or commit.parent_root != parent_root
+            or list(source_diff_ids or ()) != [*rootfs["diff_ids"], commit.diff_id]
+            or signed.image_config != parent.image_config):
+        raise ValueError("commit environment does not extend its parent root")
+
+
 def publish_environment(registry, *, source_image, environment, image_config, signing_key, tag,
-                        source_diff_ids=None):
+                        source_diff_ids=None, parent_root=None, parent_config=None):
     from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
     key = signing_key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
     raw = {"schema": "ucloud-immutable-environment-v1", "source_image": source_image,
@@ -504,7 +653,12 @@ def publish_environment(registry, *, source_image, environment, image_config, si
     # under this image ID (the config digest). Toolkits carry their own
     # independently signed source identities.
     components = [registry.load(digest) for digest in signed.components]
-    if isinstance(components[0], LayerEnvironmentComponent):
+    if parent_root is not None:
+        # A commit's base binding is its authenticated parent root's.
+        _bind_commit(registry, signed, components, parent_root, parent_config, source_diff_ids)
+    elif any(isinstance(component, CommitEnvironmentComponent) for component in components):
+        raise ValueError("only a commit publication may compose commit components")
+    elif isinstance(components[0], LayerEnvironmentComponent):
         if source_diff_ids is None:
             raise ValueError("layer environment components require the OCI image diff_ids")
         bind_source_layers(components, source_diff_ids)

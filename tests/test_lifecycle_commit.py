@@ -16,6 +16,8 @@ from ucloud_sandboxes.lifecycle_commit import (
 from ucloud_sandboxes.models import NodeHeartbeat, utc_now
 from ucloud_sandboxes.routing import RoutingStore
 
+TEST_TIER = "contract"
+
 
 class LifecycleCommitTests(unittest.TestCase):
     def setUp(self):

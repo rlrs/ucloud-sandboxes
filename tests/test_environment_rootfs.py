@@ -3,7 +3,8 @@ from pathlib import Path
 from types import SimpleNamespace
 import unittest
 
-from tests.test_environment_artifact import EnvironmentArtifactTests
+# Import the module, not the TestCase: discovery would rerun it here.
+from tests import test_environment_artifact as artifact_fixtures
 from ucloud_sandboxes.environment_artifact import (ENVIRONMENT_ANNOTATION, OCI_IMAGE,
     attach_environment_to_image, canonical_bytes, load_environment, publish_environment)
 from ucloud_sandboxes.environment_manifest import EnvironmentManifest, HOST_EROFS_ABI
@@ -12,7 +13,7 @@ from ucloud_sandboxes.images import ImageManager, ImageStore
 from ucloud_sandboxes.image_rootfs import OverlayRootfsManager
 
 
-class EnvironmentRootfsTests(EnvironmentArtifactTests):
+class EnvironmentRootfsTests(artifact_fixtures.EnvironmentArtifactTests):
     def test_signed_composition_and_existing_oci_image_input(self):
         manifest = EnvironmentManifest(self.digest)
         root = publish_environment(self.registry, source_image=self.component.source_image,

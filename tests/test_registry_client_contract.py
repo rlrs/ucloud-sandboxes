@@ -15,6 +15,8 @@ from ucloud_sandboxes.managed_registry import (
     digest_protection_tag,
 )
 
+TEST_TIER = "contract"
+
 Response = tuple[int, dict[str, str], bytes]
 Responder = Callable[[str, str, dict[str, str], bytes], Response]
 RecordedRequest = tuple[str, str, dict[str, str], bytes]

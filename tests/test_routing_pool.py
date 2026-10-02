@@ -9,6 +9,8 @@ from unittest.mock import patch
 from tests.test_control_plane import _sandbox_route
 from ucloud_sandboxes.routing import ExecRoute, RoutingStore
 
+TEST_TIER = "contract"
+
 
 class RoutingPoolTests(unittest.TestCase):
     def test_bulk_fleet_snapshot_preserves_values_order_and_fails_closed(self):

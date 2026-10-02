@@ -8,6 +8,8 @@ from tempfile import TemporaryDirectory
 
 from ucloud_sandboxes.storage_native_s3 import Boto3S3ObjectClient
 
+TEST_TIER = "contract"
+
 
 S3_ENDPOINT = os.environ.get("UCLOUD_TEST_S3_ENDPOINT", "").rstrip("/")
 S3_ACCESS_KEY = os.environ.get("UCLOUD_TEST_S3_ACCESS_KEY", "minioadmin")

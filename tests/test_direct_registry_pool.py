@@ -14,6 +14,8 @@ from ucloud_sandboxes.direct_registry import (
     DirectSandboxRegistry,
 )
 
+TEST_TIER = "contract"
+
 
 class DirectRegistryPoolTests(unittest.TestCase):
     def test_reuses_validation_but_detects_schema_and_metadata_changes(self):

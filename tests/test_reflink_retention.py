@@ -25,6 +25,8 @@ from ucloud_sandboxes.sandbox import SandboxSpec
 from tests import test_direct_warden as fixtures
 from tests import test_split_memory_lifecycle as split_fixtures
 
+TEST_TIER = "contract"
+
 
 class RetentionQuota(split_fixtures.FakeQuota):
     def __init__(self):

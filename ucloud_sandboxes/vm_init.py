@@ -19,6 +19,7 @@ from .deployment import DEFAULT_INIT_VERSION, package_version
 from .direct_network import DirectNetworkTcpEgress
 from .models import ResourceQuantity
 from .gvisor_distribution import GVISOR_COMMIT, GVISOR_SIDECARS
+from .heartbeat_sender import DEFAULT_HEARTBEAT_INTERVAL_SECONDS
 from .storage_native_publication import DEFAULT_MAX_CONCURRENT_PUBLICATIONS
 
 
@@ -28,7 +29,6 @@ DEFAULT_NODE_AGENT_HOST = "0.0.0.0"
 DEFAULT_NODE_AGENT_PORT = 8090
 DEFAULT_SSH_PORT_START = 22000
 DEFAULT_SSH_PORT_END = 22999
-DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 20
 DEFAULT_PACKAGE_SPEC = "ucloud-sandboxes"
 DEFAULT_DOCKER_QUOTA_IMAGE_GB = 200
 DEFAULT_SWAP_GB = 0
@@ -226,6 +226,8 @@ class VmInitOptions:
     direct_split_memory_backing: bool = False
     direct_ram_memory_backing: bool = False
     direct_reflink_memory_restore: bool = False
+    direct_pause_tier: bool = False
+    direct_pause_tier_zswap: bool = False
     direct_workspace_initial_grant_mb: int = 0
     environment_registry_url: str = ""
     environment_repository: str = ""
@@ -233,6 +235,8 @@ class VmInitOptions:
     environment_signing_key_pem: str = ""
     environment_allow_paths: tuple[str, ...] = ()
     environment_cache_bytes: int = 1024 ** 3
+    environment_preserve_mtimes: bool = False
+    environment_prefetch_enabled: bool = True
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
     labels: dict[str, str] | None = None
 
@@ -418,8 +422,9 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         "/etc/systemd/system/ucloud-storage-native-backend.service"
     )
     storage_service = "/etc/systemd/system/ucloud-storage-native.service"
-    heartbeat_service = "/etc/systemd/system/ucloud-sandbox-heartbeat.service"
-    heartbeat_timer = "/etc/systemd/system/ucloud-sandbox-heartbeat.timer"
+    # Units of the oneshot heartbeat timer that node agents replaced (C4.4).
+    retired_heartbeat_timer = "/etc/systemd/system/ucloud-sandbox-heartbeat.timer"
+    retired_heartbeat_service = "/etc/systemd/system/ucloud-sandbox-heartbeat.service"
     authorized_keys_shell = "\n".join(
         f"  {shlex.quote(key)}" for key in options.init_authorized_keys
     )
@@ -434,8 +439,12 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     runtime_kernel_modules_shell = " ".join(
         shlex.quote(module) for module in RUNTIME_KERNEL_MODULES
     )
-    label_args = " ".join(
-        f"--label {shlex.quote(key + '=' + value)}"
+    heartbeat_flags = (
+        " --heartbeat-url ${UCLOUD_HEARTBEAT_URL}"
+        " --heartbeat-bearer-token-file ${UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE}"
+        f" --heartbeat-interval-seconds {options.heartbeat_interval_seconds}"
+    ) + "".join(
+        f" --heartbeat-label {shlex.quote(key + '=' + value)}"
         for key, value in sorted((options.labels or {}).items())
     )
     builder_flags = ""
@@ -449,7 +458,6 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         if options.buildx_cache_registry_url:
             builder_flags += f" --buildx-cache-registry-url {shlex.quote(options.buildx_cache_registry_url)}"
     deployment_flag = " --deployment-id ${UCLOUD_DEPLOYMENT_ID}"
-    heartbeat_auth_flag = " --bearer-token-file ${UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE}"
     node_control_auth_flag = (
         " --node-control-bearer-token-file ${UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE}"
     )
@@ -515,6 +523,8 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             split_memory_flags += " --application-memory-root ${UCLOUD_APPLICATION_MEMORY_ROOT}"
         if options.direct_reflink_memory_restore:
             split_memory_flags += " --reflink-memory-restore"
+        if options.direct_pause_tier:
+            split_memory_flags += " --pause-tier"
         if options.direct_split_memory_backing and options.direct_workspace_initial_grant_mb:
             split_memory_flags += (
                 f" --workspace-initial-grant-mb {options.direct_workspace_initial_grant_mb}"
@@ -545,7 +555,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --total-vcpu ${UCLOUD_TOTAL_VCPU}"
             " --total-memory-mb ${UCLOUD_TOTAL_MEMORY_MB}"
             " --total-disk-mb ${UCLOUD_DIRECT_WRITABLE_DISK_MB}"
-            f"{node_control_auth_flag}"
+            f"{node_control_auth_flag}{heartbeat_flags}"
             f"{telemetry_args}"
         )
         node_service_user = "root"
@@ -575,7 +585,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --total-memory-mb ${UCLOUD_TOTAL_MEMORY_MB}"
             " --total-disk-mb ${UCLOUD_TOTAL_DISK_MB}"
             " --max-concurrent-image-pulls ${UCLOUD_MAX_CONCURRENT_IMAGE_PULLS}"
-            f"{builder_flags}{node_control_auth_flag}"
+            f"{builder_flags}{node_control_auth_flag}{heartbeat_flags}"
             f"{telemetry_args}"
         )
         node_service_user = "$UCLOUD_SERVICE_USER"
@@ -616,7 +626,8 @@ fi
     if options.direct_ram_memory_backing:
         memory_filesystem_prestart = memory_filesystem_prestart.rstrip("\n") + (
             " --ram-root $UCLOUD_APPLICATION_MEMORY_ROOT"
-            " --ram-capacity-bytes $UCLOUD_APPLICATION_MEMORY_CAPACITY_BYTES\n"
+            " --ram-capacity-bytes $UCLOUD_APPLICATION_MEMORY_CAPACITY_BYTES"
+            + (" --ram-swappable\n" if options.direct_pause_tier else "\n")
         )
     storage_runtime_root = (
         "${UCLOUD_STORAGE_NATIVE_MOUNT_ROOT}/.runtime"
@@ -701,6 +712,8 @@ UCLOUD_STORAGE_NATIVE_MOUNT_ROOT=$UCLOUD_STORAGE_NATIVE_ROOT/mounts
 UCLOUD_DIRECT_SPLIT_MEMORY_BACKING={int(options.direct_split_memory_backing)}
 UCLOUD_DIRECT_RAM_MEMORY_BACKING={int(options.direct_ram_memory_backing)}
 UCLOUD_DIRECT_REFLINK_MEMORY_RESTORE={int(options.direct_reflink_memory_restore)}
+UCLOUD_DIRECT_PAUSE_TIER={int(options.direct_pause_tier)}
+UCLOUD_DIRECT_PAUSE_TIER_ZSWAP={int(options.direct_pause_tier_zswap)}
 UCLOUD_APPLICATION_MEMORY_ROOT=/run/ucloud-sandboxes/application-memory
 UCLOUD_APPLICATION_MEMORY_CAPACITY_BYTES={int(options.total_resources.memory_mb) * 1024**2}
 UCLOUD_STORAGE_NATIVE_CACHE_ROOT={shlex.quote(storage_native_cache_root)}
@@ -1419,6 +1432,17 @@ if [ "$UCLOUD_SWAP_GB" -gt 0 ]; then
   fi
   echo "vm.swappiness=60" | $SUDO tee /etc/sysctl.d/90-ucloud-sandbox-swap.conf >/dev/null
   $SUDO sysctl -q -p /etc/sysctl.d/90-ucloud-sandbox-swap.conf
+  # C1.1 zswap is optional and off by default (2026-10-02 qualification). A
+  # full reclaim of a paused sandbox compresses every page, then writes it all
+  # back: 2-5x slower than plain swap and CPU-bound, and random heaps do not
+  # compress at all. Enable it only for a profile measured to compress (a text
+  # heap: 2.95x), and measure that profile's reclaim and refault first.
+  if [ "$UCLOUD_DIRECT_PAUSE_TIER_ZSWAP" -eq 1 ]; then
+    echo zstd | $SUDO tee /sys/module/zswap/parameters/compressor >/dev/null
+    echo Y | $SUDO tee /sys/module/zswap/parameters/enabled >/dev/null
+  elif [ "$UCLOUD_DIRECT_PAUSE_TIER" -eq 1 ] && [ -e /sys/module/zswap/parameters/enabled ]; then
+    echo N | $SUDO tee /sys/module/zswap/parameters/enabled >/dev/null
+  fi
 fi
 log_init_phase "swap"
 
@@ -1756,6 +1780,7 @@ if [ "$UCLOUD_DIRECT_SPLIT_MEMORY_BACKING" -eq 1 ]; then
   UCLOUD_RAM_MEMORY_ARGS=()
   if [ "$UCLOUD_DIRECT_RAM_MEMORY_BACKING" -eq 1 ]; then
     UCLOUD_RAM_MEMORY_ARGS=(--ram-root "$UCLOUD_APPLICATION_MEMORY_ROOT" --ram-capacity-bytes "$UCLOUD_APPLICATION_MEMORY_CAPACITY_BYTES")
+    [ "$UCLOUD_DIRECT_PAUSE_TIER" -eq 0 ] || UCLOUD_RAM_MEMORY_ARGS+=(--ram-swappable)
   fi
   $SUDO env PYTHONPATH="$UCLOUD_AGENT_RUNTIME_DIR/site-packages" /usr/bin/python3 \
     -m ucloud_sandboxes.memory_filesystem \
@@ -1924,38 +1949,16 @@ RestartSec=5
 WantedBy=multi-user.target
 NODE_SERVICE
 
-echo "Writing heartbeat systemd service and timer"
-$SUDO tee {shlex.quote(heartbeat_service)} >/dev/null <<HEARTBEAT_SERVICE
-[Unit]
-Description=UCloud sandbox node heartbeat
-After=network-online.target ucloud-sandbox-node.service
-
-[Service]
-Type=oneshot
-User=$UCLOUD_SERVICE_USER
-Group=$UCLOUD_SERVICE_GROUP
-SupplementaryGroups=docker
-EnvironmentFile={env_file}
-# Python -m adds its working directory to the import search path. Keep the
-# periodic heartbeat off shared virtiofs directory scans during memory pressure.
-WorkingDirectory=/
-ExecStart={agent_bin} agent-heartbeat --from-node-agent-url http://127.0.0.1:${{UCLOUD_NODE_AGENT_PORT}} --post-url ${{UCLOUD_HEARTBEAT_URL}}{deployment_flag}{node_control_auth_flag} {heartbeat_auth_flag} {label_args}
-HEARTBEAT_SERVICE
-
-$SUDO tee {shlex.quote(heartbeat_timer)} >/dev/null <<HEARTBEAT_TIMER
-[Unit]
-Description=Run UCloud sandbox node heartbeat periodically
-
-[Timer]
-OnBootSec=10s
-OnUnitActiveSec={options.heartbeat_interval_seconds}s
-AccuracySec=5s
-Persistent=true
-Unit=ucloud-sandbox-heartbeat.service
-
-[Install]
-WantedBy=timers.target
-HEARTBEAT_TIMER
+# The node agent sends its own heartbeats. Retire an older release's timer
+# before the new agent starts, so a re-initialized node never posts twice.
+if [ -e {shlex.quote(retired_heartbeat_timer)} ]; then
+  $SUDO systemctl disable --now ucloud-sandbox-heartbeat.timer
+fi
+if [ -e {shlex.quote(retired_heartbeat_service)} ]; then
+  $SUDO systemctl stop ucloud-sandbox-heartbeat.service
+  $SUDO systemctl reset-failed ucloud-sandbox-heartbeat.service || true
+fi
+$SUDO rm -f {shlex.quote(retired_heartbeat_timer)} {shlex.quote(retired_heartbeat_service)}
 
 $SUDO systemctl daemon-reload
 {environment_start}
@@ -1982,13 +1985,18 @@ if [ "$NODE_AGENT_READY" -ne 1 ]; then
   echo "Node agent did not become healthy after service start" >&2
   exit 1
 fi
-$SUDO systemctl enable --now ucloud-sandbox-heartbeat.timer
-$SUDO systemctl start ucloud-sandbox-heartbeat.service
 
 echo "UCloud sandbox node init complete. Waiting for heartbeat readiness in the control plane."
 log_init_phase "systemd-services"
 """
     return script
+
+
+def _validate_pause_tier(options: VmInitOptions) -> None:
+    if options.direct_pause_tier and options.swap_gb < 1:
+        raise ValueError("the pause tier requires a swapfile (swap_gb).")
+    if options.direct_pause_tier_zswap and not options.direct_pause_tier:
+        raise ValueError("pause-tier zswap requires the pause tier.")
 
 
 def validate_vm_init_options(options: VmInitOptions) -> None:
@@ -2129,6 +2137,7 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
             raise ValueError("direct max concurrent startups must be positive.")
         if options.direct_max_concurrent_restores < 1:
             raise ValueError("direct max concurrent restores must be positive.")
+    _validate_pause_tier(options)
     if options.docker_quota_image_gb < 0:
         raise ValueError("docker quota image size cannot be negative.")
     if options.swap_gb < 0:

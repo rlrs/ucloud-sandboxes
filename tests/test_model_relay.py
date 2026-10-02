@@ -13,6 +13,9 @@ from aiohttp import ClientSession, web
 
 from ucloud_sandboxes.model_relay import create_model_relay_app
 from tests.postgres_fixture import postgres_database
+from tests.support import requires_sdk
+
+TEST_TIER = "contract"
 
 
 class RelayHarness:
@@ -221,6 +224,39 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             else:
                 lookup.assert_not_awaited()
                 state.reconcile_unavailable_callers.assert_not_awaited()
+
+    async def test_cleanup_ends_maintenance_that_consumed_one_cancellation(self):
+        entered, consumed = asyncio.Event(), []
+
+        class State:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            async def open(self):
+                pass
+
+            async def aclose(self):
+                pass
+
+            async def maintain(self):
+                entered.set()
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    if consumed:
+                        raise
+                    # As a psycopg wait_for that raced readiness on 3.10.
+                    consumed.append(True)
+
+        with patch("ucloud_sandboxes.shared_control.relay.PostgresRelayState", State):
+            app = create_model_relay_app(
+                postgres_store=object(), maintenance_interval_seconds=60
+            )
+        runner = web.AppRunner(app)
+        await runner.setup()
+        await asyncio.wait_for(entered.wait(), 1)
+        await asyncio.wait_for(runner.cleanup(), 2)
+        self.assertEqual(consumed, [True])
 
     async def test_worker_routes_require_registration_token(self) -> None:
         async with relay_app(worker_poll_timeout_seconds=0) as relay:
@@ -483,7 +519,8 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     "rollout-renew",
                     token,
                     worker_id="worker-renew",
-                    lease_seconds="0.05",
+                    # Wide enough that a loaded host still renews in time.
+                    lease_seconds="0.5",
                 )
             )["requests"][0]
             await asyncio.sleep(0.02)
@@ -496,10 +533,11 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     "registration_token": token,
                     "lease_id": leased["lease_id"],
                     "worker_id": "worker-renew",
-                    "lease_seconds": 1,
+                    "lease_seconds": 1.5,
                 },
             )
-            await asyncio.sleep(0.04)
+            # Respond only after the original lease would have expired.
+            await asyncio.sleep(0.5)
             await relay.respond(leased, token, {"renewed": True})
             result, stats = await task, await relay.stats()
 
@@ -508,11 +546,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, (200, {"renewed": True}))
         self.assertEqual(stats["inflight"], 0)
 
+    @requires_sdk()
     async def test_sdk_worker_contract_preserves_request_identity(self) -> None:
-        try:
-            from ucloud_sandboxes_sdk import AsyncRelayWorkerClient
-        except ImportError:
-            self.skipTest("requires the SDK")
+        from ucloud_sandboxes_sdk import AsyncRelayWorkerClient
 
         rollout_id = "sdk-contract-rollout"
         worker_id = "sdk-contract-worker"

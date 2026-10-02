@@ -66,3 +66,28 @@ class RamMemoryBackingTests(unittest.TestCase):
                         quota=FakeQuota(),
                         active_root=active,
                     )
+
+
+class PauseTierRamBackingTests(unittest.TestCase):
+    def test_swap_policy_must_match_the_pause_tier_flag(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            active = root / "ram"
+            active.mkdir(mode=0o700)
+            for options, swappable, accepted in (
+                ("rw,noswap", False, True), ("rw", False, False),
+                ("rw", True, True), ("rw,noswap", True, False),
+            ):
+                with self.subTest(options=options, swappable=swappable), patch(
+                    "ucloud_sandboxes.memory_backing.subprocess.run",
+                    return_value=SimpleNamespace(stdout=f"tmpfs {options}\n"),
+                ):
+                    def build():
+                        return MemoryBackingStore(
+                            root / "disk", root / "claims.sqlite", hard_capacity_bytes=4096,
+                            quota=FakeQuota(), active_root=active, ram_swappable=swappable)
+                    if accepted:
+                        build()
+                    else:
+                        with self.assertRaisesRegex(MemoryBackingError, "pause-tier"):
+                            build()

@@ -29,6 +29,8 @@ from ucloud_sandboxes.vm_init import (
     stage_vm_init_package_over_ssh,
 )
 
+TEST_TIER = "contract"
+
 ARCHITECTURE = "amd64" if os.uname().machine == "x86_64" else "arm64"
 HOST_ARCHITECTURE = "x86_64" if ARCHITECTURE == "amd64" else "aarch64"
 RUNSC_COMMIT = "9f653e577965df2ddd13875b5530cd2588661f1c"
@@ -339,6 +341,35 @@ else:
         start = script.index("import hashlib\nimport json\nimport os")
         end = script.index('\nPY\n)"', start)
         return script, script[start:end]
+
+    def test_pause_tier_swaps_ram_backing_with_zswap_optional_and_off(self):
+        ram = {"direct_split_memory_backing": True, "direct_ram_memory_backing": True}
+        off = render_vm_init_script(self._options(**ram, swap_gb=8))
+        self.assertIn("UCLOUD_DIRECT_PAUSE_TIER=0", off)
+        self.assertNotIn(" --pause-tier", off)
+        self.assertNotIn("--ram-swappable\n", off)
+        on = render_vm_init_script(self._options(**ram, swap_gb=8, direct_pause_tier=True))
+        self.assertIn("UCLOUD_DIRECT_PAUSE_TIER=1", on)
+        self.assertIn(" --pause-tier", on)
+        self.assertIn("--ram-capacity-bytes $UCLOUD_APPLICATION_MEMORY_CAPACITY_BYTES --ram-swappable\n", on)
+        self.assertIn("UCLOUD_RAM_MEMORY_ARGS+=(--ram-swappable)", on)
+        # zswap is optional and off by default: random heaps do not compress,
+        # and a full reclaim through zswap was 2-5x slower (qualification).
+        self.assertIn("UCLOUD_DIRECT_PAUSE_TIER_ZSWAP=0", on)
+        self.assertIn("random heaps do not\n  # compress at all", on)
+        self.assertIn('elif [ "$UCLOUD_DIRECT_PAUSE_TIER" -eq 1 ] && [ -e /sys/module/zswap/parameters/enabled ]'
+                      "; then\n    echo N | $SUDO tee /sys/module/zswap/parameters/enabled", on)
+        zswap = render_vm_init_script(self._options(
+            **ram, swap_gb=8, direct_pause_tier=True, direct_pause_tier_zswap=True))
+        self.assertIn("UCLOUD_DIRECT_PAUSE_TIER_ZSWAP=1", zswap)
+        self.assertIn('if [ "$UCLOUD_DIRECT_PAUSE_TIER_ZSWAP" -eq 1 ]; then\n'
+                      "    echo zstd | $SUDO tee /sys/module/zswap/parameters/compressor", zswap)
+        # The swapfile is the existing swap_gb file, prepared before zswap.
+        self.assertLess(on.index('fallocate -l "${UCLOUD_SWAP_GB}G"'), on.index("zswap/parameters/enabled"))
+        with self.assertRaisesRegex(ValueError, "requires a swapfile"):
+            render_vm_init_script(self._options(**ram, swap_gb=0, direct_pause_tier=True))
+        with self.assertRaisesRegex(ValueError, "zswap requires the pause tier"):
+            render_vm_init_script(self._options(**ram, swap_gb=8, direct_pause_tier_zswap=True))
 
     def test_split_checkpoint_rejects_s3_before_rendering_worker(self):
         with self.assertRaisesRegex(ValueError, "requires registry checkpoint"):

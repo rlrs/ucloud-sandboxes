@@ -19,6 +19,8 @@ from ucloud_sandboxes.environment_artifact import (
 from ucloud_sandboxes.environment_cache import VerifiedEnvironmentCache
 from ucloud_sandboxes.managed_registry import RegistryClient, RegistryRequestError
 
+TEST_TIER = "contract"
+
 
 class MemoryRegistry:
     def __init__(self):
@@ -255,7 +257,7 @@ class EnvironmentReadRetryTests(EnvironmentArtifactTests):
             def log_message(self, *_args):
                 pass
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        thread = Thread(target=server.serve_forever, daemon=True)
+        thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
         thread.start()
         self.addCleanup(server.server_close)
         self.addCleanup(thread.join)
@@ -295,7 +297,7 @@ class EnvironmentReadRetryTests(EnvironmentArtifactTests):
             def log_message(self, *_args):
                 pass
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        thread = Thread(target=server.serve_forever, daemon=True)
+        thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
         thread.start()
         self.addCleanup(server.server_close)
         self.addCleanup(thread.join)
@@ -469,7 +471,7 @@ class RegistryRangeTests(unittest.TestCase):
                 inner.wfile.write(body)
 
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        Thread(target=server.serve_forever, daemon=True).start()
+        Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         client = RegistryClient(f"http://127.0.0.1:{server.server_address[1]}")
@@ -506,7 +508,7 @@ class RegistryRangeTests(unittest.TestCase):
                 inner.end_headers()
 
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        Thread(target=server.serve_forever, daemon=True).start()
+        Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         client = RegistryClient(f"http://127.0.0.1:{server.server_address[1]}")

@@ -12,6 +12,8 @@ from scripts import inspect_owned_builder as inspect
 from scripts import qualify_builder_slots as qualify
 from scripts import upgrade_owned_builder as helper
 
+TEST_TIER = "contract"
+
 
 class InstalledRuntimeTests(unittest.TestCase):
     def test_full_file_set_and_bytes_required_ignoring_only_bytecode(self):

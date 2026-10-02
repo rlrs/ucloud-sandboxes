@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 from ucloud_sandboxes.sqlite_pool import SqliteConnectionPool
 
+TEST_TIER = "contract"
+
 
 class SqliteLeaseTests(unittest.TestCase):
     def test_saturated_fifo_wakes_only_admitted_readers(self):

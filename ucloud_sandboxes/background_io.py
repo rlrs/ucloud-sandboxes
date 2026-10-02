@@ -19,6 +19,9 @@ class Pressure:
     io_stall: float = 0.0
     memory_available_bytes: int = 0
     memory_backing: MemoryBackingCapacity | None = None
+    # None when unknown; the pause tier (C1.1) stops reclaim near a full swap.
+    swap_total_bytes: int | None = None
+    swap_free_bytes: int | None = None
 
 
 class PressureSampler:
@@ -48,6 +51,8 @@ class PressureSampler:
                 sample_memory_backing(
                     self.memory_backing_root, proc_root=Path(self.root)
                 ),
+                *(memory[name] * 1024 if name in memory else None
+                  for name in ("SwapTotal", "SwapFree")),
             )
             self._at = now
             return self._value

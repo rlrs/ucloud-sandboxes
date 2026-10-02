@@ -129,13 +129,11 @@ commit to reproduce a latency figure.
 `PostgresDatabase` owns connections, transaction metrics, commit hints and relay
 schema migration. `PostgresRelayState` owns the live domain. New `migrate` calls
 create only `relay_*` tables, and `status` reports the relay without starting a
-dispatcher or writing runtime configuration. These commands no longer initialize
-or report the unshipped central-scheduling experiment.
+dispatcher or writing runtime configuration.
 
-Existing qualification tables are left intact; their users must be checked
-before any manual cleanup. The explicitly named `QualificationControlStore`
-and `qualification-migrate` / `qualification-status` commands remain available
-for isolated scheduling experiments. They never replace gateway authority.
+The unshipped central-scheduling qualification store and its
+`qualification-migrate` / `qualification-status` commands were removed.
+Tables it created are left intact; check their users before any manual cleanup.
 
 ## Idle cutover
 

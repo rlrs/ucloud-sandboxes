@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
+from tests.support import make_dirs
 from ucloud_sandboxes.direct_oci import DirectOciConfigBuilder
 from ucloud_sandboxes.direct_service import DirectSandboxService
 from ucloud_sandboxes.guest_identity import resolve_identity
@@ -58,7 +59,7 @@ class GuestEnvironmentTests(unittest.TestCase):
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
             workspace = root / "workspace"
-            workspace.mkdir(mode=0o750)
+            make_dirs(workspace, mode=0o750)
             builder = DirectOciConfigBuilder()
             builder.prepare_workspace(root, spec=self.spec())
             self.assertEqual(workspace.stat().st_mode & 0o7777, 0o750)

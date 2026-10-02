@@ -285,6 +285,10 @@ class SandboxPoolConfig:
     direct_split_memory_backing: bool = False
     direct_ram_memory_backing: bool = False
     direct_reflink_memory_restore: bool = False
+    # C1.1: idle and model-wait parks pause in place; needs swap_gb > 0.
+    direct_pause_tier: bool = False
+    # zswap ahead of the pause tier's swap: only for measured compressible heaps.
+    direct_pause_tier_zswap: bool = False
     # Split workspaces start with an XFS filesystem this large and grow online
     # toward disk_mb (docs/disk-density.md). 0 formats full-size workspaces.
     direct_workspace_initial_grant_mb: int = 512
@@ -311,6 +315,7 @@ class SandboxPoolConfig:
             raw = {"network_relays": {}, "direct_split_memory_backing": False,
                    "direct_ram_memory_backing": False,
                    "direct_reflink_memory_restore": False,
+                   "direct_pause_tier": False, "direct_pause_tier_zswap": False,
                    "direct_workspace_initial_grant_mb": cls.direct_workspace_initial_grant_mb,
                    **raw}
         values = _exact_dataclass_values("sandbox", raw, cls())
@@ -376,6 +381,14 @@ class SandboxPoolConfig:
             raise ValueError("sandbox.direct_reflink_memory_restore must be a boolean")
         if result.direct_reflink_memory_restore and not result.direct_split_memory_backing:
             raise ValueError("reflink memory restore requires split memory backing")
+        if not isinstance(result.direct_pause_tier, bool):
+            raise ValueError("sandbox.direct_pause_tier must be a boolean")
+        if result.direct_pause_tier and result.swap_gb < 1:
+            raise ValueError("the pause tier requires sandbox.swap_gb")
+        if not isinstance(result.direct_pause_tier_zswap, bool):
+            raise ValueError("sandbox.direct_pause_tier_zswap must be a boolean")
+        if result.direct_pause_tier_zswap and not result.direct_pause_tier:
+            raise ValueError("sandbox.direct_pause_tier_zswap requires the pause tier")
         grant = result.direct_workspace_initial_grant_mb
         if isinstance(grant, bool) or not isinstance(grant, int) or (grant and grant < 512):
             raise ValueError("sandbox.direct_workspace_initial_grant_mb must be 0 or at least 512")
@@ -884,7 +897,7 @@ class DeploymentConfig:
             "schema": self.schema,
             "deployment_id": self.deployment_id,
             **({"relay_postgres": asdict(self.relay_postgres)} if self.relay_postgres is not None else {}),
-            **({"immutable_environments": asdict(self.immutable_environments)} if self.immutable_environments is not None else {}),
+            **({"immutable_environments": self.immutable_environments.to_dict()} if self.immutable_environments is not None else {}),
             "provider": provider,
             "data_root": self.data_root,
             **(
@@ -977,7 +990,6 @@ def _decode_policy(
         "target_cpu_utilization",
         "target_memory_utilization",
         "target_storage_queue_utilization",
-        "model_wait_capacity_weight",
     }
     bool_fields = {
         item.name
@@ -1005,7 +1017,6 @@ def _decode_policy(
             if name in {
                 "provisioning_capacity_weight",
                 "stale_provisioning_capacity_weight",
-                "model_wait_capacity_weight",
             }:
                 minimum = 0.0
             values[name] = _require_float(

@@ -15,6 +15,8 @@ from unittest.mock import Mock, patch
 from scripts.qualify_selective_runtime import CHECK_PROGRAM, cleanup_owned, expected_filesystem, validate_receipt
 from scripts.qualify_selective_semantics import fixture_layers
 
+TEST_TIER = "contract"
+
 
 class RuntimeSemanticTests(unittest.TestCase):
     def setUp(self):

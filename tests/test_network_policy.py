@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import unittest
 
 from ucloud_sandboxes.config import SandboxPoolConfig
-from ucloud_sandboxes.control_plane import _sandbox_required_capabilities
+from ucloud_sandboxes.gateway.placement import _sandbox_required_capabilities
 from ucloud_sandboxes.direct_network import DirectNetworkError, DirectNetworkManager
 from ucloud_sandboxes.direct_oci import DirectOciConfigBuilder, DirectOciConfigError
 from ucloud_sandboxes.direct_provisioner import DirectSandboxProvisioner
@@ -21,6 +21,8 @@ from ucloud_sandboxes.sandbox import (
     SandboxSshSpec,
     sandbox_spec_fingerprint,
 )
+
+TEST_TIER = "contract"
 
 
 RELAY = SandboxNetworkPolicy.relay_only()

@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 from ucloud_sandboxes.storage_native_daemon import StorageNativeJournal, StorageNativeNodeError
 
+TEST_TIER = "contract"
+
 
 class StorageJournalPoolTests(unittest.TestCase):
     def setUp(self):

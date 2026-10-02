@@ -12,6 +12,8 @@ from ucloud_sandboxes.image_foundations import openswe_foundation, tmax_foundati
 from ucloud_sandboxes.images import ImageBuildSpec
 from ucloud_sandboxes.prepared_images import PreparedImageCatalog, resolve_build, read_context, SMITH_TAIL
 
+TEST_TIER = "contract"
+
 PIN = 'docker.io/library/ubuntu@sha256:'+'a'*64
 PREPARED = 'private:5000/prepared:base@sha256:'+'b'*64
 OTHER = 'private:5000/prepared:other@sha256:'+'c'*64

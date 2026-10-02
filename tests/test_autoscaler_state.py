@@ -13,6 +13,8 @@ from ucloud_sandboxes.autoscaler_state import (
 )
 from ucloud_sandboxes.models import InstancePhase, ProviderInstance
 
+TEST_TIER = "contract"
+
 
 NOW = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
 

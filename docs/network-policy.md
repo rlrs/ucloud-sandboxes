@@ -115,9 +115,26 @@ so clients must reconnect. Empty, invalid, or failed DNS answers install a
 policy that denies all traffic; a later valid answer restores the route.
 IPv6 relay upstreams are not supported in this first policy version.
 
-Policy intent is recorded durably before the veth is activated. A failed
-firewall transaction prevents activation and preserves the prior rules.
+Policy intent is recorded durably before the veth is handed to a sandbox. A
+failed firewall transaction prevents the hand-off and preserves the prior rules.
 Create, restore, and migration all install the policy before execution.
+
+New leases normally take a pre-created pair from a pool of 32 per node. A
+background thread refills the pool. It runs at normal priority, because it
+shares the interpreter and the state lock with creates, but defers to in-flight
+creates for up to one second per pair. A pooled pair is configured but sits in
+an empty namespace with no process, so it carries no traffic. Its slot moves
+from `pool` to `leases` in the same durable write that records the lease. The
+policy is then installed, and the namespace is bind-mounted under the lease's
+name with no `ip` process. When the pool is empty, a create builds its pair as
+before.
+
+Every create still reads the host firewall afresh: one `iptables-save` and one
+`sysctl`, about 3 ms on an idle ruleset. The create response reports it as
+`network_host_rules_ms`. Concurrent creates that queue behind one check share
+it. The check is deliberate. It is the only place where a rule deleted since the
+last create is restored before that create's sandbox runs.
+
 Node-agent restart rebuilds rules from durable leases before broad forwarding
 rules are reconciled. Deletion keeps the policy and slot reserved until the
 interface is gone, then removes the owned rules before allowing slot reuse.
@@ -155,3 +172,6 @@ sudo env UCLOUD_RUN_NETNS_TESTS=1 PYTHONPATH="$PWD" \
 It requires `unshare`, `mount`, `ip`, `iptables`, and `nft`. CI runs this test on
 Linux. It exercises the actual host firewall and namespace wiring; it does not
 replace a deployment smoke test with the pinned gVisor runtime and relay TLS.
+`tests/test_direct_network_pool.py` also hands a pooled pair to a lease with
+real `ip`, namespaces and bind mounts, without a firewall. It runs without root
+in a user namespace wherever unprivileged user namespaces are enabled.

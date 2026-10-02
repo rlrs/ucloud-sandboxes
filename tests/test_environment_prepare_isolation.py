@@ -19,6 +19,8 @@ from ucloud_sandboxes.environment_prepare import PreparationError, prepare_in_su
 from ucloud_sandboxes.managed_registry import RegistryClient
 from ucloud_sandboxes.oci_layer_materialize import materialize_layers
 
+TEST_TIER = "contract"
+
 
 REPOSITORY = "owned/isolation-fixture"
 

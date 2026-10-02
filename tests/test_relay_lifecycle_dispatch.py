@@ -12,6 +12,8 @@ from aiohttp.test_utils import TestServer
 from ucloud_sandboxes import relay_lifecycle as lifecycle
 from ucloud_sandboxes.model_relay import RelayLifecycleDeferred
 
+TEST_TIER = "contract"
+
 
 class RelayLifecycleDispatchTests(unittest.IsolatedAsyncioTestCase):
     async def test_async_transport_preserves_failure_fences_and_rejects_redirects(self):

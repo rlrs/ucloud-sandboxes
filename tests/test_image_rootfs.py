@@ -10,6 +10,9 @@ from ucloud_sandboxes.image_rootfs import (
     DockerOverlay2RootfsStore,
     OverlayRootfsManager,
 )
+from tests.support import make_dirs
+
+TEST_TIER = "contract"
 
 
 IMAGE_DIGEST = "a" * 64
@@ -49,7 +52,7 @@ class Overlay2Runner(FakeRunner):
         self.middle = self.docker_root / "overlay2" / "middle" / "diff"
         self.base = self.docker_root / "overlay2" / "base" / "diff"
         for path in (self.top, self.middle, self.base):
-            path.mkdir(parents=True)
+            make_dirs(path)
 
     def run(self, argv, *, timeout):
         command = tuple(str(item) for item in argv)
@@ -124,7 +127,7 @@ class MultiImageBlockingMountRunner(Overlay2Runner):
         self.other_middle = self.docker_root / "overlay2" / "other-middle" / "diff"
         self.other_base = self.docker_root / "overlay2" / "other-base" / "diff"
         for path in (self.other_top, self.other_middle, self.other_base):
-            path.mkdir(parents=True)
+            make_dirs(path)
         self.first_mount_started = Event()
         self.first_mount_release = Event()
 
@@ -666,8 +669,7 @@ class ImageRootfsTests(unittest.TestCase):
         with TemporaryDirectory() as raw:
             root = Path(raw)
             runner = Overlay2Runner(root / "docker")
-            writable_root = (root / "quota").resolve()
-            writable_root.mkdir()
+            writable_root = make_dirs((root / "quota").resolve())
             incarnation = writable_root / "sandbox-1.sandbox-9"
             incarnation.mkdir(mode=0o700)
             store = image_store(root, runner)
@@ -703,8 +705,8 @@ class ImageRootfsTests(unittest.TestCase):
             incarnation = writable_root / "sandbox-1.sandbox-10"
             upper = incarnation / "upper"
             generation = incarnation / "hibernate-3"
-            upper.mkdir(parents=True)
-            generation.mkdir()
+            make_dirs(upper)
+            make_dirs(generation)
             (upper / "payload").write_bytes(b"migrated")
             (generation / "checkpoint.img").write_bytes(b"checkpoint")
             store = image_store(root, runner)

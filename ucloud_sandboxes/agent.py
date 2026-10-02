@@ -18,9 +18,12 @@ from .models import (
 
 
 JOB_ID_ENV_KEYS = ("UCLOUD_JOB_ID", "UCLOUD_JOBID", "JOB_ID")
+HEARTBEAT_POST_TIMEOUT_SECONDS = 10.0
 
 
-class _RejectNodeRedirects(request.HTTPRedirectHandler):
+class _RejectRedirects(request.HTTPRedirectHandler):
+    """A 3xx is the answer: a bearer token never follows a redirect."""
+
     def redirect_request(self, *_args: object, **_kwargs: object) -> None:
         return None
 
@@ -150,16 +153,7 @@ def build_heartbeat(
 
 
 def post_heartbeat(url: str, heartbeat: NodeHeartbeat) -> HeartbeatPostResult:
-    from .registry import heartbeat_to_dict
-
-    body = json.dumps(heartbeat_to_dict(heartbeat)).encode("utf-8")
-    req = request.Request(
-        url,
-        data=body,
-        method="POST",
-        headers={"Content-Type": "application/json"},
-    )
-    return _post_heartbeat_request(req)
+    return post_heartbeat_with_headers(url, heartbeat, {})
 
 
 def post_heartbeat_with_headers(
@@ -167,22 +161,15 @@ def post_heartbeat_with_headers(
     heartbeat: NodeHeartbeat,
     headers: Mapping[str, str],
 ) -> HeartbeatPostResult:
+    """POST one heartbeat; an HTTP error or redirect is an answer, a transport error raises."""
     from .registry import heartbeat_to_dict
 
-    request_headers = {"Content-Type": "application/json", **dict(headers)}
     body = json.dumps(heartbeat_to_dict(heartbeat)).encode("utf-8")
-    req = request.Request(
-        url,
-        data=body,
-        method="POST",
-        headers=request_headers,
-    )
-    return _post_heartbeat_request(req)
-
-
-def _post_heartbeat_request(req: request.Request) -> HeartbeatPostResult:
+    req = request.Request(url, data=body, method="POST",
+                          headers={"Content-Type": "application/json", **dict(headers)})
     try:
-        with request.urlopen(req, timeout=10.0) as response:
+        with request.build_opener(_RejectRedirects()).open(
+                req, timeout=HEARTBEAT_POST_TIMEOUT_SECONDS) as response:
             raw = response.read().decode("utf-8")
             return HeartbeatPostResult(response.status, _decode_json(raw))
     except error.HTTPError as exc:
@@ -208,7 +195,7 @@ def fetch_node_agent_heartbeat(
     )
     req = request.Request(url, method="GET", headers=headers)
     try:
-        with request.build_opener(_RejectNodeRedirects()).open(
+        with request.build_opener(_RejectRedirects()).open(
             req,
             timeout=timeout_seconds,
         ) as response:

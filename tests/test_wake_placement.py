@@ -18,6 +18,8 @@ from ucloud_sandboxes.wake_placement import (
     WakeUnavailable,
 )
 
+TEST_TIER = "contract"
+
 
 class WakePlacementTests(unittest.TestCase):
     """Real durable routes and typed worker observations, without an HTTP handler."""
@@ -77,7 +79,6 @@ class WakePlacementTests(unittest.TestCase):
             refresh_capacity=lambda _: False,
             publish=self.unexpected,
             decode_publication=lambda _route, payload: payload["candidate"],
-            observe_owner=lambda *_: None,
             observe_consolidation=lambda *_: None,
         )
 

@@ -62,6 +62,27 @@ class ConfigTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 DeploymentConfig.from_dict(raw)
 
+    def test_pause_tier_is_additive_off_by_default_and_requires_swap(self):
+        raw = self._raw()
+        self.assertFalse(DeploymentConfig.from_dict(raw).sandbox.direct_pause_tier)
+        raw["sandbox"].update(direct_pause_tier=True, swap_gb=0)
+        with self.assertRaisesRegex(ValueError, "requires sandbox.swap_gb"):
+            DeploymentConfig.from_dict(raw)
+        raw["sandbox"]["swap_gb"] = 16
+        self.assertTrue(DeploymentConfig.from_dict(raw).sandbox.direct_pause_tier)
+        # zswap is optional, off by default, and only ahead of the pause tier.
+        self.assertFalse(DeploymentConfig.from_dict(raw).sandbox.direct_pause_tier_zswap)
+        raw["sandbox"]["direct_pause_tier_zswap"] = True
+        self.assertTrue(DeploymentConfig.from_dict(raw).sandbox.direct_pause_tier_zswap)
+        for invalid in ({"direct_pause_tier_zswap": 1},
+                        {"direct_pause_tier_zswap": True, "direct_pause_tier": False}):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(
+                    ValueError, "direct_pause_tier_zswap"):
+                DeploymentConfig.from_dict({**raw, "sandbox": {**raw["sandbox"], **invalid}})
+        raw["sandbox"]["direct_pause_tier"] = "yes"
+        with self.assertRaises(ValueError):
+            DeploymentConfig.from_dict(raw)
+
     def test_exact_config_round_trip_and_derived_authority(self) -> None:
         raw = self._raw()
         sandbox = raw["sandbox"]

@@ -8,9 +8,11 @@ from unittest.mock import patch
 
 from tests.test_routing import sandbox_route
 from ucloud_sandboxes import routing
-from ucloud_sandboxes.control_plane import ControlPlaneHandler
+from tests.gateway_support import gateway_services
 from ucloud_sandboxes.models import ResourceQuantity
 from ucloud_sandboxes.routing import RoutingStore
+
+TEST_TIER = "contract"
 
 
 def assert_scoped_migrations(test, store):
@@ -54,7 +56,7 @@ def assert_scoped_migrations(test, store):
             )
             test.assertEqual([row.sandbox_id for row in selected], ["one"])
         test.assertEqual(decode.call_count, 4)
-    handler = SimpleNamespace(routing_store=store)
+    placement = gateway_services(routing_store=store).placement
     heartbeat = SimpleNamespace(
         node_id="dest-one", job_id="dest-job-one", node_url="http://dest-one"
     )
@@ -62,7 +64,7 @@ def assert_scoped_migrations(test, store):
         "ucloud_sandboxes.routing._sandbox_migration_from_row",
         wraps=routing._sandbox_migration_from_row,
     ) as decode:
-        occupants = ControlPlaneHandler._placement_routes_for_node(handler, heartbeat)
+        occupants = placement.routes_for_node(heartbeat)
         test.assertEqual(decode.call_count, 1)
         test.assertEqual(len(occupants), 1)
         test.assertEqual(occupants[0].reservation_id, "move-one")

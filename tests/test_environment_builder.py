@@ -12,6 +12,8 @@ from ucloud_sandboxes.image_rootfs import DockerOverlay2RootfsStore
 from ucloud_sandboxes.images import DockerImageRuntime, ImageBuildSpec, ImageManager, ImageStore
 from ucloud_sandboxes.sandbox import CommandResult
 
+TEST_TIER = "contract"
+
 
 class EnvironmentBuilderTests(unittest.TestCase):
     def test_publication_releases_only_its_local_tag_after_success_or_failure(self):

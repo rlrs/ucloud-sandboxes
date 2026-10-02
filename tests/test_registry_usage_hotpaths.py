@@ -5,10 +5,12 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from ucloud_sandboxes.control_plane import _persist_registry_image_protection
+from ucloud_sandboxes.gateway.registry_refs import _persist_registry_image_protection
 from ucloud_sandboxes.managed_registry import (
     RegistryImageLeaseNotFound, RegistryUsageStateError, RegistryUsageStore,
 )
+
+TEST_TIER = "contract"
 
 DIGEST = 'sha256:' + 'a' * 64
 

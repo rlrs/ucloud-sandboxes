@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import unittest
 
 from tests import test_control_plane as fixtures
+from tests.gateway_support import gateway_services
 from ucloud_sandboxes.capabilities import (
     HIBERNATE_LOCAL_CAPABILITY, HOST_EROFS_CAPABILITY,
     RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX, STORAGE_NATIVE_CAPABILITY,
@@ -48,10 +49,10 @@ class MigrationRuntimeEligibilityTests(unittest.TestCase):
 
     def select(self, route, destinations, owner=None):
         handler = object.__new__(ControlPlaneHandler)
-        handler.heartbeat_ttl_seconds = 120
-        handler._placement_routes = lambda: [route]
+        handler.services = gateway_services(heartbeat_ttl_seconds=120)
+        handler.services.placement.routes = lambda: [route]
         handler.routing_store = SimpleNamespace(sandbox_migrations=lambda **_: [])
-        handler._ready_sandbox_heartbeats = lambda **_kwargs: destinations
+        handler.services.fleet.ready_sandbox_heartbeats = lambda **_kwargs: destinations
         handler._heartbeat_for_route = lambda **_: owner
         return handler._select_migration_destination(route, requested_node_id="")
 

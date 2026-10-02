@@ -49,10 +49,13 @@ jobs:
         with:
           version: "0.11.2"
       - run: uv sync --locked --extra postgres
+      - name: Install eatmydata
+        run: sudo apt-get update && sudo apt-get install --yes eatmydata
       - name: Exercise real concurrent transactions and recovery
         env:
           UCLOUD_TEST_POSTGRES_DSN: postgresql://postgres:qualification-only@127.0.0.1:5432/shared_control_test
-        run: uv run --extra postgres python -u -m unittest -v tests.test_shared_control_postgres tests.test_postgres_relay tests.test_model_relay tests.test_model_relay_stateful tests.test_relay_retirement tests.test_relay_lifecycle_dispatch tests.test_relay_keepalive
+        # Every PostgreSQL-gated module is in the contract tier.
+        run: uv run --extra postgres python scripts/run_tests.py --tier contract --no-fsync
       - name: Recover HTTP callers after killing a relay process
         env:
           UCLOUD_TEST_POSTGRES_DSN: postgresql://postgres:qualification-only@127.0.0.1:5432/shared_control_test
@@ -105,8 +108,8 @@ jobs:
         with:
           version: "0.11.2"
           enable-cache: true
-      - name: Install shellcheck
-        run: sudo apt-get update && sudo apt-get install --yes shellcheck
+      - name: Install shellcheck and eatmydata
+        run: sudo apt-get update && sudo apt-get install --yes shellcheck eatmydata
       - name: Run the canonical repository check
         run: bash scripts/check.sh
       - name: Qualify relay-only packet filtering in isolated Linux namespaces
@@ -133,7 +136,7 @@ jobs:
             sleep 1
           done
           UCLOUD_TEST_REGISTRY_URL=http://127.0.0.1:5000 \
-            uv run python -m unittest tests.test_registry_distribution_contract
+            uv run python scripts/run_tests.py tests.test_registry_distribution_contract
       - name: Remove the Docker Distribution contract container
         if: always() && matrix.python-version == '3.13'
         run: docker rm --force ucloud-test-registry 2>/dev/null || true
@@ -159,7 +162,7 @@ jobs:
           UCLOUD_TEST_S3_ENDPOINT=http://127.0.0.1:9000 \
           UCLOUD_TEST_S3_ACCESS_KEY=minioadmin \
           UCLOUD_TEST_S3_SECRET_KEY=minioadmin \
-            uv run python -m unittest tests.test_s3_compatible_contract
+            uv run python scripts/run_tests.py tests.test_s3_compatible_contract
       - name: Remove the S3-compatible contract container
         if: always() && matrix.python-version == '3.13'
         run: docker rm --force ucloud-test-minio 2>/dev/null || true

@@ -58,6 +58,8 @@ from ucloud_sandboxes.storage_native_daemon import (
     StorageVolumeState,
 )
 
+TEST_TIER = "contract"
+
 
 def build_direct_node_agent_server(*args, **kwargs):
     explicit_auth = "node_control_bearer_token" in kwargs
@@ -383,6 +385,12 @@ class FakeWarden:
             and self.records[self.key(sandbox)].state == HibernationState.RUNNING
         )
 
+    def thaw(self, _sandbox):
+        return None  # These fixtures never pause.
+
+    def is_paused(self, _sandbox_id, _generation):
+        return False
+
     @staticmethod
     def workspace_record(_sandbox):
         return SimpleNamespace(state=StorageVolumeState.MOUNTED)
@@ -420,8 +428,9 @@ class FakeWarden:
         return record
 
     @contextmanager
-    def exec_lease(self, sandbox, argv, *, env=None, working_dir=None, user=None):
-        del env, working_dir, user
+    def exec_lease(self, sandbox, argv, *, env=None, working_dir=None, user=None,
+                   keep_paused=False):
+        del env, working_dir, user, keep_paused
         yield ("runsc", "exec", sandbox.container_id, *argv)
 
     def delete(self, sandbox):
@@ -1335,6 +1344,8 @@ class DirectProvisionerTests(unittest.TestCase):
         with TemporaryDirectory() as raw:
             provisioner, _, _, _, _ = self.make(Path(raw).resolve())
             service = DirectSandboxService(provisioner)
+            # Pressure never clears here; a short bound keeps the bounded wait.
+            service.admission_wait_seconds = .05
             record = self.create(service, self.spec())
             service.park(record.spec.id, operation_id="park:restore-admission")
             metrics = NodeRuntimeMetrics(

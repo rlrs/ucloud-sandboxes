@@ -41,8 +41,12 @@ from .capabilities import (
     RUNTIME_CPU_CAPABILITY_PREFIX,
     STORAGE_NATIVE_DETACH_CAPABILITY,
     STORAGE_NATIVE_MIGRATION_CAPABILITY,
+    COMMIT_EXPORT_CAPABILITY,
 )
+from .commit_policy import CommitRefused
 from .deployment import service_health
+from .exec_session_routes import EXEC_SESSION_PREFIX_HEADER
+from .heartbeat_sender import HeartbeatSenderConfig, NodeHeartbeatSender
 from .http_server import (
     DEFAULT_MAX_JSON_BODY_BYTES,
     HighBacklogThreadingHTTPServer,
@@ -67,7 +71,8 @@ from .build_admission import BUILD_ADMISSION_CAPACITY_LABEL
 from .direct_registry import ManagedPrimaryOwnedError
 from .memory_backing import MemoryBackingBusyError
 from .managed_process import ManagedProcessError, ManagedProcessReadUnavailable, ManagedProcessStart
-from .models import NodeRuntimeMetrics, ResidentWaitMetrics, ResourceQuantity, SandboxInventoryEntry, SandboxMemoryObservation, utc_now
+from .models import NodeHeartbeat, NodeRuntimeMetrics, ResidentWaitMetrics, ResourceQuantity, SandboxInventoryEntry, SandboxMemoryObservation, utc_now
+from .node_commit import CommitExports
 from .node_runtime import BuilderNodeRuntime, DirectNodeRuntime, NodeStateStore
 from .registry import heartbeat_to_dict
 from .runtime_metrics import (
@@ -190,10 +195,61 @@ class NodeAgentHandler(BuildContextHttpHandler):
     node_epoch: str
     physical_disk_path: Path
     image_materializer: Callable[[str], object] | None = None
+    commit_exports: Any = None
     rootfs_metrics_provider: Callable[[], dict[str, int]] | None = None
     node_control_bearer_token: str
     max_file_body_bytes = DEFAULT_MAX_FILE_BODY_BYTES
     server_version = "ucloud-sandboxes-node-agent/0.1"
+
+    def node_heartbeat(self) -> NodeHeartbeat:
+        """Sample this node's heartbeat. The sender calls it on a request-less
+        instance: it reads class-bound node state only, never request state."""
+        admission = {}
+
+        def active_build_count():
+            admission.update(self.image_manager.build_admission_snapshot())
+            return admission["active_builds"]
+
+        node_snapshot = self.manager.heartbeat_snapshot(
+            active_build_count=active_build_count if self.image_builds_enabled else lambda: 0
+        )
+        activity = node_snapshot.activity
+        physical_disk_total_mb, physical_disk_free_mb = _physical_disk_usage_mb(
+            self.physical_disk_path
+        )
+        inventory = tuple(
+            self._sandbox_inventory_entry(
+                record, storage_dependency=node_snapshot.storage_dependencies.get(record.spec.id)
+            )
+            for record in activity.records
+        )
+        drain = node_snapshot.drain
+        return build_heartbeat(
+            job_id=self.job_id, node_id=self.node_id, node_url=self.node_url,
+            agent_version=self.agent_version, deployment_id=self.deployment_id,
+            init_version=self.init_version,
+            active_sandboxes=activity.active_sandboxes,
+            active_image_builds=node_snapshot.active_image_builds,
+            labels=({BUILD_ADMISSION_CAPACITY_LABEL: str(admission["admission_capacity"])}
+                    if self.image_builds_enabled else {}),
+            active_sandbox_creates=activity.active_sandbox_creates,
+            capabilities=self.capabilities,
+            total_resources=self.total_resources,
+            used_resources=activity.used_resources,
+            reserved_resources=activity.reserved_resources,
+            cached_images=_cached_image_refs(self.image_manager),
+            runtime_metrics=self._runtime_metrics_snapshot(),
+            node_epoch=self.node_epoch,
+            activity_epoch=activity.activity_revision,
+            inventory=inventory,
+            inventory_complete=True,
+            physical_disk_total_mb=physical_disk_total_mb,
+            physical_disk_free_mb=physical_disk_free_mb,
+            draining=drain.draining,
+            drain_token=drain.token if drain.draining else "",
+            drain_activity_epoch=drain.drain_activity_epoch,
+            admission_open=drain.admission_open,
+        )
 
     @traced_http_request
     def do_GET(self) -> None:
@@ -204,73 +260,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
         if not self._check_node_control_authorized():
             return
         if parsed.path == "/v1/heartbeat":
-            admission = {}
-
-            def active_build_count():
-                admission.update(self.image_manager.build_admission_snapshot())
-                return admission["active_builds"]
-
-            node_snapshot = self.manager.heartbeat_snapshot(
-                active_build_count=(
-                    active_build_count
-                    if self.image_builds_enabled
-                    else lambda: 0
-                )
-            )
-            activity = node_snapshot.activity
-            physical_disk_total_mb, physical_disk_free_mb = _physical_disk_usage_mb(
-                self.physical_disk_path
-            )
-            inventory = tuple(
-                self._sandbox_inventory_entry(
-                    record,
-                    storage_dependency=node_snapshot.storage_dependencies.get(
-                        record.spec.id
-                    ),
-                )
-                for record in activity.records
-            )
-            self._write_json(
-                {
-                    "heartbeat": heartbeat_to_dict(
-                        build_heartbeat(
-                            job_id=self.job_id,
-                            node_id=self.node_id,
-                            node_url=self.node_url,
-                            agent_version=self.agent_version,
-                            deployment_id=self.deployment_id,
-                            init_version=self.init_version,
-                            active_sandboxes=activity.active_sandboxes,
-                            active_image_builds=node_snapshot.active_image_builds,
-                            labels=({BUILD_ADMISSION_CAPACITY_LABEL: str(admission["admission_capacity"])}
-                                    if self.image_builds_enabled else {}),
-                            active_sandbox_creates=activity.active_sandbox_creates,
-                            draining=node_snapshot.drain.draining,
-                            capabilities=self.capabilities,
-                            total_resources=self.total_resources,
-                            used_resources=activity.used_resources,
-                            cached_images=_cached_image_refs(self.image_manager),
-                            runtime_metrics=self._runtime_metrics_snapshot(),
-                            node_epoch=self.node_epoch,
-                            activity_epoch=activity.activity_revision,
-                            inventory=inventory,
-                            inventory_complete=True,
-                            reserved_resources=activity.reserved_resources,
-                            physical_disk_total_mb=physical_disk_total_mb,
-                            physical_disk_free_mb=physical_disk_free_mb,
-                            drain_token=(
-                                node_snapshot.drain.token
-                                if node_snapshot.drain.draining
-                                else ""
-                            ),
-                            drain_activity_epoch=(
-                                node_snapshot.drain.drain_activity_epoch
-                            ),
-                            admission_open=node_snapshot.drain.admission_open,
-                        )
-                    )
-                }
-            )
+            self._write_json({"heartbeat": heartbeat_to_dict(self.node_heartbeat())})
             return
         if not self.sandboxes_enabled and (
             parsed.path.startswith("/v1/sandboxes")
@@ -446,6 +436,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
             "/publish-parked"
         ):
             self._publish_parked_sandbox(parsed.path)
+            return
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/commit-export"):
+            self._commit_export(parsed.path)
             return
         sandbox_route = match_sandbox_http_route("POST", parsed.path)
         if sandbox_route is not None and sandbox_route.action == "park":
@@ -646,7 +639,10 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 "node.sandbox_exec_start",
                 attributes={"sandbox.id": sandbox_id},
             ) as span:
-                session = self.exec_manager.start(spec)
+                session = self.exec_manager.start(
+                    spec,
+                    session_prefix=self.headers.get(EXEC_SESSION_PREFIX_HEADER),
+                )
                 manager_timings = self.manager.consume_exec_start_timings()
                 session_timings = dict(session.start_timings)
                 start_ms = _elapsed_ms(started)
@@ -928,8 +924,10 @@ class NodeAgentHandler(BuildContextHttpHandler):
         if sample is not None:
             age = time.monotonic() - sample.sampled_at
             if age >= 0:
+                # Swapped-out pages of a paused sandbox stay in its footprint.
                 observation = SandboxMemoryObservation(
-                    sample.current_bytes, (utc_now() - timedelta(seconds=age)).isoformat())
+                    sample.current_bytes + sample.swap_bytes,
+                    (utc_now() - timedelta(seconds=age)).isoformat())
         return SandboxInventoryEntry(
             sandbox_id=record.spec.id,
             generation=record.generation,
@@ -1121,6 +1119,22 @@ class NodeAgentHandler(BuildContextHttpHandler):
             self._write_exception(exc)
             return
         self._write_json({"ok": True})
+
+    def _commit_export(self, path: str) -> None:
+        try:
+            if self.commit_exports is None:
+                raise CommitRefused("commit_export_unavailable", "commit export is not served here",
+                                    status=HTTPStatus.NOT_FOUND)
+            status, payload = self.commit_exports.request(
+                _sandbox_id_from_path(path, suffix="/commit-export"), self._read_json_body())
+        except CommitRefused as exc:
+            self._write_json(exc.payload(), status=exc.status,
+                             headers={"Retry-After": "1"} if exc.retryable else None)
+            return
+        except ValueError as exc:
+            self._write_json({"error": str(exc), "error_code": "invalid_request"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        self._write_json(payload, status=status)
 
     def _publish_parked_sandbox(self, path: str) -> None:
         sandbox_id = _sandbox_id_from_path(path, suffix="/publish-parked")
@@ -1767,6 +1781,37 @@ class NodeAgentHandler(BuildContextHttpHandler):
         self._write_json({"error": str(exc)}, status=status)
 
 
+class NodeAgentHTTPServer(HighBacklogThreadingHTTPServer):
+    """One node's API; owns the node's heartbeat sender when one is configured."""
+
+    heartbeat_sender: NodeHeartbeatSender | None = None
+
+    def attach_heartbeats(self, config: HeartbeatSenderConfig | None) -> None:
+        if config is not None:
+            # node_heartbeat reads only class-bound node state.
+            sample = object.__new__(self.RequestHandlerClass).node_heartbeat
+            self.heartbeat_sender = NodeHeartbeatSender(sample, config)
+
+    def serve_forever(self, poll_interval: float = 0.5) -> None:
+        # Pushing lasts as long as serving: the gateway may call node_url back
+        # as soon as it accepts a heartbeat, and a node that stopped accepting
+        # must stop advertising itself, however the serve loop ends.
+        if self.heartbeat_sender is not None:
+            self.heartbeat_sender.start()
+        try:
+            super().serve_forever(poll_interval)
+        finally:
+            self.stop_heartbeats()
+
+    def stop_heartbeats(self) -> None:
+        if self.heartbeat_sender is not None:
+            self.heartbeat_sender.stop()
+
+    def server_close(self) -> None:
+        self.stop_heartbeats()
+        super().server_close()
+
+
 def build_builder_node_agent_server(
     host: str,
     port: int,
@@ -1794,7 +1839,8 @@ def build_builder_node_agent_server(
     node_epoch: str | None = None,
     telemetry: Telemetry | None = None,
     environment_publisher: Callable[[Any], str] | None = None,
-) -> HighBacklogThreadingHTTPServer:
+    heartbeat: HeartbeatSenderConfig | None = None,
+) -> NodeAgentHTTPServer:
     token = node_control_bearer_token.strip()
     if not token:
         raise ValueError("node control bearer token cannot be empty")
@@ -1865,7 +1911,9 @@ def build_builder_node_agent_server(
         _host_runtime_metrics_sampler(runtime_metrics_provider)
     )
     BuilderHandler.telemetry = resolved_telemetry
-    return HighBacklogThreadingHTTPServer((host, port), BuilderHandler)
+    server = NodeAgentHTTPServer((host, port), BuilderHandler)
+    server.attach_heartbeats(heartbeat)
+    return server
 
 
 def build_direct_node_agent_server(
@@ -1889,7 +1937,8 @@ def build_direct_node_agent_server(
     max_concurrent_image_pulls: int = 8,
     node_epoch: str | None = None,
     telemetry: Telemetry | None = None,
-) -> HighBacklogThreadingHTTPServer:
+    heartbeat: HeartbeatSenderConfig | None = None,
+) -> NodeAgentHTTPServer:
     """Serve a sandbox node with direct runsc and storage-native ownership."""
     node_control_bearer_token = node_control_bearer_token.strip()
     if not node_control_bearer_token:
@@ -2011,6 +2060,9 @@ def build_direct_node_agent_server(
         direct_capabilities.append(RUNTIME_CPU_CAPABILITY_PREFIX + fingerprint.cpu_features_sha256)
     if getattr(service.provisioner.overlays.image_store, "backend_abi", None) == HOST_EROFS_ABI:
         direct_capabilities.append(HOST_EROFS_CAPABILITY)
+    DirectBoundHandler.commit_exports = CommitExports(service)
+    if DirectBoundHandler.commit_exports.registry is not None:
+        direct_capabilities.append(COMMIT_EXPORT_CAPABILITY)
     DirectBoundHandler.capabilities = tuple(direct_capabilities)
     DirectBoundHandler.image_builds_enabled = False
     DirectBoundHandler.sandboxes_enabled = True
@@ -2027,11 +2079,17 @@ def build_direct_node_agent_server(
     DirectBoundHandler.max_json_body_bytes = max_json_body_bytes
     DirectBoundHandler.max_file_body_bytes = max_file_body_bytes
 
+    # Only the immutable-image store has a nodewide I/O backend to report.
+    environment_io = getattr(service.provisioner.overlays.image_store, "io_metrics", None)
+
     def direct_runtime_metrics() -> NodeRuntimeMetrics | None:
         metrics = host_runtime_metrics()
         storage = service.warden.storage
         if metrics is None:
             return metrics
+        if environment_io is not None:
+            # Independent of the storage read below, which may fail alone.
+            metrics = replace(metrics, environment_io=environment_io())
         try:
             raw = dict(storage.get_metrics())
             memory_backing = getattr(service.warden, "memory_backing", None)
@@ -2116,8 +2174,10 @@ def build_direct_node_agent_server(
     DirectBoundHandler.runtime_metrics_provider = staticmethod(direct_runtime_metrics)
     DirectBoundHandler.telemetry = resolved_telemetry
 
-    class DirectServiceHTTPServer(HighBacklogThreadingHTTPServer):
+    class DirectServiceHTTPServer(NodeAgentHTTPServer):
         def server_close(self) -> None:
+            # The sender samples the service; it stops first.
+            self.stop_heartbeats()
             try:
                 manager.stop()
             finally:
@@ -2126,7 +2186,9 @@ def build_direct_node_agent_server(
                 finally:
                     super().server_close()
 
-    return DirectServiceHTTPServer((host, port), DirectBoundHandler)
+    server = DirectServiceHTTPServer((host, port), DirectBoundHandler)
+    server.attach_heartbeats(heartbeat)
+    return server
 
 
 def _cached_image_refs(image_manager: ImageManager) -> tuple[str, ...]:

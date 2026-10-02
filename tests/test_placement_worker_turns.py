@@ -9,6 +9,8 @@ from time import monotonic, sleep
 import unittest
 from uuid import uuid4
 
+TEST_TIER = "contract"
+
 
 DSN = os.environ.get("UCLOUD_TEST_POSTGRES_DSN")
 

@@ -16,12 +16,15 @@ import unittest
 #   follow-ups (warm_park goes once the pause flag is the only path);
 # + C2.11 EROFS layout 2; C4.3 placement_choice (its wiring deletes the
 #   whole-fleet scan, worker revisions and advisory turns); C5.2 netns pool;
-#   C4.4 in-process heartbeat sender;
+#   C4.4 in-process heartbeat sender; C5.2 part 2 (durability levels and the
+#   in-memory registry index);
+# + C5.1 step 1 guest agent client (sandbox_exec's runsc-exec path and its
+#   three threads per session go once exec and files are wired to it);
 # + C3.1 commit worker and builder halves (the largest addition);
 # - C4.7 shadow program scheduler, shared-control qualification store, and
 #   the C6.1 extraction steps so far (PR4-PR6 net negative).
 # Lower it whenever a deletion lands; storage-native (C1.3) alone is ~8k lines.
-PACKAGE_LINE_BUDGET = 105_600
+PACKAGE_LINE_BUDGET = 106_500
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

@@ -22,6 +22,14 @@ func TestMain(m *testing.M) {
 		}
 		var err error
 		switch os.Args[1] {
+		case "files":
+			if err := runFiles(os.Args[2:], os.Stdin, os.Stdout); err != nil {
+				fmt.Fprintf(os.Stderr, "file operation failed: %v\n", err)
+				os.Exit(fileExitCode(err))
+			}
+			os.Exit(0)
+		case "agent":
+			err = runAgent(os.Args[2:])
 		case "supervise":
 			err = runSupervisor(os.Args[2:])
 		case "launch":

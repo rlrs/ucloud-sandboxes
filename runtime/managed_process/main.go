@@ -171,12 +171,17 @@ type supervisor struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		fatalf("usage: %s supervise|ctl", os.Args[0])
+		fatalf("usage: %s supervise|ctl|agent|files", os.Args[0])
 	}
 	switch os.Args[1] {
 	case "files":
 		if err := runFiles(os.Args[2:], os.Stdin, os.Stdout); err != nil {
-			fatalf("file operation failed: %v", err)
+			fmt.Fprintf(os.Stderr, "file operation failed: %v\n", err)
+			os.Exit(fileExitCode(err))
+		}
+	case "agent":
+		if err := runAgent(os.Args[2:]); err != nil {
+			fatalf("guest agent failed: %v", err)
 		}
 	case "supervise":
 		if err := runSupervisor(os.Args[2:]); err != nil {

@@ -33,7 +33,9 @@ the exact sandbox runtime fingerprint, including its image-specific rootfs.
 - The autoscaler reconciles pending sandbox resource demand against normalized
   provider instance state and node heartbeats.
 - The gateway keeps client routing stable and forwards traffic through the
-  node that owns the route's exact sandbox generation.
+  node that owns the route's exact sandbox generation. Silence, suspension,
+  reboot and deletion of that node follow
+  [node failure semantics](node-failure-semantics.md).
 - Mutating provider operations are gated behind explicit `--execute` flags and
   normalized as accepted, rejected, or uncertain.
 
@@ -130,9 +132,13 @@ create another sandbox generation.
 
 Lifecycle operations use generation and operation identifiers throughout.
 Heartbeats may confirm an assigned incarnation but cannot create a new
-generation or move a route. Storage-native capacity, registry digests, the
-migration journal, and route ownership therefore remain explicit durable
-authorities rather than observations inferred from runtime processes.
+generation or move a route to another node. A heartbeat of a new authenticated
+boot epoch settles the old boot's routes: complete local parks stay on the node
+under the new epoch, and the rest follow
+[node failure semantics](node-failure-semantics.md). Storage-native capacity,
+registry digests, the migration journal, and route ownership therefore remain
+explicit durable authorities rather than observations inferred from runtime
+processes.
 
 The node has one parking path through the lifecycle coordinator. Its local idle
 timer may park ordinary opt-in sandboxes, but it never parks

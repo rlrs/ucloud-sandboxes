@@ -13,7 +13,7 @@ from ..registry_disk import RegistryDiskMonitor
 from ..routing import RoutingStore
 from ..telemetry import Telemetry
 from .fleet import FleetView
-from .heartbeats import HeartbeatIngest
+from .heartbeats import HeartbeatIngest, RebootReaper, WorkerDelete
 from .image_resolution import (
     REGISTRY_LAYER_METADATA_CACHE_MAX_ENTRIES, ImageResolution, RegistryLayerMetadataCache,
 )
@@ -42,8 +42,12 @@ def build_services(
     registry_worker_url: str | None, registry_usage_store: RegistryUsageStore | None,
     registry_disk_monitor: RegistryDiskMonitor | None, image_manager: ImageManager,
     deployment_id: str, dependency_resolver: Any, create_target_concurrency_per_node: int,
+    delete_on_worker: WorkerDelete | None,
 ) -> GatewayServices:
-    """The single wiring of the use cases; build_server owns their lifetime."""
+    """The single wiring of the use cases; build_server owns their lifetime.
+
+    Without ``delete_on_worker`` (handlers built without workers) nothing reaps.
+    """
     registry_refs = RegistryReferences(
         registry_url=registry_url, registry_worker_url=registry_worker_url,
         usage_store=registry_usage_store, deployment_id=deployment_id,
@@ -61,6 +65,10 @@ def build_services(
         heartbeats=HeartbeatIngest(
             store=store, routing_store=routing_store, metrics_store=metrics_store,
             deployment_id=deployment_id, registry_refs=registry_refs, layer_cache=layer_cache,
+            reaper=RebootReaper(
+                routing_store=routing_store, registry_refs=registry_refs,
+                metrics_store=metrics_store, delete_on_worker=delete_on_worker,
+            ) if delete_on_worker is not None else None,
         ),
         placement=Placement(
             routing_store, fleet, telemetry=telemetry,

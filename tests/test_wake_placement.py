@@ -10,7 +10,6 @@ from ucloud_sandboxes.models import ResourceQuantity
 from ucloud_sandboxes.routing import RoutingStore, wake_pending_demand_id
 from ucloud_sandboxes.wake_admission import WakeAdmission
 from ucloud_sandboxes.wake_placement import (
-    BlockedOwnerRefresh,
     WakePlaced,
     WakePlacement,
     WakePlacementPorts,
@@ -404,15 +403,3 @@ class WakePlacementTests(unittest.TestCase):
             WakeUnavailable("image preparation pending", details={"image": "example"}),
         )
         self.assertEqual(len(self.routes.sandbox_migrations(active_only=True)), 1)
-
-    def test_refresh_rejects_rebooted_worker_evidence(self):
-        self.local_capacity = False
-        changed_boot = replace(self.owner, node_epoch="other-boot")
-        changed = BlockedOwnerRefresh.refresh(
-            self.route,
-            routes=self.routes,
-            admission=self.admission,
-            read_worker=lambda _: changed_boot,
-            receive=self.unexpected,
-        )
-        self.assertFalse(changed)

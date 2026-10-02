@@ -18,7 +18,7 @@ from ucloud_sandboxes.models import (
     ProviderInstance,
     utc_now,
 )
-from ucloud_sandboxes.policy import evaluate_scale, unreachable_node_lease_expired
+from ucloud_sandboxes.policy import evaluate_scale
 from ucloud_sandboxes.reconcile import evaluate_builder_scale
 
 
@@ -835,7 +835,7 @@ class ScalePolicyTests(unittest.TestCase):
                 )
                 self.assertEqual(decision.stops, ())
 
-    def test_expired_unreachable_lease_is_independent_of_stale_inventory(self) -> None:
+    def test_expired_unreachable_lease_alone_never_stops_an_occupied_node(self) -> None:
         now = utc_now()
         candidate = node(
             "nonempty",
@@ -846,7 +846,6 @@ class ScalePolicyTests(unittest.TestCase):
         )
         policy = ScalePolicy(unreachable_stop_after_seconds=1800)
 
-        self.assertTrue(unreachable_node_lease_expired(candidate, policy, now=now))
         self.assertEqual(
             evaluate_scale([candidate], demand(), policy, now=now).stops, ()
         )

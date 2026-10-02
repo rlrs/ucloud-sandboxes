@@ -74,10 +74,23 @@ Missing IDs are omitted. Status requests cannot use `refresh=true`; use the
 ordinary full endpoint for explicit reconciliation. Existing authentication,
 generation, heartbeat expiry and detached-snapshot validation still apply.
 
-A post-start worker suspension or final provider state is node loss. The
-gateway removes that node from placement and reports affected non-portable work
-as `node_lost`. It never routes traffic to a rebooted copy of the earlier guest
-disk.
+A late heartbeat push is not silence. Before the gateway answers exec, file,
+park, wake, DELETE, create-replay or exec-session traffic with a retryable 503
+`sandbox_worker_unreachable`, it pulls `GET /v1/heartbeat` from the stored
+node URL (2 s timeout). Concurrent requests to one worker boot share that
+pull, and the next pull waits at least 2 s after it ends, doubling up to 32 s
+while the worker does not answer. A sample counts only when its node, job,
+deployment, agent version and URL match the stored heartbeat. It is ingested
+like a push, so its inventory reconciles routes, and a new boot epoch retires
+the old boot's routes as `node_lost` (410).
+
+A final provider state is node loss: the gateway reports affected
+non-portable work as `node_lost`. A reboot (a new authenticated boot epoch)
+loses only the old guest's processes. Running, paused and half-captured
+sandboxes answer `node_lost` with `reason: rebooted`; a complete local park
+that the new boot reports with its exact incarnation keeps its route and
+wakes there. The gateway deletes the remaining old-boot registrations,
+delivering recorded deletes, so the same ids can be created again.
 
 ## Storage-native migration
 

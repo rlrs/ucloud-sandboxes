@@ -152,6 +152,18 @@ class VmJobParsingTests(unittest.TestCase):
         self.assertEqual(initial_boot.phase, InstancePhase.RUNNING)
         self.assertEqual(power_cycled.phase, InstancePhase.UNAVAILABLE)
         self.assertEqual(currently_suspended.phase, InstancePhase.UNAVAILABLE)
+        # A timed past suspension is an interruption the controller can
+        # watermark once verified; any untimed one could hide a newer one.
+        timed = [{"state": "RUNNING", "timestamp": 1_700_000_100_000},
+                 {"state": "SUSPENDED", "timestamp": 1_700_000_200_000},
+                 {"state": "RUNNING", "timestamp": 1_700_000_300_000}]
+        recovered = job_with_updates(timed)
+        self.assertEqual(recovered.phase, InstancePhase.RUNNING)
+        self.assertEqual(recovered.interrupted_at.timestamp(), 1_700_000_200)
+        for updates, state in (([*timed, {"state": "SUSPENDED"}, {"state": "RUNNING"}], "RUNNING"),
+                               (timed, "SUSPENDED")):
+            job = job_with_updates(updates, state=state)
+            self.assertEqual((job.phase, job.interrupted_at), (InstancePhase.UNAVAILABLE, None))
 
 
 class HeartbeatContractTests(unittest.TestCase):

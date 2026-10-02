@@ -22,9 +22,15 @@ import unittest
 #   three threads per session go once exec and files are wired to it);
 # + C3.1 commit worker and builder halves (the largest addition);
 # - C4.7 shadow program scheduler, shared-control qualification store, and
-#   the C6.1 extraction steps so far (PR4-PR6 net negative).
+#   the C6.1 extraction steps so far (PR4-PR6 net negative);
+# + D1 reboot = process loss: exact park re-adoption, the retired-boot reaper
+#   and registration-conflict codes (+187 net; the dead cross-boot reconcile
+#   branch and three dead helpers went).
+# + D2 heartbeat pull before any sandbox_worker_unreachable answer, and D3-D7
+#   UCloud quarantine re-anchoring, provider-confirmed loss and replay
+#   ordering (+151 net together; RoutingStore.delete_sandboxes_for_jobs went).
 # Lower it whenever a deletion lands; storage-native (C1.3) alone is ~8k lines.
-PACKAGE_LINE_BUDGET = 106_500
+PACKAGE_LINE_BUDGET = 106_730
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

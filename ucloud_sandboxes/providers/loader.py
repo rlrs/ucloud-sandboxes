@@ -43,4 +43,7 @@ def load_external_provider(
             "Compute provider factory returned kind "
             f"{provider.kind!r}, expected {configuration.kind!r}."
         )
+    for flag in ("requires_continuity_history", "requires_guest_continuity"):
+        if not isinstance(getattr(provider, flag, None), bool):
+            raise ValueError(f"Compute provider must declare a boolean {flag}.")
     return provider

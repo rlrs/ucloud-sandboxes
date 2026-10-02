@@ -262,19 +262,21 @@ class HetznerProviderTests(unittest.TestCase):
         self.assertEqual(instance.phase, InstancePhase.RUNNING)
         self.assertEqual(instance.hostname, "10.20.0.42")
         self.assertTrue(compute.instance_is_eligible(instance))
-        self.assertIsNone(compute.unreachable_lease_expiry_loss)
+        self.assertFalse(compute.requires_guest_continuity)
         self.assertTrue(access.runnable)
         self.assertEqual(access.command, "ssh root@10.20.0.42")
 
-    def test_powered_off_server_is_lost_and_missing_private_ip_refreshes(self):
+    def test_powered_off_server_is_unavailable_and_missing_private_ip_refreshes(self):
         compute = provider(FakeHetznerClient())
-        off = compute.decode_instance(server_payload(status="off"))
         running_without_network = compute.decode_instance(
             server_payload(status="running", network_id=9999)
         )
 
-        self.assertEqual(off.phase, InstancePhase.LOST)
-        self.assertIsNone(compute.destructive_instance_loss(off))
+        # Its disk survives: accounted, visible and alerting, never lost.
+        for status in ("off", "stopping"):
+            off = compute.decode_instance(server_payload(status=status))
+            self.assertEqual(off.phase, InstancePhase.UNAVAILABLE, status)
+            self.assertIsNone(compute.destructive_instance_loss(off))
         access = compute.bootstrap_access(running_without_network)
         self.assertFalse(access.runnable)
         self.assertTrue(access.refresh_recommended)

@@ -556,12 +556,6 @@ class Telemetry:
     def set_current_attributes(self, attributes: Mapping[str, Any]) -> None:
         trace.get_current_span().set_attributes(_span_attributes(attributes))
 
-    def link_from_headers(self, carrier: Mapping[str, str]) -> Link | None:
-        context = trace.get_current_span(
-            self.extracted_context(carrier)
-        ).get_span_context()
-        return Link(context) if context.is_valid else None
-
     def health(self) -> dict[str, Any]:
         return self._health.snapshot(
             queue_size=self._processor.queue_size if self._processor is not None else 0,

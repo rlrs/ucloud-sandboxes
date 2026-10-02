@@ -46,7 +46,6 @@ class UCloudProvider:
     # Recover capacity through authenticated guest continuity, never deletion.
     requires_continuity_history = True
     requires_guest_continuity = True
-    unreachable_lease_expiry_loss = None
     destructive_instance_losses: tuple[DestructiveInstanceLoss, ...] = ()
     _active_job_states = ("IN_QUEUE", "RUNNING", "SUSPENDED")
 

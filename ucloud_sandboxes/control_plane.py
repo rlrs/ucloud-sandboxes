@@ -83,6 +83,7 @@ from .storage_native_migration import (
 from .gateway import node_rpc
 from .gateway.auth import _is_sdk_api_request, _token_matches
 from .gateway.fleet import _heartbeat_has_image, _node_metadata, _requested_image_cache_keys
+from .gateway.heartbeats import PULL_TIMEOUT_SECONDS
 from .gateway.image_resolution import (
     TRANSIENT_IMAGE_RESOLUTION_ERROR_CODES, _image_record_available_to_sandboxes,
     _image_reference_kind_from_headers,
@@ -107,6 +108,7 @@ from .gateway.request_parsing import (
     _sandbox_id_from_path, _sandbox_migration_id_from_path, _strict_positive_integer,
     _truthy_query_param, _validate_prepared_resources,
 )
+from .gateway.heartbeats import REBOOT_REAP_TIMEOUT_SECONDS
 from .gateway.services import GatewayServices, build_services
 from .host_locks import HOST_LOCKS
 from .http_server import (
@@ -154,8 +156,7 @@ from .models import (
 from .control_state import ControlStateStore
 from .wake_admission import WakeAdmission
 from .wake_placement import (
-    BlockedOwnerRefresh, WakePlaced, WakePlacement, WakePlacementPorts,
-    WakePlacementStopped, WakeUnavailable,
+    WakePlaced, WakePlacement, WakePlacementPorts, WakePlacementStopped, WakeUnavailable,
 )
 from .lifecycle_commit import (
     InvalidLifecycleReceipt, LifecycleCommitter, LifecycleRouteChanged,
@@ -1114,7 +1115,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         candidates: list[NodeHeartbeat] = []
         for heartbeat in ready_heartbeats:
             if (
-                (source_is_attached and heartbeat.node_id == source.node_id)
+                # A former owner, or any worker still registering this id,
+                # would refuse the import as a registration conflict.
+                heartbeat.node_id == source.node_id
+                or any(item.sandbox_id == source.sandbox_id for item in heartbeat.inventory)
                 or STORAGE_NATIVE_CAPABILITY not in heartbeat.capabilities
                 or STORAGE_NATIVE_MIGRATION_CAPABILITY not in heartbeat.capabilities
                 # A legacy attached source cannot prove compatibility with
@@ -2088,7 +2092,6 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     observed_at=observed_at,
                     node_epoch=heartbeat.node_epoch,
                     activity_epoch=heartbeat.activity_epoch,
-                    allow_node_epoch_adoption=False,
                 )
             )
             for route in stale_snapshot_routes:
@@ -3106,7 +3109,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 status=HTTPStatus.CONFLICT,
             )
             return
-        if not self._route_worker_is_fresh(route):
+        if not self._route_worker_is_fresh(route, pull=True):
             self._write_route_worker_unreachable(route)
             return
         self.services.registry_refs.ensure_route_reference(route, touch=True)
@@ -3618,7 +3621,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self._write_json(
                 {
                     "error": "sandbox worker was lost; this sandbox incarnation cannot resume",
-                    "error_code": loss["reason"],
+                    "error_code": "node_lost",
+                    "reason": loss["reason"],
                     "retryable": False,
                     "sandbox_id": sandbox_id,
                     "sandbox_generation": loss["generation"],
@@ -3630,6 +3634,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self._write_json(
             {"error": "sandbox route not found"}, status=HTTPStatus.NOT_FOUND
         )
+
+    def _write_absent_route(self, sandbox_id: str) -> None:
+        if self.command == "DELETE":
+            pending_before = self.routing_store.get_pending(sandbox_id)
+            self.routing_store.delete_sandbox(sandbox_id)
+            record_sandbox_pending_deleted(
+                self.metrics_store,
+                sandbox_id=sandbox_id,
+                pending=pending_before,
+            )
+            self._write_json({"ok": True, "deleted": False})
+            return
+        self._write_missing_sandbox_route(sandbox_id)
 
     def _route_sandbox_request_admitted(self, sandbox_id: str, path: str) -> None:
         prefetched, self._prefetched_route = getattr(self, "_prefetched_route", None), None
@@ -3644,17 +3661,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self._defer_placement("wake", sandbox_id, *fallback)
             return
         if route is None:
-            if self.command == "DELETE":
-                pending_before = self.routing_store.get_pending(sandbox_id)
-                self.routing_store.delete_sandbox(sandbox_id)
-                record_sandbox_pending_deleted(
-                    self.metrics_store,
-                    sandbox_id=sandbox_id,
-                    pending=pending_before,
-                )
-                self._write_json({"ok": True, "deleted": False})
-                return
-            self._write_missing_sandbox_route(sandbox_id)
+            self._write_absent_route(sandbox_id)
             return
 
         if self.command != "DELETE" and route.delete_operation_id:
@@ -3762,7 +3769,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return
             route = prepared_delete
 
-        if not self._route_worker_is_fresh(route):
+        if not self._route_worker_is_fresh(route, pull=True):
+            if self.routing_store.get_sandbox_readonly(sandbox_id) is None:
+                # The pull proved a new boot, whose ingest retired this route.
+                self._write_absent_route(sandbox_id)
+                return
             if self._serve_cached_job_status(route, sandbox_http_route):
                 return
             self._write_route_worker_unreachable(route)
@@ -4476,18 +4487,20 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             )
         return program, changed
 
-    def _request_wake_heartbeat(self, route: SandboxRoute) -> NodeHeartbeat | None:
-        response = self._proxy_request(route.node_url, "/v1/heartbeat", method="GET", timeout_seconds=2)
-        if response.status != HTTPStatus.OK:
-            return None
-        raw = response.json().get("heartbeat")
-        return heartbeat_from_dict(raw) if isinstance(raw, dict) else None
+    def _read_worker_heartbeat(self, node_url: str) -> Any:
+        response = self._proxy_request(
+            node_url, "/v1/heartbeat", method="GET", timeout_seconds=PULL_TIMEOUT_SECONDS)
+        return response.json().get("heartbeat") if response.status == HTTPStatus.OK else None
 
-    def _refresh_wake_capacity(self, route: SandboxRoute) -> bool:
-        return BlockedOwnerRefresh.refresh(
-            route, routes=self.routing_store, admission=self._wake_admission(),
-            read_worker=self._request_wake_heartbeat,
-            receive=self.services.heartbeats.store.receive_heartbeat)
+    def _refresh_worker(self, heartbeat: NodeHeartbeat) -> NodeHeartbeat | None:
+        return self.services.heartbeats.refresh(heartbeat, self._read_worker_heartbeat)
+
+    def _refresh_wake_capacity(self, route: SandboxRoute) -> None:
+        # A blocked owner may be stale, or fresh but full: only a live sample
+        # can admit locally. The pull is shared with every other caller.
+        owner = self.services.fleet.store.get_heartbeat(route.job_id, include_inventory=False)
+        if owner is not None:
+            self._refresh_worker(owner)
 
     def _request_wake_publication(self, route: SandboxRoute) -> dict[str, Any] | None:
         response = self._proxy_request(
@@ -4570,7 +4583,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
     def _route_exec_request(self, session_id: str) -> None:
         try:
-            route, heartbeat = self.exec_routing.resolve(session_id)
+            route, heartbeat = self.exec_routing.resolve(session_id, refresh=self._refresh_worker)
         except ExecRouteUnavailable as exc:
             self._write_json(exc.payload, status=exc.status, headers=exc.headers)
             return
@@ -4650,15 +4663,21 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self._pooled_node_body_origin = fleet.body_keepalive_origin(heartbeat)
         return heartbeat
 
-    def _route_worker_is_fresh(self, route: SandboxRoute | ExecRoute) -> bool:
+    def _route_worker_is_fresh(self, route: SandboxRoute | ExecRoute, *, pull: bool = False) -> bool:
         heartbeat = self._heartbeat_for_route(
             job_id=route.job_id,
             include_inventory=False,
         )
+        fleet = self.services.fleet
+        if pull and heartbeat is not None and not heartbeat.is_fresh(utc_now(), fleet.heartbeat_ttl_seconds):
+            # Silence is never loss: every sandbox_worker_unreachable answer
+            # follows one shared pull of the worker (HeartbeatIngest.refresh).
+            heartbeat = self._refresh_worker(heartbeat)
+            self._pooled_node_body_origin = fleet.body_keepalive_origin(heartbeat)
         return bool(
             heartbeat is not None
             and heartbeat.node_url
-            and heartbeat.is_fresh(utc_now(), self.services.fleet.heartbeat_ttl_seconds)
+            and heartbeat.is_fresh(utc_now(), fleet.heartbeat_ttl_seconds)
         )
 
     def _write_route_worker_unreachable(self, route: SandboxRoute | ExecRoute) -> None:
@@ -5684,6 +5703,7 @@ def build_server(
         image_manager=image_manager, deployment_id=deployment_id,
         dependency_resolver=dependency_resolver,
         create_target_concurrency_per_node=int(create_target_concurrency_per_node),
+        delete_on_worker=_worker_delete(node_control_bearer_token, resolved_telemetry),
     )
     BoundHandler.max_concurrent_sandbox_creates = max(
         0,
@@ -5747,6 +5767,8 @@ def build_server(
             try:
                 super().server_close()
             finally:
+                if BoundHandler.services.heartbeats.reaper is not None:
+                    BoundHandler.services.heartbeats.reaper.close()
                 if fleet_reader is not None:
                     fleet_reader.close()
                 if routing_writer is not None:
@@ -6051,6 +6073,27 @@ def _migration_operation_lock(migration_id: str):
     migrations.
     """
     return HOST_LOCKS.hold("migration", migration_id.strip())
+
+
+def _worker_delete(node_token: str, telemetry: Telemetry):
+    """The fenced worker DELETE a gateway issues on its own, outside a request."""
+
+    def delete(node_url: str, sandbox_id: str, generation: int, operation_id: str):
+        path = f"/v1/sandboxes/{quote(sandbox_id, safe='')}"
+        response = node_rpc.proxy(
+            node_rpc.build_request(
+                node_url, path, method="DELETE", body=None, forwarded_headers={},
+                extra_headers={SANDBOX_GENERATION_HEADER: str(generation),
+                               SANDBOX_OPERATION_ID_HEADER: operation_id},
+                node_token=node_token, telemetry=telemetry,
+            ),
+            node_url, path, method="DELETE", body=None,
+            timeout_seconds=REBOOT_REAP_TIMEOUT_SECONDS, telemetry=telemetry,
+            allow_body_keep_alive=False, on_upload_consumed=lambda: None,
+        )
+        return response.status, response.json()
+
+    return delete
 
 
 def _run_image_warmup_task(

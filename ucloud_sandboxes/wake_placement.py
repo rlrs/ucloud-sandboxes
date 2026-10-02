@@ -8,13 +8,11 @@ migration reservation rather than adding a second queue.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
-from threading import RLock
-import time
+from dataclasses import dataclass, field
 from typing import Any, Callable, ContextManager, Sequence
 from uuid import uuid4
 
-from .models import NodeHeartbeat, ResourceQuantity, utc_now
+from .models import NodeHeartbeat, ResourceQuantity
 from .routing import (
     RoutingStore,
     SandboxMigration,
@@ -53,10 +51,6 @@ class WakeSnapshotPublicationRequired(Exception):
         self.route, self.pending_resources = route, pending_resources
 
 
-class WakeCapacityRefreshPending(Exception):
-    pass
-
-
 class WakeCapacityRefreshRequired(Exception):
     def __init__(self, route: SandboxRoute):
         self.route = route
@@ -73,7 +67,8 @@ class WakePlacementPorts:
     reserve_local: Callable[[SandboxRoute], SandboxRoute | None]
     finish_detach: Callable[[SandboxRoute], tuple[SandboxRoute | None, str]]
     advance_migration: Callable[..., SandboxMigration]
-    refresh_capacity: Callable[[SandboxRoute], bool]
+    # Refreshes a blocked owner's heartbeat; concurrent wakes share one pull.
+    refresh_capacity: Callable[[SandboxRoute], None]
     publish: Callable[[SandboxRoute], dict[str, Any] | None]
     decode_publication: Callable[[SandboxRoute, dict[str, Any]], SandboxRoute | None]
     observe_consolidation: Callable[[SandboxRoute, SandboxMigration | None], None]
@@ -126,12 +121,6 @@ class WakePlacement:
                 except WakeCapacityRefreshRequired as blocked:
                     self.ports.refresh_capacity(blocked.route)
                     return self._placed(current, self.reserve(blocked.route))
-            except WakeCapacityRefreshPending:
-                return WakeUnavailable(
-                    "source node capacity is being refreshed",
-                    error_code="node_active_exec_deferred",
-                    retry_after=1,
-                )
             except WakeSnapshotPublicationRequired as pending:
                 # Publication is useful only after proving another node can
                 # admit this checkpoint; never hold placement locks over RPCs.
@@ -362,79 +351,3 @@ class WakePlacement:
         # A completed journal is not permission to wake a replacement ID.
         return self.mark_waking(self.current(route))
 
-
-class BlockedOwnerRefresh:
-    """Coalesce existing on-demand refreshes, scoped to the exact worker boot."""
-
-    _guard = RLock()
-    _refreshes: dict[tuple[str, str, str], tuple[float, bool]] = {}
-
-    @classmethod
-    def refresh(
-        cls,
-        route: SandboxRoute,
-        *,
-        routes: RoutingStore,
-        admission: WakeAdmission,
-        read_worker: Callable[[SandboxRoute], NodeHeartbeat | None],
-        receive: Callable[[NodeHeartbeat], None],
-    ) -> bool:
-        previous = admission.read_owner(route.job_id)
-        if previous is None:
-            return False
-        occupants = admission.read_placement(previous)
-        requested = ResourceQuantity(
-            vcpu=route.resources.vcpu, memory_mb=route.resources.memory_mb
-        )
-        if (
-            previous.is_fresh(utc_now(), admission.heartbeat_ttl_seconds)
-            and previous.admission_open
-            and not previous.draining
-            and admission.can_admit(previous, occupants, requested)
-        ):
-            return False
-        key = str(routes.path), route.job_id, previous.node_epoch
-        now = time.monotonic()
-        with cls._guard:
-            for old_key, (finished, active) in list(cls._refreshes.items()):
-                if not active and now - finished > 120:
-                    del cls._refreshes[old_key]
-            finished, active = cls._refreshes.get(key, (0, False))
-            if active:
-                raise WakeCapacityRefreshPending()
-            if now - finished < 2:
-                return False
-            cls._refreshes[key] = now, True
-        try:
-            current = read_worker(route)
-            if current is None or (
-                current.node_id,
-                current.job_id,
-                current.node_epoch,
-                current.deployment_id,
-                current.agent_version,
-            ) != (
-                previous.node_id,
-                previous.job_id,
-                previous.node_epoch,
-                previous.deployment_id,
-                previous.agent_version,
-            ):
-                return False
-            received_at = utc_now()
-            receive(
-                replace(
-                    current,
-                    node_url=previous.node_url,
-                    received_at=received_at,
-                    updated_at=received_at,
-                    reported_at=current.reported_at or current.updated_at,
-                    idle_since=None,
-                )
-            )
-            return True
-        except (OSError, ValueError, TypeError):
-            return False
-        finally:
-            with cls._guard:
-                cls._refreshes[key] = time.monotonic(), False

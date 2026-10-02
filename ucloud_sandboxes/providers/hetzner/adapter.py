@@ -50,8 +50,9 @@ class HetznerProvider:
 
     kind = "hetzner"
     requires_continuity_history = False
+    # Readiness is the server status itself; a reboot shows as a new epoch.
+    requires_guest_continuity = False
     destructive_instance_losses: tuple[DestructiveInstanceLoss, ...] = ()
-    unreachable_lease_expiry_loss = None
 
     def __init__(
         self,

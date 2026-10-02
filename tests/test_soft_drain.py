@@ -18,6 +18,7 @@ from ucloud_sandboxes.control_state import SOFT_DRAIN, ControlStateStore
 from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.gateway import placement as placement_rules
 from ucloud_sandboxes.models import (
+    EPOCH_RETIREMENTS_LABEL,
     NodeHeartbeat,
     NodeRuntimeMetrics,
     ResourceQuantity,
@@ -264,6 +265,37 @@ class SoftDrainSelectionTests(unittest.TestCase):
             ).clear_job_ids,
             ("200",),
         )
+
+    def test_repeatedly_rebooted_worker_retires_whatever_demand_says(self):
+        now = utc_now()
+
+        def rebooted(value, *hours_ago):
+            labels = {**value.heartbeat.labels, EPOCH_RETIREMENTS_LABEL: ",".join(
+                (now - timedelta(hours=hours)).isoformat() for hours in hours_ago)}
+            return replace(value, heartbeat=replace(value.heartbeat, labels=labels))
+
+        # One reboot, or two more than a day apart, loses processes only.
+        for hours_ago in ((1,), (30, 1)):
+            self.assertFalse(self.plan(
+                [worker("100", active=10), rebooted(worker("200", active=10), *hours_ago)],
+            ).retiring)
+        failing = rebooted(worker("200", active=10), 20, 1)
+        plan = self.plan([worker("100", active=10), failing, worker("300", drained=True)])
+        self.assertEqual((plan.job_id, plan.selected, plan.retiring, plan.clear_job_ids),
+                         ("200", True, True, ("300",)))
+        # Demand never reopens it, and it is no capacity to plan with.
+        request = SandboxPlacementRequest(ResourceQuantity(1, 1024, 2048))
+        busy = evaluate_scale(
+            [drained_node(failing)], demand(pending_count=1, placement_requests=(request,)),
+            ScalePolicy(), now=now,
+        )
+        self.assertEqual((busy.soft_drain_job_id, busy.soft_drain_clear_job_ids, busy.ready_nodes),
+                         ("200", (), 0))
+        # Idle, it stops through the drain handshake, even without drain on park.
+        idle = rebooted(worker("200", active=0, idle_since=now - timedelta(hours=1)), 20, 1)
+        self.assertEqual(evaluate_scale(
+            [worker("100"), idle], demand(), ScalePolicy(drain_on_park_enabled=False), now=now,
+        ).stops, ("200",))
 
     def test_emptied_worker_stops_after_short_grace(self):
         now = utc_now()

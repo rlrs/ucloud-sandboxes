@@ -162,7 +162,9 @@ same bootstrap generation; do not repair the node with a different artifact.
 
 When a worker is permanently lost, requests for its non-portable sandboxes
 return HTTP 410 with `error_code: node_lost` and `retryable: false`. The response
-includes `sandbox_generation` and `lost_at`. This means the runner should fail
+includes `sandbox_generation`, `lost_at` and `reason`: `rebooted` when the worker
+came back with a new boot, which loses running work but keeps complete local
+parks, and `node_lost` when no cause was recorded. This means the runner should fail
 or restart the agent attempt with a new sandbox, rather than retry the same
 operation indefinitely. It does not promise continuation from a local checkpoint.
 The diagnosis is retained for seven days and does not carry over to a replacement

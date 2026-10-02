@@ -29,8 +29,7 @@ from ..routing import PendingSandboxDemand, RoutingStore, SandboxRoute, SandboxR
 from ..sandbox import SandboxSpec
 from ..telemetry import Telemetry
 from ..wake_placement import (
-    WakeCapacityRefreshPending, WakeCapacityRefreshRequired, WakePlacementStopped,
-    WakeSnapshotPublicationRequired,
+    WakeCapacityRefreshRequired, WakePlacementStopped, WakeSnapshotPublicationRequired,
 )
 from .fleet import FleetView, _requested_image_cache_keys
 from .image_resolution import RegistryLayerMetadataCache
@@ -432,8 +431,7 @@ class Placement:
                 return operation()
         with self.telemetry.span("gateway.placement.transaction"):
             return self.routing_store.run_placement(operation, worker_id=worker_id, outcomes=(
-                WakePlacementStopped, WakeCapacityRefreshRequired,
-                WakeCapacityRefreshPending, WakeSnapshotPublicationRequired,
+                WakePlacementStopped, WakeCapacityRefreshRequired, WakeSnapshotPublicationRequired,
             ))
 
     @contextmanager

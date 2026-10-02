@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.8.1 - 2026-10-02
+
+Node-failure semantics; see `docs/node-failure-semantics.md`. Upgrade the gateway first: it understands the worker's new 409 `sandbox_registration_conflict`, and the autoscaler's `pending_delete_attempts` table is additive.
+
+- **Reboot = process loss (D1).** A proven reboot (a fresh authenticated heartbeat with a new node_epoch) now loses only the old guest's processes. Running, paused and half-captured sandboxes answer 410 with error_code node_lost and a new `reason: rebooted` field. A complete local park that the new boot reports with its exact incarnation keeps its route and stays wakeable. The gateway sends generation-fenced worker deletes for the remaining old-boot registrations and delivers recorded client deletes. This frees their reservations, so the same ids can be created again and the worker rejoins placement. Every 410 for a lost sandbox now says error_code node_lost and carries `reason`. A worker answers a create or import refused because another incarnation owns the id with 409 `sandbox_registration_conflict` (retryable false), not an unclassified 503. Parked-sandbox migration never picks the route's former owner, or any worker still registering that id, as the destination. Watch the `sandbox_reboot_reap` metrics events.
+- **Silence is never loss (D2).** Before the gateway answers exec, file, park, wake, DELETE, create-replay or exec-session traffic with a retryable 503 sandbox_worker_unreachable, it pulls the worker's GET /v1/heartbeat once (2 s timeout). The pull is shared by every concurrent request to that worker boot. The next pull waits at least 2 s, doubling up to 32 s while the worker does not answer. A pulled sample counts only when its node, job, deployment, agent version and URL match the stored heartbeat. It goes through the same ingest as a push: inventory reconciliation, and on a new boot epoch, retirement of the old boot's routes as node_lost (410). The gateway emits a node_heartbeat_pull event for each pull, with outcome refreshed, epoch_changed, unreachable, identity_mismatch or rejected, plus the age of the last receipt. The wake-only BlockedOwnerRefresh and WakeCapacityRefreshPending are removed: a concurrent wake now waits for the shared pull instead of getting 503 node_active_exec_deferred. After a pull finds a new boot, the request that pulled answers one retryable 503 when the old boot's route is still pending a recorded delete; the retry or the reboot reaper delivers it.
+- **Worker loss semantics (autoscaler and providers).**
+  - **UCloud quarantine:**
+    - A RUNNING job's latest timed post-start suspension (`interrupted_at`) is watermarked by recovery in the controller label `ucloud-sandboxes/controller-continuity-verified-through`. That label is durable, only moves forward, and workers cannot forge it. So a historical suspension quarantines once instead of every cycle. Untimed history still stays unavailable.
+    - A same-boot verified probe with complete inventory now retires absent routes by the normal reconcile rules, which breaks the quarantine/reconcile deadlock.
+    - A quarantine taken before a reboot reported is re-anchored on the new boot once ingest has retired the old one, so a rebooted worker rejoins the pool.
+    - A quarantined worker wakes its own parks while its boot is unchanged.
+  - **Repeated reboots:** the gateway records each proven boot change atomically in `ucloud-sandboxes/controller-epoch-retirements`. Two within 24 h make the worker a failing host: it stops counting as capacity, holds the soft-drain slot whatever the demand, and stops through the ordinary drain handshake once idle.
+  - **Hetzner:** `off`/`stopping` servers are unavailable, not lost. They count against `max_nodes` as unreachable, are replaced one for one within it, and are never stopped automatically.
+  - **Unreachable-empty stops, every provider:** these now need a direct probe in the same cycle that failed in transport. A reachable worker whose heartbeat push broke is refreshed instead. Prepared unreachable stops written by older controllers lack `directProbeFailed` and are never replayed; they stay inert in `prepared`.
+  - **Pending-delete replay:** least recently attempted first, with attempt times persisted in the additive `pending_delete_attempts` table. Up to 8 run concurrently with a 30 s timeout each, so a silent or hung worker cannot starve younger intents.
+  - **Loss codes:** provider-confirmed termination, final-job pruning and stale-route deletion record `node_lost`. Clients get 410 and exec sessions are recorded as worker-lost, instead of a 404.
+  - **Metrics:** `vm_observed` carries `phase`, `interrupted_at` and the last known `node_epoch`. A new `node_epoch_retired` event records each boot change with its downtime.
+  - **Provider plugins:** external providers must declare boolean `requires_continuity_history` and `requires_guest_continuity`. `unreachable_lease_expiry_loss` is gone.
+
 ## 0.8.0 - 2026-10-02
 
 The first tagged release since 0.5.114rc24. It also covers the untagged 0.6 and 0.7 production builds. Rollout: `docs/rollout-0.8.0.md`. The node-failure fixes are not in it; they follow in 0.8.1.

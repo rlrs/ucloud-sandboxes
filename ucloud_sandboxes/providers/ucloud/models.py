@@ -54,6 +54,7 @@ def instance_from_payload(payload: dict[str, Any]) -> ProviderInstance:
     )
     state = str(status.get("state") or "").strip().upper()
     started_at = _parse_millis(status.get("startedAt"))
+    interruption = _post_start_suspension(updates)
     ssh_enabled = _nested_get(status, ("jobParametersJson", "request", "sshEnabled"))
     queue_status = _nested_get(
         status,
@@ -68,7 +69,7 @@ def instance_from_payload(payload: dict[str, Any]) -> ProviderInstance:
         product_id=product_id,
         product_category=str(product.get("category") or ""),
         state=state,
-        phase=_instance_phase(state, started_at=started_at, updates=updates),
+        phase=_instance_phase(state, started_at=started_at, interruption=interruption),
         hostname=_string_value(specification.get("hostname")),
         created_at=_parse_millis(payload.get("createdAt")),
         started_at=started_at,
@@ -84,6 +85,7 @@ def instance_from_payload(payload: dict[str, Any]) -> ProviderInstance:
         latest_note=latest_note if isinstance(latest_note, str) else None,
         labels={str(key): str(value) for key, value in labels.items()},
         raw=payload,
+        interrupted_at=interruption[1] if state == "RUNNING" else None,
     )
 
 
@@ -91,32 +93,39 @@ def _instance_phase(
     state: str,
     *,
     started_at: datetime | None,
-    updates: object,
+    interruption: tuple[bool, datetime | None],
 ) -> InstancePhase:
+    suspended, suspended_at = interruption
     if state in FINAL_JOB_STATES:
         return InstancePhase.TERMINAL
-    if _has_post_start_suspension(updates):
-        return InstancePhase.UNAVAILABLE
-    if state == "SUSPENDED":
-        return InstancePhase.PROVISIONING if started_at is None else InstancePhase.UNAVAILABLE
     if state == "RUNNING":
-        return InstancePhase.RUNNING
+        # A timed past suspension is a watermarkable interruption; an untimed
+        # one could hide a newer suspension, so it stays unavailable.
+        return (
+            InstancePhase.UNAVAILABLE
+            if suspended and suspended_at is None
+            else InstancePhase.RUNNING
+        )
+    if suspended or (state == "SUSPENDED" and started_at is not None):
+        return InstancePhase.UNAVAILABLE
     return InstancePhase.PROVISIONING
 
 
-def _has_post_start_suspension(updates: object) -> bool:
-    seen_running = False
-    if not isinstance(updates, list):
-        return False
-    for update in updates:
+def _post_start_suspension(updates: object) -> tuple[bool, datetime | None]:
+    """Whether a SUSPENDED ever followed a RUNNING, and the latest such time.
+
+    The time is None when any of them is untimed: no watermark covers it.
+    """
+    seen_running, times = False, []
+    for update in updates if isinstance(updates, list) else ():
         if not isinstance(update, dict):
             continue
         state = str(update.get("state") or "").strip().upper()
         if state == "RUNNING":
             seen_running = True
         elif state == "SUSPENDED" and seen_running:
-            return True
-    return False
+            times.append(_parse_millis(update.get("timestamp")))
+    return bool(times), max(times) if times and None not in times else None
 
 
 def _parse_millis(value: object) -> datetime | None:

@@ -1,21 +1,36 @@
 """S3: worker silence, reboot and quarantine, over the local fleet harness.
 
 Tier: contract. A silent worker's routes are retryable and never proxied. A
-new boot epoch retires the old boot's routes and sessions as node_lost,
-over SQLite and PostgreSQL routing; a restart within one boot keeps them. A
+new boot epoch loses the old boot's processes as node_lost (reason
+rebooted), over SQLite and PostgreSQL routing, but keeps its complete local
+parks; fenced deletes then free every other old-boot registration, recorded
+client deletes included. A restart within one boot keeps everything. A
 quarantined worker keeps serving existing work but admits none, and its
-inventory cannot retire routes.
+inventory cannot retire routes, but it still wakes its own parks. The
+autoscaler's continuity step (a fake provider job, the real probe) retires
+what a verified same-boot inventory omits, and quarantines a historical
+suspension once.
 
-The autoscaler half of S3 (provider-reported suspension or power-off, and
-no destructive stop replay) needs the S9 fake provider and is not covered.
+The rest of the autoscaler half of S3 (provider power-off, no destructive
+stop replay) needs the full S9 fake provider and is not covered.
 """
 
+from datetime import timedelta
+import threading
+import time
 import unittest
 
 from tests.harness import LocalFleet, process_alive
 from ucloud_sandboxes.control_state import QUARANTINE_REASON
+from ucloud_sandboxes.models import utc_now
 
 SPEC = {"image": "harness/base:1", "cpus": 1, "memory_mb": 256, "disk_mb": 1024, "network": "none"}
+
+
+def in_background(call) -> threading.Thread:
+    thread = threading.Thread(target=call, daemon=True)
+    thread.start()
+    return thread
 
 
 class WorkerLossTests(unittest.TestCase):
@@ -77,60 +92,138 @@ class WorkerLossTests(unittest.TestCase):
             self.assertIsNone(fleet.route("doomed"))
             self.assertIsNone(node.registration("doomed"))
 
-    def test_reboot_retires_the_old_boot_as_node_lost(self):
-        self._reboot_retires_the_old_boot(postgres=False)
+    def assert_rebooted(self, response, name: str, generation: int = 1) -> None:
+        self.assertEqual(response.status, 410, response.body)
+        self.assertEqual(
+            {key: response.json()[key]
+             for key in ("error_code", "reason", "retryable", "sandbox_id", "sandbox_generation")},
+            {"error_code": "node_lost", "reason": "rebooted", "retryable": False,
+             "sandbox_id": name, "sandbox_generation": generation},
+        )
 
-    def test_reboot_retires_the_old_boot_with_postgres_routing(self):
-        self._reboot_retires_the_old_boot(postgres=True)
+    def wait_reaped(self, node, *names: str) -> None:
+        # The gateway reaps off the heartbeat thread.
+        deadline = time.monotonic() + 15
+        while any(node.registration(name) is not None for name in names):
+            self.assertLess(time.monotonic(), deadline, f"{names} were not reaped")
+            time.sleep(0.02)
 
-    def _reboot_retires_the_old_boot(self, *, postgres: bool) -> None:
+    def test_reboot_loses_processes_and_keeps_complete_parks(self):
+        self._reboot_loses_processes_and_keeps_complete_parks(postgres=False)
+
+    def test_reboot_loses_processes_and_keeps_complete_parks_with_postgres_routing(self):
+        self._reboot_loses_processes_and_keeps_complete_parks(postgres=True)
+
+    def _reboot_loses_processes_and_keeps_complete_parks(self, *, postgres: bool) -> None:
         with LocalFleet(postgres=postgres) as fleet:
             node = fleet.nodes[0]
+            store = fleet.gateway.RequestHandlerClass.services.fleet.store
             fleet.create("alpha")
+            fleet.create("doomed")
             fleet.create("resting", parkable=True)
+            self.assertEqual(fleet.write_file("resting", "/workspace/marker", b"kept").status, 200)
             self.assertEqual(fleet.park("resting").status, 200)
             pid = node.sentry_pid("alpha")
+            # A delete recorded while the worker is silent, then the reboot.
+            node.stop()
+            fleet.expire_heartbeat(node)
+            self.assert_unreachable(fleet.delete("doomed"), node)
+            old_epoch = store.get_heartbeat(node.job_id).node_epoch
 
             node.reboot()
-            fleet.heartbeat()
+            new_epoch = store.get_heartbeat(node.job_id).node_epoch
+            self.assertNotEqual(new_epoch, old_epoch)
             self.assertFalse(process_alive(pid))
-            # A local park dies with its worker's boot, like a running sandbox.
-            self.assertEqual((fleet.route("alpha"), fleet.route("resting")), (None, None))
+            # Measured, not guessed: one event per proven boot change.
+            metrics = fleet.gateway.RequestHandlerClass.metrics_store
+            getattr(metrics, "flush", lambda: True)()
+            (retired,) = [e.data for e in metrics.load_events() if e.kind == "node_epoch_retired"]
+            self.assertEqual((retired["job_id"], retired["node_epoch"], retired["retiring"]),
+                             (node.job_id, node.boot_id.hex, False))
+            self.assertGreaterEqual(retired["downtime_seconds"], 0)
+            # The old boot's processes are lost.
+            self.assertIsNone(fleet.route("alpha"))
             self.assertEqual(fleet.status("alpha").json()["sandboxes"], [])
-            for name, response in (
-                ("alpha", fleet.request("GET", "/v1/sandboxes/alpha")),
-                ("alpha", fleet.request("GET", "/v1/sandboxes/alpha/jobs/job-1")),
-                ("alpha", fleet.start_exec("alpha", ["true"])),
-                ("alpha", fleet.park("alpha")),
-                ("alpha", fleet.read_file("alpha", "/etc/hostname")),
-                ("resting", fleet.wake("resting", generation=1)),
+            for response in (
+                fleet.request("GET", "/v1/sandboxes/alpha"),
+                fleet.request("GET", "/v1/sandboxes/alpha/jobs/job-1"),
+                fleet.start_exec("alpha", ["true"]),
+                fleet.park("alpha"),
+                fleet.read_file("alpha", "/etc/hostname"),
             ):
-                self.assertEqual(response.status, 410, response.body)
-                self.assertEqual(
-                    {key: response.json()[key]
-                     for key in ("error_code", "retryable", "sandbox_id", "sandbox_generation")},
-                    {"error_code": "node_lost", "retryable": False, "sandbox_id": name, "sandbox_generation": 1},
-                )
+                self.assert_rebooted(response, "alpha")
             for _ in range(2):
                 deleted = fleet.delete("alpha")
                 self.assertEqual((deleted.status, deleted.json()), (200, {"ok": True, "deleted": False}))
-            # The rebooted worker still reports what its old boot owned, the
-            # dead runtime as quarantined; the gateway no longer routes to it.
-            inventory = {item["sandbox_id"]: item["state"] for item in node.post_heartbeat()["node"]["inventory"]}
-            self.assertEqual((sorted(inventory), inventory["alpha"]), (["alpha", "resting"], "recovery-required"))
-            self.assertIsNotNone(node.registration("alpha"))
-            # Current contract: nothing deletes those registrations, so the
-            # same name cannot be created on this worker again.
-            again = fleet.request("POST", "/v1/sandboxes", payload={"id": "alpha", **SPEC}, token="sandbox")
-            self.assertEqual((again.status, again.json()),
-                             (503, {"error": "sandbox already has another direct registration"}))
-            self.assertEqual(fleet.create("beta")["state"], "running")
+            # The complete local park moved to the new boot, durably.
+            self.assertEqual(
+                (fleet.route("resting").state, fleet.route("resting").node_epoch), ("parked", new_epoch))
+
+            # Fenced deletes free what the old boot still held: the lost
+            # registration and the recorded delete, delivered, not dropped.
+            self.wait_reaped(node, "alpha", "doomed")
+            self.assertIsNone(fleet.route("doomed"))
+            self.assertEqual(fleet.request("GET", "/v1/sandboxes/doomed").status, 404)
+            heartbeat = node.post_heartbeat()["node"]
+            self.assertEqual({item["sandbox_id"]: item["state"] for item in heartbeat["inventory"]},
+                             {"resting": "parked"})
+            self.assertEqual(heartbeat["reserved_resources"], {"vcpu": 0.0, "memory_mb": 0, "disk_mb": 0})
+            self.assertEqual(set(node.service.provisioner.registry.disk_claims_mb()), {("resting", 1)})
+
+            self.assertEqual(fleet.wake("resting", generation=1).status, 200)
+            self.assertEqual(fleet.exec("resting", ["cat", "/workspace/marker"]).stdout, "kept")
+            # The id is free again, and a later heartbeat never reaps the
+            # newer incarnation or the re-adopted one.
+            again = fleet.create("alpha")
+            self.assertEqual((again["state"], fleet.route("alpha").generation), ("running", 2))
+            fleet.heartbeat()
+            self.assertEqual(fleet.exec("alpha", ["true"]).exit_code, 0)
+            self.assertEqual(fleet.exec("resting", ["cat", "/workspace/marker"]).stdout, "kept")
+
+    def test_reboot_settles_every_lifecycle_state(self):
+        with LocalFleet(node_processes=True) as fleet:
+            node = fleet.nodes[0]
+            fleet.create("capturing", parkable=True)
+            fleet.create("waking", parkable=True)
+            self.assertEqual(fleet.park("waking").status, 200)
+            # Mid-HIBERNATING: the checkpoint wrote its image but never returned.
+            node.arm_fault("checkpoint", "hang-after", sandbox_id="capturing")
+            park = in_background(lambda: fleet.park("capturing"))
+            node.wait_hung("checkpoint")
+            # Mid-RESTORING: the restore never ran.
+            node.arm_fault("restore", "hang", sandbox_id="waking")
+            wake = in_background(lambda: fleet.wake("waking", generation=1))
+            node.wait_hung("restore")
+
+            node.reboot()
+            park.join(15)
+            wake.join(15)
+            fleet.heartbeat()
+            # A capture without COMPLETE is lost; a restore rolls back to an
+            # intact park, which the new boot keeps.
+            self.assert_rebooted(fleet.request("GET", "/v1/sandboxes/capturing"), "capturing")
+            self.wait_reaped(node, "capturing")
+            self.assertEqual(fleet.wake("waking", generation=1).status, 200)
+            self.assertEqual(fleet.exec("waking", ["true"]).exit_code, 0)
+
+    def test_registration_conflict_is_a_definite_409(self):
+        with LocalFleet() as fleet:
+            fleet.create("ghost")
+            # The gateway forgets a route whose registration the worker keeps.
+            fleet.gateway.RequestHandlerClass.routing_store.delete_sandbox("ghost")
+            again = fleet.request("POST", "/v1/sandboxes", payload={"id": "ghost", **SPEC}, token="sandbox")
+            self.assertEqual(again.status, 409, again.body)
+            self.assertEqual({key: again.json()[key] for key in ("error_code", "retryable")},
+                             {"error_code": "sandbox_registration_conflict", "retryable": False})
+            self.assertIsNone(fleet.route("ghost"))
 
     def test_quarantined_worker_serves_existing_work_and_admits_none(self):
         with LocalFleet() as fleet:
             node = fleet.nodes[0]
             for name in ("alpha", "beta", "omega"):
                 fleet.create(name)
+            fleet.create("resting", parkable=True)
+            self.assertEqual(fleet.park("resting").status, 200)
             store = fleet.gateway.RequestHandlerClass.services.fleet.store
 
             def remove_out_of_band(name: str) -> None:
@@ -157,6 +250,44 @@ class WorkerLossTests(unittest.TestCase):
             self.assertEqual(store.get_heartbeat(node.job_id).labels[QUARANTINE_REASON],
                              "provider_readiness_unverified")
             self.assertEqual(fleet.route("beta").state, "running")
+            # Its boot is unchanged, so it still owns and wakes its own parks.
+            self.assertEqual(fleet.wake("resting", generation=1).status, 200)
+
+            # A same-boot probe with complete inventory retires beta by the
+            # normal rules, so one vanished sandbox cannot pin quarantine.
+            suspended_at = utc_now() - timedelta(minutes=5)
+            job, heartbeat, retired = fleet.continuity_cycle(node, interrupted_at=suspended_at)
+            self.assertEqual(([r.sandbox_id for r in retired], job.phase.value),
+                             (["beta"], "running"))
+            self.assertIsNone(fleet.route("beta"))
+            self.assertNotIn(QUARANTINE_REASON, heartbeat.labels)
+            self.assertEqual(fleet.create("gamma")["state"], "running")
+            # That suspension is verified: a failing probe does not quarantine
+            # it again every cycle. A newer suspension does.
+            node.stop()
+            for interrupted_at, quarantined in ((suspended_at, None),
+                                                (utc_now(), "provider_readiness_unverified")):
+                job, heartbeat, _ = fleet.continuity_cycle(node, interrupted_at=interrupted_at)
+                self.assertEqual(heartbeat.labels.get(QUARANTINE_REASON), quarantined)
+                self.assertEqual(job.phase.value, "unavailable" if quarantined else "running")
+
+    def test_one_proven_reboot_does_not_pin_quarantine(self):
+        # A UCloud power-off is quarantined before the new boot reports. Once
+        # ingest has retired the old boot, quarantine fences the new one, so
+        # the rebooted worker rejoins the pool instead of leaking forever.
+        with LocalFleet() as fleet:
+            node = fleet.nodes[0]
+            fleet.create("alpha")
+            fleet.create("resting", parkable=True)
+            self.assertEqual(fleet.park("resting").status, 200)
+            _, heartbeat, _ = fleet.continuity_cycle(node, state="SUSPENDED")
+            self.assertEqual(heartbeat.labels[QUARANTINE_REASON], "provider_readiness_unverified")
+            node.reboot()
+            fleet.heartbeat()
+            job, heartbeat, _ = fleet.continuity_cycle(node, interrupted_at=utc_now())
+            self.assertEqual((job.phase.value, heartbeat.labels.get(QUARANTINE_REASON)),
+                             ("running", None))
+            self.assertEqual(fleet.create("beta")["state"], "running")
 
 
 if __name__ == "__main__":

@@ -21,6 +21,8 @@ from .models import (
     ScalePolicy,
     SOFT_DRAIN_LABEL,
     is_soft_drained,
+    REPEATED_REBOOTS,
+    repeatedly_rebooted,
     utc_now,
 )
 from .resource_admission import (
@@ -61,7 +63,10 @@ def evaluate_scale(
     capacity_nodes = [
         node
         for node in pool_nodes
-        if node.agent_version_compatible or node.is_provisioning
+        if (node.agent_version_compatible or node.is_provisioning)
+        # A repeatedly rebooting host keeps serving what it holds while it
+        # retires; demand is planned without it.
+        and not repeatedly_rebooted(node.heartbeat, now)
     ]
     ready_nodes = [node for node in capacity_nodes if node.is_schedulable]
 
@@ -213,7 +218,7 @@ def evaluate_scale(
         scale_up_capacity(soft_drain.job_id)
     )
     soft_drain_released = False
-    if soft_drain.job_id and (
+    if soft_drain.job_id and not soft_drain.retiring and (
         placement_nodes > 0
         or (_has_resources(desired_resources) and _has_resources(resource_deficit))
     ):
@@ -256,7 +261,7 @@ def evaluate_scale(
 
     if incompatible_candidates:
         job_ids = tuple(node.job_id for node in incompatible_candidates)
-        reason = "idle sandbox node(s) have incompatible agent version"
+        reason = "idle sandbox node(s) have incompatible agent version or rebooted repeatedly"
         actions.append(
             ScaleAction(
                 kind="stop",
@@ -1304,6 +1309,7 @@ class SoftDrainPlan:
     selected: bool = False
     clear_job_ids: tuple[str, ...] = ()
     reason: str = ""
+    retiring: bool = False  # Held for repeated reboots, never for demand.
 
 
 def _soft_drain_sandboxes(node: SandboxNode) -> int:
@@ -1337,6 +1343,14 @@ def plan_soft_drain(
         return SoftDrainPlan(
             clear_job_ids=tuple(node.job_id for node in labelled),
             reason="drain on park is disabled" if labelled else "",
+        )
+    # A failing host empties whatever demand says, and takes the one slot.
+    if retiring := [node for node in pool if repeatedly_rebooted(node.heartbeat, now)]:
+        chosen = min(retiring, key=lambda node: (not is_soft_drained(node.heartbeat), node.job_id))
+        return SoftDrainPlan(
+            job_id=chosen.job_id, selected=not is_soft_drained(chosen.heartbeat), retiring=True,
+            clear_job_ids=tuple(n.job_id for n in labelled if n.job_id != chosen.job_id),
+            reason=f"{chosen.job_id} rebooted {REPEATED_REBOOTS} times within a day",
         )
     capacity_nodes = [
         node for node in pool if node.agent_version_compatible or node.is_provisioning
@@ -1467,12 +1481,12 @@ def incompatible_stop_candidates(
 ) -> list[SandboxNode]:
     candidates: list[SandboxNode] = []
     for node in nodes:
-        if node.job.is_final or node.agent_version_compatible:
+        retiring = repeatedly_rebooted(node.heartbeat, now)
+        if node.job.is_final or (node.agent_version_compatible and not retiring):
             continue
-        if node.job.is_provisioning:
+        if node.job.is_provisioning and not node.agent_version_compatible:
             candidates.append(node)
-            continue
-        if node.job.is_running and node.heartbeat_fresh and node.is_idle:
+        elif node.job.is_running and node.heartbeat_fresh and node.is_idle:
             candidates.append(node)
     return sorted(
         candidates,
@@ -1480,30 +1494,6 @@ def incompatible_stop_candidates(
             node.job.started_at or node.job.created_at or now,
             node.job_id,
         ),
-    )
-
-
-def unreachable_node_lease_expired(
-    node: SandboxNode,
-    policy: ScalePolicy,
-    *,
-    now: datetime | None = None,
-) -> bool:
-    """Return whether a running node exceeded its unreachable heartbeat lease."""
-
-    if now is None:
-        now = utc_now()
-    timeout_seconds = max(0, policy.unreachable_stop_after_seconds)
-    if (
-        timeout_seconds <= 0
-        or node.job.is_final
-        or not node.job.is_running
-        or node.heartbeat_fresh
-    ):
-        return False
-    reference = unreachable_node_reference(node)
-    return bool(
-        reference is not None and (now - reference).total_seconds() >= timeout_seconds
     )
 
 
@@ -1523,9 +1513,16 @@ def unreachable_node_stop_ready(
 
     if now is None:
         now = utc_now()
-    if not unreachable_node_lease_expired(node, policy, now=now):
-        return False
-    if node.active_sandboxes != 0:
+    timeout_seconds = max(0, policy.unreachable_stop_after_seconds)
+    reference = unreachable_node_reference(node)
+    if (
+        timeout_seconds <= 0
+        or not node.job.is_running
+        or node.heartbeat_fresh
+        or reference is None
+        or (now - reference).total_seconds() < timeout_seconds
+        or node.active_sandboxes != 0
+    ):
         return False
     heartbeat = node.heartbeat
     if heartbeat is None:

@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 import sqlite3
 from threading import Lock, RLock
-from typing import Any, Iterable, Iterator
+from typing import Any, Collection, Iterable, Iterator, Sequence
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from .models import ProviderInstance
@@ -323,6 +323,33 @@ class AutoscalerStateStore:
                 (deployment, job),
             )
         return intent
+
+    def rotate_pending_deletes(
+        self, *, deployment_id: str, pending: Sequence[tuple[str, str]],
+        recorded: Collection[tuple[str, str]], budget: int, now: datetime | None = None,
+    ) -> list[tuple[str, str]]:
+        """Pick ``budget`` (sandbox id, delete operation id) intents to replay.
+
+        Least recently attempted first, then ``pending`` order. The pick is
+        stamped before any replay, so a crash or hung worker also rotates the
+        queue; only rows of intents no longer ``recorded`` are forgotten.
+        """
+        deployment = _required("deployment_id", deployment_id)
+        now_us = _datetime_to_us(_normalized_now(now))
+        order = {key: index for index, key in enumerate(pending)}
+        with self._transaction() as conn:
+            attempted = {(row[0], row[1]): row[2] for row in conn.execute(
+                "SELECT sandbox_id, delete_operation_id, attempted_at_us "
+                "FROM pending_delete_attempts WHERE deployment_id = ?", (deployment,))}
+            selected = sorted(order, key=lambda key: (attempted.get(key, -1), order[key]))
+            conn.executemany(
+                "DELETE FROM pending_delete_attempts WHERE deployment_id = ? "
+                "AND sandbox_id = ? AND delete_operation_id = ?",
+                [(deployment, *key) for key in attempted if key not in recorded])
+            conn.executemany(
+                "INSERT OR REPLACE INTO pending_delete_attempts VALUES (?, ?, ?, ?)",
+                [(deployment, *key, now_us) for key in selected[:max(0, budget)]])
+        return selected[:max(0, budget)]
 
     def get_drain_intent(
         self,
@@ -854,6 +881,12 @@ class AutoscalerStateStore:
                     PRIMARY KEY (deployment_id, kind, base_key)
                 )
                 """
+            )
+            # Additive: older controllers ignore it and replay oldest-first.
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS pending_delete_attempts (deployment_id TEXT NOT NULL,"
+                " sandbox_id TEXT NOT NULL, delete_operation_id TEXT NOT NULL, attempted_at_us"
+                " INTEGER NOT NULL, PRIMARY KEY (deployment_id, sandbox_id, delete_operation_id))"
             )
             conn.execute(
                 """

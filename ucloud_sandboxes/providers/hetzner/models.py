@@ -61,7 +61,9 @@ def instance_phase(state: str) -> InstancePhase:
     if normalized == "deleting":
         return InstancePhase.TERMINAL
     if normalized in {"off", "stopping"}:
-        return InstancePhase.LOST
+        # Powered off with its disk intact: billed, visible and replaceable,
+        # but neither lost nor stoppable without an operator.
+        return InstancePhase.UNAVAILABLE
     return InstancePhase.PROVISIONING
 
 

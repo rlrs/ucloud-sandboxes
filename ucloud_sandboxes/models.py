@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import MISSING, asdict, dataclass, field, fields
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 import math
 import re
@@ -660,6 +660,10 @@ class ProviderInstance:
     latest_note: str | None = None
     labels: dict[str, str] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
+    # Provider time of the latest past interruption (power-off, suspension)
+    # of a RUNNING instance. Its guest may have survived; the controller
+    # trusts it again only after verifying continuity past this instant.
+    interrupted_at: datetime | None = None
 
     @property
     def is_final(self) -> bool:
@@ -788,6 +792,24 @@ SOFT_DRAIN_LABEL = "ucloud-sandboxes/soft-drain"
 
 def is_soft_drained(heartbeat: NodeHeartbeat | None) -> bool:
     return bool(heartbeat is not None and heartbeat.labels.get(SOFT_DRAIN_LABEL))
+
+
+# Controller-owned heartbeat label: gateway receipt times of this job's last
+# proven boot changes, comma-separated ISO, oldest first. One reboot loses
+# processes only; two within a day mark a failing host, which soft-drains and
+# retires through the ordinary drain handshake.
+EPOCH_RETIREMENTS_LABEL = "ucloud-sandboxes/controller-epoch-retirements"
+EPOCH_RETIREMENT_HISTORY, REPEATED_REBOOTS, REPEATED_REBOOT_WINDOW = 4, 2, timedelta(hours=24)
+
+
+def epoch_retirements(heartbeat: NodeHeartbeat | None) -> tuple[datetime, ...]:
+    raw = heartbeat.labels.get(EPOCH_RETIREMENTS_LABEL, "") if heartbeat else ""
+    return tuple(at for item in raw.split(",") if (at := parse_iso_datetime(item)))
+
+
+def repeatedly_rebooted(heartbeat: NodeHeartbeat | None, now: datetime) -> bool:
+    window = REPEATED_REBOOT_WINDOW
+    return sum(now - at <= window for at in epoch_retirements(heartbeat)) >= REPEATED_REBOOTS
 
 
 @dataclass(frozen=True)

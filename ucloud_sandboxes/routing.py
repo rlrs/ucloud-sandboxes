@@ -657,6 +657,19 @@ class RoutingState:
     image_warmups: dict[str, PendingImageWarmup] = field(default_factory=dict)
 
 
+# sandbox_losses.reason: why the worker incarnation ended. Every loss answers
+# error_code node_lost; "node_lost" itself means the cause was not recorded.
+REBOOTED_LOSS_REASON = "rebooted"
+
+
+@dataclass(frozen=True)
+class NodeEpochRetirement:
+    lost: tuple[SandboxRoute, ...]  # Their caller releases the references.
+    # Recorded deletes: the worker registration survives a reboot, so the
+    # intent stays to be delivered, never dropped.
+    pending_deletes: tuple[SandboxRoute, ...]
+
+
 class PlacementCommandRejected(ValueError):
     """A durable placement claim no longer authorizes this incarnation."""
 
@@ -2254,7 +2267,6 @@ class RoutingStore:
         node_epoch: str = "",
         activity_epoch: int = 0,
         inventory_complete: bool = True,
-        allow_node_epoch_adoption: bool = True,
     ) -> tuple[list[SandboxRoute], list[SandboxRoute]]:
         """Reconcile inventory and return removed routes and stale snapshots.
 
@@ -2378,9 +2390,7 @@ class RoutingStore:
                 if candidate.generation != existing.generation:
                     continue
                 if not _route_update_is_current(
-                    existing,
-                    candidate,
-                    allow_node_epoch_adoption=allow_node_epoch_adoption,
+                    existing, candidate, allow_node_epoch_adoption=False,
                 ):
                     continue
                 if existing.snapshot_manifest_digest and (
@@ -2432,39 +2442,20 @@ class RoutingStore:
             )
             for route in current_routes:
                 sandbox_id = route.sandbox_id
-                if sandbox_id in reported_ids:
+                if sandbox_id in reported_ids or not inventory_complete:
                     continue
-                if not inventory_complete:
+                if route.node_epoch and route.node_epoch != node_epoch:
+                    # Only retire_node_epochs settles another boot's routes.
+                    # Inventory proves state for its own boot alone, and an
+                    # unversioned observation for none.
                     continue
-                replaced_boot = bool(
-                    route.node_epoch
-                    and node_epoch
-                    and route.node_epoch != node_epoch
-                )
-                if replaced_boot and not allow_node_epoch_adoption:
-                    # Refresh polling carries an already accepted heartbeat
-                    # fence. It may prove state only for that exact boot; a
-                    # delayed response from a retired boot cannot delete the
-                    # replacement boot's inventory.
-                    continue
-                if (route.state or "unknown").lower() in {
-                    "creating",
-                    "unknown",
-                } and not replaced_boot:
+                if (route.state or "unknown").lower() in {"creating", "unknown"}:
                     # An empty inventory does not distinguish "create never
                     # arrived" from "create is still in progress" with the
                     # current node protocol. Preserve the reservation until a
                     # later generation-aware reconciliation can prove absence.
-                    # A newly accepted boot epoch is that proof: the former
-                    # guest process namespace no longer exists.
                     continue
-                if route.node_epoch and not node_epoch:
-                    # Do not let an unversioned/legacy observation erase a
-                    # route that is already fenced to a known guest boot.
-                    continue
-                if not replaced_boot and route.activity_epoch > max(
-                    0, activity_epoch
-                ):
+                if route.activity_epoch > max(0, activity_epoch):
                     continue
                 route_updated_at = parse_iso_datetime(
                     route.updated_at
@@ -2486,9 +2477,7 @@ class RoutingStore:
                     )
                     removed_sandbox_ids.append(sandbox_id)
                     continue
-                if not self._delete_sandbox_unlocked(
-                    conn, route, terminal_error="node_lost" if replaced_boot else ""
-                ):
+                if not self._delete_sandbox_unlocked(conn, route):
                     continue
                 removed_routes.append(route)
                 removed_sandbox_ids.append(sandbox_id)
@@ -2508,15 +2497,82 @@ class RoutingStore:
             with self._transaction() as conn:
                 self._delete_sandbox_unlocked(conn, sandbox_id)
 
-    def delete_sandboxes_for_jobs(self, job_ids: Iterable[str]) -> list[SandboxRoute]:
-        return self.delete_sandboxes_for_jobs_with_error(job_ids)
+    def retire_node_epochs(
+        self, job_id: str, retired_node_epochs: Iterable[str], *, node_epoch: str,
+        activity_epoch: int, inventory: Iterable[SandboxInventoryEntry] | None, observed_at: str,
+    ) -> NodeEpochRetirement:
+        """Settle every route of ``job_id`` that a retired boot owned; idempotent.
+
+        A boot change kills the old guest's processes, not its disk. The new
+        boot's complete ``inventory`` (None if incomplete) is the only
+        re-adoption proof: a route moves to ``node_epoch`` here when it reports
+        the exact incarnation parked, which a worker does only with a valid
+        complete checkpoint. A recorded delete stays to be delivered, a
+        published park detaches, and the rest is lost.
+        """
+        retired = {str(epoch) for epoch in retired_node_epochs} - {"", node_epoch}
+        if not job_id or not node_epoch or not retired:
+            return NodeEpochRetirement((), ())
+        parked = {
+            (item.sandbox_id, item.generation, item.operation_id, item.spec_hash)
+            for item in inventory or () if item.route_state == "parked"
+        }
+        lost: list[SandboxRoute] = []
+        pending_deletes: list[SandboxRoute] = []
+        with self._lock, self._transaction() as conn:
+            for row in conn.execute(
+                "SELECT * FROM sandboxes WHERE job_id = ? ORDER BY sandbox_id", (job_id,),
+            ).fetchall():
+                route = _sandbox_route_from_row(row)
+                if route is None or route.node_epoch not in retired:
+                    continue
+                disposition = sandbox_owner_loss_disposition(route)
+                deleting = disposition is SandboxOwnerLossDisposition.TERMINAL_DELETE
+                if deleting or route.worker_state == "attached" and (
+                    route.sandbox_id, route.generation, route.create_operation_id, route.spec_hash,
+                ) in parked:
+                    if deleting:
+                        pending_deletes.append(route)
+                    else:
+                        self._write_sandbox(conn, replace(
+                            route, state="parked", node_epoch=node_epoch,
+                            activity_epoch=max(0, activity_epoch), updated_at=observed_at,
+                        ))
+                    # Its exec sessions belonged to the old boot's processes.
+                    self._record_exec_losses_unlocked(conn, route)
+                    conn.execute("DELETE FROM exec_sessions WHERE sandbox_id = ?", (route.sandbox_id,))
+                elif disposition is SandboxOwnerLossDisposition.RECOVER_DETACHED:
+                    self._detach_owner_lost_route_unlocked(conn, route, updated_at=observed_at)
+                elif self._delete_sandbox_unlocked(
+                    conn, route, terminal_error="node_lost", loss_reason=REBOOTED_LOSS_REASON,
+                ):
+                    lost.append(route)
+        return NodeEpochRetirement(tuple(lost), tuple(pending_deletes))
+
+    def reboot_lost_incarnations(
+        self, job_id: str, incarnations: Iterable[tuple[str, int]],
+    ) -> set[tuple[str, int]]:
+        """The (sandbox_id, generation) pairs a reboot of ``job_id`` lost.
+
+        Generations are never reused, so a loss row proves that no route,
+        re-adopted or newer, owns that incarnation.
+        """
+        wanted = set(incarnations)
+        if not job_id or not wanted:
+            return set()
+        with self._read() as conn:
+            rows = conn.execute(
+                "SELECT sandbox_id, generation FROM sandbox_losses WHERE job_id = ? AND reason = ?"
+                f" AND sandbox_id IN ({self._json_values_query})",
+                (job_id, REBOOTED_LOSS_REASON, json.dumps(sorted({item[0] for item in wanted}))),
+            ).fetchall()
+        return wanted & {(str(row[0]), int(row[1])) for row in rows}
 
     def delete_sandboxes_for_jobs_with_error(
         self,
         job_ids: Iterable[str],
         *,
         terminal_error: str = "",
-        retired_node_epoch: str | None = None,
     ) -> list[SandboxRoute]:
         """Forget non-portable sandboxes owned by terminated VM jobs.
 
@@ -2534,28 +2590,11 @@ class RoutingStore:
             preserved: list[SandboxRoute] = []
             with self._transaction() as conn:
                 for job_id in target_ids:
-                    rows = conn.execute(
-                        """
-                        SELECT sandbox_id, node_id, job_id, node_url,
-                               resources_json, spec_json, state, generation,
-                               create_operation_id, spec_hash, delete_operation_id,
-                               node_epoch, activity_epoch, worker_state,
-                               storage_schema,
-                               snapshot_manifest_digest, snapshot_repository,
-                               snapshot_tag, storage_snapshot_json,
-                               created_at, updated_at
-                        FROM sandboxes
-                        WHERE job_id = ?
-                        ORDER BY sandbox_id
-                        """,
-                        (job_id,),
-                    ).fetchall()
-                    for row in rows:
+                    for row in conn.execute(
+                        "SELECT * FROM sandboxes WHERE job_id = ? ORDER BY sandbox_id", (job_id,),
+                    ).fetchall():
                         route = _sandbox_route_from_row(row)
-                        if route is not None and (
-                            retired_node_epoch is None
-                            or route.node_epoch == retired_node_epoch
-                        ):
+                        if route is not None:
                             if (
                                 sandbox_owner_loss_disposition(route)
                                 is SandboxOwnerLossDisposition.RECOVER_DETACHED
@@ -2631,8 +2670,10 @@ class RoutingStore:
                         route,
                         updated_at=detached_at,
                     )
+                # The owner job is gone from the provider: the same loss as a
+                # proven reboot, so clients see 410 node_lost, never a 404.
                 for route in removed:
-                    self._delete_sandbox_unlocked(conn, route)
+                    self._delete_sandbox_unlocked(conn, route, terminal_error="node_lost")
             if not removed and not preserved:
                 return []
             return removed
@@ -2684,6 +2725,7 @@ class RoutingStore:
         route: SandboxRoute | str,
         *,
         terminal_error: str = "",
+        loss_reason: str = "",
     ) -> bool:
         sandbox_id = route.sandbox_id if isinstance(route, SandboxRoute) else route
         if isinstance(route, SandboxRoute):
@@ -2720,7 +2762,7 @@ class RoutingStore:
                     sandbox_id,
                     route.generation,
                     route.job_id,
-                    terminal_error,
+                    loss_reason or terminal_error,
                     utc_now().isoformat(),
                 ),
             )
@@ -4967,16 +5009,3 @@ def _image_warmup_from_row(row: sqlite3.Row) -> PendingImageWarmup:
         warmed_node_ids=tuple(dict.fromkeys(warmed_node_ids)),
         attempts=max(1, int(row["attempts"])),
     )
-
-
-def _oldest_seconds(timestamps: list[str]) -> int:
-    now = utc_now()
-    oldest_pending_seconds = 0
-    for timestamp in timestamps:
-        created_at = parse_iso_datetime(timestamp)
-        if created_at is not None:
-            oldest_pending_seconds = max(
-                oldest_pending_seconds,
-                int((now - created_at).total_seconds()),
-            )
-    return max(0, oldest_pending_seconds)

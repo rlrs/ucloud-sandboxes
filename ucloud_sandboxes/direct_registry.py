@@ -76,6 +76,10 @@ class DirectRegistryConflictError(DirectRegistryError):
     pass
 
 
+class DirectRegistrationOwnedError(DirectRegistryConflictError):
+    """Another incarnation owns this id; nothing was registered."""
+
+
 class DirectRegistryCapacityUnavailable(DirectRegistryConflictError):
     """No disk claim was granted; the caller may wait for physical capacity."""
 
@@ -1459,9 +1463,7 @@ class DirectSandboxRegistry:
                 )
                 if replay:
                     return existing
-                raise DirectRegistryConflictError(
-                    "sandbox already has another direct registration"
-                )
+                raise DirectRegistrationOwnedError("sandbox already has another direct registration")
             if imported:
                 fenced = connection.execute(
                     """

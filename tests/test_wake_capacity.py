@@ -16,7 +16,7 @@ from ucloud_sandboxes.direct_service import DirectSandboxService
 from ucloud_sandboxes.gateway import placement
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, SandboxInventoryEntry, utc_now
 from ucloud_sandboxes.routing import RoutingStore, wake_pending_demand_id
-from ucloud_sandboxes.wake_placement import WakeCapacityRefreshPending, WakeSnapshotPublicationRequired
+from ucloud_sandboxes.wake_placement import WakeSnapshotPublicationRequired
 from ucloud_sandboxes.node_agent import NodeAgentHandler
 from ucloud_sandboxes.sandbox import SandboxCapacityUnavailableError
 
@@ -41,7 +41,7 @@ class WakeCapacityTests(unittest.TestCase):
 
     def heartbeat(self, *, active=63):
         return fixtures.build_heartbeat(
-            node_id="node", job_id="job", node_url="http://node:8090",
+            node_id="node", job_id="job", node_url="http://node:8090", node_epoch="boot",
             capabilities=("sandbox", "disk-quota", "storage-native-v1"),
             total_resources=ResourceQuantity(vcpu=32, memory_mb=98304, disk_mb=1000000),
             runtime_metrics=NodeRuntimeMetrics(
@@ -52,6 +52,16 @@ class WakeCapacityTests(unittest.TestCase):
             ),
             inventory_complete=True,
         )
+
+    @staticmethod
+    def holding(heartbeat, route):
+        """A worker's pulled sample is ingested like a push: its complete
+        inventory must still hold the parked sandbox."""
+        return replace(heartbeat, inventory=(SandboxInventoryEntry(
+            sandbox_id=route.sandbox_id, generation=route.generation,
+            operation_id=route.create_operation_id, spec_hash=route.spec_hash,
+            state="parked", resources=route.resources,
+        ),))
 
     def route(self, state="parked"):
         return fixtures._sandbox_route(
@@ -195,10 +205,10 @@ class WakeCapacityTests(unittest.TestCase):
             heartbeat = self.heartbeat(active=64)
             store.upsert_heartbeat(heartbeat)
             route = handler.routing_store.upsert_sandbox(self.route())
-            refreshed = replace(heartbeat, runtime_metrics=replace(
+            refreshed = self.holding(replace(heartbeat, runtime_metrics=replace(
                 heartbeat.runtime_metrics, storage_ublk_active_devices=0,
-            ))
-            acquired = []
+            )), route)
+            acquired, waiters = [], []
             def refresh(url, path, **kwargs):
                 def check_lock():
                     ok = placement._GATEWAY_SCHEDULING_LOCK.acquire(timeout=.2)
@@ -209,20 +219,24 @@ class WakeCapacityTests(unittest.TestCase):
                 thread.start()
                 thread.join(1)
                 self.assertEqual(path, "/v1/heartbeat")
-                # Concurrent callers defer rather than fetching or publishing.
-                with self.assertRaises(WakeCapacityRefreshPending):
-                    handler._refresh_wake_capacity(route)
+                # A concurrent wake waits for this pull rather than starting one.
+                waiters.append(Thread(target=handler._refresh_wake_capacity, args=(route,)))
+                waiters[0].start()
+                waiters[0].join(.2)
+                self.assertTrue(waiters[0].is_alive())
                 import json
                 return control_plane.ProxiedResponse(200, {}, json.dumps({
                     "heartbeat": heartbeat_to_dict(refreshed),
                 }).encode())
             handler._proxy_request = Mock(side_effect=refresh)
             self.assertEqual(fixtures._prepare_wake_route(handler, route).state, "waking")
+            waiters[0].join(5)
+            self.assertFalse(waiters[0].is_alive())
             self.assertEqual(acquired, [True])
             self.assertEqual(handler._proxy_request.call_count, 1)
             self.assertEqual(store.load_heartbeats()["job"].runtime_metrics.storage_ublk_active_devices, 0)
             store.upsert_heartbeat(heartbeat)
-            self.assertFalse(handler._refresh_wake_capacity(route))
+            handler._refresh_wake_capacity(route)  # within the pull interval
             self.assertEqual(handler._proxy_request.call_count, 1)
 
     def test_unblocked_wake_reads_owner_inventory_once_without_capacity_refresh(self):
@@ -298,6 +312,40 @@ class WakeCapacityTests(unittest.TestCase):
             )
             self.assertIsNone(handler._select_migration_destination(another, requested_node_id=""))
 
+    def test_detached_wake_never_targets_a_worker_still_registering_its_id(self):
+        with TemporaryDirectory() as directory:
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = RoutingStore(Path(directory) / "routes.sqlite")
+            handler.services = gateway_services(routing_store=handler.routing_store)
+            snapshot = fixtures._portable_snapshot("parked")
+            spec = snapshot.manifest.spec
+            source = handler.routing_store.upsert_sandbox(replace(
+                self.route(), spec=spec.to_dict(), spec_hash=snapshot.manifest.spec_sha256,
+                resources=spec.requested_resources(), worker_state="detached",
+                generation=snapshot.manifest.sandbox_generation,
+                create_operation_id=snapshot.manifest.create_operation_id,
+                storage_schema="storage-native-v1", storage_snapshot=snapshot.to_dict(),
+                snapshot_manifest_digest=snapshot.publication.manifest_digest,
+                snapshot_repository=snapshot.publication.repository,
+                snapshot_tag=snapshot.publication.tag,
+            ))
+            stale = SandboxInventoryEntry(
+                sandbox_id=source.sandbox_id, generation=source.generation,
+                operation_id=source.create_operation_id, spec_hash=source.spec_hash,
+                state="recovery-required",
+            )
+            capabilities = self.heartbeat().capabilities + (
+                "sandbox-migrate-storage-native-v1", "hibernate-local-v2",
+                control_plane._migration_runtime_capability(source, None))
+            former = replace(self.heartbeat(), capabilities=capabilities)
+            holder = replace(former, node_id="holder", job_id="holder-job",
+                             node_url="http://holder:8090", inventory=(stale,))
+            clean = replace(former, node_id="clean", job_id="clean-job", node_url="http://clean:8090")
+            for ready, expected in (([former, holder, clean], "clean"), ([former, holder], None)):
+                handler.services.fleet.ready_sandbox_heartbeats = lambda ready=ready, **_kwargs: ready
+                selected = handler._select_migration_destination(source, requested_node_id="")
+                self.assertEqual(selected.node_id if selected else None, expected)
+
     def test_publication_is_generation_fenced_and_never_parks_running_work(self):
         with TemporaryDirectory() as directory:
             fixture = direct_fixtures.DirectProvisionerTests()
@@ -344,7 +392,7 @@ class WakeCapacityTests(unittest.TestCase):
                 handler._select_migration_destination = Mock(return_value=None)
                 import json
                 handler._proxy_request = Mock(return_value=control_plane.ProxiedResponse(200, {}, json.dumps({
-                    'heartbeat': heartbeat_to_dict(healthy),
+                    'heartbeat': heartbeat_to_dict(self.holding(healthy, route)),
                 }).encode()))
                 result = fixtures._prepare_wake_route(handler, route)
                 self.assertEqual(result.state, 'waking')

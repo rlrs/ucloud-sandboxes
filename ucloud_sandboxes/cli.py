@@ -56,7 +56,10 @@ from .bootstrap import (
 )
 from .config import DeploymentConfig
 from .cold_offload import plan_cold_offload
-from .control_state import ControlStateStore, QUARANTINE_REASON, QUARANTINE_EPOCH
+from .control_state import (
+    CONTINUITY_VERIFIED_THROUGH, QUARANTINE_EPOCH, QUARANTINE_REASON, ControlStateStore,
+    quarantined_labels, recovered_labels,
+)
 from .control_plane import build_server
 from .heartbeat_sender import DEFAULT_HEARTBEAT_INTERVAL_SECONDS, HeartbeatSenderConfig
 from .deployment import (
@@ -144,6 +147,7 @@ from .models import (
     ScalePolicy,
     ProviderInstance,
     is_soft_drained,
+    parse_iso_datetime,
     utc_now,
 )
 from .providers.base import (
@@ -167,7 +171,6 @@ from .networking import (
 )
 from .policy import (
     evaluate_scale,
-    unreachable_node_lease_expired,
     unreachable_node_reference,
     unreachable_node_stop_ready,
 )
@@ -187,6 +190,7 @@ from .routing import (
     open_routing_store,
     cold_offload_fence,
     ProgramRequestState,
+    RoutingStore,
     SandboxOwnerLossDisposition,
     SandboxRoute,
     is_portable_parked_route,
@@ -2782,6 +2786,7 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
                     bootstrap_coordinator=bootstrap_coordinator,
                     provider_fence=assert_process_fence,
                     telemetry=telemetry,
+                    routing_store=routing_store,
                 )
                 reconcile_span.set_attributes(
                     {
@@ -2801,44 +2806,9 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
                     str(job_id)
                     for job_id in result.get("destructive_node_loss_job_ids", [])
                 }
-                removed_routes = routing_store.delete_sandboxes_for_jobs_with_error(
-                    destructive_job_ids,
-                    terminal_error="node_lost",
+                removed_routes = _delete_lost_routes(
+                    routing_store, result, config.policy, stale=bool(args.execute),
                 )
-                route_cleanup_job_ids = set(result.get("prunedFinalHeartbeats", []))
-                route_cleanup_job_ids.update(
-                    str(job_id)
-                    for job_id in result.get("definitelyTerminatedJobIds", [])
-                )
-                removed_routes.extend(
-                    routing_store.delete_sandboxes_for_jobs(
-                        route_cleanup_job_ids - destructive_job_ids
-                    )
-                )
-                if args.execute:
-                    effective_policy = config.policy
-                    stale_route_grace_seconds = max(
-                        effective_policy.heartbeat_ttl_seconds * 3,
-                        effective_policy.heartbeat_ttl_seconds + 60,
-                    )
-                    active_route_job_ids = {
-                        node.job_id
-                        for node in result["rawNodes"]
-                        if not node.job.is_final
-                    }
-                    active_route_node_ids = {
-                        node.heartbeat.node_id
-                        for node in result["rawNodes"]
-                        if node.heartbeat is not None and node.heartbeat_fresh
-                    }
-                    removed_routes.extend(
-                        routing_store.delete_stale_sandboxes(
-                            active_job_ids=active_route_job_ids,
-                            active_node_ids=active_route_node_ids,
-                            older_than=utc_now()
-                            - timedelta(seconds=stale_route_grace_seconds),
-                        )
-                    )
                 if registry_usage_store is not None:
                     for removed_route in removed_routes:
                         release_registry_route_references(
@@ -2946,6 +2916,7 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
                 printable = dict(result)
                 for key in (
                     "rawNodes",
+                    "rawRetiredRoutes",
                     "rawSandboxNodes",
                     "rawBuilderNodes",
                     "rawDecision",
@@ -2986,6 +2957,32 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
         if process_lock is not None:
             process_lock.release()
         telemetry.shutdown()
+
+
+def _delete_lost_routes(
+    routing_store: RoutingStore, result: dict[str, Any], policy: ScalePolicy, *, stale: bool,
+) -> list[SandboxRoute]:
+    """Delete the routes of workers known gone, as node_lost.
+
+    Provider-confirmed termination, a fenced loss and a vanished stale job end
+    the guest's processes exactly as a proven reboot does: never a bare 404.
+    """
+    keys = ("destructive_node_loss_job_ids", "prunedFinalHeartbeats", "definitelyTerminatedJobIds")
+    removed = [*result.get("rawRetiredRoutes", ())]
+    removed.extend(routing_store.delete_sandboxes_for_jobs_with_error(
+        {str(job_id) for key in keys for job_id in result.get(key, [])}, terminal_error="node_lost",
+    ))
+    if stale:
+        ttl = policy.heartbeat_ttl_seconds
+        removed.extend(routing_store.delete_stale_sandboxes(
+            active_job_ids={node.job_id for node in result["rawNodes"] if not node.job.is_final},
+            active_node_ids={
+                node.heartbeat.node_id for node in result["rawNodes"]
+                if node.heartbeat is not None and node.heartbeat_fresh
+            },
+            older_than=utc_now() - timedelta(seconds=max(ttl * 3, ttl + 60)),
+        ))
+    return removed
 
 
 def _post_node_drain(
@@ -3186,7 +3183,7 @@ def _delete_gateway_sandbox(
     sandbox_id: str,
     *,
     bearer_token: str | None = None,
-    timeout_seconds: float = 3600.0,
+    timeout_seconds: float,
 ) -> dict[str, Any]:
     return _delete_bounded_json(
         gateway_url,
@@ -3197,6 +3194,50 @@ def _delete_gateway_sandbox(
         timeout_seconds=timeout_seconds,
         response_name="gateway sandbox delete replay",
     )[0]
+
+
+# A hung worker holds one bounded slot, never the cycle; the durable delete
+# operation id makes an abandoned attempt safe to repeat.
+_PENDING_DELETE_REPLAY_TIMEOUT_SECONDS = 30.0
+_PENDING_DELETE_REPLAY_CONCURRENCY = 8
+
+
+def _replay_pending_deletes(
+    routes: list[SandboxRoute], *, skip_job_ids: set[str], provider_state: AutoscalerStateStore,
+    deployment_id: str, budget: int, gateway_url: str, bearer_token: str | None,
+) -> list[dict[str, Any]]:
+    """Deliver recorded client DELETE intents, least recently attempted first.
+
+    Intent age alone would let a silent worker's oldest intents take the
+    whole budget every cycle and starve every younger one. A skipped job's
+    intents keep their attempt times, so they cannot jump the queue later.
+    """
+    by_key = {(route.sandbox_id, route.delete_operation_id): route for route in sorted(
+        routes, key=lambda route: (route.updated_at, route.sandbox_id))}
+    eligible = [key for key, route in by_key.items() if route.job_id not in skip_job_ids]
+
+    def replay(key: tuple[str, str]) -> dict[str, Any]:
+        route, error, payload = by_key[key], "", {}
+        try:
+            payload = _delete_gateway_sandbox(
+                gateway_url, route.sandbox_id, bearer_token=bearer_token,
+                timeout_seconds=_PENDING_DELETE_REPLAY_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:
+            error = str(exc)
+        return {
+            "job_id": route.job_id, "sandbox_id": route.sandbox_id, "gateway_url": gateway_url,
+            "delete_operation_id": route.delete_operation_id, "request_succeeded": not error,
+            "deleted": payload.get("deleted"), "error": error,
+        }
+
+    selected = provider_state.rotate_pending_deletes(
+        deployment_id=deployment_id, pending=eligible, recorded=by_key, budget=budget,
+    )
+    if not selected:
+        return []
+    with ThreadPoolExecutor(min(_PENDING_DELETE_REPLAY_CONCURRENCY, len(selected))) as pool:
+        return list(pool.map(replay, selected))
 
 
 def _drain_response_acknowledges(
@@ -3276,24 +3317,11 @@ def _provider_destructive_loss_disposition(
     return next(
         (
             disposition
-            for disposition in _provider_destructive_loss_dispositions(provider)
+            for disposition in provider.destructive_instance_losses
             if disposition.reason == reason
             and disposition.evidence_kind == evidence_kind
         ),
         None,
-    )
-
-
-def _provider_destructive_loss_dispositions(
-    provider: ComputeProvider,
-) -> tuple[DestructiveInstanceLoss, ...]:
-    return (
-        *provider.destructive_instance_losses,
-        *(
-            (provider.unreachable_lease_expiry_loss,)
-            if provider.unreachable_lease_expiry_loss is not None
-            else ()
-        ),
     )
 
 
@@ -3307,7 +3335,7 @@ def _provider_destructive_instance_loss(
     prototype = next(
         (
             candidate
-            for candidate in _provider_destructive_loss_dispositions(provider)
+            for candidate in provider.destructive_instance_losses
             if candidate.reason == disposition.reason
             and candidate.evidence_kind == disposition.evidence_kind
         ),
@@ -3356,6 +3384,11 @@ def _stop_operation_has_safety_proof(
             and type(active_sandboxes) is int
             and active_sandboxes == 0
             and operation.request.get("lastHeartbeatSafeToStop") is True
+            # A worker that heartbeated also failed this cycle's direct probe.
+            and (
+                operation.request.get("lastHeartbeatPresent") is False
+                or operation.request.get("directProbeFailed") is True
+            )
         )
     token = str(operation.request.get("drainToken") or "").strip()
     if not token or operation.request.get("drainReady") is not True:
@@ -3579,11 +3612,14 @@ class _ProviderObservation:
     destructive_loss_reasons: dict[str, str]
     destructive_node_loss_job_ids: tuple[str, ...]
     loss_latched_evidence: dict[str, dict[str, Any]]
-    unreachable_loss_evidence: dict[str, dict[str, Any]]
     unreachable_probe_results: list[dict[str, Any]]
+    # Lease-expired empty workers whose direct probe failed in transport.
+    unreachable_probe_failed_job_ids: frozenset[str]
     final_heartbeat_job_ids: tuple[str, ...]
     fenced_heartbeat_job_ids: tuple[str, ...]
     orphaned_stale_heartbeat_job_ids: tuple[str, ...]
+    # Routes a verified same-boot quarantine probe proved absent.
+    retired_routes: tuple[SandboxRoute, ...] = ()
 
 
 def _probe_unreachable_node(
@@ -3615,7 +3651,8 @@ def _probe_unreachable_node(
         return None, False
     if not fresh.is_fresh(utc_now(), heartbeat_ttl_seconds):
         return None, False
-    return replace(fresh, received_at=utc_now()), False
+    # The probe reached this canonical endpoint; that is the proven node URL.
+    return replace(fresh, node_url=heartbeat.node_url, received_at=utc_now()), False
 
 
 def _guest_continuity_matches(
@@ -3652,6 +3689,43 @@ def _guest_continuity_matches(
     return True
 
 
+def _unverified_interruption(job: ProviderInstance, heartbeat: NodeHeartbeat) -> bool:
+    """A provider interruption newer than the last verified guest continuity."""
+    verified = parse_iso_datetime(heartbeat.labels.get(CONTINUITY_VERIFIED_THROUGH))
+    return job.interrupted_at is not None and (verified is None or job.interrupted_at > verified)
+
+
+def _retire_absent_routes(
+    routing_store: RoutingStore, fresh: NodeHeartbeat, routes: tuple[SandboxRoute, ...],
+) -> tuple[tuple[SandboxRoute, ...], list[SandboxRoute]]:
+    """Apply a verified same-boot inventory's absences by the ingest rules."""
+    removed, _ = routing_store.reconcile_sandboxes_for_node(
+        fresh.node_url or "", (), node_id=fresh.node_id, job_id=fresh.job_id,
+        reported_sandbox_ids=[item.sandbox_id for item in fresh.inventory],
+        observed_at=fresh.freshness_at.isoformat(), node_epoch=fresh.node_epoch,
+        activity_epoch=fresh.activity_epoch,
+    )
+    # A protected absence (in-flight state, newer activity) still blocks.
+    return tuple(route for route in routes if (
+        (current := routing_store.get_sandbox_readonly(route.sandbox_id)) is not None
+        and current.job_id == route.job_id and current.worker_state != "detached"
+    )), removed
+
+
+def _probe_nodes(
+    heartbeats: dict[str, NodeHeartbeat], bearer_token: str | None, ttl_seconds: int,
+) -> dict[str, tuple[NodeHeartbeat | None, bool]]:
+    """Probe each worker directly, eight at a time; results in input order."""
+    if not heartbeats:
+        return {}
+    with ThreadPoolExecutor(max_workers=min(8, len(heartbeats))) as pool:
+        futures = {
+            job_id: pool.submit(_probe_unreachable_node, heartbeat, bearer_token, ttl_seconds)
+            for job_id, heartbeat in heartbeats.items()
+        }
+    return {job_id: future.result() for job_id, future in futures.items()}
+
+
 def _quarantine_unverified_guests(
     jobs: list[ProviderInstance],
     heartbeats: dict[str, NodeHeartbeat],
@@ -3662,23 +3736,28 @@ def _quarantine_unverified_guests(
     route_reservations: dict[str, tuple[SandboxRoute, ...]],
     execution_authorized: bool,
     bearer_token: str | None,
+    routing_store: RoutingStore | None = None,
+    retired_routes: list[SandboxRoute] | None = None,
 ) -> tuple[list[ProviderInstance], dict[str, NodeHeartbeat]]:
+    """Fence unverified guests; ``retired_routes`` receives verified absences."""
     candidates = {}
+    jobs_by_id = {job.id: job for job in jobs}
     for job in jobs:
         previous = heartbeats.get(job.id)
         if job.is_final or not is_managed_compute_instance(job, deployment_id):
             continue
         if previous is None:
             continue
+        unready = job.is_unavailable or _unverified_interruption(job, previous)
         if not (
-            job.is_unavailable
+            unready
             or previous.labels.get(QUARANTINE_REASON)
             or not previous.is_fresh(utc_now(), policy.heartbeat_ttl_seconds)
         ):
             continue
         reason = (
             "provider_readiness_unverified"
-            if job.is_unavailable
+            if unready
             else "heartbeat_continuity_unverified"
         )
         if execution_authorized:
@@ -3687,15 +3766,7 @@ def _quarantine_unverified_guests(
                 continue
         else:
             guarded = replace(
-                previous,
-                admission_open=False,
-                labels={
-                    **previous.labels,
-                    QUARANTINE_REASON: reason,
-                    QUARANTINE_EPOCH: previous.labels.get(
-                        QUARANTINE_EPOCH, previous.node_epoch
-                    ),
-                },
+                previous, admission_open=False, labels=quarantined_labels(previous, reason),
             )
         heartbeats[job.id] = guarded
         # An authenticated guest may still serve existing work while UCloud
@@ -3703,30 +3774,36 @@ def _quarantine_unverified_guests(
         if job.state == "RUNNING":
             candidates[job.id] = guarded
     recovered = set()
-    if candidates:
-        with ThreadPoolExecutor(max_workers=min(8, len(candidates))) as pool:
-            probes = {
-                pool.submit(
-                    _probe_unreachable_node,
-                    previous,
-                    bearer_token,
-                    policy.heartbeat_ttl_seconds,
-                ): jid
-                for jid, previous in candidates.items()
-            }
-            for future in as_completed(probes):
-                jid = probes[future]
-                fresh, _transport_failed = future.result()
-                if fresh is None or not _guest_continuity_matches(
-                    candidates[jid], fresh, route_reservations.get(jid, ())
-                ):
-                    continue
-                if execution_authorized and not control_state.recover_quarantined_node(
-                    fresh
-                ):
-                    continue
-                heartbeats[jid] = fresh
-                recovered.add(jid)
+    probes = _probe_nodes(candidates, bearer_token, policy.heartbeat_ttl_seconds)
+    for jid, (fresh, _transport_failed) in probes.items():
+        previous, routes = candidates[jid], route_reservations.get(jid, ())
+        if fresh is None:
+            continue
+        reported = {item.sandbox_id for item in fresh.inventory}
+        if (
+            routing_store is not None
+            and fresh.node_epoch == previous.node_epoch == previous.labels.get(QUARANTINE_EPOCH)
+            and _guest_continuity_matches(previous, fresh, tuple(
+                route for route in routes if route.sandbox_id in reported
+            ))
+        ):
+            # Quarantined ingest retires nothing, yet continuity needs every
+            # route present: without this, one vanished sandbox pins
+            # quarantine. Never across an epoch.
+            routes, removed = _retire_absent_routes(routing_store, fresh, routes)
+            if retired_routes is not None:
+                retired_routes.extend(removed)
+        if not _guest_continuity_matches(previous, fresh, routes):
+            continue
+        verified_through = jobs_by_id[jid].interrupted_at
+        if not execution_authorized:
+            fresh = replace(fresh, labels=recovered_labels(fresh, previous, verified_through))
+        elif (fresh := control_state.recover_quarantined_node(
+            fresh, verified_through=verified_through,
+        )) is None:
+            continue
+        heartbeats[jid] = fresh
+        recovered.add(jid)
     jobs = [
         replace(job, phase=InstancePhase.RUNNING)
         if job.id in recovered
@@ -3752,6 +3829,7 @@ def _observe_provider_nodes(
     execution_authorized: bool,
     retrieve_history: bool,
     node_control_bearer_token: str | None = None,
+    routing_store: RoutingStore | None = None,
 ) -> _ProviderObservation:
     """Normalize provider continuity and heartbeat evidence into node state."""
 
@@ -3796,7 +3874,7 @@ def _observe_provider_nodes(
                 )
             )
             continuity_history_required = bool(
-                getattr(provider, "requires_continuity_history", False)
+                provider.requires_continuity_history
                 and is_managed_compute_instance(job, deployment_id)
             )
             should_retrieve_history = bool(
@@ -3837,7 +3915,8 @@ def _observe_provider_nodes(
             if job_id not in orphaned_stale_heartbeat_job_ids
         }
 
-    if getattr(provider, "requires_guest_continuity", False):
+    retired_routes: list[SandboxRoute] = []
+    if provider.requires_guest_continuity:
         jobs, heartbeats = _quarantine_unverified_guests(
             jobs,
             heartbeats,
@@ -3847,6 +3926,8 @@ def _observe_provider_nodes(
             route_reservations=route_reservations,
             execution_authorized=execution_authorized,
             bearer_token=node_control_bearer_token,
+            routing_store=routing_store if execution_authorized else None,
+            retired_routes=retired_routes,
         )
 
     destructive_loss_dispositions: dict[str, DestructiveInstanceLoss] = {}
@@ -3867,72 +3948,34 @@ def _observe_provider_nodes(
         apply_route_reservations_to_heartbeats(heartbeats, route_reservations),
         policy,
     )
-    unreachable_loss_evidence: dict[str, dict[str, Any]] = {}
+    # Silence is never loss: an unreachable-empty stop of a worker that has
+    # heartbeated also needs this cycle's direct probe to fail in transport.
     unreachable_probe_results: list[dict[str, Any]] = []
-    unreachable_lease_loss = getattr(provider, "unreachable_lease_expiry_loss", None)
-    if unreachable_lease_loss is not None:
-        expired = [
-            node
-            for node in observed_nodes
-            if is_managed_compute_instance(node.job, deployment_id)
-            and node.job_id not in destructive_loss_dispositions
-            and unreachable_node_lease_expired(node, policy)
-            and node.heartbeat is not None
-        ]
-        if expired:
-            with ThreadPoolExecutor(max_workers=min(8, len(expired))) as pool:
-                probes = {
-                    pool.submit(
-                        _probe_unreachable_node,
-                        node.heartbeat,
-                        node_control_bearer_token,
-                        policy.heartbeat_ttl_seconds,
-                    ): node
-                    for node in expired
-                }
-                for future in as_completed(probes):
-                    node = probes[future]
-                    fresh, transport_failed = future.result()
-                    unreachable_probe_results.append(
-                        {
-                            "jobId": node.job_id,
-                            "status": "healthy"
-                            if fresh is not None
-                            else ("unreachable" if transport_failed else "unverified"),
-                        }
-                    )
-                    if fresh is not None:
-                        heartbeats[node.job_id] = fresh
-                        if execution_authorized:
-                            control_state.upsert_heartbeat(fresh)
-                        continue
-                    if not transport_failed:
-                        # Invalid credentials/schema are not an empty-worker
-                        # proof either. Keep the node unschedulable, without
-                        # letting the ordinary stale-empty path bypass probing.
-                        heartbeats[node.job_id] = replace(
-                            node.heartbeat, inventory_complete=False
-                        )
-                        continue
-                    reference = unreachable_node_reference(node)
-                    if reference is None:
-                        continue
-                    disposition = replace(
-                        unreachable_lease_loss,
-                        evidence=(
-                            ("unreachableLeaseExpired", True),
-                            ("unreachableReference", reference.isoformat()),
-                            ("directProbeFailed", True),
-                        ),
-                    )
-                    if not unreachable_lease_loss.matches(disposition):
-                        continue
-                    destructive_loss_dispositions[node.job_id] = disposition
-                    unreachable_loss_evidence[node.job_id] = {
-                        "unreachableReference": reference.isoformat(),
-                        "lastHeartbeatPresent": True,
-                        "lastKnownActiveSandboxes": node.active_sandboxes,
-                    }
+    probe_failed: set[str] = set()
+    expired = {
+        node.job_id: node.heartbeat
+        for node in observed_nodes
+        if is_managed_compute_instance(node.job, deployment_id)
+        and node.job_id not in destructive_loss_dispositions
+        and node.heartbeat is not None
+        and unreachable_node_stop_ready(node, policy)
+    }
+    probes = _probe_nodes(expired, node_control_bearer_token, policy.heartbeat_ttl_seconds)
+    for job_id, (fresh, transport_failed) in probes.items():
+        unreachable_probe_results.append({"jobId": job_id, "status": (
+            "healthy" if fresh else "unreachable" if transport_failed else "unverified"
+        )})
+        stored = heartbeats[job_id]
+        if transport_failed:
+            probe_failed.add(job_id)
+        elif fresh is not None and fresh.node_epoch == stored.node_epoch:
+            # Only the same boot; a new one arrives through ingest.
+            heartbeats[job_id] = (
+                control_state.receive_heartbeat(fresh).stored if execution_authorized else fresh
+            )
+        else:
+            # Contact without a same-boot heartbeat proves no empty worker.
+            heartbeats[job_id] = replace(stored, inventory_complete=False)
 
     destructive_loss_reasons = {
         job_id: disposition.reason
@@ -3977,11 +4020,12 @@ def _observe_provider_nodes(
         destructive_loss_reasons=destructive_loss_reasons,
         destructive_node_loss_job_ids=destructive_node_loss_job_ids,
         loss_latched_evidence=loss_latched_evidence,
-        unreachable_loss_evidence=unreachable_loss_evidence,
         unreachable_probe_results=unreachable_probe_results,
+        unreachable_probe_failed_job_ids=frozenset(probe_failed),
         final_heartbeat_job_ids=final_heartbeat_job_ids,
         fenced_heartbeat_job_ids=fenced_heartbeat_job_ids,
         orphaned_stale_heartbeat_job_ids=orphaned_stale_heartbeat_job_ids,
+        retired_routes=tuple(retired_routes),
     )
 
 
@@ -4003,6 +4047,7 @@ def run_reconcile_cycle(
     bootstrap_coordinator: _VmBootstrapCoordinator | None = None,
     provider_fence: Callable[[], None] | None = None,
     telemetry: Telemetry | None = None,
+    routing_store: RoutingStore | None = None,
 ) -> dict[str, Any]:
     execution_requested = bool(args.execute)
     if (
@@ -4059,6 +4104,7 @@ def run_reconcile_cycle(
             config.node_control_token_file(),
             "node control bearer token",
         ),
+        routing_store=routing_store,
     )
     jobs = observation.jobs
     nodes = observation.nodes
@@ -4068,7 +4114,6 @@ def run_reconcile_cycle(
     destructive_loss_reasons = observation.destructive_loss_reasons
     destructive_node_loss_job_ids = observation.destructive_node_loss_job_ids
     loss_latched_evidence = observation.loss_latched_evidence
-    unreachable_loss_evidence = observation.unreachable_loss_evidence
     final_heartbeat_job_ids = observation.final_heartbeat_job_ids
     fenced_heartbeat_job_ids = observation.fenced_heartbeat_job_ids
     orphaned_stale_heartbeat_job_ids = observation.orphaned_stale_heartbeat_job_ids
@@ -4367,6 +4412,10 @@ def run_reconcile_cycle(
         if job_id not in destructive_stop_job_ids
         if (node := stop_nodes_by_job_id.get(job_id)) is not None
         and unreachable_node_stop_ready(node, effective_policy)
+        and (
+            node.heartbeat is None
+            or job_id in observation.unreachable_probe_failed_job_ids
+        )
     )
     unreachable_stop_job_id_set = set(unreachable_stop_job_ids)
     active_drain_intents: list[DrainIntent] = []
@@ -4387,44 +4436,16 @@ def run_reconcile_cycle(
         "gateway control bearer token",
     )
     if execution_requested and execution_authorized:
-        pending_delete_routes = sorted(
-            (
-                route
-                for route in sandbox_routes
-                if route.delete_operation_id
-                and route.job_id not in destructive_job_id_set
-                and route.job_id not in quarantined_job_ids
-            ),
-            key=lambda route: (route.updated_at, route.sandbox_id),
+        assert provider_state is not None
+        pending_delete_results = _replay_pending_deletes(
+            [route for route in sandbox_routes if route.delete_operation_id],
+            skip_job_ids=destructive_job_id_set | quarantined_job_ids,
+            provider_state=provider_state,
+            deployment_id=operation_deployment_id,
+            budget=config.autoscaler_max_pending_delete_retries_per_cycle,
+            gateway_url=detach_gateway_url,
+            bearer_token=gateway_control_bearer_token,
         )
-        pending_delete_budget = max(
-            0,
-            config.autoscaler_max_pending_delete_retries_per_cycle,
-        )
-        for route in pending_delete_routes[:pending_delete_budget]:
-            delete_error = ""
-            delete_payload: dict[str, Any] = {}
-            try:
-                delete_payload = _delete_gateway_sandbox(
-                    detach_gateway_url,
-                    route.sandbox_id,
-                    bearer_token=gateway_control_bearer_token,
-                )
-            except Exception as exc:
-                # The gateway and node reuse the route's durable delete
-                # operation id, so an ambiguous replay is safe next cycle.
-                delete_error = str(exc)
-            pending_delete_results.append(
-                {
-                    "job_id": route.job_id,
-                    "sandbox_id": route.sandbox_id,
-                    "gateway_url": detach_gateway_url,
-                    "delete_operation_id": route.delete_operation_id,
-                    "request_succeeded": not delete_error,
-                    "deleted": delete_payload.get("deleted"),
-                    "error": delete_error,
-                }
-            )
     remaining_detach_budget = max(
         0,
         config.autoscaler_max_storage_native_detaches_per_cycle,
@@ -4820,6 +4841,7 @@ def run_reconcile_cycle(
                             "lastKnownActiveSandboxes": node.active_sandboxes,
                             "lastHeartbeatSafeToStop": True,
                             "lastHeartbeatPresent": node.heartbeat is not None,
+                            "directProbeFailed": node.heartbeat is not None,
                         }
                     )
                 elif destructively_lost:
@@ -4849,11 +4871,6 @@ def run_reconcile_cycle(
                                 loss_disposition,
                             )
                         )
-                        diagnostics = unreachable_loss_evidence.get(job_id)
-                        if diagnostics is not None:
-                            request["lastHeartbeatPresent"] = bool(
-                                diagnostics.get("lastHeartbeatPresent", False)
-                            )
                 elif drain_intent is None:
                     raise AutoscalerStateError(
                         f"drain-ready job has no durable intent: {job_id}"
@@ -4866,7 +4883,7 @@ def run_reconcile_cycle(
                         }
                     )
                 intent_key = (
-                    f"{role}:{job_id}:unreachable:{request['unreachableReference']}"
+                    f"{role}:{job_id}:unreachable-empty:{request['unreachableReference']}"
                     if unreachable_ready
                     else (
                         (
@@ -4911,13 +4928,6 @@ def run_reconcile_cycle(
         "destructive_node_loss_job_ids": list(destructive_node_loss_job_ids),
         "quarantined_job_ids": sorted(quarantined_job_ids),
         "unreachableNodeProbes": observation.unreachable_probe_results,
-        "unreachable_permanent_loss_job_ids": sorted(
-            job_id
-            for job_id in destructive_loss_reasons
-            if job_id in unreachable_loss_evidence
-            or loss_latched_evidence.get(job_id, {}).get("lossEvidenceKind")
-            == "unreachable_lease_expired"
-        ),
         "lost_sandbox_ids": [route.sandbox_id for route in lost_sandbox_routes],
         "buildWarmSandboxResources": build_warm_resources.to_dict(),
         "createIntents": [intent.to_dict() for intent in create_intents],
@@ -4962,6 +4972,7 @@ def run_reconcile_cycle(
         "builderCapacityOperationSucceeded": False,
         "definitelyTerminatedJobIds": [],
         "rawNodes": nodes,
+        "rawRetiredRoutes": observation.retired_routes,
         "rawSandboxNodes": sandbox_nodes,
         "rawBuilderNodes": builder_nodes,
         "rawDecision": decision,
@@ -5284,6 +5295,7 @@ def record_observed_vm_metrics(
             getattr(job, "latest_note", None),
             bool(getattr(node, "heartbeat_fresh", False)),
             bool(getattr(node, "is_ready", False)),
+            getattr(job, "interrupted_at", None),
         )
         if observed_vm_keys.get(job_id) == key:
             continue
@@ -6476,7 +6488,7 @@ def print_reconcile(
 def vm_job_to_dict(job: ProviderInstance) -> dict[str, Any]:
     raw = asdict(job)
     raw.pop("raw", None)
-    for key in ("created_at", "started_at", "expires_at"):
+    for key in ("created_at", "started_at", "expires_at", "interrupted_at"):
         if raw[key] is not None:
             raw[key] = raw[key].isoformat()
     return raw

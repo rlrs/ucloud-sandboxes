@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import timedelta
 from tempfile import TemporaryDirectory
 from pathlib import Path
@@ -15,6 +16,7 @@ from ucloud_sandboxes.metrics import (
     build_live_scale_signals,
     build_metrics_snapshot,
     record_autoscaler_cycle,
+    record_vm_observed,
 )
 from ucloud_sandboxes.models import (
     NodeRuntimeMetrics,
@@ -28,6 +30,7 @@ from ucloud_sandboxes.routing import (
     RoutingState,
     SandboxRoute,
 )
+from tests.test_policy import node as policy_node
 
 TEST_TIER = "contract"
 
@@ -463,6 +466,29 @@ class MetricsTests(unittest.TestCase):
             3072,
         )
         self.assertEqual(programs["response_to_wake_p95_ms"], 10_000)
+
+    def test_provider_status_change_carries_the_boot_it_happened_to(self) -> None:
+        observed = policy_node("job-1", state="SUSPENDED")
+        observed = replace(observed, job=replace(observed.job, interrupted_at=utc_now()),
+                           heartbeat=replace(observed.heartbeat, node_epoch="boot-a"))
+        with TemporaryDirectory() as raw_dir:
+            store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
+            record_vm_observed(store, cycle=1, node=observed)
+            (event,) = store.load_events()
+        self.assertEqual(
+            {key: event.data[key] for key in ("state", "phase", "node_epoch")},
+            {"state": "SUSPENDED", "phase": observed.job.phase.value, "node_epoch": "boot-a"},
+        )
+        self.assertEqual(event.data["interrupted_at"], observed.job.interrupted_at.isoformat())
+        # A suspend and resume between two polls is still a transition.
+        from ucloud_sandboxes.cli import record_observed_vm_metrics
+
+        later = replace(observed, job=replace(observed.job, interrupted_at=utc_now()))
+        with TemporaryDirectory() as raw_dir:
+            store, keys = MetricsStore(Path(raw_dir) / "metrics.sqlite"), {}
+            for cycle, value in enumerate((observed, observed, later)):
+                record_observed_vm_metrics(store, cycle, {"rawSandboxNodes": [value]}, keys)
+            self.assertEqual([event.data["cycle"] for event in store.load_events()], [0, 2])
 
     def test_gateway_busy_signals_are_aggregated_between_samples(self) -> None:
         with TemporaryDirectory() as raw_dir:

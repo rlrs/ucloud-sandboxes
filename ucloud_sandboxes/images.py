@@ -1648,15 +1648,6 @@ class ImageManager:
             condition.notify_all()
         return updated
 
-    def _update_build_timings(
-        self,
-        build_id: str,
-        phases: dict[str, int],
-        started: float,
-        environment: dict | None = None,
-    ) -> None:
-        self._update_build(build_id, timings=_build_timings(phases, started, environment))
-
 
 def image_id_from_tag(image: str) -> str:
     if IMAGE_ID_RE.fullmatch(image):

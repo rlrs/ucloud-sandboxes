@@ -81,6 +81,18 @@ generation elsewhere only after one of these fences:
 - a node-specific recovery protocol proves the operation rejected and records
   a tombstone/high-water mark.
 
+A heartbeat authenticated with a new `node_epoch` proves that every process
+of the earlier boot is gone, not its disk. The gateway retires the old epoch
+in one routing transaction: a route whose exact incarnation (generation,
+operation ID and spec hash) the new boot's complete inventory reports
+`parked`, which a worker does only with a valid complete checkpoint, moves to
+the new epoch; a delete intent stays until the worker acknowledges it; every
+other route follows the owner-loss classifier below. Ordinary inventory never
+adopts or retires another boot's route. The gateway then sends
+generation-fenced deletes for each delete intent and for each old-boot
+registration whose incarnation that retirement recorded as lost, so a reboot
+frees its reservations and the worker rejoins placement.
+
 Provider state that is merely unschedulable is not destructive proof. In
 particular, powered-off Hetzner servers retain their routes and local state.
 When a worker owner is proven lost, one route classifier decides the outcome:

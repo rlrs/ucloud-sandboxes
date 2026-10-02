@@ -99,11 +99,8 @@ CONTRACTS = (
     "stale_inventory_cannot_overwrite_or_delete_newer_generation",
     "same_generation_update_requires_exact_nonempty_identity",
     "route_incarnation_normalizes_node_url_for_every_mutation",
-    "exact_identity_adopts_new_boot_epoch_then_allows_absence",
-    "refresh_fence_cannot_readopt_or_delete_from_retired_boot",
-    "new_boot_inventory_removes_absent_old_boot_process",
-    "new_boot_inventory_detaches_absent_portable_park",
-    "new_boot_inventory_removes_portable_park_pending_delete",
+    "boot_retirement_readopts_only_the_exact_complete_park",
+    "inventory_never_settles_another_boots_route",
     "concurrent_different_spec_allocation_rejects_loser_atomically",
 )
 for _name in CONTRACTS:

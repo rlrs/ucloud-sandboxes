@@ -235,6 +235,33 @@ def allow_fixture_mutations(test):
     return wrapped
 
 
+def hetzner_provider(client) -> HetznerProvider:
+    profile = HetznerCreateProfile(
+        server_type="cx43", image=9001, location="hel1", network_id=1001,
+    )
+    return HetznerProvider(
+        "hetzner-project", client=client, api_token_env="HETZNER_API_KEY",
+        api_base_url="https://api.hetzner.cloud/v1", ssh_user="root",
+        sandbox_profile=profile, builder_profile=profile,
+    )
+
+
+def hetzner_server(status: str) -> dict:
+    return {
+        "id": 42, "name": "sandbox-node-off", "status": status,
+        "created": "2026-08-29T10:00:00+00:00",
+        "server_type": {
+            "name": "cx43", "category": "shared", "cores": 8, "memory": 16, "disk": 160,
+        },
+        "primary_disk_size": 160,
+        "image": {"id": 9001, "name": "sandbox-node-v2"},
+        "private_net": [{"network": 1001, "ip": "10.20.0.42"}],
+        "labels": {
+            "ucloud-sandboxes/node": "true", "ucloud-sandboxes/deployment": "prod-a",
+        },
+    }
+
+
 class CliTests(unittest.TestCase):
     def test_gateway_submission_defaults_to_four_vcpus(self) -> None:
         args = cli.build_parser().parse_args(
@@ -669,7 +696,6 @@ class CliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(submitted, [])
         self.assertEqual(terminated, [])
-        self.assertEqual(payload["unreachable_permanent_loss_job_ids"], [])
         self.assertEqual(payload["destructive_node_loss_job_ids"], [])
         self.assertEqual(payload["quarantined_job_ids"], ["lost-job"])
         self.assertEqual(payload["lost_sandbox_ids"], [])
@@ -688,45 +714,9 @@ class CliTests(unittest.TestCase):
             def delete_server(self, _server_id: str) -> dict:
                 raise AssertionError("recoverable off server must not be deleted")
 
-        profile = HetznerCreateProfile(
-            server_type="cx43",
-            image=9001,
-            location="hel1",
-            network_id=1001,
-        )
-        provider = HetznerProvider(
-            "hetzner-project",
-            client=NoMutationHetznerClient(),  # type: ignore[arg-type]
-            api_token_env="HETZNER_API_KEY",
-            api_base_url="https://api.hetzner.cloud/v1",
-            ssh_user="root",
-            sandbox_profile=profile,
-            builder_profile=profile,
-        )
+        provider = hetzner_provider(NoMutationHetznerClient())
         with temporary_root() as root:
-            jobs_file = write_jobs(
-                root,
-                {
-                    "id": 42,
-                    "name": "sandbox-node-off",
-                    "status": "off",
-                    "created": "2026-08-29T10:00:00+00:00",
-                    "server_type": {
-                        "name": "cx43",
-                        "category": "shared",
-                        "cores": 8,
-                        "memory": 16,
-                        "disk": 160,
-                    },
-                    "primary_disk_size": 160,
-                    "image": {"id": 9001, "name": "sandbox-node-v2"},
-                    "private_net": [{"network": 1001, "ip": "10.20.0.42"}],
-                    "labels": {
-                        "ucloud-sandboxes/node": "true",
-                        "ucloud-sandboxes/deployment": "prod-a",
-                    },
-                },
-            )
+            jobs_file = write_jobs(root, hetzner_server("off"))
             route_file = root / "routes.sqlite"
             RoutingStore(route_file).upsert_sandbox(
                 sandbox_route(
@@ -785,6 +775,59 @@ class CliTests(unittest.TestCase):
         self.assertIsNotNone(invalid_after)
         assert invalid_after is not None
         self.assertEqual(invalid_after.state, "failed")
+        # Powered off is unavailable: accounted, visible and alerting.
+        self.assertEqual(payload["quarantined_job_ids"], ["42"])
+        self.assertEqual(payload["decision"]["unreachableNodes"], 1)
+
+    @allow_fixture_mutations
+    def test_hetzner_unreachable_empty_stop_needs_a_failed_direct_probe(self) -> None:
+        # Silence is never loss: a reachable empty worker whose push path
+        # broke is refreshed; only a transport failure proves it gone.
+        stale = owned_heartbeat(
+            job_id="42", node_id="sandbox-node-off", node_url="http://10.20.0.42:8090",
+            node_epoch="boot-a", inventory_complete=True,
+            updated_at=utc_now() - timedelta(hours=1),
+        )
+        # None: no probe ran this cycle (the lease expired after it), so no proof.
+        for probe, stopped in (
+            (replace(stale, updated_at=utc_now()), False), (TimeoutError("down"), True),
+            (None, False),
+        ):
+            deleted: list[str] = []
+            client = SimpleNamespace(
+                create_server=None, delete_server=lambda sid: deleted.append(sid) or {},
+            )
+            with self.subTest(stopped=stopped), temporary_root() as root:
+                jobs_file = write_jobs(root, hetzner_server("running"))
+                save_heartbeats(root / "control-state.sqlite", {"42": stale})
+                output = io.StringIO()
+                with (
+                    patch.object(cli, "compute_provider_from_args",
+                                 return_value=hetzner_provider(client)),
+                    patch.object(cli, "fetch_node_agent_heartbeat", side_effect=[probe]),
+                    patch.object(cli, "_probe_nodes", **(
+                        {"return_value": {}} if probe is None else {"wraps": cli._probe_nodes})),
+                    # A reachable idle worker scales down by the drain handshake.
+                    patch.object(cli, "_post_node_drain", return_value={}) as drain,
+                    redirect_stdout(output),
+                ):
+                    cli.main([
+                        "autoscaler", "--config", str(write_ucloud_config(
+                            root, deployment_id="prod-a")),
+                        "--jobs-file", str(jobs_file), "--execute", "--once",
+                        "--output", "json",
+                    ])
+                payload = json.loads(output.getvalue())
+                fresh = ControlStateStore(root / "control-state.sqlite").get_heartbeat("42")
+            self.assertEqual(payload["unreachableNodeProbes"], [] if probe is None else [{
+                "jobId": "42", "status": "unreachable" if stopped else "healthy",
+            }])
+            self.assertEqual(payload["unreachableReadyStopJobIds"], ["42"] if stopped else [])
+            self.assertEqual(deleted, ["42"] if stopped else [])
+            self.assertEqual(drain.call_count, 0 if stopped else 1)
+            # Refreshed, or retired along with the deleted server.
+            self.assertEqual(fresh is not None and fresh.is_fresh(utc_now(), 120),
+                             not stopped and probe is not None)
 
     def test_external_provider_loss_evidence_is_serialized_generically(self) -> None:
         prototype = DestructiveInstanceLoss(
@@ -810,7 +853,6 @@ class CliTests(unittest.TestCase):
         provider = SimpleNamespace(
             kind="external",
             destructive_instance_losses=(prototype,),
-            unreachable_lease_expiry_loss=None,
             destructive_instance_loss=lambda _instance: disposition,
         )
         lost_instance = ProviderInstance(
@@ -889,11 +931,7 @@ class CliTests(unittest.TestCase):
 
                 self.assertIsNone(
                     cli._provider_destructive_loss_disposition(
-                        SimpleNamespace(
-                            kind="ucloud",
-                            destructive_instance_losses=(),
-                            unreachable_lease_expiry_loss=None,
-                        ),
+                        SimpleNamespace(kind="ucloud", destructive_instance_losses=()),
                         operation,
                     )
                 )
@@ -928,6 +966,8 @@ class CliTests(unittest.TestCase):
                     "routeCount": 0,
                     "lastKnownActiveSandboxes": 0,
                     "lastHeartbeatSafeToStop": True,
+                    "lastHeartbeatPresent": True,
+                    "directProbeFailed": True,
                 },
                 response={},
                 target_job_ids=("job-1",),
@@ -942,11 +982,16 @@ class CliTests(unittest.TestCase):
                     operation,
                 )
             )
-            for field in ("routeCount", "lastKnownActiveSandboxes"):
-                with self.subTest(field=field):
+            # Silence alone is no proof: a worker that heartbeated must also
+            # have failed the direct probe.
+            for field, value in (
+                ("routeCount", False), ("lastKnownActiveSandboxes", False),
+                ("directProbeFailed", False), ("directProbeFailed", None),
+            ):
+                with self.subTest(field=field, value=value):
                     malformed = replace(
                         operation,
-                        request={**operation.request, field: False},
+                        request={**operation.request, field: value},
                     )
                     self.assertFalse(
                         cli._stop_operation_has_safety_proof(  # type: ignore[arg-type]
@@ -1960,6 +2005,65 @@ class CliTests(unittest.TestCase):
                         self.assertEqual(state.list_operations(kind="stop"), [])
                     client.return_value.terminate_jobs.assert_not_called()
 
+    def test_provider_confirmed_loss_records_node_lost_not_unknown(self):
+        with temporary_root() as root:
+            store = RoutingStore(root / "routes.sqlite")
+            for job_id in ("final-job", "terminated-job", "live-job"):
+                store.upsert_sandbox(sandbox_route(f"{job_id}-box", job_id=job_id))
+            # Routes the continuity probe retired release their references too.
+            retired = sandbox_route("retired-box", job_id="live-job")
+            removed = cli._delete_lost_routes(store, {
+                "prunedFinalHeartbeats": ["final-job"], "rawRetiredRoutes": (retired,),
+                "definitelyTerminatedJobIds": ["terminated-job"], "rawNodes": [],
+            }, ScalePolicy(), stale=False)
+            self.assertEqual(sorted(r.sandbox_id for r in removed),
+                             ["final-job-box", "retired-box", "terminated-job-box"])
+            for job_id in ("final-job", "terminated-job"):
+                self.assertEqual(store.get_sandbox_loss(f"{job_id}-box")["reason"], "node_lost")
+            self.assertIsNotNone(store.get_sandbox("live-job-box"))
+
+    def test_pending_delete_replay_rotates_durably_with_bounded_attempts(self):
+        # Intent age alone let a silent worker's oldest intents take the
+        # whole budget every cycle and starve every younger one.
+        routes = [
+            sandbox_route(f"s{i}", job_id=f"job-{i}", delete_operation_id=f"d{i}",
+                          updated_at=f"2026-01-01T00:00:0{i}+00:00")
+            for i in range(5)
+        ]
+        timeouts: list[float] = []
+
+        def delete(_url, sandbox_id, *, bearer_token, timeout_seconds):
+            timeouts.append(timeout_seconds)
+            if sandbox_id == "s0":
+                raise TimeoutError("hung worker")
+            return {"deleted": True}
+
+        with temporary_root() as root, patch.object(
+            cli, "_delete_gateway_sandbox", side_effect=delete,
+        ):
+            def cycle(pending, skip=(), budget=2, path="state.sqlite"):
+                # A fresh store each cycle: the rotation survives restarts.
+                results = cli._replay_pending_deletes(
+                    pending, skip_job_ids=set(skip), budget=budget,
+                    provider_state=AutoscalerStateStore(root / path),
+                    deployment_id="prod-a", gateway_url="http://gw", bearer_token="t",
+                )
+                return sorted((r["sandbox_id"], r["request_succeeded"]) for r in results)
+
+            self.assertEqual(
+                [cycle(routes) for _ in range(3)],
+                [[("s0", False), ("s1", True)], [("s2", True), ("s3", True)],
+                 [("s0", False), ("s4", True)]],
+            )
+            self.assertEqual(cycle(routes[2:]), [("s2", True), ("s3", True)])
+            # A fenced (skipped) job's intent keeps its turn: when its worker
+            # returns it does not jump ahead of one never attempted.
+            flapping = [cycle(routes[:3], skip=skip, budget=1, path="flap.sqlite")
+                        for skip in ((), ("job-0",), ())]
+            self.assertEqual(flapping, [[("s0", False)], [("s1", True)], [("s2", True)]])
+        self.assertEqual(set(timeouts), {cli._PENDING_DELETE_REPLAY_TIMEOUT_SECONDS})
+        self.assertLessEqual(cli._PENDING_DELETE_REPLAY_TIMEOUT_SECONDS, 30)
+
     def test_unreachable_probe_distinguishes_transport_from_auth_and_identity(self):
         heartbeat = owned_heartbeat()
         for error in (TimeoutError("timeout"), OSError("connection refused")):
@@ -1995,7 +2099,28 @@ class CliTests(unittest.TestCase):
 
     def test_ucloud_declares_no_status_or_silence_deletion_authority(self):
         self.assertEqual(UCloudProvider.destructive_instance_losses, ())
-        self.assertIsNone(UCloudProvider.unreachable_lease_expiry_loss)
+        self.assertTrue(UCloudProvider.requires_guest_continuity)
+
+    def test_external_provider_must_declare_its_continuity_contract(self):
+        from ucloud_sandboxes.providers import loader
+
+        configuration = SimpleNamespace(kind="external")
+        for flags, loads in (({"requires_continuity_history": False}, False),
+                             ({"requires_continuity_history": False,
+                               "requires_guest_continuity": 0}, False),
+                             ({"requires_continuity_history": False,
+                               "requires_guest_continuity": True}, True)):
+            provider = SimpleNamespace(kind="external", **flags)
+            entry = SimpleNamespace(load=lambda provider=provider: lambda *_: provider)
+            with self.subTest(flags=flags), patch.object(
+                loader, "entry_points",
+                return_value=SimpleNamespace(select=lambda **_: (entry,)),
+            ):
+                if loads:
+                    self.assertIs(loader.load_external_provider(configuration, None), provider)
+                else:
+                    with self.assertRaisesRegex(ValueError, "requires_guest_continuity"):
+                        loader.load_external_provider(configuration, None)
 
     def test_demand_rise_durably_cancels_drain_before_ambiguous_undrain(self) -> None:
         terminate_calls: list[tuple[str, ...]] = []

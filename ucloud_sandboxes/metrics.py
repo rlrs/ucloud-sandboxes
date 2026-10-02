@@ -19,6 +19,7 @@ from .models import (
     SandboxNode,
     ScalePolicy,
     parse_iso_datetime,
+    repeatedly_rebooted,
     utc_now,
 )
 from .providers.base import InstanceCreateIntent
@@ -940,8 +941,28 @@ def record_vm_observed(
             "ready": node.is_ready,
             "provisioning": node.is_provisioning,
             "heartbeat_fresh": node.heartbeat_fresh,
+            # Joined with node_epoch_retired: readiness blip or real reboot.
+            "phase": job.phase.value,
+            "interrupted_at": _iso_or_none(job.interrupted_at),
+            "node_epoch": node.heartbeat.node_epoch if node.heartbeat else "",
         },
     )
+
+
+def record_node_epoch_retired(
+    store: MetricsStore | None, previous: NodeHeartbeat | None, heartbeat: NodeHeartbeat,
+) -> None:
+    """A proven boot change; downtime runs from the old boot's last receipt."""
+    if store is not None and previous is not None and previous.node_epoch not in (
+        "", heartbeat.node_epoch,
+    ):
+        store.append("node_epoch_retired", {
+            "job_id": heartbeat.job_id, "node_id": heartbeat.node_id,
+            "retired_node_epoch": previous.node_epoch, "node_epoch": heartbeat.node_epoch,
+            "downtime_seconds": (heartbeat.freshness_at - previous.freshness_at).total_seconds(),
+            # The second within a day soft-drains and retires the worker.
+            "retiring": repeatedly_rebooted(heartbeat, heartbeat.freshness_at),
+        })
 
 
 def record_vm_init_attempt(

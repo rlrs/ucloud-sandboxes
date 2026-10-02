@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from collections import OrderedDict
 from dataclasses import replace
+from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -15,7 +16,10 @@ import weakref
 
 from .sqlite_pool import SqliteConnectionPool
 from .bootstrap import VmBootstrapRecord
-from .models import NODE_RUNTIME_METRIC_DEFAULTS, SOFT_DRAIN_LABEL, NodeHeartbeat
+from .models import (
+    EPOCH_RETIREMENT_HISTORY, EPOCH_RETIREMENTS_LABEL, NODE_RUNTIME_METRIC_DEFAULTS,
+    SOFT_DRAIN_LABEL, NodeHeartbeat, epoch_retirements, parse_iso_datetime,
+)
 from .registry import (
     HeartbeatReceiptResult,
     _assert_heartbeat_binding,
@@ -37,9 +41,14 @@ _HEARTBEAT_HEADER_CACHE_BYTES = 1024**2
 # workers and the durable heartbeat schema remain wire-compatible.
 QUARANTINE_REASON = "ucloud-sandboxes/controller-quarantine"
 QUARANTINE_EPOCH = "ucloud-sandboxes/controller-quarantine-epoch"
+# Provider interruptions at or before this ISO instant were followed by a
+# verified same-guest continuity probe; only a newer one re-quarantines.
+CONTINUITY_VERIFIED_THROUGH = "ucloud-sandboxes/controller-continuity-verified-through"
 _QUARANTINE_KEYS = {QUARANTINE_REASON, QUARANTINE_EPOCH}
 SOFT_DRAIN = SOFT_DRAIN_LABEL
-_CONTROLLER_KEYS = _QUARANTINE_KEYS | {SOFT_DRAIN}
+_CONTROLLER_KEYS = _QUARANTINE_KEYS | {
+    SOFT_DRAIN, CONTINUITY_VERIFIED_THROUGH, EPOCH_RETIREMENTS_LABEL,
+}
 
 
 def _placement_heartbeat(heartbeat: NodeHeartbeat) -> NodeHeartbeat:
@@ -82,6 +91,28 @@ def _controller_labels(heartbeat: NodeHeartbeat, previous: NodeHeartbeat | None)
             {k: v for k, v in previous.labels.items() if k in _CONTROLLER_KEYS}
         )
     return replace(heartbeat, labels=labels)
+
+
+def quarantined_labels(heartbeat: NodeHeartbeat, reason: str) -> dict[str, str]:
+    """Fence the boot first quarantined, or the one now running once ingest
+    proved the boot change (its routes then name the new boot or are gone)."""
+    labels = {**heartbeat.labels, QUARANTINE_REASON: reason}
+    if labels.get(QUARANTINE_EPOCH) in (None, *heartbeat.retired_node_epochs):
+        labels[QUARANTINE_EPOCH] = heartbeat.node_epoch
+    return labels
+
+
+def recovered_labels(
+    fresh: NodeHeartbeat, current: NodeHeartbeat, verified_through: datetime | None,
+) -> dict[str, str]:
+    """End quarantine only; every other controller label keeps its owner."""
+    labels = _controller_labels(fresh, current).labels
+    for key in _QUARANTINE_KEYS:
+        labels.pop(key, None)
+    previous = parse_iso_datetime(labels.get(CONTINUITY_VERIFIED_THROUGH))
+    if verified_through is not None and (previous is None or verified_through > previous):
+        labels[CONTINUITY_VERIFIED_THROUGH] = verified_through.isoformat()
+    return labels
 
 
 _TABLE_SQL = """CREATE TABLE control_records (
@@ -263,9 +294,9 @@ class ControlStateStore:
             current = self._load_heartbeats(connection).get(job_id)
             if current is None:
                 return None
-            labels = dict(current.labels)
-            labels.setdefault(QUARANTINE_EPOCH, current.node_epoch)
-            labels[QUARANTINE_REASON] = reason
+            labels = quarantined_labels(current, reason)
+            if labels == current.labels:
+                return _placement_heartbeat(current)  # Unchanged: no write.
             stored, payload = _encode_heartbeat(replace(current, labels=labels))
             self._upsert(connection, "heartbeat", job_id, payload)
             return _placement_heartbeat(stored)
@@ -291,8 +322,13 @@ class ControlStateStore:
             self._upsert(connection, "heartbeat", job_id, payload)
             return True
 
-    def recover_quarantined_node(self, heartbeat: NodeHeartbeat) -> bool:
-        """Commit verified continuity only if no newer boot/revision intervened."""
+    def recover_quarantined_node(
+        self, heartbeat: NodeHeartbeat, *, verified_through: datetime | None = None,
+    ) -> NodeHeartbeat | None:
+        """Commit verified continuity only if no newer boot/revision intervened.
+
+        ``verified_through`` is the provider interruption this probe covered.
+        """
         with self._transaction(write=True) as connection:
             current = self._load_heartbeats(connection).get(heartbeat.job_id)
             if current is None or (
@@ -301,22 +337,16 @@ class ControlStateStore:
                 or current.activity_epoch > heartbeat.activity_epoch
                 or current.freshness_at > heartbeat.freshness_at
             ):
-                return False
-            labels = {
-                k: v for k, v in heartbeat.labels.items() if k not in _CONTROLLER_KEYS
-            }
-            # Recovery ends quarantine only; the autoscaler owns soft drain.
-            if current.labels.get(SOFT_DRAIN):
-                labels[SOFT_DRAIN] = current.labels[SOFT_DRAIN]
+                return None
             stored, payload = _encode_heartbeat(
                 replace(
                     heartbeat,
-                    labels=labels,
+                    labels=recovered_labels(heartbeat, current, verified_through),
                     retired_node_epochs=current.retired_node_epochs,
                 )
             )
             self._upsert(connection, "heartbeat", stored.job_id, payload)
-            return True
+            return stored
 
     def upsert_heartbeat(self, heartbeat: NodeHeartbeat) -> None:
         with self._transaction(write=True) as connection:
@@ -344,6 +374,7 @@ class ControlStateStore:
             ):
                 return HeartbeatReceiptResult(previous, previous, False)
             retired_epochs = set(previous.retired_node_epochs if previous else ())
+            heartbeat = _controller_labels(heartbeat, previous)
             if previous is not None:
                 if heartbeat.node_epoch != previous.node_epoch:
                     if (
@@ -360,14 +391,18 @@ class ControlStateStore:
                     # boot from returning after the new one is accepted.
                     if previous.node_epoch:
                         retired_epochs.add(previous.node_epoch)
+                        # Durable reboot history, atomic with the retirement.
+                        history = (*epoch_retirements(previous), heartbeat.received_at)
+                        heartbeat = replace(heartbeat, labels={
+                            **heartbeat.labels, EPOCH_RETIREMENTS_LABEL: ",".join(
+                                at.isoformat() for at in history[-EPOCH_RETIREMENT_HISTORY:]
+                            ),
+                        })
                 elif heartbeat.activity_epoch < previous.activity_epoch:
                     return HeartbeatReceiptResult(previous, previous, False)
             stored, payload = _encode_heartbeat(
                 normalize_idle_since(
-                    replace(
-                        _controller_labels(heartbeat, previous),
-                        retired_node_epochs=tuple(sorted(retired_epochs)),
-                    ),
+                    replace(heartbeat, retired_node_epochs=tuple(sorted(retired_epochs))),
                     previous=previous,
                 )
             )

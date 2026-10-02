@@ -39,4 +39,5 @@ def gateway_services(
         deployment_id=deployment_id,
         dependency_resolver=dependency_resolver,
         create_target_concurrency_per_node=create_target_concurrency_per_node,
+        delete_on_worker=None,
     )

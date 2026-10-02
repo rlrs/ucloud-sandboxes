@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Callable, Protocol, Sequence
 
+from .control_state import QUARANTINE_EPOCH
 from .models import NodeHeartbeat, ResourceQuantity, utc_now
 from .routing import (
     RoutingStore,
@@ -177,7 +178,9 @@ class WakeAdmission:
         return bool(
             owner.node_url
             and not owner.draining
-            and owner.admission_open
+            # Quarantine fences new placement only: while the boot it was
+            # taken on runs, the guest still owns and may wake its own parks.
+            and (owner.admission_open or owner.labels.get(QUARANTINE_EPOCH) == owner.node_epoch)
             and "sandbox" in owner.capabilities
             and owner.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
         )

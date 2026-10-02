@@ -284,22 +284,48 @@ across heartbeats and controller restarts. Recovery requires current provider
 RUNNING state plus a fresh authenticated direct heartbeat with a verified guest
 boot identity and complete inventory matching the assigned route generations,
 create operations, and specifications. A plain RUNNING status or heartbeat
-arrival cannot clear quarantine.
+arrival cannot clear quarantine. Recovery records the latest provider
+suspension time it covered in the controller label
+`ucloud-sandboxes/controller-continuity-verified-through`, so a historical
+suspension quarantines once, not every cycle; only a newer (or untimed)
+suspension, or a current `SUSPENDED` state, quarantines again.
 
-An authenticated changed guest boot retires routes from the old incarnation;
-fully published portable snapshots remain recoverable. It does not authorize
-termination of the new guest. Old UCloud destructive stop authorizations are
-invalidated before replay; already submitted calls remain recorded as such.
+Quarantined ingest retires no routes, yet continuity needs every route present.
+So when a probe has verified the quarantine's own boot and a complete inventory,
+the routes that inventory omits are retired by the ordinary reconcile rules
+(in-flight and newer-activity routes stay protected) before continuity is
+checked. This never happens across a boot change. While its boot is unchanged, a
+quarantined worker still wakes its own local parks; quarantine fences new
+placement only.
 
-`unreachable_stop_after_seconds` retains the other providers' conservative
-empty-worker eviction behavior. UCloud does not treat elapsed heartbeat silence,
-even combined with a failed direct probe, as authority to delete an occupied VM.
+An authenticated changed guest boot loses the old guest's processes, not the
+node: it retires running routes from the old incarnation, while fully published
+portable snapshots remain recoverable. It does not authorize termination of the
+new guest, which rejoins the pool: a quarantine taken before the new boot
+reported is re-anchored on the new boot once ingest has retired the old one, so
+the routes that now name the new boot can prove continuity. The gateway records every boot change, with
+its receipt time, in the controller label
+`ucloud-sandboxes/controller-epoch-retirements` (the last four, atomically with
+the retirement). A worker with two boot changes within 24 hours is a failing
+host: it stops counting as capacity, takes the soft-drain slot regardless of
+demand (with drain on park enabled) and, once idle, stops through the ordinary
+drain handshake. Old UCloud destructive stop authorizations are invalidated
+before replay; already submitted calls remain recorded as such.
+
+`unreachable_stop_after_seconds` retains the conservative empty-worker eviction
+behavior for every provider, and silence alone is never proof: a worker that
+has heartbeated is stopped through this path only after its last complete
+inventory was empty and a direct probe in the same cycle failed in transport.
+A reachable worker whose push path broke is refreshed instead. UCloud never
+deletes an occupied VM on silence, even combined with a failed direct probe.
 Workers that have reported a heartbeat must recover continuity and complete the
 ordinary drain handshake before automatic idle termination. A never-heartbeating
 VM with no assigned routes can still be retired under the existing unreachable
-startup policy. Quarantined jobs retain their provider/billing slots; replacement
-planning does not pretend those VMs have ceased to exist. A persistently
-unavailable VM may therefore need operator investigation and explicit cleanup.
+startup policy. Quarantined and powered-off jobs (Hetzner `off` and `stopping`
+are unavailable, not lost) retain their provider/billing slots and count as
+unreachable; replacement planning does not pretend those VMs have ceased to
+exist. A persistently unavailable VM may therefore need operator investigation
+and explicit cleanup.
 
 For controlled incident reproduction, use a disposable pre-provisioned pool
 with the executing autoscaler stopped. `max_stop_per_cycle=0` is not a global
@@ -364,18 +390,20 @@ intents.
 
 There is one bounded exception for a node that cannot participate in the drain
 protocol at all. After `unreachable_stop_after_seconds`, an owned running VM may
-receive a durable unreachable-stop proof when it has no gateway routes and its
-last complete heartbeat inventory was empty, or when it never emitted a
-heartbeat. This proof permits the same journaled provider termination without a
-node acknowledgement. It does not apply to a fresh node, an incomplete last
-inventory, or any node with retained route ownership.
+receive a durable unreachable-stop proof when it has no gateway routes, its last
+complete heartbeat inventory was empty and a direct probe failed in transport,
+or when it never emitted a heartbeat. This proof permits the same journaled
+provider termination without a node acknowledgement. It does not apply to a
+fresh node, an incomplete last inventory, a reachable node, or any node with
+retained route ownership. Neither in-tree adapter treats lease expiry or a
+provider suspension as destructive node loss.
 
-The UCloud adapter deliberately uses a stronger proof at the same lease
-boundary. Because a suspended/reset UCloud guest and its local sandbox storage
-are permanently unrecoverable, lease expiry is durable destructive-node-loss
-proof regardless of the stale inventory. The operation journal latches that
-classification across controller restarts. This provider capability is disabled
-for Hetzner and does not weaken the generic empty-inventory rule.
+Recorded client DELETE intents are replayed every executing cycle, least
+recently attempted first (attempt times persist in the autoscaler state), at
+most `autoscaler_max_pending_delete_retries_per_cycle` of them, eight at a time
+with a 30 s timeout each. A silent worker's intents therefore cannot starve
+younger ones or stall the cycle, and the durable delete operation id makes an
+abandoned attempt safe to repeat.
 
 The journal moves an operation from `prepared` to `uncertain` before making the
 provider call. A crash or timeout leaves that same operation uncertain. A
@@ -582,7 +610,7 @@ durable, so a compaction failure blocks detachment and scale-down rather than
 discarding recoverable state.
 
 Durable delete intents are also controller-owned cleanup work. The autoscaler
-replays the oldest pending deletes every cycle, bounded independently by
+replays pending deletes every cycle, least recently attempted first, within
 `autoscaler_max_pending_delete_retries_per_cycle`. If deletion meets an
 uncommitted storage-native migration, the gateway first aborts the destination
 import and restores the source registration, then reuses the existing

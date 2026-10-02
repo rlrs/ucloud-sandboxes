@@ -5,6 +5,7 @@ from datetime import timedelta
 import unittest
 import json
 from urllib.request import Request, urlopen
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from tests.test_cli import (
@@ -19,11 +20,16 @@ from tests.test_cli import (
 )
 from ucloud_sandboxes import cli
 from ucloud_sandboxes.autoscaler_state import AutoscalerStateStore
-from ucloud_sandboxes.control_state import ControlStateStore, QUARANTINE_REASON
+from ucloud_sandboxes.control_state import (
+    CONTINUITY_VERIFIED_THROUGH, ControlStateStore, QUARANTINE_EPOCH, QUARANTINE_REASON,
+)
 from ucloud_sandboxes.models import (
+    EPOCH_RETIREMENTS_LABEL,
     InstancePhase,
     SandboxInventoryEntry,
     ScalePolicy,
+    epoch_retirements,
+    repeatedly_rebooted,
     utc_now,
 )
 from ucloud_sandboxes.providers.ucloud import UCloudProvider
@@ -31,6 +37,7 @@ from ucloud_sandboxes.providers.ucloud.models import instance_from_payload
 from ucloud_sandboxes.registry import heartbeat_to_dict
 from tests.test_control_plane import _gateway_server, _running_server
 from ucloud_sandboxes.routing import RoutingStore
+from ucloud_sandboxes.wake_admission import WakeAdmission
 
 TEST_TIER = "contract"
 
@@ -87,6 +94,103 @@ class GuestContinuityTests(unittest.TestCase):
             self.assertEqual(jobs[0].phase, InstancePhase.RUNNING)
             self.assertTrue(heartbeats["owned"].admission_open)
             self.assertNotIn(QUARANTINE_REASON, store.get_heartbeat("owned").labels)
+
+    def continuity_cycle(self, store, job, probe, route, routing=None):
+        with patch.object(cli, "_probe_unreachable_node", return_value=probe) as probed:
+            jobs, _ = cli._quarantine_unverified_guests(
+                [job], store.load_heartbeats(), control_state=store, policy=ScalePolicy(),
+                deployment_id="prod-a", route_reservations={"owned": (route,)},
+                execution_authorized=True, bearer_token="test-token", routing_store=routing,
+            )
+        return jobs[0].phase, probed.call_count
+
+    def test_verified_suspension_is_watermarked_across_restarts(self):
+        def interrupted(millis):
+            payload = owned_node_job()
+            payload["status"] = {"state": "RUNNING", "startedAt": 1_700_000_100_000}
+            payload["updates"] = [{"state": state, "timestamp": at} for state, at in (
+                ("RUNNING", 1_700_000_100_000), ("SUSPENDED", millis), ("RUNNING", millis + 1))]
+            return instance_from_payload(payload)
+
+        with temporary_root() as root:
+            path = root / "control-state.sqlite"
+            heartbeat, route = continuity_pair()
+            ControlStateStore(path).receive_heartbeat(heartbeat)
+            first = interrupted(1_700_000_200_000)
+            self.assertEqual(self.continuity_cycle(
+                ControlStateStore(path), first, (heartbeat, False), route,
+            ), (InstancePhase.RUNNING, 1))
+            # After a controller restart a failing probe is not even needed...
+            self.assertEqual(self.continuity_cycle(
+                ControlStateStore(path), first, (None, True), route,
+            ), (InstancePhase.RUNNING, 0))
+            # ...but the watermark never hides a newer suspension.
+            self.assertEqual(self.continuity_cycle(
+                ControlStateStore(path), interrupted(1_700_000_300_000), (None, True), route,
+            ), (InstancePhase.UNAVAILABLE, 1))
+        # Operators read the interruption in the JSON job views.
+        self.assertEqual(json.loads(json.dumps(cli.vm_job_to_dict(first)))["interrupted_at"],
+                         first.interrupted_at.isoformat())
+
+    def test_proven_reboot_reanchors_quarantine_and_the_owner_wake(self):
+        with temporary_root() as root:
+            store = ControlStateStore(root / "control-state.sqlite")
+            heartbeat, _ = continuity_pair()
+            store.receive_heartbeat(heartbeat)
+            store.quarantine_node("owned", "provider_readiness_unverified")
+            rebooted = replace(heartbeat, node_epoch="boot-b", received_at=utc_now())
+            store.receive_heartbeat(rebooted)
+            admission = SimpleNamespace(heartbeat_ttl_seconds=120)
+            # Until the controller re-fences it, the old boot's quarantine
+            # grants the new boot nothing.
+            for anchor in ("boot-a", "boot-b"):
+                owner = store.get_heartbeat("owned")
+                self.assertEqual((owner.labels[QUARANTINE_EPOCH], owner.admission_open),
+                                 (anchor, False))
+                self.assertEqual(WakeAdmission.owner_ready(  # type: ignore[arg-type]
+                    admission, replace(owner, capabilities=("sandbox",))), anchor == "boot-b")
+                # Ingest retired boot-a: quarantine now fences the boot running.
+                store.quarantine_node("owned", "provider_readiness_unverified")
+
+    def test_controller_labels_cannot_be_forged_and_count_reboots(self):
+        with temporary_root() as root:
+            path = root / "control-state.sqlite"
+            heartbeat, _ = continuity_pair()
+            ControlStateStore(path).receive_heartbeat(heartbeat)
+            forged = {EPOCH_RETIREMENTS_LABEL: "", CONTINUITY_VERIFIED_THROUGH: "2099-01-01"}
+            for boot in ("boot-b", "boot-c", "boot-d", "boot-e", "boot-f"):
+                ControlStateStore(path).receive_heartbeat(
+                    replace(heartbeat, node_epoch=boot, received_at=utc_now(), labels=forged)
+                )
+            stored = ControlStateStore(path).get_heartbeat("owned")
+            self.assertNotIn(CONTINUITY_VERIFIED_THROUGH, stored.labels)
+            # The last four, atomically with each retirement.
+            self.assertEqual(len(epoch_retirements(stored)), 4)
+            self.assertTrue(repeatedly_rebooted(stored, utc_now()))
+            self.assertFalse(repeatedly_rebooted(stored, utc_now() + timedelta(days=2)))
+
+    def test_absent_routes_retire_only_after_a_verified_same_boot_probe(self):
+        with temporary_root() as root:
+            store = ControlStateStore(root / "control-state.sqlite")
+            routing = RoutingStore(root / "routes.sqlite")
+            heartbeat, route = continuity_pair()
+            route = replace(route, node_url=heartbeat.node_url)
+            routing.upsert_sandbox(route)
+            store.receive_heartbeat(heartbeat)
+            store.quarantine_node("owned", "heartbeat_continuity_unverified")
+            # The probe stamps its own receipt, as heartbeat ingest does.
+            empty = replace(heartbeat, inventory=(), active_sandboxes=0, activity_epoch=1,
+                            received_at=utc_now())
+            unavailable = InstancePhase.UNAVAILABLE
+            for fresh, phase in ((replace(empty, node_epoch="boot-b"), unavailable),
+                                 (replace(empty, inventory_complete=False), unavailable),
+                                 (empty, InstancePhase.RUNNING)):
+                with self.subTest(fresh=fresh.node_epoch, complete=fresh.inventory_complete):
+                    self.assertEqual(self.continuity_cycle(
+                        store, suspended_job(), (fresh, False), route, routing,
+                    )[0], phase)
+                    retired = phase is InstancePhase.RUNNING
+                    self.assertEqual(routing.get_sandbox(route.sandbox_id) is None, retired)
 
     def test_suspended_or_unreachable_guest_keeps_routes_and_cannot_stop(self):
         for state, route_only in (
@@ -246,9 +350,10 @@ class GuestContinuityTests(unittest.TestCase):
             )
             routing.upsert_sandbox(old)
             routing.upsert_sandbox(new)
-            removed = routing.delete_sandboxes_for_jobs_with_error(
-                ("owned",), terminal_error="node_lost", retired_node_epoch="boot-a"
-            )
+            removed = routing.retire_node_epochs(
+                "owned", ("boot-a",), node_epoch="boot-b", activity_epoch=0,
+                inventory=(), observed_at=utc_now().isoformat(),
+            ).lost
             self.assertEqual([route.sandbox_id for route in removed], [old.sandbox_id])
             self.assertIsNone(routing.get_sandbox(old.sandbox_id))
             self.assertEqual(routing.get_sandbox(new.sandbox_id).node_epoch, "boot-b")

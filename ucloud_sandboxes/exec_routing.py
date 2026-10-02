@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from http import HTTPStatus
+from typing import Callable, Optional
 
 from .control_state import QUARANTINE_REASON
 from .exec_session_routes import ExecSessionRoutes, SignedExecRoute
@@ -40,6 +41,10 @@ def heartbeat_proves_route_absent(
         route_created_at
     )
     return reference is None or heartbeat.freshness_at >= reference
+
+
+# Pulls one stale worker heartbeat; None once the stale boot was replaced.
+Refresh = Optional[Callable[[NodeHeartbeat], Optional[NodeHeartbeat]]]
 
 
 def _worker_unreachable(route: ExecRoute | SignedExecRoute) -> ExecRouteUnavailable:
@@ -120,46 +125,37 @@ class ExecRoutingService:
             and signed.job_id == route.job_id
         )
 
-    def heartbeat(self, route: ExecRoute | SignedExecRoute) -> NodeHeartbeat | None:
+    def fresh(self, heartbeat: NodeHeartbeat | None) -> bool:
+        return bool(
+            heartbeat is not None
+            and heartbeat.node_url
+            and heartbeat.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
+        )
+
+    def heartbeat(self, route: ExecRoute | SignedExecRoute, refresh: Refresh = None) -> NodeHeartbeat | None:
         heartbeat = self.control_store.get_heartbeat(
             route.job_id, include_inventory=False
         )
+        if refresh is not None and heartbeat is not None and not self.fresh(heartbeat):
+            # Silence is never loss: ask the worker once before a 503.
+            heartbeat = refresh(heartbeat)
         if heartbeat is not None and heartbeat.active_sandboxes == 0:
             heartbeat = self.control_store.get_heartbeat(route.job_id)
         return heartbeat
 
-    def resolve(self, session_id: str) -> tuple[ExecRoute, NodeHeartbeat]:
+    def resolve(self, session_id: str, *, refresh: Refresh = None) -> tuple[ExecRoute, NodeHeartbeat]:
+        """Route one session; ``refresh`` pulls a stale worker's heartbeat."""
         signed = (
             self.session_routes.decode(session_id)
             if self.session_routes is not None
             else None
         )
         if signed is not None:
-            return self._resolve_signed(session_id, signed)
+            return self._resolve_signed(session_id, signed, refresh)
         route = self.routing_store.get_exec(session_id)
         if route is None:
-            loss = self.routing_store.get_exec_loss(session_id)
-            if loss is not None:
-                raise ExecRouteUnavailable(
-                    HTTPStatus.GONE,
-                    {
-                        "error": "exec worker was lost; the accepted command cannot resume",
-                        "error_code": "exec_worker_lost",
-                        "retryable": False,
-                        "session_id": session_id,
-                        "sandbox_id": loss["sandbox_id"],
-                        "sandbox_generation": loss["generation"],
-                        "lost_at": loss["lost_at"],
-                    },
-                )
-            raise ExecRouteUnavailable(
-                HTTPStatus.NOT_FOUND,
-                {
-                    "error": "exec route not found",
-                    "retryable": False,
-                },
-            )
-        heartbeat = self.heartbeat(route)
+            raise self._missing(session_id)
+        heartbeat = self.heartbeat(route, refresh)
         if heartbeat_proves_route_absent(
             heartbeat,
             sandbox_id=route.sandbox_id,
@@ -176,16 +172,23 @@ class ExecRoutingService:
                     "retryable": False,
                 },
             )
-        if not (
-            heartbeat is not None
-            and heartbeat.node_url
-            and heartbeat.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
-        ):
+        if not self.fresh(heartbeat):
+            if refresh is not None and self.routing_store.get_exec(session_id) is None:
+                # The pull proved a new boot, whose ingest retired this route.
+                raise self._missing(session_id)
             raise _worker_unreachable(route)
         return route, heartbeat
 
+    def _missing(self, session_id: str) -> ExecRouteUnavailable:
+        loss = self.routing_store.get_exec_loss(session_id)
+        if loss is None:
+            return ExecRouteUnavailable(
+                HTTPStatus.NOT_FOUND, {"error": "exec route not found", "retryable": False},
+            )
+        return _worker_lost(session_id, loss["sandbox_id"], loss["generation"], loss["lost_at"])
+
     def _resolve_signed(
-        self, session_id: str, signed: SignedExecRoute
+        self, session_id: str, signed: SignedExecRoute, refresh: Refresh
     ) -> tuple[ExecRoute, NodeHeartbeat]:
         """Route by the signed worker identity; read routing only on failure.
 
@@ -195,12 +198,8 @@ class ExecRoutingService:
         the prefix was minted.
         """
 
-        heartbeat = self.heartbeat(signed)
-        if (
-            heartbeat is not None
-            and heartbeat.node_url
-            and heartbeat.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
-        ):
+        heartbeat = self.heartbeat(signed, refresh)
+        if self.fresh(heartbeat):
             return (
                 ExecRoute(
                     session_id=session_id,

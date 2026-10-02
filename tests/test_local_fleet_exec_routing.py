@@ -2,10 +2,11 @@
 
 Tier: contract. A worker that honors the gateway's signed prefix names each
 session ``xr1.<route>.<random>``; the gateway then routes polls, stdin and
-signals by heartbeat alone. When that worker is silent the gateway answers
-for it: 503 while the incarnation is still its own, 404 once deleted or
-replaced, 410 once the incarnation was lost. A fresh worker is the authority
-on its own sessions. Workers without the prefix keep the durable exec route.
+signals by heartbeat alone. A late push is not silence: the gateway pulls the
+worker's heartbeat first. When the worker is silent the gateway answers for
+it: 503 while the incarnation is still its own, 404 once deleted or replaced,
+410 once the incarnation was lost. A fresh worker is the authority on its own
+sessions. Workers without the prefix keep the durable exec route.
 """
 
 import signal
@@ -46,9 +47,12 @@ class SignedExecSessionTests(unittest.TestCase):
             node = fleet.nodes[0]
             fleet.create("alpha")
             first = fleet.start_exec("alpha", ["sleep", "30"]).json()["session"]["id"]
+            fleet.expire_heartbeat(node)
+            self.assertEqual(fleet.events(first, after=0, wait_seconds=0).status, 200)
 
             # Silent, but the incarnation is still this worker's: retryable,
             # and nothing reaches the worker.
+            node.stop()
             fleet.expire_heartbeat(node)
             before = len(_exec_paths(node))
             for response in (
@@ -61,8 +65,10 @@ class SignedExecSessionTests(unittest.TestCase):
                 self.assertTrue(response.json()["retryable"])
                 self.assertEqual(response.headers["Retry-After"], "1")
             self.assertEqual(len(_exec_paths(node)), before)
-            fleet.heartbeat()
-            self.assertEqual(fleet.events(first, after=0, wait_seconds=0).status, 200)
+            # The restarted agent keeps the sandbox; this scenario needs only
+            # a session it started.
+            node.start()
+            first = fleet.start_exec("alpha", ["sleep", "30"]).json()["session"]["id"]
 
             # Deleted: the fresh worker still replays the killed command's
             # events, even though its inventory is now empty; once silent,
@@ -74,16 +80,18 @@ class SignedExecSessionTests(unittest.TestCase):
             exit_event = replay.json()["events"][-1]
             self.assertEqual(exit_event["stream"], "exit")
             self.assertNotEqual(exit_event["exit_code"], 0)
+            node.stop()
             fleet.expire_heartbeat(node)
             gone = fleet.events(first, after=0, wait_seconds=0)
             self.assertEqual((gone.status, gone.json()), (404, {"error": "exec route not found", "retryable": False}))
 
             # Replaced: the old generation's session is unknown, the new one
             # is retryable while its worker is silent.
-            fleet.heartbeat()
+            node.start()
             fleet.create("alpha")
             self.assertEqual(fleet.route("alpha").generation, 2)
             second = fleet.start_exec("alpha", ["sleep", "30"]).json()["session"]["id"]
+            node.stop()
             fleet.expire_heartbeat(node)
             self.assertEqual(fleet.events(first, after=0, wait_seconds=0).status, 404)
             self.assertEqual(fleet.events(second, after=0, wait_seconds=0).status, 503)
@@ -96,6 +104,7 @@ class SignedExecSessionTests(unittest.TestCase):
             unknown = fleet.events(second, after=0, wait_seconds=0)
             self.assertEqual(unknown.status, 404, unknown.body)
             self.assertIn("exec session not found", unknown.json()["error"])
+            node.stop()
             fleet.expire_heartbeat(node)
             lost = fleet.events(second, after=0, wait_seconds=0)
             self.assertEqual(lost.status, 410, lost.body)
@@ -121,7 +130,11 @@ class SignedExecSessionTests(unittest.TestCase):
                 fleet.wait_output(session_id, "ready\n")
             self.assertIn("get_exec", calls)
 
-            # A silent worker keeps its durable session: retryable, unproxied.
+            # A late push is not silence; a silent worker keeps its durable
+            # session: retryable, unproxied.
+            fleet.expire_heartbeat(node)
+            self.assertEqual(fleet.events(session_id, after=0, wait_seconds=0).status, 200)
+            node.stop()
             fleet.expire_heartbeat(node)
             before = len(_exec_paths(node))
             silent = fleet.events(session_id, after=0, wait_seconds=0)
@@ -129,7 +142,7 @@ class SignedExecSessionTests(unittest.TestCase):
             self.assertEqual(len(_exec_paths(node)), before)
             self.assertIsNotNone(store.get_exec(session_id))
             self.assertIsNone(store.get_exec_loss(session_id))
-            fleet.heartbeat()
+            node.start()
 
             # Deletion removes the durable row: the gateway answers alone.
             self.assertEqual(fleet.delete("alpha").status, 200)

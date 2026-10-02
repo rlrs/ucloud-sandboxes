@@ -68,7 +68,7 @@ from .images import (
     uploaded_build_context_reference,
 )
 from .build_admission import BUILD_ADMISSION_CAPACITY_LABEL
-from .direct_registry import ManagedPrimaryOwnedError
+from .direct_registry import DirectRegistrationOwnedError, ManagedPrimaryOwnedError
 from .memory_backing import MemoryBackingBusyError
 from .managed_process import ManagedProcessError, ManagedProcessReadUnavailable, ManagedProcessStart
 from .models import NodeHeartbeat, NodeRuntimeMetrics, ResidentWaitMetrics, ResourceQuantity, SandboxInventoryEntry, SandboxMemoryObservation, utc_now
@@ -1769,6 +1769,12 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 status=HTTPStatus.SERVICE_UNAVAILABLE,
                 headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
             )
+            return
+        if isinstance(exc, DirectRegistrationOwnedError):
+            # Definite, unlike other registry conflicts (lost races, so 503):
+            # another incarnation owns this id, e.g. one an unreaped old boot left.
+            self._write_json({"error": str(exc), "error_code": "sandbox_registration_conflict",
+                              "retryable": False}, status=HTTPStatus.CONFLICT)
             return
         if isinstance(exc, (RequestBodyTooLargeError, SandboxFileTooLargeError)):
             status = HTTPStatus.REQUEST_ENTITY_TOO_LARGE

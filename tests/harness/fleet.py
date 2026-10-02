@@ -874,6 +874,37 @@ class LocalFleet:
             if node.running:
                 node.post_heartbeat()
 
+    def continuity_cycle(self, node: FleetNode, *, interrupted_at=None, state: str = "RUNNING"):
+        """Run the autoscaler's per-cycle guest-continuity step for ``node``.
+
+        A part of the S9 gap: the provider is a fake RUNNING (or ``state``)
+        job, last interrupted at ``interrupted_at``, and the probe is real.
+        Returns the resulting job, heartbeat and the routes it retired.
+        """
+        from ucloud_sandboxes import cli
+        from ucloud_sandboxes.deployment import DEPLOYMENT_LABEL, NODE_LABEL
+        from ucloud_sandboxes.models import InstancePhase, ProviderInstance, ScalePolicy
+
+        handler = self.gateway.RequestHandlerClass
+        store, routes = handler.services.fleet.store, handler.routing_store
+        job = ProviderInstance(
+            id=node.job_id, name=node.node_id, application_name="", application_version="",
+            product_id="", product_category="", state=state, labels={
+                DEPLOYMENT_LABEL: self.deployment_id, NODE_LABEL: "true"},
+            phase=InstancePhase.RUNNING if state == "RUNNING" else InstancePhase.UNAVAILABLE,
+            interrupted_at=interrupted_at,
+        )
+        owned = tuple(r for r in routes.sandbox_routes_readonly() if r.job_id == node.job_id)
+        retired: list = []
+        jobs, heartbeats = cli._quarantine_unverified_guests(
+            [job], store.load_heartbeats(), control_state=store,
+            policy=ScalePolicy(heartbeat_ttl_seconds=self.heartbeat_ttl_seconds),
+            deployment_id=self.deployment_id, route_reservations={node.job_id: owned},
+            execution_authorized=True, bearer_token=self.tokens.node_control,
+            routing_store=routes, retired_routes=retired,
+        )
+        return jobs[0], heartbeats[node.job_id], retired
+
     def expire_heartbeat(self, node: FleetNode) -> None:
         """Age ``node``'s last heartbeat receipt past the TTL, as silence would.
 

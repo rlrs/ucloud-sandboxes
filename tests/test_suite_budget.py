@@ -17,8 +17,10 @@ from tests.test_package_budget import package_lines
 # code deletions whose tests go with them (C1.1, C1.3, C1.4, C2.1, C2.9).
 # 89,500 after the C8.4 consolidation, raised to 93,000 for the tests merged
 # alongside it: C1.1 follow-ups, C3.1 commit, C4.4 sender, C5.1 guest agent
-# and C5.2. Lower it as scenarios replace more handler-level tests.
-SUITE_LINE_BUDGET = 93_000
+# and C5.2, then to 93,200 for the node-failure scenarios (reboot re-adoption
+# and reaping, heartbeat pull, UCloud quarantine). Lower it as scenarios
+# replace more handler-level tests.
+SUITE_LINE_BUDGET = 93_200
 SUITE = Path(__file__).resolve().parent
 
 

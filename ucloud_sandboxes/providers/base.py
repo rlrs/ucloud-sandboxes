@@ -249,9 +249,12 @@ class ComputeProvider(Protocol):
 
     kind: str
     scope_id: str
+    # Retrieve per-instance history every cycle (interruptions, readiness).
     requires_continuity_history: bool
+    # Quarantine a silent or interrupted guest until a direct probe proves
+    # the same boot and route inventory; otherwise only the generic gates.
+    requires_guest_continuity: bool
     destructive_instance_losses: tuple[DestructiveInstanceLoss, ...]
-    unreachable_lease_expiry_loss: DestructiveInstanceLoss | None
 
     def list_instances(self) -> list[ProviderInstance]: ...
 

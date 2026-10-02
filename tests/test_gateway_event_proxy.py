@@ -278,6 +278,8 @@ class AsyncGatewayEventTests(unittest.TestCase):
         )
         # receive_heartbeat records receipt itself; exercise the canonical
         # resolver with a stale read, preserving real routing and HTTP layers.
+        # The gateway first pulls a heartbeat; this worker cannot serve one.
+        self.release.set()
         with patch.object(
             self.gateway.RequestHandlerClass.services.fleet.store,
             "get_heartbeat",
@@ -292,7 +294,7 @@ class AsyncGatewayEventTests(unittest.TestCase):
             self.assertEqual(
                 json.loads(response.read())["error_code"], "sandbox_worker_unreachable"
             )
-        self.assertEqual(self.calls, [])
+        self.assertEqual(self.calls, [("/v1/heartbeat", "Bearer node-private")])
 
     def test_shutdown_cancels_owned_responses_without_waiting_for_worker(self):
         connection = self.poll()

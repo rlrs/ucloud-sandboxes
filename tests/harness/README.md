@@ -73,6 +73,9 @@ processes and changes the boot ID before restarting the agent.
 `node.drain(token)` and `node.request(...)` call the node's control API
 directly, as the autoscaler or gateway does. `node.honor_exec_session_prefix
 = False` models a worker that predates signed exec session names.
+`fleet.continuity_cycle(node, interrupted_at=...)` runs the autoscaler's
+per-cycle guest-continuity step against a fake provider job and the real
+direct probe; the rest of an autoscaler cycle is not modeled yet.
 
 ## Not modeled
 

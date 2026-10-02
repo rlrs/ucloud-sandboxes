@@ -553,6 +553,33 @@ review finds that the prepared cache leaves 63,926 of 66,786 training images
 (49% of task rows) to a live, unpinned build at first use.
 
 **C2.13 Adopt the Nydus RAFS v6 format, keep our serving and trust.**
+
+> **Decided 2026-10-02 after spikes S10 and S11**
+> (`docs/benchmarks/nydus-spike-2026-10-02/`,
+> `docs/benchmarks/fscache-spike-2026-10-02/`).
+>
+> - **Adopt** RAFS v6 conversion, mounted with kernel EROFS over our NBD
+>   backend.
+> - **Don't adopt** Nydus's chunk dictionary. It caps a bootstrap at 254
+>   blobs, `merge` panicked and dropped chunks, and it recorded truncated blob
+>   sizes: one image mounted with 2,076 of 42,138 files wrong.
+> - **Don't adopt** fscache. It is deprecated upstream, needs unsigned
+>   modules, and breaks every mount if the daemon restarts unsupervised.
+> - **Don't adopt** `nydusd`.
+> - **Instead:** convert each layer without a dictionary. Store every chunk
+>   once in our own content-addressed chunk store, keyed by the sha256 of the
+>   uncompressed 256 KiB chunk (from the bootstrap's chunk table). The backend
+>   serves and decompresses chunks into each image's address space.
+> - **Port from S11's numbers:** concurrent attach, 1 MiB fetch units and
+>   compressed transfer.
+> - **Measured on the 181-image sample:**
+>   - stored bytes 149.8 GB today against 17.5 GB (8.6× less);
+>   - attach 0.18–0.24 s against 0.23–0.79 s;
+>   - cold `import sys` 0.36–0.56 s against 0.47–0.64 s, reading 8–12 MB
+>     instead of 31–56 MB;
+>   - mtimes kept, so no stale `.pyc`.
+> - **New risk:** the chunk store must be built: pack files, an index and GC,
+>   for about 400–500M chunks at full corpus size.
 - **Change:** builders convert each built OCI image with `nydus-image` / `nydusify`
   (v2.4.5) into a RAFS v6 bootstrap plus data blobs. The chunk dictionary covers
   every image already converted, so identical file chunks are stored once
@@ -586,6 +613,15 @@ review finds that the prepared cache leaves 63,926 of 66,786 training images
   - the offline recipe-index rewrite (with C2.10).
 
 **C2.14 Build the training corpus once, ahead of training, and freeze it.**
+
+> **Storage, from S10.** All 66,786 images in the chunk store come to an
+> estimated 7.3–9.6 TB. OpenSWE alone is 7–9 TB: 100–276 MB of new chunks per
+> task, over 35,549 tasks. That exceeds the "not many TB more" constraint, so
+> OpenSWE needs a decision on one or more of:
+> - slimming the task deltas: measure what they hold (git history, caches,
+>   build trees);
+> - precomputing only the training split's OpenSWE tasks;
+> - a bounded OpenSWE set with lockfile rebuilds.
 - **Why ahead of time:** a run touches 500 tasks × 100–1,000 steps, so 50,000–500,000
   task uses against 130,253 rows. Long runs touch nearly every one of the 63,926
   images that still need a build. Building just ahead of the sampler would need

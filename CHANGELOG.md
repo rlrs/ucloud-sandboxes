@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.8.0 - 2026-10-02
+
+The first tagged release since 0.5.114rc24. It also covers the untagged 0.6 and 0.7 production builds. Rollout: `docs/rollout-0.8.0.md`. The node-failure fixes are not in it; they follow in 0.8.1.
+
 - Continue splitting `ControlPlaneHandler` into `ucloud_sandboxes/gateway/` (plan C6.1, PR4–PR6):
   - `heartbeats`: `HeartbeatIngest` validates, persists and reconciles worker heartbeats. It runs the deployment and identity checks, the retired-epoch cleanup and the snapshot inventory reconcile, and it releases routes the worker no longer reports. The handler schedules image warmups only when a heartbeat is accepted.
   - `placement`: `Placement` ranks workers and reserves one for creates, wakes and migrations. `_GATEWAY_SCHEDULING_LOCK`, the per-host placement file lock, `InflightCreatePlacements` and the scoring and fit rules move with it. The lock order is unchanged: the process lock, then the file lock.

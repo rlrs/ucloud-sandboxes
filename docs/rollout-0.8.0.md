@@ -1,8 +1,8 @@
 # 0.8.0 rollout plan (Hetzner production)
 
 Status: plan, not executed. Production runs 0.7.0 (gateway 77.42.92.27; workers
-scale from zero). The release candidate is branch `rl-scale-plan`, plus the
-node-failure fixes once they are merged and reviewed. Placement wiring (C4.3)
+scale from zero). The release candidate is branch `rl-scale-plan` at version 0.8.0. The
+node-failure fixes are not in it; they ship as 0.8.1 after review. Placement wiring (C4.3)
 and later items go out separately in 0.9.0, after their own canary, because
 they change PostgreSQL placement behavior.
 
@@ -18,10 +18,10 @@ they change PostgreSQL placement behavior.
 | In-process heartbeat sender (C4.4) | On | VM init retires the old oneshot timer. |
 | Create pipeline (C5.2) | On | Three commits per create, a netns pool in `network-slots.json`, and a `direct-registry.sqlite.owner` sidecar. |
 | Commit worker and builder halves (C3.1) | Unreachable: no gateway route | — |
-| Guest agent (C5.1 step 1) | Not wired | New `agent` mode in the init binary. |
+| Guest agent (C5.1 step 1) | Not wired | The bundles keep the qualified 0.7.0 init binary; only the unwired `guest_agent.py` uses the new `agent` and `files stat` modes. |
 | Program scheduler removed (C4.7) | — | Policy keys removed: the config must be re-rendered. |
 | Relay and placement-queue cancellation fixes | On | — |
-| Node-failure fixes (reboot = process loss, quarantine, Hetzner off ≠ lost, delete replay) | On | Merge first; see `docs/node-failure-semantics.md`. |
+| Node-failure fixes (reboot = process loss, quarantine, Hetzner off ≠ lost, delete replay) | Not in 0.8.0 | Ship in 0.8.1. They fix 0.7.0 behavior and nothing in 0.8.0 depends on them. |
 
 ## Ordering constraints
 
@@ -42,15 +42,23 @@ they change PostgreSQL placement behavior.
 1. **Preflight, read-only.** The fleet must be idle: no routes, no running
    builds, no relay in-flight work. Confirm the off-host evidence and
    PostgreSQL backups (`scripts/backup_relay_postgres.py`).
-2. **Build.** Wheel and node bundles from `rl-scale-plan`. Run
+2. **Build.** The wheel from `rl-scale-plan`. Repack the live sandbox and
+   builder bundles on the gateway with `scripts/repack_node_bundle.py`,
+   replacing only the agent wheel and asserting that native files and the
+   dependency closure are unchanged. Run
    `scripts/verify_installed_wheel.py`, which must show
    `ucloud_sandboxes/gateway/`, and the full suite: `scripts/run_tests.py`,
    with and without PostgreSQL. Run the Go tests and the local fleet harness.
-3. **Render config.** Run `scripts/hetzner_prod/make_config.py <snapshot-id>`
-   and review the diff against the current deployment. Expected changes:
-   - removed: `program_aware_autoscaling_enabled`, `model_wait_*`;
-   - added: `preserve_mtimes: false`, `prefetch_enabled: true`, the pause-tier
-     flags (off).
+3. **Derive the config from the live one.** Do not re-render with
+   `make_config.py`: the live `/etc/ucloud-sandboxes/deployment.json` carries
+   production tuning the script does not know (for example a 32 GB sandbox
+   Docker store, snapshot `436561313`, `node_package_root`). Copy it, then:
+   - remove `policy.program_aware_autoscaling_enabled` (it was `false`),
+     `policy.model_wait_capacity_weight` and `policy.model_wait_max_headroom_nodes`;
+   - set `node_package_root` to the 0.8.0 bundle directory and
+     `provider.sandbox_image`/`builder_image` to the new snapshot.
+   New keys stay at their defaults (prefetch on, layout-2 writer off, pause
+   tier off), so nothing else is added. Validate with the 0.8.0 loader.
 4. **New worker snapshot.** Follow docs/hetzner.md "New snapshot", including
    the park/wake canary on the snapshot source.
 5. **Upgrade the gateway** with `upgrade-gateway.sh 0.8.0`, while the fleet is

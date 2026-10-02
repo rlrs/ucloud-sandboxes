@@ -29,6 +29,8 @@ def pulls(node) -> int:
 
 def pull_outcomes(fleet) -> list[str]:
     metrics = fleet.gateway.RequestHandlerClass.metrics_store
+    # The gateway writes telemetry on its own thread; read only what it queued.
+    assert getattr(metrics, "flush", lambda: True)(), "gateway metrics did not drain"
     return [event.data["outcome"] for event in metrics.load_events(kinds=("node_heartbeat_pull",))]
 
 

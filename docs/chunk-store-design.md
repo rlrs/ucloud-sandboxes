@@ -496,6 +496,32 @@ starts with Phase B's store node.
 
 ## Decisions (2026-10-02)
 
+> **S13 result** (`docs/benchmarks/fanotify-spike-2026-10-02/`).
+> - **Mount granularity for M1: per-image merged mounts.** Page cache per extra
+>   distinct image is 21.0 MB for per-image mounts, 12.3 MB for per-layer and
+>   3.1 MB with `inode_share` (with `-o directio`; about double without it).
+> - **`inode_share` comes later.** It needs an out-of-tree `erofs.ko`, and per-file
+>   fingerprints that only `mkfs.erofs` 1.9 can write (`--xattr-inode-digest`),
+>   not nydus-image.
+> - **NBD stays in M1.** fanotify pre-content hooks with file-backed EROFS work and
+>   are correct, but they are not adopted until C2.1's native daemon:
+>   - per-blob backing files matched or beat NBD at 20-way (5.6–6.2 s against
+>     7.1–7.2 s), but the Python prototype lost at 100-way (37 s against 27.6 s);
+>   - **the kernel fails open:** when the listener dies, pending and new reads
+>     return zeros, where NBD returns EIO in 45 ms.
+>
+>   C2.1 must:
+>   - use per-blob files holding each layer's complete chunk table;
+>   - deny (EIO) any range it cannot place;
+>   - keep the group and write fds in systemd's fd store, journal events and
+>     take over on restart, and retire the node's mounts if the group is lost;
+>   - unmark a blob once it is complete;
+>   - meet or beat NBD on the 100-way burst.
+> - **Disk sharing:** reflink from a shared chunk cache cuts disk per extra image
+>   to a median of 29 MB (chunks padded to 4 KiB).
+> - **Fixed in M1:** nydus-image `--repeatable` zeroed every file owner; the
+>   converter no longer passes it.
+
 > **S12 result** (`docs/benchmarks/s3-chunk-spike-2026-10-02/`): Phase B from the start.
 > - **S3 tail latency fails the gate.** 1 MiB GETs at concurrency 32 had a p99 of
 >   5.5 s (the gate is 150 ms), with multi-second stalls even one request at a

@@ -1,7 +1,8 @@
 # Hetzner production deployment scripts
 
 See the "Production deployment" section of [docs/hetzner.md](../../docs/hetzner.md).
-The scripts read secrets from `.env` and `build/hetzner-prod/hetzner.env`, and
+The scripts read secrets from `.env` and `build/hetzner-prod/hetzner.env` (`hz.py`
+loads its API key from there when `HETZNER_API_KEY` is unset), and
 the SSH key from `.hetzner/ssh/gateway-init`. They write generated state
 (resource ledger, deployment.json, known hosts, release inputs) to the
 git-ignored `build/hetzner-prod/`.

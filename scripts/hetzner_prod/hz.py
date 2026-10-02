@@ -11,6 +11,16 @@ from pathlib import Path
 API = "https://api.hetzner.cloud/v1"
 LEDGER = Path(__file__).resolve().parents[2] / "build" / "hetzner-prod" / "resources.json"
 LABELS = {"purpose": "sandboxes-production"}
+ENV_FILE = LEDGER.with_name("hetzner.env")
+
+
+def api_key():
+    if "HETZNER_API_KEY" not in os.environ and ENV_FILE.exists():
+        for line in ENV_FILE.read_text().splitlines():
+            name, _, value = line.partition("=")
+            if name.strip() == "HETZNER_API_KEY":
+                return value.strip().strip("'\"")
+    return os.environ["HETZNER_API_KEY"]
 
 
 def call(method, path, body=None):
@@ -19,7 +29,7 @@ def call(method, path, body=None):
         method=method,
         data=None if body is None else json.dumps(body).encode(),
         headers={
-            "Authorization": "Bearer " + os.environ["HETZNER_API_KEY"],
+            "Authorization": "Bearer " + api_key(),
             "Content-Type": "application/json",
         },
     )

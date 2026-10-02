@@ -142,3 +142,25 @@ Steps 1–6 ran on 2026-10-02; the 24 h watch and the W0 baseline (steps 7–8) 
 - **Canary caveats.** Production nodes need `network: bridge` and a keep-alive command.
   Images vary in their user and `$HOME`, so the canary writes to the first writable disk
   directory.
+
+## 0.8.1 (2026-10-02)
+
+Same procedure, from the 0.8.0 release directory. Scripts are in
+`/work/ucloud-sandboxes/release-0.8.1-20261002`.
+
+- **Build.** Wheel `32c93c29…` from `9ab452f`. Bundles repacked from 0.8.0: sandbox
+  `cc5780c6…`, builder `21346078…`, native files and dependencies unchanged.
+- **Gateway.** `gateway_upgrade_081.py apply`; the only config change is
+  `node_package_root`. Backup in `rollback/`.
+- **Snapshot `438710747`.** Built from `438664008` on a CPX32 with the same source-only
+  overrides. Run twice on the source, the canary showed the trace fix on a real kernel:
+  the first run saved 5 traces (36 chunks) at delete, and the second found all 5 and
+  started replay. Replay fetched nothing, because that node's cache already held the
+  chunks. Prepare now leaves no ucloud units or environment config in `/etc`.
+- **Canary through the autoscaler.** A fresh CCX63 from `438710747`. The first create,
+  including the cold worker boot, took 42.8 s (61.3 s on 0.8.0). Warm: create 0.54 s,
+  first exec 0.03 s, park 0.16 s, wake 0.18 s, state intact. Traces were saved on the
+  first run and replayed on the second.
+- **Operations.** `hz.py` now reads its API key from `build/hetzner-prod/hetzner.env`.
+  Every production step ran as one plain `scripts/hetzner_prod/gw '…'`, `gscp` or `hz.py`
+  command, so the permission rules in `.claude/settings.local.json` apply.

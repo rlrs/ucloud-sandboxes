@@ -1,7 +1,7 @@
 """Convert OCI images from our registry into the chunk store (design §3).
 
 Per layer: ``nydus-image create`` (v2.4.5, RAFS v6, sha256, zstd, 256 KiB,
-``--repeatable``, no chunk dictionary), then the chunks the index does not
+no ``--repeatable``, which drops owners, no chunk dictionary), then the chunks the index does not
 know are verified and packed, the packs PUT, and one commit records them.
 Per image: the signed component(s), registration, and last the root
 manifest. Every object is content addressed and the root is the only
@@ -44,7 +44,7 @@ MAX_LAYERS_PER_ROOT = 33  # The base and 32 toolkits (ImmutableEnvironment).
 def converter_identity(layout):
     """Everything besides the layer that decides a layer bootstrap's bytes."""
     whiteouts = "oci" if layout == "image" else "overlayfs"
-    return f"{RAFS_CONVERTER};fs6;sha256;zstd;0x40000;repeatable;whiteouts={whiteouts}"
+    return f"{RAFS_CONVERTER};fs6;sha256;zstd;0x40000;owners;whiteouts={whiteouts}"  # never --repeatable: it zeroes owners
 
 
 def strip_environment_annotation(document):
@@ -202,7 +202,7 @@ class RafsConverter:
             source, kind = tar, ["-t", "targz-rafs" if gzipped else "tar-rafs"]
         output = work / "layer.json"
         subprocess.run([self.nydus_image, "create", *kind, "--fs-version", "6", "--digester", "sha256",
-                        "--compressor", "zstd", "--chunk-size", "0x40000", "--repeatable",
+                        "--compressor", "zstd", "--chunk-size", "0x40000",
                         "-D", str(work / "blobs"), "-B", str(work / "layer.boot"), "-J", str(output), str(source)],
                        check=True, capture_output=True, timeout=3600)
         blobs = json.loads(output.read_text())["blobs"]

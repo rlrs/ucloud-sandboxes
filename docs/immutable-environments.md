@@ -187,7 +187,8 @@ installed but disabled.
   locators its read token, which it creates on first start.
 * **Converter** (`convert-environment`): per layer, `nydus-image create`
   (v2.4.5, `--fs-version 6 --digester sha256 --compressor zstd --chunk-size
-  0x40000 --repeatable`, no chunk dictionary) on the layer read from our
+  0x40000`, no chunk dictionary; never `--repeatable`, which writes every
+  owner as 0:0) on the layer read from our
   registry with its digest and diff ID checked. It verifies each chunk the
   index does not know, packs, PUTs, commits; then merges (layout `image`),
   uploads the bootstrap and map, signs, verifies, publishes the components,

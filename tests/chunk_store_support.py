@@ -165,7 +165,7 @@ def sample_images(client):
     base = layer([("etc", "dir"), ("etc/hosts", b"127.0.0.1 localhost\n"), ("etc/gone", b"x" * 5000),
                   ("usr", "dir"), ("usr/lib", "dir"), ("usr/lib/text", b"lorem ipsum " * 90_000),
                   ("usr/lib/noise", pseudo_random("noise", 700_000)), ("usr/lib/link", ("symlink", "text")),
-                  ("usr/lib/hard", ("link", "usr/lib/text"))])
+                  ("usr/lib/hard", ("link", "usr/lib/text")), ("home", "dir"), ("home/user", "dir"), ("home/user/.p", b"x")])
     top_a = layer([("etc/.wh.gone", b""), ("opt", "dir"), ("opt/a", shared), ("opt/a-only", pseudo_random("a", 9000))])
     top_b = layer([("opt", "dir"), ("opt/b", shared), ("opt/b-only", pseudo_random("b", 70_000))])
     return push_image(client, "a", [base, top_a]), push_image(client, "b", [base, top_b])
@@ -187,7 +187,7 @@ def layer(entries, *, compress=True):
     with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as writer:
         for name, value in entries:
             info = tarfile.TarInfo(name)
-            info.mtime, info.mode = 1_600_000_000, 0o644
+            info.mtime, info.mode, info.uid = 1_600_000_000, 0o644, 1000 if name.startswith("home/user") else 0
             payload = None
             if value == "dir":
                 info.type, info.mode = tarfile.DIRTYPE, 0o755

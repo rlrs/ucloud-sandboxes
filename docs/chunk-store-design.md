@@ -496,6 +496,24 @@ starts with Phase B's store node.
 
 ## Decisions (2026-10-02)
 
+> **S12 result** (`docs/benchmarks/s3-chunk-spike-2026-10-02/`): Phase B from the start.
+> - **S3 tail latency fails the gate.** 1 MiB GETs at concurrency 32 had a p99 of
+>   5.5 s (the gate is 150 ms), with multi-second stalls even one request at a
+>   time. 4 of 9 trace-replayed cold commands were 1.4–29× slower than local.
+> - **NAT puts the gateway back in the byte path.** Workers are private-only and
+>   reach S3 through the gateway's NAT, and the bucket has no private endpoint.
+> - **So:** S3 stays the durable store. Workers read from a store node on the
+>   private network: NVMe, a read-through cache over S3, filled ahead by trace
+>   and foundation prefetch.
+> - **Packs:** 17.53 GB for the 181 images (within 0.2% of S10). An image touches a
+>   median of 39 packs, with 90% of its bytes in 9.
+> - **Index:** 31.3 GB at 500M rows. Lookups meet the gate only while resident
+>   (0.51 s against 10–13 s cold), so it cannot stay on the 16 GB gateway at full
+>   scale. Move it to the store node.
+> - **Page-cache sharing (`inode_share`) is feasible:** `erofs.ko` builds with it,
+>   and `mkfs.erofs` 1.9 can write the per-file fingerprints
+>   (`--xattr-inode-digest`), but nydus-image v2.4.5 cannot. Not yet measured.
+
 1. **Storage:** S3 (Hetzner Object Storage) from day one, provided S12 passes its
    performance gate. If it fails, M1 starts with Phase B's store node in front of
    S3.

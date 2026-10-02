@@ -108,3 +108,37 @@ they change PostgreSQL placement behavior.
   4. Delete `warm_park`.
 - **0.9.0:** placement wiring (C4.3), the commit gateway route (C3.1), and
   gateway split steps 7–9.
+
+## Execution log (2026-10-02)
+
+Steps 1–6 ran on 2026-10-02; the 24 h watch and the W0 baseline (steps 7–8) have not.
+
+- **Preflight.** Idle fleet: only the gateway, 0 sandboxes, no relay or lifecycle work. The
+  live gateway was 0.7.0 plus files hot-copied into `site-packages`; every one matched a
+  commit already in `main`, so the 0.8.0 wheel dropped no production fix.
+- **Build.** Wheel `7d6bc452…`. Both live bundles were repacked on the gateway
+  (`/work/ucloud-sandboxes/release-0.8.0-20261002/package_080.py`): sandbox `89370316…`,
+  builder `a86a5ca5…`, native files and agent dependencies byte-identical.
+- **Config.** Derived from the live file: the three removed policy keys, `node_package_root`
+  and later `provider.sandbox_image`. Builders stay on `436561313`.
+- **Gateway.** `gateway_upgrade_080.py apply`: about 9 s of downtime while idle, with the
+  backup in `rollback/`. `/healthz` reports 0.8.0.
+- **Snapshot `438664008`.** Built from `436561313` on a CPX32 after the gateway upgrade, so
+  VM init ran 0.8.0. The CPX32 needs a source-only config with
+  `sandbox.direct_disk_headroom_mb` 24576 and `immutable_environments.cache_bytes`
+  8 GiB: production values are sized for a CCX63's disk. VM init must run as the `ucloud`
+  user, because the trust file is owned by `ucloud`. The source passed the lifecycle canary
+  (create 0.67 s, park 0.29 s, wake 0.31 s).
+- **Canary through the autoscaler.** A fresh CCX63 booted from `438664008`, with the EROFS
+  task image `terminal-resolver-task_02282-adba4e22`. The first create, including the cold
+  worker boot, took 61.3 s. On the warm worker: create 0.74 s, first exec 0.07 s, park
+  0.30 s, wake 0.46 s, memory and disk state intact, signed (`xr1.`) exec sessions.
+- **Prefetch counters** (`heartbeat.runtime_metrics.environment_io`, not in `/v1/nodes`):
+  `prefetch_enabled` true, 117 hits, 8.9 MB downloaded, no corruptions or retries.
+  `metadata_hint_absent` 10: images published before 0.8.0 builders carry no hints until
+  they are republished. `trace_recordings_started` 10 but `traces_recorded` 0 and
+  `trace_chunks_recorded` 0, minutes after the canary: trace recording does not see these
+  reads in production. To investigate before relying on C2.3.
+- **Canary caveats.** Production nodes need `network: bridge` and a keep-alive command.
+  Images vary in their user and `$HOME`, so the canary writes to the first writable disk
+  directory.

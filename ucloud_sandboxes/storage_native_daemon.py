@@ -2983,7 +2983,7 @@ class StorageNativeNodeService:
         if volume_root.exists() and not has_retired:
             if volume_root.is_symlink() or not volume_root.is_dir():
                 raise StorageNativeTerminalError("volume root is not a real directory")
-            shutil.rmtree(volume_root)
+            shutil.rmtree(volume_root, onerror=_raise_unless_vanished)
         mount_path = Path(record.mount_path)
         if mount_path.exists():
             mount_path.rmdir()
@@ -4027,6 +4027,11 @@ def _local_layer_bytes(record: StorageVolumeRecord) -> int:
             seen.add(identity)
             total += info.st_blocks * 512
     return total
+
+
+def _raise_unless_vanished(_function, _path, info) -> None:
+    if not issubclass(info[0], FileNotFoundError):  # e.g. cancelled compaction scratch
+        raise info[1]
 
 
 def _request_sha256(request: dict[str, Any]) -> str:

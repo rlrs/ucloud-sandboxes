@@ -1,8 +1,9 @@
 """Bootstrap trust for the optional immutable image adapter."""
 import base64
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import json
 import os
+import re
 from pathlib import Path
 import stat
 
@@ -79,6 +80,104 @@ def environment_publisher_from_args(args):
     return lambda spec: builder.publish_image(spec.tag, allowlist=allowlist)
 
 
+_ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+
+
+@dataclass(frozen=True)
+class ChunkStoreConfig:
+    """``immutable_environments.chunk_store`` (docs/chunk-store-design.md).
+
+    The S3 key is named by environment variable and read only by the
+    gateway's ``ucloud-chunk-index`` and by builders; workers get presigned
+    URLs. Every field is required, as for ``snapshot_store``.
+    """
+    endpoint: str
+    bucket: str
+    region: str
+    prefix: str
+    access_key_id_env: str
+    secret_access_key_env: str
+    force_path_style: bool
+    index_url: str  # How builders and workers reach the service.
+    index_listen: str  # host:port the gateway service binds.
+    index_database: str
+    read_token_file: str
+    write_token_file: str
+    url_ttl_seconds: int
+    mount_granularity: str  # image (merged bootstrap) or layer (stacked); S12 decides.
+    nydus_image: str
+    concurrent_misses: int
+
+    @classmethod
+    def from_dict(cls, raw):
+        from dataclasses import fields
+        names = {field.name for field in fields(cls)}
+        if not isinstance(raw, dict) or set(raw) != names:
+            raise ValueError("immutable_environments.chunk_store fields do not match schema")
+        result = cls(**raw)
+        for name in names - {"force_path_style", "url_ttl_seconds", "concurrent_misses"}:
+            value = getattr(result, name)
+            if not isinstance(value, str) or not value or any(c in value for c in "\0\r\n "):
+                raise ValueError(f"immutable_environments.chunk_store.{name} must be a nonempty string")
+        from .config import normalize_s3_endpoint
+        endpoint = normalize_s3_endpoint(result.endpoint, bucket=result.bucket, region=result.region,
+                                         field_name="immutable_environments.chunk_store.endpoint")
+        if (not isinstance(result.force_path_style, bool) or "/" in result.bucket
+                or any(part in ("", ".", "..") for part in result.prefix.strip("/").split("/"))):
+            raise ValueError("immutable_environments.chunk_store has an invalid bucket, prefix or addressing")
+        for name in ("access_key_id_env", "secret_access_key_env"):
+            if not _ENV_NAME.fullmatch(getattr(result, name)):
+                raise ValueError(f"immutable_environments.chunk_store.{name} must name an environment variable")
+        for name in ("index_database", "read_token_file", "write_token_file"):
+            if not Path(getattr(result, name)).is_absolute():
+                raise ValueError(f"immutable_environments.chunk_store.{name} must be absolute")
+        host, _, port = result.index_listen.rpartition(":")
+        if (not result.index_url.startswith(("http://", "https://")) or not host or not port.isdigit()
+                or not 0 < int(port) < 65536):
+            raise ValueError("immutable_environments.chunk_store index_url/index_listen are invalid")
+        for name, low, high in (("url_ttl_seconds", 3600, 7 * 86400), ("concurrent_misses", 1, 256)):
+            value = getattr(result, name)
+            if type(value) is not int or not low <= value <= high:
+                raise ValueError(f"immutable_environments.chunk_store.{name} must be an integer in [{low}, {high}]")
+        if result.mount_granularity not in ("image", "layer"):
+            raise ValueError("immutable_environments.chunk_store.mount_granularity must be image or layer")
+        return replace(result, endpoint=endpoint, prefix=result.prefix.strip("/"))
+
+    def object_store(self, environ=None):
+        """Index-service and builder side only: holds the S3 key."""
+        from .chunk_index import ChunkObjectStore, S3Presigner
+        from .storage_native_s3 import Boto3S3ObjectClient
+        environ = os.environ if environ is None else environ
+        try:
+            key, secret = environ[self.access_key_id_env], environ[self.secret_access_key_env]
+        except KeyError as exc:
+            raise ValueError(f"chunk store credentials are missing: {exc.args[0]}") from None
+        client = Boto3S3ObjectClient(endpoint=self.endpoint, bucket=self.bucket, region=self.region,
+                                     credentials={"access_key_id": key, "secret_access_key": secret},
+                                     force_path_style=self.force_path_style)
+        presigner = S3Presigner(self.endpoint, self.bucket, self.region, key, secret, path_style=self.force_path_style)
+        return ChunkObjectStore(client, presigner, self.prefix, url_seconds=self.url_ttl_seconds)
+
+
+def read_token(path, *, create=False):
+    """An owner-only bearer token file; ``create`` makes one when absent."""
+    path = Path(path)
+    if create and not path.exists():
+        import secrets
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "w") as stream:
+            stream.write(secrets.token_hex(32) + "\n")
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(descriptor, "rb") as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077 or info.st_uid not in {0, os.geteuid()}:
+            raise ValueError("chunk index token files must be owner-only regular files")
+        token = stream.read(4097).strip()
+    if not 32 <= len(token) <= 4096:
+        raise ValueError("chunk index token has an invalid length")
+    return token
+
+
 @dataclass(frozen=True)
 class EnvironmentDeploymentConfig:
     """Opt-in fleet adapter; paths refer to owned controller-side key files."""
@@ -95,6 +194,8 @@ class EnvironmentDeploymentConfig:
     # Off switch for attach-time metadata and startup-trace prefetch (C2.2,
     # C2.3). A backend reads it once at start; bootstrap never restarts one.
     prefetch_enabled: bool = True
+    # Chunk-store (RAFS) images, off by default (C2.13, design §9 M1).
+    chunk_store: ChunkStoreConfig | None = None
 
     @classmethod
     def from_dict(cls, raw):
@@ -106,6 +207,8 @@ class EnvironmentDeploymentConfig:
         if set(raw) - {field.name for field in fields(cls)} or "trusted_keys_file" not in raw:
             raise ValueError("invalid immutable_environments fields")
         values = dict(raw)
+        if values.get("chunk_store") is not None:
+            values["chunk_store"] = ChunkStoreConfig.from_dict(values["chunk_store"])
         paths = values.get("allow_paths", [])
         if not isinstance(paths, (list, tuple)):
             raise ValueError("immutable environment allow_paths must be a list")
@@ -139,6 +242,8 @@ class EnvironmentDeploymentConfig:
         raw = asdict(self)
         if not self.preserve_mtimes:
             del raw["preserve_mtimes"]
+        if self.chunk_store is None:
+            del raw["chunk_store"]
         return raw
 
 

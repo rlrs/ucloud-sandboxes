@@ -313,8 +313,13 @@ def build_parser() -> argparse.ArgumentParser:
     environment_io.add_argument("--cache-bytes", type=int, default=1024 ** 3)
     environment_io.add_argument("--disable-prefetch", action="store_true",
                                 help="Demand-load only: no attach-time metadata or startup-trace prefetch.")
+    environment_io.add_argument("--chunk-index-url", default="", help="ucloud-chunk-index, for RAFS components")
+    environment_io.add_argument("--chunk-index-token-file", type=Path)
+    environment_io.add_argument("--chunk-concurrent-misses", type=int, default=32)
     add_environment_registry_args(environment_io)
     environment_io.set_defaults(func=cmd_serve_environment_io)
+    from .chunk_convert import add_commands as add_chunk_store_commands
+    add_chunk_store_commands(subparsers)
 
     publish_environment = subparsers.add_parser(
         "publish-environment", help="Publish a fresh allowlisted immutable artifact for an existing OCI image.",
@@ -1016,9 +1021,14 @@ def cmd_provision_environment_key(args: argparse.Namespace) -> int:
 
 def cmd_serve_environment_io(args: argparse.Namespace) -> int:
     from .environment_backend import serve_backend
-    from .environment_config import environment_registry_from_args
+    from .environment_config import environment_registry_from_args, read_token
+    if bool(args.chunk_index_url) != bool(args.chunk_index_token_file):
+        raise ValueError("--chunk-index-url and --chunk-index-token-file go together")
+    chunk_index = (args.chunk_index_url, read_token(args.chunk_index_token_file).decode()) \
+        if args.chunk_index_url else None
     serve_backend(environment_registry_from_args(args), root=args.root, socket_path=args.socket,
-                  cache_bytes=args.cache_bytes, prefetch=not args.disable_prefetch)
+                  cache_bytes=args.cache_bytes, prefetch=not args.disable_prefetch, chunk_index=chunk_index,
+                  concurrent_misses=args.chunk_concurrent_misses)
     return 0
 
 
@@ -6876,6 +6886,12 @@ def vm_init_options_for_job(
             "environment_prefetch_enabled": selected_environment.prefetch_enabled,
             "environment_allow_paths": selected_environment.allow_paths,
         }
+        chunk_store = selected_environment.chunk_store
+        if chunk_store is not None and role == "sandbox":
+            from .environment_config import read_token
+            environment_options["environment_chunk_index_url"] = chunk_store.index_url
+            environment_options["environment_chunk_index_token"] = read_token(chunk_store.read_token_file).decode()
+            environment_options["environment_chunk_concurrent_misses"] = chunk_store.concurrent_misses
         if role == "builder":
             # Only the owned builder receives private material; workers get public trust alone.
             descriptor = os.open(selected_environment.signing_key_file, os.O_RDONLY | os.O_NOFOLLOW)

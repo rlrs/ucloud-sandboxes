@@ -8,6 +8,7 @@ TRUST_FILE = "/etc/ucloud-sandboxes/environment/producers.json"
 KEY_FILE = "/etc/ucloud-sandboxes/environment/producer.pem"
 SOCKET = "/run/ucloud-environment/io.sock"
 SERVICE = "ucloud-environment-io.service"
+CHUNK_TOKEN_FILE = "/etc/ucloud-sandboxes/environment/chunk-index.token"
 
 
 def settings(options):
@@ -39,6 +40,15 @@ $SUDO chown root:root {KEY_FILE}
                       ' requires erofs-utils 1.9+ (mkfs.erofs $UCLOUD_MKFS_OPTION)" >&2; exit 1 ;; esac; done\n')
         return (registry_flags + " --environment-signing-key " + KEY_FILE + preserve + "".join(
             " --environment-allow-path " + shlex.quote(path) for path in options.environment_allow_paths), setup, "")
+    chunk_setup = chunk_flags = ""
+    if options.environment_chunk_index_url:
+        # Chunk-store images: the index's read token, never an S3 key.
+        token = base64.b64encode(options.environment_chunk_index_token.encode()).decode()
+        chunk_setup = (f"$SUDO install -m 0600 /dev/null {CHUNK_TOKEN_FILE}\n"
+                       f"printf %s {shlex.quote(token)} | base64 -d | $SUDO tee {CHUNK_TOKEN_FILE} >/dev/null\n")
+        chunk_flags = (" --chunk-index-url " + shlex.quote(options.environment_chunk_index_url)
+                       + " --chunk-index-token-file " + CHUNK_TOKEN_FILE
+                       + f" --chunk-concurrent-misses {int(options.environment_chunk_concurrent_misses)}")
     setup += f'''# Never replace the adapter beneath existing sandboxes.
 if [ -e "$UCLOUD_STATE_DIR/direct-runtime/direct-registry.sqlite" ] && [ ! -e "$UCLOUD_STATE_DIR/environment-adapter" ]; then
   echo 'immutable environments require a fresh worker; retire the old adapter first' >&2; exit 1
@@ -51,7 +61,7 @@ $SUDO modprobe erofs
 if [ ! -d /sys/module/nbd ]; then $SUDO modprobe nbd nbds_max=1024 max_part=0; fi
 test -b /dev/nbd0
 $SUDO touch "$UCLOUD_STATE_DIR/environment-adapter"
-$SUDO tee /etc/systemd/system/{SERVICE} >/dev/null <<ENVIRONMENT_IO_SERVICE
+{chunk_setup}$SUDO tee /etc/systemd/system/{SERVICE} >/dev/null <<ENVIRONMENT_IO_SERVICE
 [Unit]
 Description=UCloud verified immutable environment I/O
 Wants=network-online.target
@@ -64,7 +74,7 @@ Group=root
 PrivateMounts=no
 RuntimeDirectory=ucloud-environment
 RuntimeDirectoryMode=0700
-ExecStart=$UCLOUD_AGENT_BIN serve-environment-io --root $UCLOUD_STATE_DIR/environment-io --socket {SOCKET} --cache-bytes {options.environment_cache_bytes}{"" if options.environment_prefetch_enabled else " --disable-prefetch"}{registry_flags}
+ExecStart=$UCLOUD_AGENT_BIN serve-environment-io --root $UCLOUD_STATE_DIR/environment-io --socket {SOCKET} --cache-bytes {options.environment_cache_bytes}{"" if options.environment_prefetch_enabled else " --disable-prefetch"}{chunk_flags}{registry_flags}
 Restart=no
 
 [Install]
@@ -81,7 +91,7 @@ def validate(options):
     if not supplied:
         if any((options.environment_repository, options.environment_trusted_keys_json,
                 options.environment_signing_key_pem, options.environment_allow_paths,
-                options.environment_preserve_mtimes)):
+                options.environment_preserve_mtimes, options.environment_chunk_index_url)):
             raise ValueError("immutable environment bootstrap requires registry URL and producer trust")
         return
     from .environment_config import EnvironmentDeploymentConfig
@@ -101,6 +111,11 @@ def validate(options):
         raise ValueError("invalid immutable environment producer key identity")
     if not options.environment_registry_url.startswith(("http://", "https://")) or any(c in options.environment_registry_url for c in "\0\r\n"):
         raise ValueError("invalid immutable environment registry URL")
+    chunk_url, chunk_token = options.environment_chunk_index_url, options.environment_chunk_index_token
+    if (bool(chunk_url) != bool(chunk_token) or (chunk_url and options.role != "sandbox")
+            or (chunk_url and (not chunk_url.startswith(("http://", "https://")) or not 32 <= len(chunk_token) <= 4096
+                               or any(c in chunk_url + chunk_token for c in "\0\r\n '\"")))):
+        raise ValueError("invalid immutable environment chunk index bootstrap")
     if options.role == "sandbox":
         if options.environment_signing_key_pem:
             raise ValueError("sandbox workers must never receive environment signing keys")

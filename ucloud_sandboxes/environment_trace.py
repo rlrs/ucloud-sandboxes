@@ -20,6 +20,9 @@ from .environment_artifact import canonical_bytes, require_digest
 
 _LOG = logging.getLogger(__name__)
 TRACE_SCHEMA = "ucloud-environment-startup-trace-v1"
+# Chunk-store images record chunk ids, which are global: one image's trace
+# can warm another's chunks (docs/chunk-store-design.md §4 step 5).
+TRACE_SCHEMA_IDS = "ucloud-environment-startup-trace-v2"
 MAX_TRACE_CHUNKS = 2048
 _MAX_TRACE_FILE_BYTES = 64 * 1024
 # One trace per image ever attached grows without bound on a long-lived node
@@ -84,6 +87,8 @@ class LocalTraceStore:
                 raise ValueError("environment trace exceeds its bound")
             raw = json.loads(data)
             chunks = raw.get("chunks") if isinstance(raw, dict) else None
+            if getattr(component, "chunk_ids", None) is not None:
+                return "present", self._indices(component, raw, chunks)
             if (not isinstance(raw, dict) or set(raw) != {"schema", "image_digest", "chunk_count", "chunks"}
                     or raw["schema"] != TRACE_SCHEMA or raw["image_digest"] != component.image_digest
                     or raw["chunk_count"] != len(component.chunks) or not isinstance(chunks, list)
@@ -97,13 +102,28 @@ class LocalTraceStore:
             path.unlink(missing_ok=True)
             return "invalid", None
 
+    @staticmethod
+    def _indices(component, raw, chunks):
+        if (not isinstance(raw, dict) or set(raw) != {"schema", "image_digest", "chunks"}
+                or raw["schema"] != TRACE_SCHEMA_IDS or raw["image_digest"] != component.image_digest
+                or not isinstance(chunks, list) or not 0 < len(chunks) <= MAX_TRACE_CHUNKS
+                or len(set(chunks)) != len(chunks) or any(not isinstance(item, str) for item in chunks)):
+            raise ValueError("invalid environment startup trace")
+        indices = tuple(index for index in map(component.chunk_index, chunks) if index is not None)
+        if not indices:
+            raise ValueError("environment startup trace names none of this image's chunks")
+        return indices
+
     def save(self, component, chunks):
         """Atomically replace this component's trace; no fsync, it is a hint."""
         chunks = list(dict.fromkeys(chunks))[:MAX_TRACE_CHUNKS]
         if not chunks:
             return
+        ids = getattr(component, "chunk_ids", None)
         payload = canonical_bytes({"schema": TRACE_SCHEMA, "image_digest": component.image_digest,
-                                   "chunk_count": len(component.chunks), "chunks": chunks})
+                                   "chunk_count": len(component.chunks), "chunks": chunks} if ids is None else {
+            "schema": TRACE_SCHEMA_IDS, "image_digest": component.image_digest,
+            "chunks": list(dict.fromkeys(ids[index] for index in chunks))})
         descriptor, name = tempfile.mkstemp(prefix=".trace-", dir=self.root)
         temporary = Path(name)
         try:

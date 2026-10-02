@@ -226,6 +226,16 @@ class EnvironmentBootstrapTests(unittest.TestCase):
             # A truthy string must not render the default (prefetching) service.
             with self.assertRaisesRegex(ValueError, "prefetch_enabled must be boolean"):
                 render_vm_init_script(vm_fixtures.VmInitTests._options(**common, environment_prefetch_enabled="false"))
+            # Chunk-store workers get the index's read token, never an S3 key.
+            chunk = {"environment_chunk_index_url": "http://10.42.0.2:5090", "environment_chunk_index_token": "t" * 64}
+            reader = render_vm_init_script(vm_fixtures.VmInitTests._options(**common, **chunk))
+            self.assertIn(" --chunk-index-url http://10.42.0.2:5090 --chunk-index-token-file "
+                          "/etc/ucloud-sandboxes/environment/chunk-index.token --chunk-concurrent-misses 32", reader)
+            self.assertNotIn("chunk-index", worker)
+            for invalid in ({**chunk, "environment_chunk_index_token": ""}, {**chunk, "role": "builder",
+                            "environment_signing_key_pem": private, "environment_allow_paths": ("bin",)}):
+                with self.assertRaisesRegex(ValueError, "chunk index"):
+                    render_vm_init_script(vm_fixtures.VmInitTests._options(**common, **invalid))
             altered = json.loads(public)
             altered[next(iter(altered))] = "bad"
             with self.assertRaises(ValueError):

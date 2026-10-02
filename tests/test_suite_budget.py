@@ -21,8 +21,13 @@ from tests.test_package_budget import package_lines
 # and reaping, heartbeat pull, UCloud quarantine), then to 93,390 for the C2.15
 # upstream mirror (test_upstream_mirror), then to 93,450 for the C9.2 rollout
 # scenario tests, then to 93,490 for the backend EAGAIN tests, then to 93,653
-# for the rollout think modes, then 93,681 for composition sharing.
-SUITE_LINE_BUDGET = 93_681
+# for the rollout think modes, then 93,681 for composition sharing, then
+# 94,939 (+1,258) for the C2.13 M1 chunk store: format tamper tests, the index
+# over real SQLite and HTTP, SigV4 vectors, converter crash injection at every
+# write-path step, the worker read path against an S3 stand-in and concurrent
+# attach. They retire test_environment_layers and test_erofs_metadata with the
+# EROFS builder after migration.
+SUITE_LINE_BUDGET = 94_939
 SUITE = Path(__file__).resolve().parent
 
 

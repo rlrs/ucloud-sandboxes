@@ -50,6 +50,16 @@ COMMIT_SCHEMA = "ucloud-environment-erofs-commit-v1"
 COMMIT_SOURCE_KIND = "sandbox-commit-v1"
 _COMMIT_DOMAIN = b"ucloud.immutable-environment-commit.v1\0"
 MAX_COMMIT_DEPTH = 8
+# Chunk-store images (C2.13, docs/chunk-store-design.md §1.5): a RAFS v6
+# bootstrap and chunk map named by digest, their bytes in the object store.
+RAFS_SCHEMA = "ucloud-environment-rafs-v1"
+_RAFS_DOMAIN = b"ucloud.immutable-environment-rafs.v1\0"
+RAFS_CONVERTER = "nydus-image v2.4.5"
+# image: one merged bootstrap per image (OCI whiteouts applied by merge).
+# layer: one bootstrap per layer with overlayfs whiteouts, stacked like today.
+RAFS_LAYOUTS = ("image", "layer")
+RAFS_MAX_BOOTSTRAP_BYTES = 128 * 1024 ** 2
+RAFS_MAX_CHUNK_MAP_BYTES = 48 * 1024 ** 2
 
 
 def canonical_bytes(value):
@@ -155,6 +165,8 @@ class EnvironmentComponent:
             return LayerEnvironmentComponent.from_dict(raw)
         if isinstance(raw, dict) and raw.get("schema") == COMMIT_SCHEMA:
             return CommitEnvironmentComponent.from_dict(raw)
+        if isinstance(raw, dict) and raw.get("schema") == RAFS_SCHEMA:
+            return RafsEnvironmentComponent.from_dict(raw)
         if not isinstance(raw, dict) or set(raw) != {
             "schema", "filesystem", "source_kind", "source_image", "image_digest",
             "image_size", "chunks", "producer_key", "signature",
@@ -327,7 +339,114 @@ class CommitEnvironmentComponent:
         return _authenticate(self, trusted_keys)
 
 
+def rafs_format(layout):
+    if layout not in RAFS_LAYOUTS:
+        raise ValueError("unknown RAFS layout")
+    return {"rafs": 6, "converter": RAFS_CONVERTER, "chunk_bytes": CHUNK_BYTES, "digester": "sha256",
+            "compressor": "zstd", "layout": layout}
+
+
+def _require_object(value, max_size):
+    if (not isinstance(value, dict) or set(value) != {"digest", "size"} or type(value["size"]) is not int
+            or not 0 < value["size"] <= max_size):
+        raise ValueError("invalid RAFS object descriptor")
+    require_digest(value["digest"])
+
+
+@dataclass(frozen=True)
+class RafsEnvironmentComponent:
+    """A RAFS v6 image in the chunk store; workers verify every chunk.
+
+    Layout ``image`` binds one OCI config's layers; layout ``layer`` is one
+    layer diff with overlayfs whiteouts, shared by every image that has it.
+    """
+    source_image: str | None
+    source_layers: tuple[str, ...]
+    bootstrap: dict = field(hash=False)
+    chunk_map: dict = field(hash=False)
+    device_size: int
+    format: dict = field(hash=False)
+    producer_key: str
+    signature: str
+    schema: str = RAFS_SCHEMA
+
+    def __post_init__(self):
+        layout = self.format.get("layout") if isinstance(self.format, dict) else None
+        if self.schema != RAFS_SCHEMA or layout not in RAFS_LAYOUTS or self.format != rafs_format(layout):
+            raise ValueError("unqualified immutable environment format/provenance")
+        if (not isinstance(self.source_layers, tuple) or not 0 < len(self.source_layers) <= _MAX_SOURCE_LAYERS
+                or EMPTY_LAYER_DIFF_ID in self.source_layers
+                or (layout == "layer") != (self.source_image is None)
+                or (layout == "layer" and len(self.source_layers) != 1)):
+            raise ValueError("invalid RAFS environment source")
+        for digest in (*self.source_layers, *((self.source_image,) if self.source_image else ()), self.producer_key):
+            require_digest(digest)
+        _require_object(self.bootstrap, RAFS_MAX_BOOTSTRAP_BYTES)
+        _require_object(self.chunk_map, RAFS_MAX_CHUNK_MAP_BYTES)
+        if type(self.device_size) is not int or not 0 < self.device_size < 2 ** 44 or self.device_size % 4096:
+            raise ValueError("invalid RAFS device size")
+        try:
+            if len(base64.b64decode(self.signature, validate=True)) != 64:
+                raise ValueError("invalid signature length")
+        except (ValueError, TypeError) as exc:
+            raise ValueError("invalid environment producer signature") from exc
+
+    @property
+    def image_digest(self):
+        return self.chunk_map["digest"]
+
+    def unsigned(self):
+        return {"schema": self.schema, "source_image": self.source_image, "source_layers": list(self.source_layers),
+                "bootstrap": self.bootstrap, "chunk_map": self.chunk_map, "device_size": self.device_size,
+                "format": self.format, "producer_key": self.producer_key}
+
+    def to_dict(self):
+        return self.unsigned() | {"signature": self.signature}
+
+    @classmethod
+    def from_dict(cls, raw):
+        if not isinstance(raw, dict) or set(raw) != {
+            "schema", "source_image", "source_layers", "bootstrap", "chunk_map", "device_size", "format",
+            "producer_key", "signature",
+        } or not isinstance(raw["source_layers"], list):
+            raise ValueError("invalid environment component schema")
+        return cls(**(raw | {"source_layers": tuple(raw["source_layers"])}))
+
+    def authenticate(self, trusted_keys: Mapping[str, bytes]):
+        return _authenticate(self, trusted_keys)
+
+
+def sign_rafs_component(*, source_image, source_layers, bootstrap, chunk_map, device_size, layout,
+                        signing_key: Ed25519PrivateKey):
+    """Sign a converted RAFS image; ``bootstrap``/``chunk_map`` are {digest, size}."""
+    candidate = RafsEnvironmentComponent(source_image, tuple(source_layers), dict(bootstrap), dict(chunk_map),
+                                         device_size, rafs_format(layout), _key_id(signing_key), _UNSIGNED)
+    signature = signing_key.sign(_domain(candidate) + canonical_bytes(candidate.unsigned()))
+    return RafsEnvironmentComponent.from_dict(candidate.to_dict() | {"signature": base64.b64encode(signature).decode()})
+
+
+def bind_rafs_layers(components, source_image, diff_ids):
+    """RAFS components lead the root and rebuild exactly the image's layers.
+
+    One ``image`` component of this OCI config, or one ``layer`` component per
+    non-empty layer in order; only independently signed toolkits follow.
+    """
+    expected = [digest for digest in diff_ids or () if digest != EMPTY_LAYER_DIFF_ID]
+    count = next((index for index, component in enumerate(components)
+                  if not isinstance(component, RafsEnvironmentComponent)), len(components))
+    leading, rest = components[:count], components[count:]
+    layouts = {component.format["layout"] for component in leading}
+    if (not expected or any(isinstance(component, (RafsEnvironmentComponent, LayerEnvironmentComponent,
+                                                   CommitEnvironmentComponent)) for component in rest)
+            or [layer for component in leading for layer in component.source_layers] != expected
+            or (layouts == {"image"} and (count != 1 or leading[0].source_image != source_image))
+            or layouts not in ({"image"}, {"layer"})):
+        raise ValueError("RAFS environment components differ from the OCI image layers")
+
+
 def _domain(component):
+    if isinstance(component, RafsEnvironmentComponent):
+        return _RAFS_DOMAIN
     return _COMMIT_DOMAIN if isinstance(component, CommitEnvironmentComponent) else _SIGNING_DOMAIN
 
 
@@ -469,6 +588,17 @@ class EnvironmentArtifactRegistry:
             self._whole_images.add(component.image_digest)
         return content_digest(manifest)
 
+    def publish_rafs(self, component, *, tag: str) -> str:
+        """Publish a signed RAFS component manifest with no registry layers."""
+        component.authenticate(self.trusted_keys)
+        config = canonical_bytes(component.to_dict())
+        config_digest = content_digest(config)
+        _upload_blob(self.client, self.repository, config, config_digest)
+        manifest = canonical_bytes({"schemaVersion": 2, "mediaType": OCI_IMAGE, "layers": [],
+            "config": {"mediaType": COMPONENT_MEDIA_TYPE, "digest": config_digest, "size": len(config)}})
+        self.client.put_manifest(self.repository, tag, manifest, media_type=OCI_IMAGE)
+        return content_digest(manifest)
+
     def load(self, digest: str) -> EnvironmentComponent:
         require_digest(digest)
         document, _headers = self.client.manifest_document(self.repository, digest)
@@ -499,6 +629,12 @@ class EnvironmentArtifactRegistry:
         if len(payload) != config["size"] or content_digest(payload) != config["digest"]:
             raise ValueError("environment index content identity mismatch")
         component = EnvironmentComponent.from_dict(json.loads(payload)).authenticate(self.trusted_keys)
+        if isinstance(component, RafsEnvironmentComponent):
+            # Its bytes live in the chunk store; the registry holds only this
+            # manifest and config, as it does for roots.
+            if document.get("layers") != []:
+                raise ValueError("environment OCI dependency closure differs from signed index")
+            return component
         whole_image = [{"mediaType": IMAGE_MEDIA_TYPE, "digest": component.image_digest,
                         "size": component.image_size}]
         per_chunk = [{"mediaType": CHUNK_MEDIA_TYPE, **chunk.to_dict()} for chunk in component.chunks]
@@ -658,6 +794,8 @@ def publish_environment(registry, *, source_image, environment, image_config, si
         _bind_commit(registry, signed, components, parent_root, parent_config, source_diff_ids)
     elif any(isinstance(component, CommitEnvironmentComponent) for component in components):
         raise ValueError("only a commit publication may compose commit components")
+    elif any(isinstance(component, RafsEnvironmentComponent) for component in components):
+        bind_rafs_layers(components, source_image, source_diff_ids)
     elif isinstance(components[0], LayerEnvironmentComponent):
         if source_diff_ids is None:
             raise ValueError("layer environment components require the OCI image diff_ids")

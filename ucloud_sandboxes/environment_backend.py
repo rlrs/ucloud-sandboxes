@@ -4,6 +4,7 @@ This owns kernel mounts/devices only. Image references, retention and scheduling
 remain with the existing image store/registry. A restarted backend never adopts
 an old live filesystem: lost kernel exports are an explicit admission fence.
 """
+from concurrent.futures import Future
 from dataclasses import dataclass
 import errno
 import fcntl
@@ -11,15 +12,16 @@ import json
 import logging
 import os
 import re
+import shutil
 from pathlib import Path
 import socket
 import socketserver
 import stat
 import subprocess
-from threading import Lock, RLock
+from threading import Condition, Lock, RLock
 import time
 
-from .environment_artifact import CHUNK_BYTES, canonical_bytes, require_digest
+from .environment_artifact import CHUNK_BYTES, RafsEnvironmentComponent, canonical_bytes, require_digest
 from .environment_cache import VerifiedEnvironmentCache
 from .environment_nbd import EnvironmentReadWorkers, ReadOnlyEnvironmentDevice
 from .environment_trace import LocalTraceStore, MAX_TRACE_CHUNKS, trace_order
@@ -104,7 +106,7 @@ class PrefetchPolicy:
 class EnvironmentBackend:
     def __init__(self, root, registry, *, devices=None, device_factory=ReadOnlyEnvironmentDevice,
                  mount=None, unmount=None, mounted=_mounted, referenced=mount_has_dependents, cache_bytes=1024 ** 3,
-                 prefetch=PrefetchPolicy(), traces=None, cache_options=None):
+                 prefetch=PrefetchPolicy(), traces=None, cache_options=None, rafs=None):
         self.root, self.registry = Path(root), registry
         if not self.root.is_absolute():
             raise ValueError("environment backend root must be absolute")
@@ -135,6 +137,12 @@ class EnvironmentBackend:
         self._mounted = mounted
         self._referenced = referenced
         self._guard = RLock()
+        # (digest, RafsEnvironmentComponent) -> verified RafsImage; None
+        # without a chunk index (docs/chunk-store-design.md §4).
+        self._rafs = rafs
+        self._attaching = {}  # Digest -> Future of the one attach in flight.
+        self._reserved = set()  # Devices being bound outside the guard.
+        self._released = Condition(self._guard)
         self._active = {}
         self._components = {}  # Attached digest -> authenticated component.
         # Attached digest -> (metadata job, ready deadline). Every caller of
@@ -192,8 +200,10 @@ class EnvironmentBackend:
         status, trace = self.traces.load(component)
         self._count(f"trace_hint_{status}")
         if trace is not None:
-            # Lower priority than metadata on the same bounded miss pool.
-            self.cache.prefetch(component, trace_order(trace), kind="trace",
+            # Lower priority than metadata on the same bounded miss pool;
+            # chunk-store images replay in pack order, so ranges coalesce.
+            order = getattr(component, "prefetch_order", trace_order)
+            self.cache.prefetch(component, order(trace), kind="trace",
                                 max_bytes=min(policy.trace_bytes, budget), deadline_seconds=policy.trace_seconds)
         elif self.cache.record_startup(component, self.traces.save, window_seconds=policy.trace_window_seconds,
                                        max_chunks=policy.trace_window_chunks):
@@ -201,97 +211,157 @@ class EnvironmentBackend:
         return metadata
 
     def _attach(self, digest):
+        """Single flight per component (design §4 item 6): the guard covers
+        only the maps and device selection; the registry and chunk-store
+        loads, the NBD bind and the mount run outside it, so a burst of
+        distinct images attaches in parallel."""
         require_digest(digest)
         with self._guard:
             if self._closed:
                 raise RuntimeError("environment backend is closed")
-            if digest in self._active:
+            pending = self._attaching.get(digest)
+            if pending is None and digest in self._active:
                 if not getattr(self._active[digest], "healthy", True):
                     raise RuntimeError("environment block export failed; fence and drain affected sandboxes")
                 return str(self.mounts / digest[7:])
-            component = self.registry.load(digest)  # Signature before any privileged operation.
-            target = self.mounts / digest[7:]
-            _private_directory(target)
-            # Durable physical ownership marker, deliberately no image reference
-            # count. Registry leases and the rootfs manager govern retention.
-            receipt = self.root / (digest[7:] + ".json")
-            with receipt.open("wb") as stream:
-                stream.write(canonical_bytes({"component": digest, "pid": os.getpid()}))
-                stream.flush()
-                os.fsync(stream.fileno())
-            directory_fd = os.open(self.root, os.O_DIRECTORY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
-            selected = None
-            for device in self._devices:
-                try:
-                    selected = self._factory(device, component, self.cache, self.workers,
-                                             trusted_keys=self.registry.trusted_keys)
-                    break
-                except OSError as exc:
-                    if exc.errno != errno.EBUSY:
-                        raise
-            if selected is None:
-                raise RuntimeError(NO_BLOCK_DEVICE)
+            owner = pending is None
+            if owner:
+                pending = self._attaching[digest] = Future()
+        if not owner:
+            return pending.result()
+        try:
+            target = self._attach_owned(digest)
+        except BaseException as exc:
+            with self._guard:
+                self._attaching.pop(digest, None)
+            pending.set_exception(exc)
+            raise
+        with self._guard:
+            self._attaching.pop(digest, None)
+        pending.set_result(target)
+        return target
+
+    def _attach_owned(self, digest):
+        component = self.registry.load(digest)  # Signature before any privileged operation.
+        if isinstance(component, RafsEnvironmentComponent):
+            if self._rafs is None:
+                raise RuntimeError("chunk-store environments need a chunk index on this worker")
+            # Bootstrap and chunk map verified against the signed digests.
+            component = self._rafs(digest, component)
+        target = self.mounts / digest[7:]
+        _private_directory(target)
+        # Durable physical ownership marker, deliberately no image reference
+        # count. Registry leases and the rootfs manager govern retention.
+        receipt = self.root / (digest[7:] + ".json")
+        with receipt.open("wb") as stream:
+            stream.write(canonical_bytes({"component": digest, "pid": os.getpid()}))
+            stream.flush()
+            os.fsync(stream.fileno())
+        directory_fd = os.open(self.root, os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+        try:
+            selected = self._bind(component)
+        except BaseException:
+            getattr(component, "close", lambda: None)()
+            raise
+        with self._guard:
             # Record ownership before invoking mount: an interrupted command
             # can have mounted successfully even if no acknowledgment arrived.
             self._active[digest] = selected
             self._components[digest] = component
-            metadata = None
-            if self.prefetch.enabled:
-                # Concurrent with the mount, whose superblock read joins the
-                # first bulk range. A hint is never a reason to fail attach.
-                try:
-                    metadata = self._start_prefetch(digest, component)
-                except Exception:
-                    self._count("prefetch_start_failures")
-                    _LOG.warning("environment prefetch for %s did not start", digest, exc_info=True)
+            self._reserved.discard(selected.path)
+            self._released.notify_all()
+        metadata = None
+        if self.prefetch.enabled:
+            # Concurrent with the mount, whose superblock read joins the
+            # first bulk range. A hint is never a reason to fail attach.
             try:
-                self._mount(selected.path, target)
-            except BaseException:
-                # A failed attach is no startup trace: discard it before drop.
-                self.cache.stop_recording(component)
-                # Never disconnect a possibly mounted backing device. If
-                # unmount/close cannot finish, retain it for a later cleanup.
-                try:
-                    self.drop(digest)
-                except Exception:
-                    pass
-                raise
-            if metadata is not None:
+                metadata = self._start_prefetch(digest, component)
+            except Exception:
+                self._count("prefetch_start_failures")
+                _LOG.warning("environment prefetch for %s did not start", digest, exc_info=True)
+        try:
+            self._mount(selected.path, target)
+        except BaseException:
+            # A failed attach is no startup trace: discard it before drop.
+            self.cache.stop_recording(component)
+            # Never disconnect a possibly mounted backing device. If
+            # unmount/close cannot finish, retain it for a later cleanup.
+            try:
+                with self._guard:
+                    self._drop(digest)
+            except Exception:
+                pass
+            raise
+        if metadata is not None:
+            with self._guard:
                 self._warming[digest] = (metadata, time.monotonic() + self.prefetch.metadata_wait_seconds)
-            return str(target)
+        return str(target)
+
+    def _bind(self, component):
+        """Select a free device under the guard, bind it outside; the device
+        inode flock still fences any device another owner holds (EBUSY)."""
+        tried = set()
+        while True:
+            with self._guard:
+                if self._closed:
+                    raise RuntimeError("environment backend is closed")
+                candidates = [path for path in self._devices if path not in tried]
+                if not candidates:
+                    raise RuntimeError(NO_BLOCK_DEVICE)
+                device = next((path for path in candidates if path not in self._reserved), None)
+                if device is None:  # Every candidate is being bound by another attach.
+                    self._released.wait(.05)
+                    continue
+                self._reserved.add(device)
+            try:
+                return self._factory(device, component, self.cache, self.workers,
+                                     trusted_keys=self.registry.trusted_keys)
+            except BaseException as exc:
+                with self._guard:
+                    self._reserved.discard(device)
+                    self._released.notify_all()
+                if not isinstance(exc, OSError) or exc.errno != errno.EBUSY:
+                    raise
+                tried.add(device)
 
     def drop(self, digest):
         require_digest(digest)
         with self._guard:
-            target = self.mounts / digest[7:]
-            device = self._active.get(digest)
-            if device is None:
-                return not self._mounted(target)
-            if self._mounted(target):
-                if self._referenced(target):
-                    return False
-                try:
-                    self._unmount(target)
-                except (OSError, subprocess.CalledProcessError):
-                    return False
-            # A failed close may be retried after unmount already succeeded;
-            # do not inspect the now-unmounted directory's parent filesystem.
-            component = self._components.get(digest)
-            if component is not None:
-                # Detached, often inside the trace window: save what was read.
-                self.cache.cancel_prefetch(component)
-                self.cache.stop_recording(component, save=True)
-            device.close()
-            del self._active[digest]
-            self._components.pop(digest, None)
-            self._warming.pop(digest, None)
-            target.rmdir()
-            (self.root / (digest[7:] + ".json")).unlink(missing_ok=True)
-            return True
+            if digest in self._attaching:
+                return False  # An attach in flight still owns it.
+            return self._drop(digest)
+
+    def _drop(self, digest):
+        target = self.mounts / digest[7:]
+        device = self._active.get(digest)
+        if device is None:
+            return not self._mounted(target)
+        if self._mounted(target):
+            if self._referenced(target):
+                return False
+            try:
+                self._unmount(target)
+            except (OSError, subprocess.CalledProcessError):
+                return False
+        # A failed close may be retried after unmount already succeeded;
+        # do not inspect the now-unmounted directory's parent filesystem.
+        component = self._components.get(digest)
+        if component is not None:
+            # Detached, often inside the trace window: save what was read.
+            self.cache.cancel_prefetch(component)
+            self.cache.stop_recording(component, save=True)
+        device.close()
+        getattr(component, "close", lambda: None)()  # A RAFS image's bootstrap file.
+        del self._active[digest]
+        self._components.pop(digest, None)
+        self._warming.pop(digest, None)
+        target.rmdir()
+        (self.root / (digest[7:] + ".json")).unlink(missing_ok=True)
+        return True
 
     def close(self):
         with self._guard:
@@ -404,10 +474,24 @@ class EnvironmentBackendClient:
         return self._call({"method": "metrics"}, METRICS_TIMEOUT_SECONDS)
 
 
-def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetch=True):
+def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetch=True, chunk_index=None,
+                  concurrent_misses=32):
+    """``chunk_index`` is (URL, read token) when chunk-store images are enabled."""
     if os.geteuid() != 0 or registry is None:
         raise ValueError("the artifact I/O backend requires root and registry trust")
-    backend = EnvironmentBackend(root, registry, cache_bytes=cache_bytes, prefetch=PrefetchPolicy(enabled=prefetch))
+    rafs, cache_options = None, None
+    if chunk_index is not None:
+        from .chunk_index import ChunkIndexClient
+        from .environment_rafs import load_rafs_image
+        client, meta = ChunkIndexClient(*chunk_index), Path(root) / "rafs"
+        # Verified bootstraps of mounted images; none survive a backend restart.
+        shutil.rmtree(meta, ignore_errors=True)
+        _private_directory(meta)
+        rafs = lambda digest, component: load_rafs_image(digest, component, client, meta_root=meta)  # noqa: E731
+        # S3 demand misses wait 30-100 ms, not the registry's 3 ms.
+        cache_options = {"concurrent_misses": concurrent_misses}
+    backend = EnvironmentBackend(root, registry, cache_bytes=cache_bytes, prefetch=PrefetchPolicy(enabled=prefetch),
+                                 rafs=rafs, cache_options=cache_options)
     try:
         with EnvironmentBackendServer(socket_path, backend) as server:
             server.serve_forever()

@@ -295,6 +295,10 @@ class VerifiedEnvironmentCache:
             if remaining <= 0:
                 raise TimeoutError("immutable environment fetch deadline exceeded")
             try:
+                if hasattr(source, "fetch_window"):
+                    # A chunk-store image: one verified window, siblings included.
+                    data = source.fetch_window(self, chunk, remaining)
+                    break
                 if source is not None:
                     image_digest, offset = source
                     data = self.registry.client.blob_range(
@@ -335,6 +339,48 @@ class VerifiedEnvironmentCache:
         with self._guard:
             self._metrics["misses"] += 1
         return data
+
+    def contains(self, chunk):
+        """Whether ``chunk`` is cached or already being fetched."""
+        with self._guard:
+            return (chunk.digest.removeprefix("sha256:") in self._lru or chunk.digest in self._pending
+                    or chunk.digest in self._prefetching)
+
+    def join_window(self, chunks):
+        """Let readers of a window's other chunks join it (as they join bulk
+        prefetch reads) instead of starting their own misses."""
+        futures = {}
+        with self._guard:
+            for chunk in chunks:
+                name = chunk.digest.removeprefix("sha256:")
+                if (name not in self._lru and chunk.digest not in self._pending
+                        and chunk.digest not in self._prefetching and chunk.digest not in futures):
+                    futures[chunk.digest] = (chunk, Future())
+                    self._prefetching[chunk.digest] = futures[chunk.digest][1]
+        return futures
+
+    def finish_window(self, futures, verified):
+        """Install a window's verified siblings, then answer joined readers."""
+        for digest, (chunk, _) in futures.items():
+            if digest in verified:
+                try:
+                    self._install(chunk, verified[digest], None)
+                except (CancelledError, OSError, TimeoutError):
+                    pass
+        with self._guard:
+            for digest, (_, future) in futures.items():
+                if self._prefetching.get(digest) is future:
+                    del self._prefetching[digest]
+            self._guard.notify_all()
+        for digest, (_, future) in futures.items():
+            if digest in verified:
+                future.set_result(verified[digest])
+            else:
+                future.set_exception(ValueError("environment window did not verify this chunk"))
+
+    def count_corruption(self):
+        with self._guard:
+            self._metrics["corruptions"] += 1
 
     def prefetch(self, component, indices, *, kind, max_bytes, max_chunks=65536, deadline_seconds=30.0):
         """Schedule verified bulk fills of ``indices`` in order; returns its job.
@@ -393,6 +439,10 @@ class VerifiedEnvironmentCache:
                     job.cancel()
             self._guard.notify_all()
 
+    def observe(self, component, index):
+        if self._recordings:
+            self._observe(component, index)
+
     def _observe(self, component, index):
         with self._trace_guard:
             recording = self._recordings.get(component.image_digest)
@@ -422,8 +472,32 @@ class VerifiedEnvironmentCache:
             self._metrics[prefix + "truncated"] += 1
         job.done.set()
 
+    def _budget(self, job, chunk):
+        """Account one chunk to ``job``, or stop it at its budget."""
+        if (job.scheduled_chunks >= job.max_chunks or job.scheduled_bytes + chunk.size > job.max_bytes
+                or (job.kind != "metadata" and self._prefetch_scheduled + chunk.size > self.max_bytes // 2)):
+            job.stop("budget")
+            return False
+        job.scheduled_chunks += 1
+        job.scheduled_bytes += chunk.size
+        self._prefetch_scheduled += chunk.size
+        return True
+
     def _next_run(self, job):
         """Take the next adjacent missing chunks of ``job`` within its budget."""
+        if hasattr(job.component, "next_run"):
+            # Chunk-store image: runs are pack ranges of up to 4 MiB.
+            busy = lambda chunk: (chunk.digest[7:] in self._lru or chunk.digest in self._pending  # noqa: E731
+                                  or chunk.digest in self._prefetching)
+            indices, skipped = job.component.next_run(job.queue, busy)
+            job.skipped_chunks += skipped
+            self._metrics[f"{job.kind}_prefetch_skipped_chunks"] += skipped
+            run = []
+            for index in indices:
+                if not self._budget(job, job.component.chunks[index]):
+                    break
+                run.append((index, job.component.chunks[index]))
+            return run
         whole = getattr(self.registry, "whole_image", None)
         limit = PREFETCH_RANGE_CHUNKS if whole is not None and whole(job.component) else 1
         run, seen = [], set()
@@ -440,13 +514,8 @@ class VerifiedEnvironmentCache:
                 job.skipped_chunks += 1
                 self._metrics[f"{job.kind}_prefetch_skipped_chunks"] += 1
                 continue
-            if (job.scheduled_chunks >= job.max_chunks or job.scheduled_bytes + chunk.size > job.max_bytes
-                    or (job.kind != "metadata" and self._prefetch_scheduled + chunk.size > self.max_bytes // 2)):
-                job.stop("budget")
+            if not self._budget(job, chunk):
                 break
-            job.scheduled_chunks += 1
-            job.scheduled_bytes += chunk.size
-            self._prefetch_scheduled += chunk.size
             seen.add(chunk.digest)
             run.append((index, chunk))
         return run
@@ -524,28 +593,34 @@ class VerifiedEnvironmentCache:
                 future.set_exception(CancelledError("environment prefetch was not scheduled"))
             job.stop("cancelled")
 
+    def _run_pieces(self, job, run):
+        first, total = run[0][0], sum(chunk.size for _, chunk in run)
+        client, repository = self.registry.client, self.registry.repository
+        if len(run) == 1 and not getattr(self.registry, "whole_image", lambda _: False)(job.component):
+            return [client.blob_bytes(repository, run[0][1].digest, max_bytes=run[0][1].size,
+                                      timeout_seconds=self._fetch_timeout_seconds)]
+        payload = client.blob_range(repository, job.component.image_digest, first * CHUNK_BYTES, total,
+                                    timeout_seconds=self._fetch_timeout_seconds)
+        if len(payload) != total:
+            raise ValueError("environment prefetch range has an unexpected length")
+        pieces, offset = [], 0
+        for _, chunk in run:
+            pieces.append(payload[offset:offset + chunk.size])
+            offset += chunk.size
+        return pieces
+
     def _fetch_run(self, job, run, futures):
         """One bulk read without retries: a failure only leaves demand misses."""
         verified, installed = {}, []
         try:
             self._cancelled(job.cancelled)
-            first, total = run[0][0], sum(chunk.size for _, chunk in run)
-            client, repository = self.registry.client, self.registry.repository
-            if len(run) == 1 and not getattr(self.registry, "whole_image", lambda _: False)(job.component):
-                pieces = [client.blob_bytes(repository, run[0][1].digest, max_bytes=run[0][1].size,
-                                            timeout_seconds=self._fetch_timeout_seconds)]
+            if hasattr(job.component, "fetch_run"):
+                # A chunk-store image: one pack range, verified chunk by chunk.
+                verified = job.component.fetch_run([index for index, _ in run], self._fetch_timeout_seconds)
             else:
-                payload = client.blob_range(repository, job.component.image_digest, first * CHUNK_BYTES, total,
-                                            timeout_seconds=self._fetch_timeout_seconds)
-                if len(payload) != total:
-                    raise ValueError("environment prefetch range has an unexpected length")
-                pieces, offset = [], 0
-                for _, chunk in run:
-                    pieces.append(payload[offset:offset + chunk.size])
-                    offset += chunk.size
-            for (_index, chunk), data in zip(run, pieces):
-                if len(data) == chunk.size and content_digest(data) == chunk.digest:
-                    verified[chunk.digest] = data
+                for (_index, chunk), data in zip(run, self._run_pieces(job, run)):
+                    if len(data) == chunk.size and content_digest(data) == chunk.digest:
+                        verified[chunk.digest] = data
             for _index, chunk in run:
                 if chunk.digest in verified:
                     try:
@@ -599,6 +674,11 @@ class VerifiedEnvironmentCache:
         if (type(offset) is not int or type(length) is not int or offset < 0
                 or length < 0 or length > 32 * 1024 ** 2 or offset + length > component.image_size):
             raise ValueError("environment read exceeds its authenticated bounds")
+        if hasattr(component, "map"):
+            from .environment_rafs import read_image
+            data = read_image(self, component, offset, length, cancel)
+            self._cancelled(cancel)
+            return data
         result = []
         end = offset + length
         while offset < end:

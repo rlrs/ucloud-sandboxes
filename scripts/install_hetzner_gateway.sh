@@ -276,6 +276,7 @@ for unit in \
   ucloud-sandbox-registry-pressure.timer \
   ucloud-sandbox-snapshot-gc.service \
   ucloud-sandbox-snapshot-gc.timer \
+  ucloud-sandbox-chunk-index.service \
   ucloud-sandbox-registry-prune.service \
   ucloud-sandbox-registry-prune.timer \
   ucloud-sandbox-registry.service \

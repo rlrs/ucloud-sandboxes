@@ -34,6 +34,7 @@ REGISTRY_IMAGE = "registry:3.1.1"
 REGISTRY_CONFIG_PATH = "/etc/distribution/config.yml"
 REGISTRY_S3_CHUNK_BYTES = 32 * 1024 * 1024
 REGISTRY_SERVICE = "ucloud-sandbox-registry.service"
+CHUNK_INDEX_SERVICE = "ucloud-sandbox-chunk-index.service"
 # flock(1) in the prune unit locks the same file: "<path>.lock".
 REGISTRY_MAINTENANCE_LOCK = Path("/run/lock/ucloud-sandbox-registry-maintenance")
 REGISTRY_WRITER_LOCK = Path("/run/lock/ucloud-sandbox-registry-writer")
@@ -393,6 +394,14 @@ def reconcile_gateway_services(
         "ucloud-sandbox-autoscaler.service",
     ):
         systemctl("enable", service)
+    # ucloud-chunk-index (decision 5: on the gateway until C2.6), only once
+    # immutable_environments.chunk_store is configured.
+    environments = config.immutable_environments
+    chunk_store = environments.chunk_store if environments is not None else None
+    if chunk_store is None:
+        systemctl("disable", "--now", CHUNK_INDEX_SERVICE, check=False)
+    else:
+        systemctl("enable", CHUNK_INDEX_SERVICE)
 
     # A removed or disabled mirror instance stays stopped: at boot its helper
     # finds no configured upstream and exits with RestartPreventExitStatus.
@@ -414,6 +423,9 @@ def reconcile_gateway_services(
         systemctl("restart", service)
     wait_for("gateway", f"http://127.0.0.1:{config.gateway_port}/healthz")
     wait_for("relay", f"http://127.0.0.1:{config.relay_port}/healthz")
+    if chunk_store is not None:
+        systemctl("restart", CHUNK_INDEX_SERVICE)
+        wait_for("chunk index", chunk_store.index_url.rstrip("/") + "/healthz")
 
 
 def registry_run_command(config: DeploymentConfig) -> list[str]:

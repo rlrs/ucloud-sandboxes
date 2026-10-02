@@ -34,8 +34,14 @@ import unittest
 #   in scripts/ outside this count and goes once production runs with it.
 # + the environment backend's deep backlog and EAGAIN connect retry (+15),
 #   and sharing a composition between config-only siblings (+1).
+# + C2.13 M1 chunk store core (+2,437): pack, chunk-map and locator formats,
+#   ucloud-chunk-index, the RAFS converter with crash-safe publication, the
+#   worker RAFS device, single-flight attach and the unpack rollback, all
+#   behind immutable_environments.chunk_store. What it retires comes with
+#   migration (docs/chunk-store-design.md §8: ~3.6k lines, the EROFS builder,
+#   layer groups, erofs_metadata and the component-index cache paths).
 # Lower it whenever a deletion lands; storage-native (C1.3) alone is ~8k lines.
-PACKAGE_LINE_BUDGET = 107_016
+PACKAGE_LINE_BUDGET = 109_453
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

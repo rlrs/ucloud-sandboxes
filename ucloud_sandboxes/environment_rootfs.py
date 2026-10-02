@@ -6,7 +6,7 @@ The disk-backed writable overlay and sandbox lifecycle have one implementation.
 """
 from contextlib import ExitStack, contextmanager
 from collections import OrderedDict
-from concurrent.futures import Future
+from concurrent.futures import Future, ThreadPoolExecutor
 import fcntl
 import json
 import logging
@@ -142,7 +142,14 @@ class EnvironmentRootfsStore:
                 self._ensure(component)
             self._track(image_id, environment)
             return rootfs
-        lowers = [Path(self._ensure(digest)) for digest in environment.components]
+        # The backend attaches distinct components concurrently (one
+        # single flight each), so a per-layer image does not pay for its
+        # layers one after another.
+        if len(environment.components) == 1:
+            lowers = [Path(self._ensure(environment.components[0]))]
+        else:
+            with ThreadPoolExecutor(min(8, len(environment.components)), thread_name_prefix="ensure") as pool:
+                lowers = [Path(path) for path in pool.map(self._ensure, environment.components)]
         if any(any(character in str(path) for character in (":", ",", "\n")) for path in lowers):
             raise ValueError("invalid component mount path")
         if len(lowers) == 1:

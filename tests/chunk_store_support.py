@@ -47,10 +47,14 @@ class ObjectServer:
 
     def __init__(self, bucket="chunks"):
         self.objects, self.requests, self.bucket, self.corrupt = {}, [], bucket, {}
+        # fault(key, range) -> None, ("status", code), ("stall", seconds) before
+        # the headers, or ("body_stall", seconds) after half the body.
+        self.fault, self.inflight, self.peak = None, 0, 0
         self.guard = threading.Lock()
         handler = type("Handler", (_ObjectHandler,), {"store": self})
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self.server.daemon_threads = True
+        self.server.handle_error = lambda *_: None  # Hedged losers hang up mid-response.
         self.endpoint = f"http://127.0.0.1:{self.server.server_address[1]}"
         self.presigner = S3Presigner(self.endpoint, bucket, "hel1", "AKIDTEST", "secret-test", path_style=True)
         self.thread = threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": .05}, daemon=True)
@@ -98,20 +102,42 @@ class _ObjectHandler(BaseHTTPRequestHandler):
         spec = self.headers.get("Range", "")
         with self.store.guard:
             self.store.requests.append((key, spec))
-        if not spec:
-            return self._send(200, data)
-        first, _, last = spec.removeprefix("bytes=").partition("-")
-        start = max(0, len(data) - int(last)) if first == "" else int(first)
-        end = len(data) - 1 if first == "" or not last else min(int(last), len(data) - 1)
-        self._send(206, data[start:end + 1], {"Content-Range": f"bytes {start}-{end}/{len(data)}"})
+            self.store.inflight += 1
+            self.store.peak = max(self.store.peak, self.store.inflight)
+        try:
+            fault = self.store.fault(key, spec) if self.store.fault else None
+            if fault and fault[0] == "status":
+                return self._send(fault[1], b"fault")
+            if fault and fault[0] == "stall":
+                time.sleep(fault[1])
+            if not spec:
+                return self._send(200, data)
+            first, _, last = spec.removeprefix("bytes=").partition("-")
+            start = max(0, len(data) - int(last)) if first == "" else int(first)
+            if start >= len(data):
+                return self._send(416, b"", {"Content-Range": f"bytes */{len(data)}"})
+            end = len(data) - 1 if first == "" or not last else min(int(last), len(data) - 1)
+            self._send(206, data[start:end + 1], {"Content-Range": f"bytes {start}-{end}/{len(data)}"},
+                       stall=fault[1] if fault and fault[0] == "body_stall" else 0)
+        finally:
+            with self.store.guard:
+                self.store.inflight -= 1
 
-    def _send(self, status, payload, headers=()):
+    def _send(self, status, payload, headers=(), stall=0):
         self.send_response(status)
         for name, value in dict(headers).items():
             self.send_header(name, value)
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
-        self.wfile.write(payload)
+        try:
+            if stall:
+                self.wfile.write(payload[:len(payload) // 2])
+                self.wfile.flush()
+                time.sleep(stall)
+                payload = payload[len(payload) // 2:]
+            self.wfile.write(payload)
+        except OSError:
+            self.close_connection = True  # A hedge's loser hung up.
 
 
 class IndexFixture:

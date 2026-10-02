@@ -3,7 +3,8 @@
 Read path of docs/chunk-store-design.md §4. The bootstrap is served from
 memory, a block resolves to a chunk id through the signed chunk map, and the
 unsigned locator says which pack range holds it. Misses fetch 1 MiB windows
-(prefetch up to 4 MiB) with plain HTTP ranges; every chunk is decompressed
+(prefetch up to 4 MiB) with plain HTTP ranges, from S3 or, when configured,
+only from the store node (C2.6); every chunk is decompressed
 and checked against its id before it is cached or served. The cache is keyed
 by chunk id, so images share chunks. C2.1's Rust device implements the same
 contract; this is the reference.
@@ -63,9 +64,11 @@ class RafsImage:
     the NBD export and the trace store (``image_digest``, ``image_size``,
     ``chunks``)."""
 
-    def __init__(self, digest, component, bootstrap, chunk_map, locator, *, refresh=None, reader=http_range):
+    def __init__(self, digest, component, bootstrap, chunk_map, locator, *, refresh=None, reader=http_range,
+                 origin=None):
         if not isinstance(component, RafsEnvironmentComponent) or chunk_map.device_size != component.device_size:
             raise ValueError("RAFS chunk map does not match its signed component")
+        self.origin = origin  # With a store node, every locator URL must name it.
         if not isinstance(bootstrap, VerifiedBootstrap):
             bootstrap = VerifiedBootstrap(bootstrap)
         self.digest, self.component, self.bootstrap, self.map = digest, component, bootstrap, chunk_map
@@ -90,6 +93,7 @@ class RafsImage:
 
     def _use(self, locator):
         """Adopt a locator after bounds checks against the verified map."""
+        require_origin(locator, self.origin)
         if len(locator.entries) != len(self.chunks) or any(
                 flags == RAW and clen != size for (_, _, clen, flags), size in zip(locator.entries, self.map.sizes)):
             raise ValueError("chunk locator does not fit its chunk map")
@@ -225,12 +229,43 @@ def _get(url, limit, timeout=60.0):
     return http_request("GET", url, timeout=timeout, max_bytes=limit)[2]
 
 
-def load_rafs_image(digest, component, index, *, getter=_get, reader=http_range, meta_root=None):
+def store_prefix(base_url):
+    return base_url.rstrip("/") + "/v1/objects/"
+
+
+def require_origin(locator, origin):
+    """With a store node configured, a locator naming anything else (S3, a
+    presigned URL) is refused: workers fail closed, never reach S3."""
+    if origin is not None and any(not url.startswith(store_prefix(origin))
+                                  for url in [url for _, url in locator.packs] + list(locator.meta.values())):
+        raise ValueError("chunk locator names a source other than the configured store node")
+
+
+def store_access(base_url, token):
+    """(reader, getter) that read only from the store node, with its token."""
+    prefix, headers = store_prefix(base_url), {"Authorization": "Bearer " + token}
+
+    def check(url):
+        if not url.startswith(prefix):
+            raise ValueError("refusing a chunk read outside the configured store node")
+        return url
+
+    def reader(url, start, length, *, timeout=30.0):
+        return http_range(check(url), start, length, timeout=timeout, headers=headers)
+
+    def getter(url, limit, timeout=60.0):
+        return http_request("GET", check(url), headers=headers, timeout=timeout, max_bytes=limit)[2]
+    return reader, getter
+
+
+def load_rafs_image(digest, component, index, *, getter=_get, reader=http_range, meta_root=None, origin=None):
     """Fetch and verify the bootstrap and chunk map (design §1.5 steps 3-4);
-    ``meta_root``, a private directory, keeps bootstraps out of memory."""
+    ``meta_root``, a private directory, keeps bootstraps out of memory;
+    ``origin``, a store node's URL, is the only source a locator may name."""
     locator = index.locator(digest)
     if set(locator.meta) != {"bootstrap", "chunk_map"}:
         raise ValueError("chunk locator lacks the image metadata URLs")
+    require_origin(locator, origin)
     boot_size, map_size = component.bootstrap["size"], component.chunk_map["size"]
     with ThreadPoolExecutor(2, thread_name_prefix="rafs-meta") as pool:
         compressed = pool.submit(getter, locator.meta["bootstrap"], boot_size + boot_size // 64 + (1 << 20))
@@ -247,7 +282,7 @@ def load_rafs_image(digest, component, index, *, getter=_get, reader=http_range,
     if meta_root is not None:
         bootstrap = VerifiedBootstrap(bootstrap, Path(meta_root) / (digest[7:] + ".boot"))
     return RafsImage(digest, component, bootstrap, chunk_map, locator, refresh=lambda: index.locator(digest),
-                     reader=reader)
+                     reader=reader, origin=origin)
 
 
 def read_image(cache, image, offset, length, cancel=None):

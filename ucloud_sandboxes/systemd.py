@@ -398,6 +398,9 @@ def reconcile_gateway_services(
     # immutable_environments.chunk_store is configured.
     environments = config.immutable_environments
     chunk_store = environments.chunk_store if environments is not None else None
+    # C2.6: with the index on the store node the gateway's unit still runs
+    # once, to make the tokens, and exits 78.
+    index_here = chunk_store is not None and not (chunk_store.store_node and chunk_store.store_node.serve_index)
     if chunk_store is None:
         systemctl("disable", "--now", CHUNK_INDEX_SERVICE, check=False)
     else:
@@ -425,7 +428,8 @@ def reconcile_gateway_services(
     wait_for("relay", f"http://127.0.0.1:{config.relay_port}/healthz")
     if chunk_store is not None:
         systemctl("restart", CHUNK_INDEX_SERVICE)
-        wait_for("chunk index", chunk_store.index_url.rstrip("/") + "/healthz")
+        if index_here:
+            wait_for("chunk index", chunk_store.index_url.rstrip("/") + "/healthz")
 
 
 def registry_run_command(config: DeploymentConfig) -> list[str]:

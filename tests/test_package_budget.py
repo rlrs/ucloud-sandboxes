@@ -40,8 +40,14 @@ import unittest
 #   behind immutable_environments.chunk_store. What it retires comes with
 #   migration (docs/chunk-store-design.md §8: ~3.6k lines, the EROFS builder,
 #   layer groups, erofs_metadata and the component-index cache paths).
+# + C2.6 chunk store node (+1,381): ucloud-chunk-store (S3 fills in extents
+#   with coalescing and progress-based hedging, a crash-safe LRU extent cache,
+#   warm jobs, metrics, an asyncio sendfile server), the store VM init role,
+#   the store_node config and the index relocation. S12 made it a
+#   precondition of M1 (S3's tail and NAT); it retires nothing yet, and C2.1's
+#   native device replaces the worker read path it feeds, not this node.
 # Lower it whenever a deletion lands; storage-native (C1.3) alone is ~8k lines.
-PACKAGE_LINE_BUDGET = 109_453
+PACKAGE_LINE_BUDGET = 110_834
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

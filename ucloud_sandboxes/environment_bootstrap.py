@@ -49,6 +49,8 @@ $SUDO chown root:root {KEY_FILE}
         chunk_flags = (" --chunk-index-url " + shlex.quote(options.environment_chunk_index_url)
                        + " --chunk-index-token-file " + CHUNK_TOKEN_FILE
                        + f" --chunk-concurrent-misses {int(options.environment_chunk_concurrent_misses)}")
+        if options.environment_chunk_store_url:  # C2.6: the store node is the only source.
+            chunk_flags += " --chunk-store-url " + shlex.quote(options.environment_chunk_store_url)
     setup += f'''# Never replace the adapter beneath existing sandboxes.
 if [ -e "$UCLOUD_STATE_DIR/direct-runtime/direct-registry.sqlite" ] && [ ! -e "$UCLOUD_STATE_DIR/environment-adapter" ]; then
   echo 'immutable environments require a fresh worker; retire the old adapter first' >&2; exit 1
@@ -91,7 +93,8 @@ def validate(options):
     if not supplied:
         if any((options.environment_repository, options.environment_trusted_keys_json,
                 options.environment_signing_key_pem, options.environment_allow_paths,
-                options.environment_preserve_mtimes, options.environment_chunk_index_url)):
+                options.environment_preserve_mtimes, options.environment_chunk_index_url,
+                options.environment_chunk_store_url)):
             raise ValueError("immutable environment bootstrap requires registry URL and producer trust")
         return
     from .environment_config import EnvironmentDeploymentConfig
@@ -116,6 +119,10 @@ def validate(options):
             or (chunk_url and (not chunk_url.startswith(("http://", "https://")) or not 32 <= len(chunk_token) <= 4096
                                or any(c in chunk_url + chunk_token for c in "\0\r\n '\"")))):
         raise ValueError("invalid immutable environment chunk index bootstrap")
+    store_url = options.environment_chunk_store_url
+    if store_url and (not chunk_url or not store_url.startswith(("http://", "https://"))
+                      or any(c in store_url for c in "\0\r\n '\"")):
+        raise ValueError("invalid immutable environment chunk store node bootstrap")
     if options.role == "sandbox":
         if options.environment_signing_key_pem:
             raise ValueError("sandbox workers must never receive environment signing keys")

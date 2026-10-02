@@ -141,6 +141,33 @@ immutable_environments = {
     # their mode; newly provisioned workers apply a change.
     "prefetch_enabled": True,
 }
+# Chunk-store (RAFS) images (docs/chunk-store-design.md): packs in S3, read by
+# workers only through a store node on the private network (C2.6), which also
+# hosts ucloud-chunk-index. Turn on after the store node is up (docs/hetzner.md,
+# "Chunk store node") and replace RAFS-reading workers: their locators switch
+# to store-node URLs at once. Store node: CCX43, 10.42.0.200, public IPv4 for
+# S3 fills only; the services bind the private address.
+CHUNK_STORE = False
+STORE_NODE = "10.42.0.200"
+if CHUNK_STORE:
+    immutable_environments["chunk_store"] = {
+        **{name: s3[name] for name in ("endpoint", "bucket", "region", "access_key_id_env", "secret_access_key_env")},
+        "prefix": "production/chunks", "force_path_style": False,
+        "index_url": f"http://{STORE_NODE}:5090", "index_listen": f"{STORE_NODE}:5090",
+        "index_database": "/var/lib/ucloud-chunk-index/index.sqlite",
+        "read_token_file": "/var/lib/ucloud-chunk-index/read.token",
+        "write_token_file": "/var/lib/ucloud-chunk-index/write.token",
+        "url_ttl_seconds": 86400, "mount_granularity": "image", "nydus_image": "/usr/local/bin/nydus-image",
+        # 1-3 ms per miss from the store, not S3's 30-100 ms (S12 recommendation 4).
+        "concurrent_misses": 16,
+        "store_node": {
+            "url": f"http://{STORE_NODE}:5091", "listen": f"{STORE_NODE}:5091",
+            # CCX43: 360 GB NVMe; the index (31 GB at full corpus) shares it.
+            "cache_dir": "/var/lib/ucloud-chunk-store/cache", "cache_bytes": 280 * 1024**3,
+            "extent_bytes": 4 * 1024**2,  # docs/benchmarks/chunk-store-node-2026-10-02
+            "s3_concurrency": 64, "serve_index": True,
+        },
+    }
 if IMMUTABLE_WORKERS:
     raw["immutable_environments"] = immutable_environments
     # Workers pull nothing large; half the headroom is the chunk cache.

@@ -26,12 +26,10 @@ from tests.test_package_budget import package_lines
 # over real SQLite and HTTP, SigV4 vectors, converter crash injection at every
 # write-path step, the worker read path against an S3 stand-in and concurrent
 # attach. They retire test_environment_layers and test_erofs_metadata with the
-# EROFS builder after migration. Then 95,215 (+276) for the M1 gate driver
-# (scripts/chunk_store_gate.py), which orders production VMs and deletes S3
-# objects: its plain-helper command form, phase resume, teardown after a crash
-# and the report's pass/fail logic. No scenario covers an operator script;
-# test_chunk_store_gate goes with the driver once M2's waves are done.
-SUITE_LINE_BUDGET = 95_215
+# EROFS builder after migration. Then +276 for the M1 gate driver
+# (test_chunk_store_gate: no scenario covers an operator script) and +399 for
+# the C2.6 store node (test_chunk_store_node: needs a store node, not a scenario).
+SUITE_LINE_BUDGET = 95_614
 SUITE = Path(__file__).resolve().parent
 
 

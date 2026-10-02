@@ -232,6 +232,13 @@ class EnvironmentBootstrapTests(unittest.TestCase):
             self.assertIn(" --chunk-index-url http://10.42.0.2:5090 --chunk-index-token-file "
                           "/etc/ucloud-sandboxes/environment/chunk-index.token --chunk-concurrent-misses 32", reader)
             self.assertNotIn("chunk-index", worker)
+            self.assertNotIn("--chunk-store-url", reader)  # C2.6: only with a store node.
+            node = render_vm_init_script(vm_fixtures.VmInitTests._options(
+                **common, **chunk, environment_chunk_store_url="http://10.42.0.200:5091"))
+            self.assertIn("--chunk-concurrent-misses 32 --chunk-store-url http://10.42.0.200:5091", node)
+            with self.assertRaisesRegex(ValueError, "store node"):
+                render_vm_init_script(vm_fixtures.VmInitTests._options(
+                    **common, environment_chunk_store_url="http://10.42.0.200:5091"))
             for invalid in ({**chunk, "environment_chunk_index_token": ""}, {**chunk, "role": "builder",
                             "environment_signing_key_pem": private, "environment_allow_paths": ("bin",)}):
                 with self.assertRaisesRegex(ValueError, "chunk index"):

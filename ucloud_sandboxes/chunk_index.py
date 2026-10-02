@@ -1,8 +1,9 @@
 """``ucloud-chunk-index``: the chunk store's SQLite index and its HTTP API.
 
 Only builders and GC use the index (docs/chunk-store-design.md §1.3, §5).
-Workers ask it for one thing, a root's unsigned locator with presigned GET
-URLs (decision 2), so the S3 key stays on this service and the builders.
+Workers ask it for one thing, a root's unsigned locator: with presigned GET
+URLs (decision 2), or with a store node configured (C2.6) the node's URLs,
+so the S3 key stays on this service, the builders and the store node.
 Everything here is a derived cache of pack footers and chunk maps in S3.
 """
 from __future__ import annotations
@@ -133,12 +134,13 @@ def http_request(method, url, *, headers=None, body=None, timeout=30.0, max_byte
     return response.status, response.headers, payload
 
 
-def http_range(url, start, length, *, timeout=30.0):
+def http_range(url, start, length, *, timeout=30.0, headers=None):
     """Exactly ``length`` bytes at ``start``, or the last ``length`` with ``start=None``."""
     if length <= 0 or (start is not None and start < 0):
         raise ValueError("invalid chunk store range")
     spec = f"bytes=-{length}" if start is None else f"bytes={start}-{start + length - 1}"
-    status, headers, payload = http_request("GET", url, headers={"Range": spec}, timeout=timeout, max_bytes=length)
+    status, headers, payload = http_request("GET", url, headers={**(headers or {}), "Range": spec}, timeout=timeout,
+                                            max_bytes=length)
     content_range = str(headers.get("Content-Range") or "")
     if start is None:
         if status not in (200, 206):  # 200 or "bytes 0-": the whole, smaller object.
@@ -352,10 +354,15 @@ class ChunkIndex:
 # --- The service ---
 
 class ChunkIndexService:
-    """API behind ChunkIndexServer; ``store`` is a ChunkObjectStore."""
+    """API behind ChunkIndexServer; ``store`` is a ChunkObjectStore.
 
-    def __init__(self, index, store, *, locator_cache=64):
-        self.index, self.store = index, store
+    With ``store_url`` (a store node, C2.6) worker locators name the node's
+    URLs, which never expire; builder lookups (``locate``) stay presigned,
+    since builders hold the S3 key.
+    """
+
+    def __init__(self, index, store, *, locator_cache=64, store_url=None):
+        self.index, self.store, self.store_url = index, store, store_url and store_url.rstrip("/")
         self._maps, self._locators, self._guard = OrderedDict(), OrderedDict(), threading.Lock()
         self._locator_cache = locator_cache
 
@@ -400,13 +407,19 @@ class ChunkIndexService:
         return self.index.register(request["component"], chunk_map["digest"],
                                    require_digest(request["bootstrap"]), parsed)
 
-    def locate(self, ids, meta=None, epoch=0):
+    def _worker_url(self, key):
+        if self.store_url is None:
+            return self.store.url(key)
+        return f"{self.store_url}/v1/objects/{key.removeprefix(self.store.prefix + '/')}"
+
+    def locate(self, ids, meta=None, epoch=0, url=None):
         rows = self.index.locate(ids)
         if any(row is None for row in rows):
             raise MissingChunks(f"{sum(row is None for row in rows)} chunks are unknown or condemned")
         packs = list(dict.fromkeys(row[0] for row in rows))
         position = {digest: index for index, digest in enumerate(packs)}
-        return Locator(epoch, tuple((digest, self.store.url(pack_key(self.store.prefix, digest))) for digest in packs),
+        url = url or self.store.url
+        return Locator(epoch, tuple((digest, url(pack_key(self.store.prefix, digest))) for digest in packs),
                        tuple((position[row[0]], *row[1:]) for row in rows), meta or {})
 
     def locator(self, component):
@@ -420,10 +433,11 @@ class ChunkIndexService:
         # at least the other half; workers refetch on 403.
         if found is not None and found[0] > time.monotonic():
             return found[1]
-        meta = {"bootstrap": self.store.url(bootstrap_key(self.store.prefix, bootstrap_digest[7:])),
-                "chunk_map": self.store.url(chunk_map_key(self.store.prefix, chunk_map_digest[7:]))}
-        encoded = self.locate(list(self.chunk_map(chunk_map_digest).ids), meta, epoch).encode()
-        self._cached(self._locators, key, (time.monotonic() + self.store.url_seconds / 2, encoded))
+        meta = {"bootstrap": self._worker_url(bootstrap_key(self.store.prefix, bootstrap_digest[7:])),
+                "chunk_map": self._worker_url(chunk_map_key(self.store.prefix, chunk_map_digest[7:]))}
+        encoded = self.locate(list(self.chunk_map(chunk_map_digest).ids), meta, epoch, self._worker_url).encode()
+        lifetime = float("inf") if self.store_url else self.store.url_seconds / 2
+        self._cached(self._locators, key, (time.monotonic() + lifetime, encoded))
         return encoded
 
 

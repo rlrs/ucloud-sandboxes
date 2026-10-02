@@ -502,7 +502,7 @@ def mount_verifier(*, devices, trusted_keys, work_root):
 # --- Rollback: chunk store -> tar -> OCI push (design §7) ---
 
 def unpack_environment(registry, index, root, *, repository, tag, work_root, nydus_image="nydus-image",
-                       reader=None):
+                       reader=None, access=None):
     """Regenerate a single-layer OCI image from a converted root.
 
     Supports ``image`` layout roots. The blobs are rebuilt uncompressed from
@@ -516,7 +516,7 @@ def unpack_environment(registry, index, root, *, repository, tag, work_root, nyd
     base = registry.load(environment.environment.base)
     if not isinstance(base, RafsEnvironmentComponent) or base.format["layout"] != "image":
         raise ValueError("unpack supports roots with one image-layout RAFS base")
-    image = load_rafs_image(environment.environment.base, base, index, reader=reader or http_range)
+    image = load_rafs_image(environment.environment.base, base, index, **(access or {"reader": reader or http_range}))
     with TemporaryDirectory(dir=work_root) as temporary:
         scratch = Path(temporary)
         blobs = scratch / "blobs"
@@ -595,16 +595,27 @@ def _chunk_store(path):
 
 
 def serve_chunk_index(args):
-    """The gateway's ``ucloud-chunk-index``; exits 78 while not configured."""
+    """``ucloud-chunk-index`` on the gateway (``--config``) or, with
+    ``store_node.serve_index``, on the store node (``--chunk-store-config``);
+    exits 78 where it is not configured to run."""
     from .chunk_index import ChunkIndex, ChunkIndexServer, ChunkIndexService
-    from .environment_config import read_token
-    store = _chunk_store(args.config)
+    from .environment_config import ChunkStoreConfig, read_token
+    on_node = args.chunk_store_config is not None
+    store = ChunkStoreConfig.from_file(args.chunk_store_config) if on_node else _chunk_store(args.config)
     if store is None:
         print("immutable_environments.chunk_store is not configured", flush=True)
         return 78
-    tokens = [read_token(path, create=True) for path in (store.read_token_file, store.write_token_file)]
+    # The gateway's unit makes the tokens as the service user, even when the
+    # index lives on the store node; store-node init copies them there.
+    paths = (store.read_token_file, store.write_token_file)
+    tokens = None if on_node else [read_token(path, create=True) for path in paths]
+    if (store.store_node is not None and store.store_node.serve_index) != on_node:
+        print("ucloud-chunk-index is configured to run on the other host", flush=True)
+        return 78
+    tokens = tokens or [read_token(path) for path in paths]
     Path(store.index_database).parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    service = ChunkIndexService(ChunkIndex(store.index_database), store.object_store())
+    service = ChunkIndexService(ChunkIndex(store.index_database), store.object_store(),
+                                store_url=store.store_node.url if store.store_node else None)
     host, port = store.index_listen.rsplit(":", 1)
     with ChunkIndexServer((host, int(port)), service, read_token=tokens[0], write_token=tokens[1]) as server:
         server.serve_forever()
@@ -648,17 +659,28 @@ def unpack_command(args):
     if coordinates is None or "@" in args.output_ref:
         raise ValueError("unpack-environment needs an owned output tag")
     args.work_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    access = None
+    if store.store_node is not None:  # Locators name the store node: read there, with the token.
+        from .environment_config import read_token
+        from .environment_rafs import store_access
+        reader, getter = store_access(store.store_node.url, read_token(args.chunk_index_token_file).decode())
+        access = {"reader": reader, "getter": getter, "origin": store.store_node.url}
     result = unpack_environment(registry, index, require_digest(args.root), repository=coordinates[0],
-                                tag=coordinates[1], work_root=args.work_root, nydus_image=store.nydus_image)
+                                tag=coordinates[1], work_root=args.work_root, nydus_image=store.nydus_image,
+                                access=access)
     print(json.dumps(result, sort_keys=True))
     return 0
 
 
 def add_commands(subparsers):
     from .environment_config import add_environment_registry_args
-    serve = subparsers.add_parser("serve-chunk-index", help="Run the gateway's chunk store index (ucloud-chunk-index).")
-    serve.add_argument("--config", type=Path, required=True)
+    serve = subparsers.add_parser("serve-chunk-index", help="Run the chunk store index (ucloud-chunk-index).")
+    where = serve.add_mutually_exclusive_group(required=True)
+    where.add_argument("--config", type=Path, help="the gateway's deployment.json")
+    where.add_argument("--chunk-store-config", type=Path, help="the store node's chunk_store JSON")
     serve.set_defaults(func=serve_chunk_index)
+    from .chunk_store_node import add_commands as add_node_commands
+    add_node_commands(subparsers)
     for name, function, text in (
             ("convert-environment", convert_command, "Convert a registry image into the chunk store (RAFS v6)."),
             ("unpack-environment", unpack_command, "Regenerate an OCI image from a chunk-store root (rollback).")):

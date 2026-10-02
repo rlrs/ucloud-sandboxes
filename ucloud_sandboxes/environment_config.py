@@ -83,13 +83,60 @@ def environment_publisher_from_args(args):
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
+def _origin(value, name):
+    from urllib.parse import urlsplit
+    parsed = urlsplit(value) if isinstance(value, str) else None
+    if (parsed is None or parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.path not in ("", "/")
+            or parsed.query or parsed.fragment or parsed.username or any(c in value for c in "\0\r\n ")):
+        raise ValueError(f"immutable_environments.chunk_store.{name} must be an HTTP(S) origin")
+    return parsed
+
+
+@dataclass(frozen=True)
+class StoreNodeConfig:
+    """``chunk_store.store_node`` (C2.6): a read-through NVMe cache over S3 on
+    the private network. Workers read through it with the index's read token
+    and never reach S3; ``serve_index`` moves ``ucloud-chunk-index`` there too.
+    """
+    url: str  # How workers and the index name it, e.g. http://10.42.0.10:5091.
+    listen: str  # host:port it binds.
+    cache_dir: str
+    cache_bytes: int
+    extent_bytes: int  # Fill unit: a power of two, 1-64 MiB (64 MiB = whole packs).
+    s3_concurrency: int
+    serve_index: bool
+
+    @classmethod
+    def from_dict(cls, raw):
+        from dataclasses import fields
+        if not isinstance(raw, dict) or set(raw) != {field.name for field in fields(cls)}:
+            raise ValueError("immutable_environments.chunk_store.store_node fields do not match schema")
+        result = cls(**raw)
+        _origin(result.url, "store_node.url")
+        host, _, port = result.listen.rpartition(":") if isinstance(result.listen, str) else ("", "", "")
+        if not host or not port.isdigit() or not 0 < int(port) < 65536 or any(c in host for c in "\0\r\n /"):
+            raise ValueError("immutable_environments.chunk_store.store_node.listen must be host:port")
+        if not isinstance(result.cache_dir, str) or not Path(result.cache_dir).is_absolute() or "\n" in result.cache_dir:
+            raise ValueError("immutable_environments.chunk_store.store_node.cache_dir must be absolute")
+        extent = result.extent_bytes
+        for name, value, low, high in (("cache_bytes", result.cache_bytes, 1024 ** 3, 1 << 50),
+                                       ("extent_bytes", extent, 1 << 20, 64 << 20),
+                                       ("s3_concurrency", result.s3_concurrency, 1, 512)):
+            if type(value) is not int or not low <= value <= high:
+                raise ValueError(f"immutable_environments.chunk_store.store_node.{name} must be in [{low}, {high}]")
+        if extent & (extent - 1) or not isinstance(result.serve_index, bool):
+            raise ValueError("immutable_environments.chunk_store.store_node extent_bytes or serve_index is invalid")
+        return replace(result, url=result.url.rstrip("/"))
+
+
 @dataclass(frozen=True)
 class ChunkStoreConfig:
     """``immutable_environments.chunk_store`` (docs/chunk-store-design.md).
 
-    The S3 key is named by environment variable and read only by the
-    gateway's ``ucloud-chunk-index`` and by builders; workers get presigned
-    URLs. Every field is required, as for ``snapshot_store``.
+    The S3 key is named by environment variable and read only by
+    ``ucloud-chunk-index``, builders and the store node; workers get presigned
+    URLs, or with ``store_node`` the node's URLs. Every field but
+    ``store_node`` is required, as for ``snapshot_store``.
     """
     endpoint: str
     bucket: str
@@ -107,14 +154,16 @@ class ChunkStoreConfig:
     mount_granularity: str  # image (merged bootstrap) or layer (stacked); S12 decides.
     nydus_image: str
     concurrent_misses: int
+    store_node: StoreNodeConfig | None = None  # Phase B (C2.6); off when absent.
 
     @classmethod
     def from_dict(cls, raw):
         from dataclasses import fields
-        names = {field.name for field in fields(cls)}
-        if not isinstance(raw, dict) or set(raw) != names:
+        names = {field.name for field in fields(cls)} - {"store_node"}
+        if not isinstance(raw, dict) or set(raw) - {"store_node"} != names:
             raise ValueError("immutable_environments.chunk_store fields do not match schema")
-        result = cls(**raw)
+        node = raw.get("store_node")
+        result = cls(**{**raw, "store_node": None if node is None else StoreNodeConfig.from_dict(node)})
         for name in names - {"force_path_style", "url_ttl_seconds", "concurrent_misses"}:
             value = getattr(result, name)
             if not isinstance(value, str) or not value or any(c in value for c in "\0\r\n "):
@@ -141,22 +190,44 @@ class ChunkStoreConfig:
                 raise ValueError(f"immutable_environments.chunk_store.{name} must be an integer in [{low}, {high}]")
         if result.mount_granularity not in ("image", "layer"):
             raise ValueError("immutable_environments.chunk_store.mount_granularity must be image or layer")
+        if (result.store_node is not None and result.store_node.serve_index
+                and _origin(result.index_url, "index_url").hostname != _origin(result.store_node.url,
+                                                                                "store_node.url").hostname):
+            raise ValueError("immutable_environments.chunk_store.index_url must name the store node with serve_index")
         return replace(result, endpoint=endpoint, prefix=result.prefix.strip("/"))
+
+    @classmethod
+    def from_file(cls, path):
+        """The block alone, as store-node init writes it."""
+        return cls.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
+
+    def to_dict(self):
+        raw = asdict(self)
+        if self.store_node is None:
+            del raw["store_node"]  # Older releases reject unknown fields.
+        return raw
+
+    def credentials(self, environ=None):
+        environ = os.environ if environ is None else environ
+        try:
+            return environ[self.access_key_id_env], environ[self.secret_access_key_env]
+        except KeyError as exc:
+            raise ValueError(f"chunk store credentials are missing: {exc.args[0]}") from None
+
+    def presigner(self, environ=None):
+        from .chunk_index import S3Presigner
+        key, secret = self.credentials(environ)
+        return S3Presigner(self.endpoint, self.bucket, self.region, key, secret, path_style=self.force_path_style)
 
     def object_store(self, environ=None):
         """Index-service and builder side only: holds the S3 key."""
-        from .chunk_index import ChunkObjectStore, S3Presigner
+        from .chunk_index import ChunkObjectStore
         from .storage_native_s3 import Boto3S3ObjectClient
-        environ = os.environ if environ is None else environ
-        try:
-            key, secret = environ[self.access_key_id_env], environ[self.secret_access_key_env]
-        except KeyError as exc:
-            raise ValueError(f"chunk store credentials are missing: {exc.args[0]}") from None
+        key, secret = self.credentials(environ)
         client = Boto3S3ObjectClient(endpoint=self.endpoint, bucket=self.bucket, region=self.region,
                                      credentials={"access_key_id": key, "secret_access_key": secret},
                                      force_path_style=self.force_path_style)
-        presigner = S3Presigner(self.endpoint, self.bucket, self.region, key, secret, path_style=self.force_path_style)
-        return ChunkObjectStore(client, presigner, self.prefix, url_seconds=self.url_ttl_seconds)
+        return ChunkObjectStore(client, self.presigner(environ), self.prefix, url_seconds=self.url_ttl_seconds)
 
 
 def read_token(path, *, create=False):
@@ -164,6 +235,7 @@ def read_token(path, *, create=False):
     path = Path(path)
     if create and not path.exists():
         import secrets
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(descriptor, "w") as stream:
             stream.write(secrets.token_hex(32) + "\n")
@@ -244,6 +316,8 @@ class EnvironmentDeploymentConfig:
             del raw["preserve_mtimes"]
         if self.chunk_store is None:
             del raw["chunk_store"]
+        else:
+            raw["chunk_store"] = self.chunk_store.to_dict()
         return raw
 
 

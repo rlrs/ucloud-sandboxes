@@ -316,6 +316,8 @@ def build_parser() -> argparse.ArgumentParser:
     environment_io.add_argument("--chunk-index-url", default="", help="ucloud-chunk-index, for RAFS components")
     environment_io.add_argument("--chunk-index-token-file", type=Path)
     environment_io.add_argument("--chunk-concurrent-misses", type=int, default=32)
+    environment_io.add_argument("--chunk-store-url", default="",
+                                help="read RAFS images only from this store node, with the index read token")
     add_environment_registry_args(environment_io)
     environment_io.set_defaults(func=cmd_serve_environment_io)
     from .chunk_convert import add_commands as add_chunk_store_commands
@@ -524,7 +526,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_config_args(init_vm)
     add_session_arg(init_vm)
     init_vm.add_argument("job_id", help="UCloud VM job id.")
-    init_vm.add_argument("--role", choices=("sandbox", "builder"), required=True)
+    init_vm.add_argument("--role", choices=("sandbox", "builder", "store"), required=True)
     init_vm.add_argument("--package-spec", type=Path, required=True)
     init_vm.add_argument("--execute", action="store_true")
     init_vm.add_argument("--timeout-seconds", type=int, default=1800)
@@ -1022,13 +1024,14 @@ def cmd_provision_environment_key(args: argparse.Namespace) -> int:
 def cmd_serve_environment_io(args: argparse.Namespace) -> int:
     from .environment_backend import serve_backend
     from .environment_config import environment_registry_from_args, read_token
-    if bool(args.chunk_index_url) != bool(args.chunk_index_token_file):
-        raise ValueError("--chunk-index-url and --chunk-index-token-file go together")
+    if bool(args.chunk_index_url) != bool(args.chunk_index_token_file) or (args.chunk_store_url
+                                                                         and not args.chunk_index_url):
+        raise ValueError("--chunk-index-url and --chunk-index-token-file go together; --chunk-store-url needs them")
     chunk_index = (args.chunk_index_url, read_token(args.chunk_index_token_file).decode()) \
         if args.chunk_index_url else None
     serve_backend(environment_registry_from_args(args), root=args.root, socket_path=args.socket,
                   cache_bytes=args.cache_bytes, prefetch=not args.disable_prefetch, chunk_index=chunk_index,
-                  concurrent_misses=args.chunk_concurrent_misses)
+                  concurrent_misses=args.chunk_concurrent_misses, chunk_store_url=args.chunk_store_url or None)
     return 0
 
 
@@ -6845,8 +6848,8 @@ def vm_init_options_for_job(
     node_id: str = "",
     labels: dict[str, str] | None = None,
 ) -> VmInitOptions:
-    if role not in {"sandbox", "builder"}:
-        raise ValueError("VM init role must be sandbox or builder")
+    if role not in {"sandbox", "builder", "store"}:
+        raise ValueError("VM init role must be sandbox, builder or store")
     heartbeat_token_file = config.heartbeat_token_file()
     node_control_token_file = config.node_control_token_file()
     resolved_node_id = node_id or job.hostname or f"ucloud-vm-{job.id}"
@@ -6892,6 +6895,8 @@ def vm_init_options_for_job(
             environment_options["environment_chunk_index_url"] = chunk_store.index_url
             environment_options["environment_chunk_index_token"] = read_token(chunk_store.read_token_file).decode()
             environment_options["environment_chunk_concurrent_misses"] = chunk_store.concurrent_misses
+            if chunk_store.store_node is not None:
+                environment_options["environment_chunk_store_url"] = chunk_store.store_node.url
         if role == "builder":
             # Only the owned builder receives private material; workers get public trust alone.
             descriptor = os.open(selected_environment.signing_key_file, os.O_RDONLY | os.O_NOFOLLOW)
@@ -6904,6 +6909,23 @@ def vm_init_options_for_job(
                 raise ValueError("environment signing key is too large")
             environment_options["environment_signing_key_pem"] = payload.decode("ascii")
             environment_options["environment_preserve_mtimes"] = selected_environment.preserve_mtimes
+    if role == "store":
+        # A chunk store node: the block, both index tokens (the gateway makes
+        # them) and the S3 key from this process's environment.
+        from .environment_config import read_token
+        store = selected_environment.chunk_store if selected_environment is not None else None
+        if store is None or store.store_node is None:
+            raise ValueError("the store role needs immutable_environments.chunk_store.store_node")
+        key, secret = store.credentials()
+        try:  # The gateway's ucloud-sandbox-chunk-index unit makes them as the service user.
+            tokens = [read_token(path).decode() for path in (store.read_token_file, store.write_token_file)]
+        except FileNotFoundError:
+            raise ValueError("chunk index tokens are missing: start ucloud-sandbox-chunk-index on the gateway "
+                             "first") from None
+        environment_options = {
+            "chunk_store_config_json": json.dumps(store.to_dict(), sort_keys=True),
+            "chunk_store_read_token": tokens[0], "chunk_store_write_token": tokens[1],
+            "chunk_store_s3_access_key_id": key, "chunk_store_s3_secret_access_key": secret}
     s3_access_key_id = ""
     s3_secret_access_key = ""
     s3_security_token = ""

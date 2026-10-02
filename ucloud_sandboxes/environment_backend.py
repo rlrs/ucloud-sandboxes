@@ -475,19 +475,25 @@ class EnvironmentBackendClient:
 
 
 def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetch=True, chunk_index=None,
-                  concurrent_misses=32):
-    """``chunk_index`` is (URL, read token) when chunk-store images are enabled."""
+                  concurrent_misses=32, chunk_store_url=None):
+    """``chunk_index`` is (URL, read token) when chunk-store images are enabled;
+    ``chunk_store_url`` makes the store node, with that token, the only source."""
     if os.geteuid() != 0 or registry is None:
         raise ValueError("the artifact I/O backend requires root and registry trust")
     rafs, cache_options = None, None
     if chunk_index is not None:
         from .chunk_index import ChunkIndexClient
-        from .environment_rafs import load_rafs_image
+        from .environment_rafs import load_rafs_image, store_access
         client, meta = ChunkIndexClient(*chunk_index), Path(root) / "rafs"
         # Verified bootstraps of mounted images; none survive a backend restart.
         shutil.rmtree(meta, ignore_errors=True)
         _private_directory(meta)
-        rafs = lambda digest, component: load_rafs_image(digest, component, client, meta_root=meta)  # noqa: E731
+        access = {}
+        if chunk_store_url:
+            reader, getter = store_access(chunk_store_url, chunk_index[1])
+            access = {"reader": reader, "getter": getter, "origin": chunk_store_url}
+        rafs = lambda digest, component: load_rafs_image(digest, component, client, meta_root=meta,  # noqa: E731
+                                                         **access)
         # S3 demand misses wait 30-100 ms, not the registry's 3 ms.
         cache_options = {"concurrent_misses": concurrent_misses}
     backend = EnvironmentBackend(root, registry, cache_bytes=cache_bytes, prefetch=PrefetchPolicy(enabled=prefetch),

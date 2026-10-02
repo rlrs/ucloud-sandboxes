@@ -163,7 +163,9 @@ DEFAULT_SSH_OPTIONS = (
 class VmInitOptions:
     job_id: str
     heartbeat_url: str
-    role: Literal["sandbox", "builder"] = "sandbox"
+    # "store" is a chunk store node (C2.6): infrastructure, not a fleet node.
+    # It shares staging and the bundle's agent runtime, and nothing else.
+    role: Literal["sandbox", "builder", "store"] = "sandbox"
     heartbeat_bearer_token_file: str = ""
     heartbeat_bearer_token: str = ""
     node_control_bearer_token_file: str = ""
@@ -244,6 +246,15 @@ class VmInitOptions:
     environment_chunk_index_url: str = ""
     environment_chunk_index_token: str = ""
     environment_chunk_concurrent_misses: int = 32
+    # chunk_store.store_node: workers read only from the store node.
+    environment_chunk_store_url: str = ""
+    # The store role only: the chunk_store block (JSON), both index tokens and
+    # the S3 key the node fills from (chunk_store_node.store_init_script).
+    chunk_store_config_json: str = ""
+    chunk_store_read_token: str = ""
+    chunk_store_write_token: str = ""
+    chunk_store_s3_access_key_id: str = ""
+    chunk_store_s3_secret_access_key: str = ""
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
     labels: dict[str, str] | None = None
 
@@ -411,6 +422,9 @@ log_init_phase "buildkit-cache"
 
 def render_vm_init_script(options: VmInitOptions) -> str:
     validate_vm_init_options(options)
+    if options.role == "store":
+        from .chunk_store_node import store_init_script
+        return store_init_script(options)
     work_dir = _clean_posix_path(options.work_dir)
     agent_bin = str(PurePosixPath(work_dir) / "bin" / "ucloud-sandboxes")
     storage_agent_bin = str(
@@ -2050,8 +2064,10 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         raise ValueError("ssh port start must be <= ssh port end.")
     if options.heartbeat_interval_seconds < 1:
         raise ValueError("heartbeat interval must be positive.")
-    if options.role not in {"sandbox", "builder"}:
-        raise ValueError("node role must be sandbox or builder")
+    if options.role not in {"sandbox", "builder", "store"}:
+        raise ValueError("node role must be sandbox, builder or store")
+    from .chunk_store_node import validate_store_options
+    validate_store_options(options)
     if not isinstance(options.direct_split_memory_backing, bool):
         raise ValueError("direct_split_memory_backing must be a boolean")
     if options.direct_split_memory_backing and options.role != "sandbox":
@@ -2435,8 +2451,8 @@ def static_runtime_receipt_for_remote_package(
     init_version: str = DEFAULT_INIT_VERSION,
 ) -> str:
     remote_path = _clean_posix_path(remote_package)
-    if role not in {"sandbox", "builder"}:
-        raise ValueError("node role must be sandbox or builder")
+    if role not in {"sandbox", "builder", "store"}:
+        raise ValueError("node role must be sandbox, builder or store")
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", init_version):
         raise ValueError("init version is unsafe for a runtime receipt path")
     return str(

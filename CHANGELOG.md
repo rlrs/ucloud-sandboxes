@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Upstream pull-through mirror (C2.15).** This is an opt-in deployment section, `upstream_mirror`. Without it, nothing changes, and the rendered `deployment.json`, node init and gateway units are the same. Full description and rollout order: `docs/managed-registry.md#upstream-pull-through-mirror`.
+  - **Gateway:** runs one `registry:3.1.1` proxy-mode instance per upstream registry, for example `docker.io`, `ghcr.io`, `quay.io` and `mcr.microsoft.com`. Each runs as `ucloud-sandbox-upstream-mirror@<registry>.service` on its own port on the private address. Its cache lives on the registry Volume, outside the private registry's data root.
+  - **Docker Hub account:** optional, from a root-only `credentials_file`. Its values reach Docker only through the environment.
+  - **Cache bounds:** Distribution's `proxy.ttl` (`ttl_hours`, default 168). In addition, an hourly `ucloud-sandbox-upstream-mirror-trim.timer` empties the largest caches while their total is above `max_bytes` (default 256 GiB).
+  - **Gateway services:** `gateway-reconcile` starts and health-checks configured instances and stops removed ones. The Hetzner installer and `deploy-all-in-one` install the units with the registry mount gate. The Hetzner installer also installs staged `/tmp/ucloud-sandboxes-upstream-mirror-<registry>.env` credentials.
+  - **Builders:** new builders get `[registry."<upstream>"] mirrors` with plain-HTTP transport in the shared `buildkitd.toml`, and the Docker Hub mirror in `daemon.json` `registry-mirrors` plus `insecure-registries`. Sandbox nodes get the `daemon.json` mirror too.
+  - **Fallback:** BuildKit and Docker fall back to the upstream itself when a mirror fails. Pulls are digest-verified.
+  - **Imports:** request-time imports are builder builds, so they take that route, and their ids and build contexts are unchanged.
+  - **Campaign:** `prepare_image_pool.py` resolves through the configured mirror without an upstream token, and so does `--stage-upstream` in `stage_source_image.py`. The campaign's cooldowns stay for now (see the doc).
+  - **Validation:** upstreams other than `docker.io` require `builder.buildx_cache_ref`, because Docker's own builder mirrors only Docker Hub.
+  - **Line budgets:** the package budget rises from 106,730 to 107,000 lines and the suite budget from 93,200 to 93,390 for this feature.
+
 ## 0.8.1 - 2026-10-02
 
 Node-failure semantics; see `docs/node-failure-semantics.md`. Upgrade the gateway first: it understands the worker's new 409 `sandbox_registration_conflict`, and the autoscaler's `pending_delete_attempts` table is additive.

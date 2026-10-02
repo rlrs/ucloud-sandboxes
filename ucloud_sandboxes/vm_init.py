@@ -193,6 +193,8 @@ class VmInitOptions:
     swap_gb: int = DEFAULT_SWAP_GB
     max_concurrent_image_pulls: int = DEFAULT_MAX_CONCURRENT_IMAGE_PULLS
     docker_insecure_registries: tuple[str, ...] = ()
+    # C2.15 pull-through mirrors as UPSTREAM=HOST:PORT, served over plain HTTP.
+    registry_mirrors: tuple[str, ...] = ()
     host_aliases: tuple[str, ...] = ()
     buildx_cache_ref: str = ""
     buildx_cache_registry_url: str = ""
@@ -291,19 +293,34 @@ def _buildkit_config(options: VmInitOptions) -> str:
         '  maxRegistryConcurrency = 4\n'
     )
     cache_url = urlsplit(options.buildx_cache_registry_url)
-    registries = set(options.docker_insecure_registries)
+    mirrors = _registry_mirrors(options)
+    plain_http = {authority for authorities in mirrors.values() for authority in authorities}
     if cache_url.scheme == "http":
-        registries.add(cache_url.netloc)
-    for registry in sorted(registries):
+        plain_http.add(cache_url.netloc)
+    # BuildKit tries each mirror, then the upstream itself, so a mirror outage
+    # degrades to direct pulls; content stays digest-verified either way.
+    for registry, authorities in sorted(mirrors.items()):
+        config += f'\n[registry.{json.dumps(registry)}]\n  mirrors = {json.dumps(authorities)}\n'
+    for registry in sorted(set(options.docker_insecure_registries) | plain_http):
         # BuildKit uses exact registry authorities, unlike Docker's optional
         # CIDR matching. Refuse to silently drop an existing network policy.
         if "/" in registry:
             raise ValueError("BuildKit cache requires explicit insecure registry hosts, not CIDRs or URLs")
-        # Only the explicitly configured plain-HTTP cache endpoint bypasses
-        # TLS. Other explicitly insecure registries retain their TLS transport.
-        transport = "http" if cache_url.scheme == "http" and registry == cache_url.netloc else "insecure"
+        # Only the plain-HTTP cache endpoint and mirrors bypass TLS. Other
+        # explicitly insecure registries retain their TLS transport.
+        transport = "http" if registry in plain_http else "insecure"
         config += f'\n[registry.{json.dumps(registry)}]\n  {transport} = true\n'
     return config
+
+
+def _registry_mirrors(options: VmInitOptions) -> dict[str, list[str]]:
+    mirrors: dict[str, list[str]] = {}
+    for entry in options.registry_mirrors:
+        registry, _, authority = entry.partition("=")
+        if not registry or not authority or any(c.isspace() or c in "/=" for c in registry + authority):
+            raise ValueError("registry mirror must use UPSTREAM=HOST:PORT.")
+        mirrors.setdefault(registry, []).append(authority)
+    return mirrors
 
 
 def _buildkit_setup_script(options: VmInitOptions, service_user: str) -> str:
@@ -634,6 +651,12 @@ fi
         if options.direct_split_memory_backing
         else "${UCLOUD_STORAGE_NATIVE_ROOT}/runtime"
     )
+    mirrors = _registry_mirrors(options)
+    # Docker's daemon (and its embedded builder) mirrors only Docker Hub and
+    # falls back to it; the mirrors are plain HTTP, hence insecure-registries.
+    docker_registry_mirrors = ["http://" + authority for authority in mirrors.get("docker.io", [])]
+    docker_insecure_registries = list(dict.fromkeys(
+        (*options.docker_insecure_registries, *(a for authorities in mirrors.values() for a in authorities))))
     script = f"""#!/usr/bin/env bash
 set -euo pipefail
 
@@ -691,7 +714,8 @@ UCLOUD_MAX_CONCURRENT_IMAGE_PULLS={options.max_concurrent_image_pulls}
 UCLOUD_DOCKER_QUOTA_IMAGE={shlex.quote(docker_quota_image)}
 UCLOUD_DOCKER_QUOTA_ROOT={shlex.quote(docker_quota_root)}
 UCLOUD_SWAP_FILE={shlex.quote(swap_file)}
-UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON={shlex.quote(json.dumps(list(options.docker_insecure_registries)))}
+UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON={shlex.quote(json.dumps(docker_insecure_registries))}
+UCLOUD_DOCKER_REGISTRY_MIRRORS_JSON={shlex.quote(json.dumps(docker_registry_mirrors))}
 UCLOUD_HOST_ALIASES_JSON={shlex.quote(json.dumps(list(options.host_aliases)))}
 UCLOUD_NODE_ROLE={shlex.quote(runtime_role)}
 UCLOUD_DIRECT_RUNSC={shlex.quote(direct_runsc)}
@@ -1689,7 +1713,7 @@ detect_routed_mtu() {{
 if [ "$UCLOUD_DOCKER_MTU" -eq 0 ]; then
   UCLOUD_DOCKER_MTU="$(detect_routed_mtu)"
 fi
-export UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_MAX_CONCURRENT_DOWNLOADS UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON
+export UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_MAX_CONCURRENT_DOWNLOADS UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON UCLOUD_DOCKER_REGISTRY_MIRRORS_JSON
 echo "Configuring Docker daemon with bridge MTU $UCLOUD_DOCKER_MTU"
 $SUDO mkdir -p /etc/docker
 DOCKER_DAEMON_JSON="$(mktemp)"
@@ -1706,6 +1730,9 @@ config = {{
 insecure_registries = json.loads(os.environ.get("UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON") or "[]")
 if insecure_registries:
     config["insecure-registries"] = insecure_registries
+registry_mirrors = json.loads(os.environ.get("UCLOUD_DOCKER_REGISTRY_MIRRORS_JSON") or "[]")
+if registry_mirrors:
+    config["registry-mirrors"] = registry_mirrors
 docker_mtu = int(os.environ.get("UCLOUD_DOCKER_MTU") or "0")
 if docker_mtu > 0:
     config["mtu"] = docker_mtu

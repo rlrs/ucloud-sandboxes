@@ -29,8 +29,11 @@ import unittest
 # + D2 heartbeat pull before any sandbox_worker_unreachable answer, and D3-D7
 #   UCloud quarantine re-anchoring, provider-confirmed loss and replay
 #   ordering (+151 net together; RoutingStore.delete_sandboxes_for_jobs went).
+# + C2.15 upstream pull-through mirror (+265: config, mirror/trim helpers,
+#   builder mirrors). What it retires, the campaign's upstream cooldowns, lives
+#   in scripts/ outside this count and goes once production runs with it.
 # Lower it whenever a deletion lands; storage-native (C1.3) alone is ~8k lines.
-PACKAGE_LINE_BUDGET = 106_730
+PACKAGE_LINE_BUDGET = 107_000
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

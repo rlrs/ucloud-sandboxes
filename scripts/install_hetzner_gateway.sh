@@ -16,6 +16,9 @@ The following release inputs must already be staged on the gateway:
   /tmp/ucloud-sandboxes-gateway-init.pub
   /tmp/ucloud-sandboxes-hetzner.env
   /tmp/configure_hetzner_sdk_ingress.sh
+
+Optional, for an upstream_mirror upstream with a credentials_file:
+  /tmp/ucloud-sandboxes-upstream-mirror-<registry>.env
 EOF
 }
 
@@ -187,6 +190,35 @@ install -m 0644 "$deployment" /etc/ucloud-sandboxes/deployment.json
 install -m 0600 "$provider_env" /etc/ucloud-sandboxes/hetzner.env
 install -m 0600 "$provider_env" /etc/ucloud-sandboxes/snapshot-store.env
 install -m 0600 "$provider_env" /etc/ucloud-sandboxes/registry-store.env
+# Opt-in upstream pull-through mirror (C2.15). An upstream with a
+# credentials_file takes it from /tmp/ucloud-sandboxes-upstream-mirror-<registry>.env
+# when staged, or keeps the one already installed; it is root-only either way.
+# gateway-reconcile starts one ucloud-sandbox-upstream-mirror@<registry> each.
+mirror_credentials="$(python3 - "$deployment" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    mirror = json.load(source).get("upstream_mirror") or {}
+for upstream in mirror.get("upstreams", []):
+    if upstream.get("credentials_file"):
+        print(upstream["registry"] + "\t" + upstream["credentials_file"])
+PY
+)"
+while IFS=$'\t' read -r mirror_registry mirror_credentials_file; do
+  [[ -n "$mirror_registry" ]] || continue
+  staged_credentials="/tmp/ucloud-sandboxes-upstream-mirror-$mirror_registry.env"
+  if [[ -s "$staged_credentials" ]]; then
+    install -D -m 0600 -o root -g root "$staged_credentials" "$mirror_credentials_file"
+    rm -f "$staged_credentials"
+  fi
+  if [[ ! -s "$mirror_credentials_file" ]]; then
+    echo "missing upstream mirror credentials for $mirror_registry: $mirror_credentials_file" >&2
+    exit 2
+  fi
+  chown root:root "$mirror_credentials_file"
+  chmod 0600 "$mirror_credentials_file"
+done <<< "$mirror_credentials"
 install -m 0600 -o ucloud -g ucloud "$init_key" "$data_root/ssh/gateway-init"
 install -m 0644 -o ucloud -g ucloud \
   "$init_public_key" "$data_root/ssh/gateway-init.pub"
@@ -247,7 +279,10 @@ for unit in \
   ucloud-sandbox-registry-prune.service \
   ucloud-sandbox-registry-prune.timer \
   ucloud-sandbox-registry.service \
-  ucloud-sandbox-relay.service; do
+  ucloud-sandbox-relay.service \
+  ucloud-sandbox-upstream-mirror@.service \
+  ucloud-sandbox-upstream-mirror-trim.service \
+  ucloud-sandbox-upstream-mirror-trim.timer; do
   install -m 0644 "$systemd_source/$unit" "/etc/systemd/system/$unit"
 done
 
@@ -255,7 +290,9 @@ install -d -m 0755 \
   /etc/systemd/system/ucloud-sandbox-autoscaler.service.d \
   /etc/systemd/system/ucloud-sandbox-registry.service.d \
   /etc/systemd/system/ucloud-sandbox-registry-gc.service.d \
-  /etc/systemd/system/ucloud-sandbox-registry-pressure.service.d
+  /etc/systemd/system/ucloud-sandbox-registry-pressure.service.d \
+  /etc/systemd/system/ucloud-sandbox-upstream-mirror@.service.d \
+  /etc/systemd/system/ucloud-sandbox-upstream-mirror-trim.service.d
 cat >/etc/systemd/system/ucloud-sandbox-autoscaler.service.d/hetzner.conf <<'EOF'
 [Service]
 EnvironmentFile=/etc/ucloud-sandboxes/hetzner.env
@@ -263,7 +300,9 @@ EOF
 for unit in \
   ucloud-sandbox-registry.service \
   ucloud-sandbox-registry-gc.service \
-  ucloud-sandbox-registry-pressure.service; do
+  ucloud-sandbox-registry-pressure.service \
+  ucloud-sandbox-upstream-mirror@.service \
+  ucloud-sandbox-upstream-mirror-trim.service; do
   if [[ "$registry_store_kind" == filesystem ]]; then
     cat >"/etc/systemd/system/$unit.d/volume.conf" <<'EOF'
 [Unit]

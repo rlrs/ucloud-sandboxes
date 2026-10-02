@@ -6950,6 +6950,7 @@ def vm_init_options_for_job(
         docker_insecure_registries=(
             f"{config.registry_endpoint_host}:{config.registry_port}",
         ),
+        registry_mirrors=tuple(f"{r}={a}" for r, a in config.upstream_mirror_authorities().items()),
         host_aliases=(host_alias,) if host_alias else (),
         buildx_cache_ref=(config.builder.buildx_cache_ref if role == "builder" else ""),
         build_execution_timeout_seconds=config.builder.build_execution_timeout_seconds,
@@ -7055,6 +7056,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "dockerQuotaImageGb": options.docker_quota_image_gb,
         "swapGb": options.swap_gb,
         "dockerInsecureRegistries": list(options.docker_insecure_registries),
+        "registryMirrors": list(options.registry_mirrors),
         "hostAliases": list(options.host_aliases),
         "role": options.role,
         "directRunscCommit": options.direct_runsc_commit,

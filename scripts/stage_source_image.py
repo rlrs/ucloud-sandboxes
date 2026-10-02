@@ -162,8 +162,8 @@ def upload_stream(client, repository, descriptor, stream):
 
 
 def stage_source(resolved, client, lock_root, *, publication_url, protect, opener=None, headers_factory=None,
-                 metrics=None, blob_sources=None):
-    from prepare_image_pool import public_registry_headers, registry_parts
+                 metrics=None, blob_sources=None, mirrors=None):
+    from prepare_image_pool import ACCEPT, public_registry_headers, registry_parts, upstream_endpoint
     host, repository, digest = registry_parts(resolved["reference"])
     manifest = resolved["manifest_json"].encode()
     config = resolved["config_json"].encode()
@@ -210,14 +210,14 @@ def stage_source(resolved, client, lock_root, *, publication_url, protect, opene
                 with io.BytesIO(config) as stream:
                     upload_stream(client, REPOSITORY, descriptor, stream)
                 continue
+            base, authenticate = upstream_endpoint(host, mirrors)
             if headers is None:
-                headers = headers_factory(host, repository)
-            endpoint = "registry-1.docker.io" if host == "docker.io" else host
-            url = f"https://{endpoint}/v2/{repository}/blobs/{blob}"
+                headers = headers_factory(host, repository) if authenticate else {"Accept": ACCEPT}
+            url = f"{base}/v2/{repository}/blobs/{blob}"
             try:
                 stream = opener(request.Request(url, headers=headers), timeout=60)
             except urlerror.HTTPError as error:
-                if error.code != 401:
+                if error.code != 401 or not authenticate:
                     raise
                 # A large layer can outlive a short registry bearer token.
                 # Refresh once at the next blob boundary, preserving already

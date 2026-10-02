@@ -8,6 +8,8 @@ import json
 import logging
 import os
 from pathlib import Path
+import shutil
+import stat
 import subprocess
 import time
 from typing import Any, Callable, Mapping, Sequence
@@ -326,6 +328,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="converge and health-check the common gateway services",
     )
     reconcile.add_argument("--config", type=Path, required=True)
+    mirror = subparsers.add_parser("upstream-mirror", help="run one pull-through mirror (C2.15)")
+    mirror.add_argument("--config", type=Path, required=True)
+    mirror.add_argument("--upstream", required=True, help="configured upstream registry, e.g. docker.io")
+    trim = subparsers.add_parser("upstream-mirror-trim", help="empty mirror caches above upstream_mirror.max_bytes")
+    trim.add_argument("--config", type=Path, required=True)
     return parser
 
 
@@ -387,6 +394,15 @@ def reconcile_gateway_services(
     ):
         systemctl("enable", service)
 
+    # A removed or disabled mirror instance stays stopped: at boot its helper
+    # finds no configured upstream and exits with RestartPreventExitStatus.
+    systemctl("stop", UPSTREAM_MIRROR_UNIT.format("*"), check=False)
+    mirror = config.upstream_mirror
+    systemctl(*(("enable", "--now") if mirror else ("disable", "--now")),
+              "ucloud-sandbox-upstream-mirror-trim.timer", check=mirror is not None)
+    for upstream in mirror.upstreams if mirror else ():
+        systemctl("enable", "--now", UPSTREAM_MIRROR_UNIT.format(upstream.registry))
+        wait_for(f"upstream mirror {upstream.registry}", mirror.local_url(upstream) + "/v2/")
     systemctl("restart", "ucloud-sandbox-registry.service")
     wait_for("registry", f"http://127.0.0.1:{config.registry_port}/v2/")
     for service in (
@@ -476,6 +492,114 @@ def registry_process_environment(
         }
     )
     return result
+
+
+UPSTREAM_MIRROR_UNIT = "ucloud-sandbox-upstream-mirror@{}.service"
+UPSTREAM_MIRROR_UNCONFIGURED = 78  # EX_CONFIG: the unit neither fails nor restarts
+_MIRROR_CREDENTIALS = ("REGISTRY_PROXY_USERNAME", "REGISTRY_PROXY_PASSWORD")
+
+
+def read_mirror_credentials(path: Path) -> dict[str, str]:
+    """Parse a root-only KEY=VALUE file; no error message ever includes a value."""
+
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(descriptor, encoding="utf-8") as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+            raise RuntimeError(f"upstream mirror credentials {path} must be a regular owner-only (0600) file")
+        text = stream.read(65536)
+    values: dict[str, str] = {}
+    for number, line in enumerate(text.splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        key, separator, value = line.partition("=")
+        if not separator or key.strip() not in _MIRROR_CREDENTIALS or key.strip() in values:
+            raise RuntimeError(f"upstream mirror credentials {path}:{number} must set {' or '.join(_MIRROR_CREDENTIALS)} once")
+        values[key.strip()] = value.strip()
+    if set(values) != set(_MIRROR_CREDENTIALS) or not all(values.values()):
+        raise RuntimeError(f"upstream mirror credentials {path} need non-empty {' and '.join(_MIRROR_CREDENTIALS)}")
+    return values
+
+
+def upstream_mirror_command(config: DeploymentConfig, upstream) -> list[str]:
+    names = ("REGISTRY_HTTP_ADDR", "REGISTRY_LOG_LEVEL", "OTEL_TRACES_EXPORTER", "REGISTRY_STORAGE",
+             "REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY", REGISTRY_BLOB_CACHE_ENV,
+             "REGISTRY_PROXY_REMOTEURL", "REGISTRY_PROXY_TTL",
+             *(_MIRROR_CREDENTIALS if upstream.credentials_file else ()))
+    return ["docker", "run", "--rm", "--name", f"ucloud-sandbox-upstream-mirror-{upstream.registry}",
+            "--network", "host", "-v", f"{config.upstream_mirror.storage_dir(upstream)}:/var/lib/registry",
+            *[item for name in names for item in ("-e", name)], REGISTRY_IMAGE]
+
+
+def upstream_mirror_environment(config: DeploymentConfig, upstream, *,
+                                environ: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Distribution in proxy mode; credentials reach Docker only by environment."""
+
+    mirror = config.upstream_mirror
+    result = {k: v for k, v in (os.environ if environ is None else environ).items() if k not in _MIRROR_CREDENTIALS}
+    result.update({
+        "REGISTRY_HTTP_ADDR": f"{mirror.listen_address}:{upstream.port}", "REGISTRY_LOG_LEVEL": "info",
+        "OTEL_TRACES_EXPORTER": "none", "REGISTRY_STORAGE": "filesystem",
+        "REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY": "/var/lib/registry",
+        # TTL expiry deletes blobs underneath; never answer from a stale descriptor.
+        REGISTRY_BLOB_CACHE_ENV: REGISTRY_BLOB_CACHE_DISABLED,
+        "REGISTRY_PROXY_REMOTEURL": upstream.remote_url, "REGISTRY_PROXY_TTL": f"{mirror.ttl_hours}h",
+    })
+    if upstream.credentials_file:
+        result.update(read_mirror_credentials(Path(upstream.credentials_file)))
+    return result
+
+
+def run_upstream_mirror(config: DeploymentConfig, registry: str, *, runner=subprocess.run, environ=None) -> int:
+    mirror = config.upstream_mirror
+    upstream = next((u for u in mirror.upstreams if u.registry == registry), None) if mirror else None
+    if upstream is None:
+        print(f"no upstream mirror is configured for {registry}; staying stopped")
+        return UPSTREAM_MIRROR_UNCONFIGURED
+    require_registry_mount(config)
+    mirror.storage_dir(upstream).mkdir(parents=True, exist_ok=True)
+    name = f"ucloud-sandbox-upstream-mirror-{registry}"
+    runner(["docker", "rm", "-f", name], check=False, text=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return runner(upstream_mirror_command(config, upstream), check=False, text=True,
+                  env=upstream_mirror_environment(config, upstream, environ=environ)).returncode
+
+
+def _tree_bytes(path: Path) -> int:
+    total = 0
+    for directory, _subdirectories, files in os.walk(path):
+        for name in files:
+            try:
+                total += os.lstat(os.path.join(directory, name)).st_blocks * 512
+            except FileNotFoundError:
+                pass
+    return total
+
+
+def trim_upstream_mirrors(config: DeploymentConfig, *, runner=subprocess.run, measure=_tree_bytes) -> dict[str, Any]:
+    """Enforce max_bytes by emptying the largest caches: content is refetchable.
+
+    Distribution has no size bound, only the TTL. A stopped mirror makes
+    BuildKit and Docker fall back to the upstream until it restarts.
+    """
+
+    mirror = config.upstream_mirror
+    if mirror is None:
+        return {"action": "none", "reason": "upstream mirror disabled"}
+    sizes = {u.registry: measure(mirror.storage_dir(u)) for u in mirror.upstreams}
+    total, purged = sum(sizes.values()), []
+    for upstream in sorted(mirror.upstreams, key=lambda u: -sizes[u.registry]):
+        if total <= mirror.max_bytes:
+            break
+        unit = UPSTREAM_MIRROR_UNIT.format(upstream.registry)
+        runner(["systemctl", "stop", unit], check=True, text=True)
+        try:
+            if mirror.storage_dir(upstream).exists():
+                shutil.rmtree(mirror.storage_dir(upstream))
+        finally:
+            runner(["systemctl", "start", unit], check=True, text=True)
+        total -= sizes[upstream.registry]
+        purged.append(upstream.registry)
+    return {"bytes": sizes, "max_bytes": mirror.max_bytes, "purged": purged}
 
 
 def _registry_storage_docker_args(config: DeploymentConfig) -> list[str]:
@@ -580,6 +704,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_registry_process(config)
     if args.command == "gateway-reconcile":
         reconcile_gateway_services(config=config)
+        return 0
+    if args.command == "upstream-mirror":
+        return run_upstream_mirror(config, args.upstream)
+    if args.command == "upstream-mirror-trim":
+        print(json.dumps(trim_upstream_mirrors(config), sort_keys=True))
         return 0
     raise ValueError(f"unsupported systemd helper: {args.command}")
 

@@ -43,6 +43,9 @@ SYSTEMD_UNIT_NAMES = (
     "ucloud-sandbox-snapshot-gc.service",
     "ucloud-sandbox-snapshot-gc.timer",
     "ucloud-sandbox-autoscaler.service",
+    "ucloud-sandbox-upstream-mirror@.service",
+    "ucloud-sandbox-upstream-mirror-trim.service",
+    "ucloud-sandbox-upstream-mirror-trim.timer",
 )
 PERSISTENT_STATE_SYSTEMD_UNITS = (
     "ucloud-sandbox-gateway.service",
@@ -55,6 +58,8 @@ REGISTRY_STORAGE_SYSTEMD_UNITS = (
     "ucloud-sandbox-registry.service",
     "ucloud-sandbox-registry-gc.service",
     "ucloud-sandbox-registry-pressure.service",
+    "ucloud-sandbox-upstream-mirror@.service",
+    "ucloud-sandbox-upstream-mirror-trim.service",
 )
 # The bundle is resolved against an empty dpkg status so it remains usable on a
 # freshly booted image. APT still treats some Essential packages as ambient.

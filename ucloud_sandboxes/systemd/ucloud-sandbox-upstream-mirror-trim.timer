@@ -1,0 +1,11 @@
+[Unit]
+Description=Check the UCloud sandbox pull-through mirror cache size hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=5m
+Unit=ucloud-sandbox-upstream-mirror-trim.service
+
+[Install]
+WantedBy=timers.target

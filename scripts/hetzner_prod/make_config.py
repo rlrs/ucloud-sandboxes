@@ -182,6 +182,24 @@ policy.update({
     # temporary workers.
     "create_target_concurrency_per_node": 32,
 })
+# C2.15 pull-through mirrors on the gateway (docs/managed-registry.md). Turn on
+# after the gateway runs a release with them and the Docker Hub token is staged
+# as /tmp/ucloud-sandboxes-upstream-mirror-docker.io.env; builders then follow.
+UPSTREAM_MIRROR = False
+if UPSTREAM_MIRROR:
+    raw["upstream_mirror"] = {
+        "listen_address": "10.42.0.2",
+        "storage_root": "/mnt/ucloud-registry/upstream-mirror",
+        "upstreams": [
+            {"registry": "docker.io", "port": 5010,
+             "credentials_file": "/etc/ucloud-sandboxes/upstream-mirror-docker.io.env"},
+            {"registry": "ghcr.io", "port": 5011},
+            {"registry": "quay.io", "port": 5012},
+            {"registry": "mcr.microsoft.com", "port": 5013},
+        ],
+        "ttl_hours": 14 * 24,
+        "max_bytes": 300 * 1024**3,
+    }
 config = DeploymentConfig.from_dict(raw)  # validate the exact document
 Path(__file__).resolve().parents[2].joinpath("build", "hetzner-prod", "deployment.json").write_text(
     json.dumps(config.to_dict(), indent=2, sort_keys=True) + "\n"

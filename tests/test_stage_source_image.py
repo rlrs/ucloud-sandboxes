@@ -114,6 +114,25 @@ class StageSourceTests(unittest.TestCase):
                                                   media_type='application/vnd.oci.image.manifest.v1+json')
         self.assertEqual(protect.call_count, 2)
 
+    def test_mirrored_upstream_blobs_come_from_the_mirror_without_a_token(self):
+        resolved, config, layer, manifest = self.source()
+        client = Mock(base_url='http://127.0.0.1:5000')
+        client.blob_exists.return_value = False
+        client.mount_blob.return_value = False
+        client.start_blob_upload.return_value = '/upload'
+        client._validate_upload_location.side_effect = lambda location: location
+        client._request.side_effect = lambda path, **kwargs: Mock(headers={'Docker-Content-Digest': digest(b''.join(kwargs['data']))})
+        client.manifest_digest.return_value = digest(manifest)
+        opener = Mock(side_effect=lambda *args, **kwargs: io.BytesIO(layer))
+        auth = Mock(side_effect=AssertionError('the mirror authenticates upstream itself'))
+        with tempfile.TemporaryDirectory() as directory, patch.dict(sys.modules, {'prepare_image_pool': pool}):
+            staging.stage_source(resolved, client, Path(directory), publication_url='http://registry.internal:5000',
+                                 protect=lambda *args: True, opener=opener, headers_factory=auth,
+                                 mirrors={'docker.io': 'http://10.42.0.2:5010'})
+        request = opener.call_args.args[0]
+        self.assertEqual(request.full_url, f'http://10.42.0.2:5010/v2/example/source/blobs/{digest(layer)}')
+        self.assertIsNone(request.get_header('Authorization'))
+
     def test_corruption_aborts_upload_and_does_not_publish_manifest(self):
         resolved, _, layer, _ = self.source()
         client = Mock(base_url='http://registry:5000')

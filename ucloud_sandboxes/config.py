@@ -480,6 +480,83 @@ class RelayPostgresConfig:
 
 
 @dataclass(frozen=True)
+class UpstreamMirror:
+    registry: str
+    port: int
+    # Root-only env file with REGISTRY_PROXY_USERNAME/REGISTRY_PROXY_PASSWORD.
+    credentials_file: str = ""
+
+    @property
+    def remote_url(self) -> str:
+        return "https://" + ("registry-1.docker.io" if self.registry == "docker.io" else self.registry)
+
+
+@dataclass(frozen=True)
+class UpstreamMirrorConfig:
+    """C2.15: one Distribution proxy-mode instance per upstream registry."""
+
+    listen_address: str
+    storage_root: str
+    upstreams: tuple[UpstreamMirror, ...]
+    ttl_hours: int = 168
+    max_bytes: int = 256 * 1024**3
+
+    @classmethod
+    def from_dict(cls, raw: object) -> "UpstreamMirrorConfig | None":
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise ValueError("upstream_mirror must be an object or null")
+        values = {"ttl_hours": cls.ttl_hours, "max_bytes": cls.max_bytes, **raw}
+        _require_exact_keys("upstream_mirror", values, {item.name for item in fields(cls)})
+        import ipaddress
+        try:
+            address = ipaddress.IPv4Address(_require_string("upstream_mirror.listen_address", values["listen_address"]))
+        except ValueError as exc:
+            raise ValueError("upstream_mirror.listen_address must be an IPv4 address") from exc
+        if not address.is_unspecified and (address.is_loopback or not address.is_private):
+            raise ValueError("upstream_mirror.listen_address must be a private address or 0.0.0.0")
+        if not isinstance(values["upstreams"], list) or not values["upstreams"]:
+            raise ValueError("upstream_mirror.upstreams must be a non-empty array")
+        upstreams = []
+        for item in values["upstreams"]:
+            item = {"credentials_file": "", **item} if isinstance(item, dict) else item
+            upstream = UpstreamMirror(**_exact_dataclass_values("upstream_mirror.upstreams[]", item, UpstreamMirror("", 0)))
+            registry = _require_string("upstream_mirror.upstreams[].registry", upstream.registry)
+            if (registry != registry.lower() or "." not in registry or registry.endswith(".docker.io")
+                    or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789.-" for c in registry)):
+                raise ValueError(f"upstream_mirror registry {registry!r} must be a lowercase host such as docker.io")
+            if upstream.credentials_file:
+                _require_absolute_path("upstream_mirror.upstreams[].credentials_file", upstream.credentials_file)
+            elif not isinstance(upstream.credentials_file, str):
+                raise ValueError("upstream_mirror.upstreams[].credentials_file must be a string")
+            upstreams.append(replace(upstream, registry=registry,
+                                     port=_require_port("upstream_mirror.upstreams[].port", upstream.port)))
+        if len({u.registry for u in upstreams}) != len(upstreams) or len({u.port for u in upstreams}) != len(upstreams):
+            raise ValueError("upstream_mirror upstream registries and ports must be distinct")
+        return cls(
+            listen_address=str(address),
+            storage_root=_require_absolute_path("upstream_mirror.storage_root", values["storage_root"]),
+            upstreams=tuple(upstreams),
+            # Distribution treats a zero TTL as "never expire"; the cache is always bounded.
+            ttl_hours=_require_int("upstream_mirror.ttl_hours", values["ttl_hours"], minimum=1),
+            max_bytes=_require_int("upstream_mirror.max_bytes", values["max_bytes"], minimum=1024**3),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {**asdict(self), "upstreams": [asdict(item) for item in self.upstreams]}
+
+    def storage_dir(self, upstream: UpstreamMirror) -> Path:
+        return Path(self.storage_root) / upstream.registry
+
+    def local_url(self, upstream: UpstreamMirror) -> str:
+        """How processes on the gateway itself reach a mirror."""
+
+        host = "127.0.0.1" if self.listen_address == "0.0.0.0" else self.listen_address
+        return f"http://{host}:{upstream.port}"
+
+
+@dataclass(frozen=True)
 class DeploymentConfig:
     schema: int
     deployment_id: str
@@ -517,6 +594,7 @@ class DeploymentConfig:
     node_package_root: str = DEFAULT_INSTALL_ROOT + "/release"
     relay_postgres: RelayPostgresConfig | None = None
     immutable_environments: EnvironmentDeploymentConfig | None = None
+    upstream_mirror: UpstreamMirrorConfig | None = None
     # Filesystem registry disk guard (docs/managed-registry.md): at the cleanup
     # threshold the registry-pressure unit prunes, evicts least-recently-used
     # managed images down to the target, and garbage collects; at the refuse
@@ -589,7 +667,7 @@ class DeploymentConfig:
     def from_dict(cls, raw: object) -> "DeploymentConfig":
         if not isinstance(raw, dict):
             raise ValueError("deployment config must be a JSON object")
-        raw = {"node_package_root": DEFAULT_INSTALL_ROOT + "/release", "relay_postgres": None, "immutable_environments": None, "gateway_processes": 1, **_REGISTRY_GUARD_DEFAULTS, **raw}
+        raw = {"node_package_root": DEFAULT_INSTALL_ROOT + "/release", "relay_postgres": None, "immutable_environments": None, "upstream_mirror": None, "gateway_processes": 1, **_REGISTRY_GUARD_DEFAULTS, **raw}
         expected = {item.name for item in fields(cls)}
         schema = _require_int("schema", raw.get("schema"), minimum=1)
         if schema != DEPLOYMENT_CONFIG_SCHEMA:
@@ -626,6 +704,7 @@ class DeploymentConfig:
             deployment_id=_require_string("deployment_id", raw["deployment_id"]),
             relay_postgres=RelayPostgresConfig.from_dict(raw["relay_postgres"]),
             immutable_environments=EnvironmentDeploymentConfig.from_dict(raw["immutable_environments"]),
+            upstream_mirror=UpstreamMirrorConfig.from_dict(raw["upstream_mirror"]),
             provider=provider,
             data_root=_require_absolute_path("data_root", raw["data_root"]),
             node_package_root=_require_absolute_path(
@@ -775,6 +854,21 @@ class DeploymentConfig:
             authority = result.builder.buildx_cache_ref.partition("/")[0]
             if authority != f"{result.registry_endpoint_host}:{result.registry_port}":
                 raise ValueError("builder.buildx_cache_ref must use this deployment's private registry")
+        if (mirror := result.upstream_mirror) is not None:
+            # 5001 is the private registry's loopback debug listener.
+            if {u.port for u in mirror.upstreams} & {result.gateway_port, result.relay_port, result.registry_port, 5001}:
+                raise ValueError("upstream_mirror ports must differ from the gateway, relay and registry ports")
+            root = Path(mirror.storage_root)
+            if result.registry_store.kind == "filesystem" and (
+                    not root.is_relative_to(result.registry_store.mount_point)
+                    or root.is_relative_to(result.registry_data_dir())
+                    or result.registry_data_dir().is_relative_to(root)):
+                raise ValueError("upstream_mirror.storage_root must be on the registry Volume, "
+                                 "outside registry_store.data_root")
+            # Docker's own builder mirrors only Docker Hub; other upstreams need
+            # the shared docker-container BuildKit builder (buildkitd.toml).
+            if any(u.registry != "docker.io" for u in mirror.upstreams) and not result.builder.buildx_cache_ref:
+                raise ValueError("upstream_mirror upstreams other than docker.io require builder.buildx_cache_ref")
         return result
 
     def control_state_file(self) -> Path:
@@ -876,6 +970,15 @@ class DeploymentConfig:
             return ""
         return f"{DEFAULT_REGISTRY_ALIAS}={self.registry_private_ip}"
 
+    def upstream_mirror_authorities(self) -> dict[str, str]:
+        """Upstream registry -> the mirror authority builders and nodes use."""
+
+        mirror = self.upstream_mirror
+        if mirror is None:
+            return {}
+        host = self.registry_endpoint_host if mirror.listen_address == "0.0.0.0" else mirror.listen_address
+        return {u.registry: f"{host}:{u.port}" for u in mirror.upstreams}
+
     @property
     def heartbeat_url(self) -> str:
         return (
@@ -898,6 +1001,7 @@ class DeploymentConfig:
             "deployment_id": self.deployment_id,
             **({"relay_postgres": asdict(self.relay_postgres)} if self.relay_postgres is not None else {}),
             **({"immutable_environments": self.immutable_environments.to_dict()} if self.immutable_environments is not None else {}),
+            **({"upstream_mirror": self.upstream_mirror.to_dict()} if self.upstream_mirror is not None else {}),
             "provider": provider,
             "data_root": self.data_root,
             **(

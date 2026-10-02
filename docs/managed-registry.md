@@ -110,6 +110,132 @@ MTU can be lower than Docker's default `1500`; without this, large HTTPS
 responses during `docker build` or registry pulls can stall even though host
 networking works.
 
+## Upstream Pull-Through Mirror
+
+Builders, request-time imports and the image campaign can pull `docker.io` and
+other public registries through pull-through caches on the gateway (plan
+C2.15). Each upstream blob is then fetched from the upstream once, with an
+authenticated Docker Hub account, so Docker Hub 429s stop failing builds. The
+mirror is off by default. A deployment without `upstream_mirror` renders,
+loads and initializes nodes exactly as before.
+
+Each upstream gets one instance of the same Distribution image as the private
+registry (`registry:3.1.1`), running in proxy mode. Distribution proxies one
+remote per instance, so each upstream also gets its own port. Every instance
+is a read-only cache. It needs no fence against the blob sweep, because its
+tree is outside `registry_store.data_root`.
+
+```json
+"upstream_mirror": {
+  "listen_address": "10.42.0.2",
+  "storage_root": "/mnt/ucloud-registry/upstream-mirror",
+  "upstreams": [
+    {"registry": "docker.io", "port": 5010,
+     "credentials_file": "/etc/ucloud-sandboxes/upstream-mirror-docker.io.env"},
+    {"registry": "ghcr.io", "port": 5011},
+    {"registry": "quay.io", "port": 5012}
+  ],
+  "ttl_hours": 336,
+  "max_bytes": 322122547200
+}
+```
+
+- **`listen_address`:** the gateway's private IPv4 address. The mirrors are
+  plain HTTP with no client authentication, and an authenticated mirror would
+  let anyone who can reach it pull with our account. Loopback and public
+  addresses are rejected. `0.0.0.0` is accepted only for a gateway with no
+  public interface (UCloud). There, workers use the registry's private host
+  name and gateway-local tools use `127.0.0.1`.
+- **`upstreams`:**
+  - `registry` is the name images use: `docker.io`, not `registry-1.docker.io`.
+  - Ports must differ from each other and from the gateway, relay, registry
+    and registry debug (5001) ports.
+  - Any upstream other than `docker.io` requires `builder.buildx_cache_ref`.
+    Docker's own builder mirrors only Docker Hub, so the other upstreams need
+    the shared docker-container BuildKit builder and its `buildkitd.toml`.
+- **`credentials_file` (optional):** an owner-only (0600) file:
+
+  ```
+  REGISTRY_PROXY_USERNAME=<docker hub user>
+  REGISTRY_PROXY_PASSWORD=<personal access token>
+  ```
+
+  The helper reads it and refuses a file that other users can read. It passes
+  the values to `docker run` only through its environment, never in arguments
+  or logs. Root can still see them with `docker inspect`, just as with the S3
+  registry secrets.
+
+  Use a dedicated account whose token has only public read-only scope. Any
+  builder can pull through the mirror, so it can read every repository that
+  account can see.
+- **`storage_root`:** each upstream caches under `<storage_root>/<registry>`.
+  With a filesystem registry store, this must be on the registry Volume and
+  outside `registry_store.data_root`. The units get the same mount gate as the
+  registry.
+- **Bounds:**
+  - `ttl_hours` (default 168) is Distribution's `proxy.ttl`: cached content
+    expires that long after it was fetched.
+  - Distribution has no size limit. The hourly
+    `ucloud-sandbox-upstream-mirror-trim.timer` adds one: when the caches
+    together exceed `max_bytes` (default 256 GiB), it stops the largest
+    mirror, empties its cache and starts it again, repeating until the total
+    fits. Emptying is safe because the content can be fetched again.
+  - The caches share the Volume with the private registry, so they count
+    toward `registry_disk_*` pressure. Size `max_bytes` with that in mind.
+
+**Fallback.** BuildKit (`[registry."docker.io"] mirrors = [...]` in
+`buildkitd.toml`) and Docker (`registry-mirrors` in `daemon.json`) try the
+mirror first. If it fails, they pull from the upstream itself. Pulls are
+digest-verified, so falling back cannot change content. During a mirror
+outage, builds pull from the upstream directly, with the old 429 exposure,
+instead of failing. The campaign (`prepare_image_pool.py`, with or without
+`--stage-upstream`) has no fallback. When a mirror is configured, it resolves
+and stages through that mirror without an upstream token. Its existing
+backoff, cooldown and deferral logic still handles errors from the mirror.
+
+**Imports.** A request-time import is an ordinary managed build of
+`FROM <image>` on a builder. It therefore takes the builder's mirror route.
+Import ids, build contexts and the recorded `org.ucloud.import-source` label
+are unchanged. Sandbox nodes also get the Docker Hub `registry-mirrors`
+setting for any direct pull.
+
+### Rollout
+
+1. **Gateway first.** Stage the token as
+   `/tmp/ucloud-sandboxes-upstream-mirror-docker.io.env`, add `upstream_mirror`
+   to `deployment.json` (`UPSTREAM_MIRROR = True` in
+   `scripts/hetzner_prod/make_config.py`), and run the gateway installer.
+   - The installer installs the credentials root-only and fails if a
+     configured file is missing. `gateway-reconcile` then starts one
+     `ucloud-sandbox-upstream-mirror@<registry>.service` per upstream, enables
+     the trim timer and waits for each mirror's `/v2/`.
+   - On UCloud, `deploy-all-in-one` installs the same units. Place the
+     credentials file on the gateway by hand before converging.
+   - Verify with
+     `curl -fsS http://10.42.0.2:5010/v2/library/alpine/manifests/latest -H 'Accept: application/vnd.oci.image.index.v1+json' -o /dev/null -w '%{http_code}\n'`.
+2. **Builders next, through new VMs.** VM init renders the mirrors into
+   `daemon.json` and `buildkitd.toml`. Existing builders keep their old
+   configuration. On a re-init, the shared BuildKit receipt check refuses the
+   change ("replace this builder node"). Let idle builders scale down, or stop
+   them, so that new ones boot with the mirrors.
+   - A builder snapshot taken from an initialized builder still carries
+     `/etc/ucloud-sandboxes/buildkit` and the buildx instance, so init on it
+     fails the same check. Rebuild the snapshot with
+     `prepare_hetzner_snapshot.sh` first.
+3. **Campaign.** Restart `prepare_image_pool.py` after the gateway has the
+   mirror. It reads `upstream_mirror` from `deployment.json` at start.
+
+To turn the mirror off, remove `upstream_mirror` and converge the gateway.
+Reconcile stops every instance and disables the trim timer. An instance still
+enabled at boot finds no configuration and exits without starting a container.
+New builders then pull from the upstream directly again.
+
+`stage_source_image.py` and the campaign's per-host cooldown files stay. The
+mirror replaces their purpose of avoiding repeated upstream pulls. Staging
+still pre-links base blobs into the private registry for faster pushes, and
+the cooldowns cover mirror errors and deployments without a mirror. Retire
+them once production has run with the mirror enabled.
+
 ## Build And Run
 
 Use a stable gateway image id; do not provide registry coordinates:

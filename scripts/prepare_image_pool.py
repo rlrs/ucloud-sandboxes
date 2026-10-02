@@ -268,13 +268,28 @@ def public_registry_headers(host, repository):
     return headers
 
 
-def resolve_source(source):
+def upstream_endpoint(host, mirrors=None):
+    """Base URL for an upstream registry and whether it needs our anonymous token.
+
+    A configured pull-through mirror (C2.15) authenticates upstream itself.
+    """
+    if mirrors and host in mirrors:
+        return mirrors[host], False
+    return "https://" + ("registry-1.docker.io" if host == "docker.io" else host), True
+
+
+def deployment_mirrors(config):
+    mirror = config.upstream_mirror
+    return {u.registry: mirror.local_url(u) for u in mirror.upstreams} if mirror else {}
+
+
+def resolve_source(source, mirrors=None):
     host, repository, selector = registry_parts(source)
-    headers = public_registry_headers(host, repository)
+    base, authenticate = upstream_endpoint(host, mirrors)
+    headers = public_registry_headers(host, repository) if authenticate else {"Accept": ACCEPT}
 
     def get(kind, ref):
-        endpoint = "registry-1.docker.io" if host == "docker.io" else host
-        url = f"https://{endpoint}/v2/{repository}/{kind}/{ref}"
+        url = f"{base}/v2/{repository}/{kind}/{ref}"
         with request.urlopen(request.Request(url, headers=headers), timeout=120) as response:
             content = response.read(16 * 1024 * 1024 + 1)
             if len(content) > 16 * 1024 * 1024:
@@ -448,7 +463,8 @@ def main():
     image_store = ImageStore(config.image_file())
     claim_root = config.control_state_file().parent / "image-pool-locks"
     claim_root.mkdir(parents=True, exist_ok=True)
-    resolve = SourceResolver(claim_root)
+    mirrors = deployment_mirrors(config)
+    resolve = SourceResolver(claim_root, resolve=lambda source: resolve_source(source, mirrors))
     registry_health = RegistryHealthGate(config.registry_url)
     plan = json.loads((args.root / "plan.json").read_text())
     if plan.get("schema") != 1:
@@ -572,7 +588,7 @@ def main():
                         staging_metrics = {}
                         build_source = stage_source(resolved, registry.client, claim_root,
                             publication_url=config.registry_worker_url, metrics=staging_metrics,
-                            blob_sources=blob_sources,
+                            blob_sources=blob_sources, mirrors=mirrors,
                             protect=lambda ref, owner: _persist_registry_image_protection(
                                 usage, ref, owner, touch=True, persistent=True))
                         receipt["staged_source"] = build_source

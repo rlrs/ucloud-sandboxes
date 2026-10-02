@@ -1,0 +1,6 @@
+[Unit]
+Description=Bound the UCloud sandbox pull-through mirror caches to upstream_mirror.max_bytes
+
+[Service]
+Type=oneshot
+ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/python -m ucloud_sandboxes.systemd upstream-mirror-trim --config /etc/ucloud-sandboxes/deployment.json

@@ -68,6 +68,7 @@ done
 echo "Stopping workload and test services"
 systemctl stop \
   ucloud-sandbox-node.service \
+  ucloud-environment-io.service \
   ucloud-storage-native.service \
   ucloud-storage-native-backend.service 2>/dev/null || true
 if [[ -f /tmp/ucloud-hetzner-heartbeat.pid ]]; then
@@ -127,6 +128,7 @@ rm -f \
   /etc/ucloud-sandboxes/storage-native-backend.json \
   /etc/ucloud-sandboxes/storage-native-resize-backend.json \
   /etc/systemd/system/ucloud-sandbox-node.service \
+  /etc/systemd/system/ucloud-environment-io.service \
   /etc/systemd/system/ucloud-storage-native.service \
   /etc/systemd/system/ucloud-storage-native-backend.service \
   /tmp/ucloud-hetzner-heartbeat.py \
@@ -136,6 +138,7 @@ rm -f \
   /root/prepare_hetzner_snapshot.sh \
   /root/.bash_history
 rm -rf \
+  /etc/ucloud-sandboxes/environment \
   /tmp/ucloud-snapshot-test-registry \
   /etc/systemd/system/multi-user.target.wants/ucloud-* \
   /etc/systemd/system/timers.target.wants/ucloud-* \

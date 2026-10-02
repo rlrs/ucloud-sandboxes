@@ -1,0 +1,18 @@
+include/generated/rustc_cfg:1839:--cfg=CONFIG_CACHEFILES_ONDEMAND
+include/generated/rustc_cfg:1840:--cfg=CONFIG_CACHEFILES_ONDEMAND="y"
+include/generated/rustc_cfg:11208:--cfg=CONFIG_CPU_FREQ_GOV_ONDEMAND
+include/generated/rustc_cfg:11209:--cfg=CONFIG_CPU_FREQ_GOV_ONDEMAND="y"
+include/generated/rustc_cfg:12922:--cfg=CONFIG_EROFS_FS_ONDEMAND
+include/generated/rustc_cfg:12923:--cfg=CONFIG_EROFS_FS_ONDEMAND="y"
+include/generated/rustc_cfg:15774:--cfg=CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND
+include/generated/rustc_cfg:15775:--cfg=CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND="y"
+include/generated/autoconf.h:935:#define CONFIG_CACHEFILES_ONDEMAND 1
+include/generated/autoconf.h:5674:#define CONFIG_CPU_FREQ_GOV_ONDEMAND 1
+include/generated/autoconf.h:6540:#define CONFIG_EROFS_FS_ONDEMAND 1
+include/generated/autoconf.h:7982:#define CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND 1
+include/config/auto.conf:935:CONFIG_CACHEFILES_ONDEMAND=y
+include/config/auto.conf:5674:CONFIG_CPU_FREQ_GOV_ONDEMAND=y
+include/config/auto.conf:6540:CONFIG_EROFS_FS_ONDEMAND=y
+include/config/auto.conf:7982:CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND=y
+include/linux/netfs.h:192:#define NETFS_SREQ_ONDEMAND		5	/* Set if it's from on-demand read mode */
+include/linux/devfreq.h:19:#define DEVFREQ_GOV_SIMPLE_ONDEMAND	"simple_ondemand"

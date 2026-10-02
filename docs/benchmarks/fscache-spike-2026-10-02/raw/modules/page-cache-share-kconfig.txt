@@ -1,0 +1,9 @@
+207-
+208:config EROFS_FS_PAGE_CACHE_SHARE
+209-	bool "EROFS page cache share support (experimental)"
+210-	depends on EROFS_FS && EROFS_FS_XATTR && !EROFS_FS_ONDEMAND
+211-	help
+212-	  This enables page cache sharing among inodes with identical
+213-	  content fingerprints on the same machine.
+214-
+215-	  If unsure, say N.

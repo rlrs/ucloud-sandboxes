@@ -1,0 +1,14 @@
+/root/s11/kbuild/ext/cachefiles/cache.o
+/root/s11/kbuild/ext/cachefiles/cachefiles.mod.o
+/root/s11/kbuild/ext/cachefiles/cachefiles.o
+/root/s11/kbuild/ext/cachefiles/daemon.o
+/root/s11/kbuild/ext/cachefiles/error_inject.o
+/root/s11/kbuild/ext/cachefiles/interface.o
+/root/s11/kbuild/ext/cachefiles/io.o
+/root/s11/kbuild/ext/cachefiles/key.o
+/root/s11/kbuild/ext/cachefiles/main.o
+/root/s11/kbuild/ext/cachefiles/namei.o
+/root/s11/kbuild/ext/cachefiles/ondemand.o
+/root/s11/kbuild/ext/cachefiles/security.o
+/root/s11/kbuild/ext/cachefiles/volume.o
+/root/s11/kbuild/ext/cachefiles/xattr.o

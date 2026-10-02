@@ -1,0 +1,2037 @@
+{
+ "seq": {
+  "fscache": {
+   "Python images (ScaleSWE, TMax 1-5, T-Lego 0/2/4)": {
+    "n": 16,
+    "attach_s": 0.122,
+    "ready_s (attach+overlay+runsc start)": 0.596,
+    "cold": {
+     "python_import_sys": 0.519,
+     "git_status": 0.228,
+     "pip_version": 1.95,
+     "pytest_import": 0.877
+    },
+    "warm": {
+     "python_import_sys": 0.049,
+     "git_status": 0.039,
+     "pip_version": 0.466,
+     "pytest_import": 0.241
+    },
+    "bytes_fetched": 28858388.0,
+    "bytes_fetched_sum": 434197329,
+    "cache_allocated_bytes": 2424832.0,
+    "cache_allocated_sum": 34074624,
+    "daemon_cpu_s": 0.995,
+    "host_busy_cpu_s": 5.16
+   },
+   "all": {
+    "n": 20,
+    "attach_s": 0.095,
+    "ready_s (attach+overlay+runsc start)": 0.569,
+    "cold": {
+     "python_import_sys": 0.519,
+     "git_status": 0.228,
+     "pip_version": 1.95,
+     "pytest_import": 0.877
+    },
+    "warm": {
+     "python_import_sys": 0.049,
+     "git_status": 0.039,
+     "pip_version": 0.466,
+     "pytest_import": 0.241
+    },
+    "bytes_fetched": 22785495.0,
+    "bytes_fetched_sum": 446996189,
+    "cache_allocated_bytes": 1691648.0,
+    "cache_allocated_sum": 39526400,
+    "daemon_cpu_s": 0.93,
+    "host_busy_cpu_s": 4.765
+   },
+   "no python3 (TMax 0, T-Lego 1/3/5)": {
+    "n": 4,
+    "attach_s": 0.067,
+    "ready_s (attach+overlay+runsc start)": 0.501,
+    "cold": {
+     "python_import_sys": null,
+     "git_status": null,
+     "pip_version": null,
+     "pytest_import": null
+    },
+    "warm": {
+     "python_import_sys": null,
+     "git_status": null,
+     "pip_version": null,
+     "pytest_import": null
+    },
+    "bytes_fetched": 2305881.5,
+    "bytes_fetched_sum": 12798860,
+    "cache_allocated_bytes": 1296384.0,
+    "cache_allocated_sum": 5451776,
+    "daemon_cpu_s": 0.1,
+    "host_busy_cpu_s": 0.715
+   },
+   "per_image": {
+    "scaleswe-responses-0": {
+     "attach_s": 0.137,
+     "ready_s": 0.609,
+     "cold": {
+      "python_import_sys": [
+       0.591,
+       0
+      ],
+      "git_status": [
+       0.199,
+       0
+      ],
+      "pip_version": [
+       2.007,
+       0
+      ],
+      "pytest_import": [
+       0.91,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.042,
+      "git_status": 0.031,
+      "pip_version": 0.486,
+      "pytest_import": 0.21
+     },
+     "bytes": 33191151,
+     "cache": 2654208
+    },
+    "scaleswe-responses-1": {
+     "attach_s": 0.132,
+     "ready_s": 0.607,
+     "cold": {
+      "python_import_sys": [
+       0.599,
+       0
+      ],
+      "git_status": [
+       0.188,
+       0
+      ],
+      "pip_version": [
+       1.947,
+       0
+      ],
+      "pytest_import": [
+       0.812,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.056,
+      "git_status": 0.042,
+      "pip_version": 0.538,
+      "pytest_import": 0.241
+     },
+     "bytes": 33204247,
+     "cache": 2670592
+    },
+    "scaleswe-responses-2": {
+     "attach_s": 0.125,
+     "ready_s": 0.599,
+     "cold": {
+      "python_import_sys": [
+       0.592,
+       0
+      ],
+      "git_status": [
+       0.208,
+       0
+      ],
+      "pip_version": [
+       2.044,
+       0
+      ],
+      "pytest_import": [
+       0.908,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.053,
+      "git_status": 0.036,
+      "pip_version": 0.449,
+      "pytest_import": 0.214
+     },
+     "bytes": 33205289,
+     "cache": 2670592
+    },
+    "scaleswe-responses-3": {
+     "attach_s": 0.126,
+     "ready_s": 0.604,
+     "cold": {
+      "python_import_sys": [
+       0.601,
+       0
+      ],
+      "git_status": [
+       0.209,
+       0
+      ],
+      "pip_version": [
+       2.034,
+       0
+      ],
+      "pytest_import": [
+       0.9,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.064,
+      "git_status": 0.039,
+      "pip_version": 0.506,
+      "pytest_import": 0.238
+     },
+     "bytes": 33205811,
+     "cache": 2670592
+    },
+    "scaleswe-oauthlib-0": {
+     "attach_s": 0.127,
+     "ready_s": 0.604,
+     "cold": {
+      "python_import_sys": [
+       0.551,
+       0
+      ],
+      "git_status": [
+       0.27,
+       0
+      ],
+      "pip_version": [
+       2.028,
+       0
+      ],
+      "pytest_import": [
+       0.914,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.052,
+      "git_status": 0.039,
+      "pip_version": 0.566,
+      "pytest_import": 0.267
+     },
+     "bytes": 35708770,
+     "cache": 2605056
+    },
+    "scaleswe-oauthlib-1": {
+     "attach_s": 0.127,
+     "ready_s": 0.603,
+     "cold": {
+      "python_import_sys": [
+       0.529,
+       0
+      ],
+      "git_status": [
+       0.275,
+       0
+      ],
+      "pip_version": [
+       2.022,
+       0
+      ],
+      "pytest_import": [
+       0.877,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.046,
+      "git_status": 0.041,
+      "pip_version": 0.496,
+      "pytest_import": 0.272
+     },
+     "bytes": 35717178,
+     "cache": 2621440
+    },
+    "scaleswe-traitlets-0": {
+     "attach_s": 0.125,
+     "ready_s": 0.593,
+     "cold": {
+      "python_import_sys": [
+       0.547,
+       0
+      ],
+      "git_status": [
+       0.247,
+       0
+      ],
+      "pip_version": [
+       2.014,
+       0
+      ],
+      "pytest_import": [
+       0.914,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.034,
+      "git_status": 0.029,
+      "pip_version": 0.463,
+      "pytest_import": 0.237
+     },
+     "bytes": 34948511,
+     "cache": 2555904
+    },
+    "scaleswe-traitlets-1": {
+     "attach_s": 0.128,
+     "ready_s": 0.604,
+     "cold": {
+      "python_import_sys": [
+       0.53,
+       0
+      ],
+      "git_status": [
+       0.253,
+       0
+      ],
+      "pip_version": [
+       1.962,
+       0
+      ],
+      "pytest_import": [
+       0.908,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.059,
+      "git_status": 0.042,
+      "pip_version": 0.497,
+      "pytest_import": 0.241
+     },
+     "bytes": 34960726,
+     "cache": 2572288
+    },
+    "tmax-0": {
+     "attach_s": 0.063,
+     "ready_s": 0.512,
+     "cold": {
+      "python_import_sys": [
+       0.037,
+       128
+      ],
+      "git_status": [
+       0.016,
+       128
+      ],
+      "pip_version": [
+       0.015,
+       128
+      ],
+      "pytest_import": [
+       0.019,
+       128
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.018,
+      "git_status": 0.019,
+      "pip_version": 0.018,
+      "pytest_import": 0.023
+     },
+     "bytes": 2218376,
+     "cache": 1196032
+    },
+    "tmax-1": {
+     "attach_s": 0.095,
+     "ready_s": 0.569,
+     "cold": {
+      "python_import_sys": [
+       0.478,
+       0
+      ],
+      "git_status": [
+       0.02,
+       128
+      ],
+      "pip_version": [
+       1.952,
+       0
+      ],
+      "pytest_import": [
+       0.694,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.041,
+      "git_status": 0.017,
+      "pip_version": 0.462,
+      "pytest_import": 0.253
+     },
+     "bytes": 22785100,
+     "cache": 1691648
+    },
+    "tmax-2": {
+     "attach_s": 0.093,
+     "ready_s": 0.55,
+     "cold": {
+      "python_import_sys": [
+       0.509,
+       0
+      ],
+      "git_status": [
+       0.02,
+       128
+      ],
+      "pip_version": [
+       1.896,
+       0
+      ],
+      "pytest_import": [
+       0.689,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.045,
+      "git_status": 0.018,
+      "pip_version": 0.448,
+      "pytest_import": 0.234
+     },
+     "bytes": 22785669,
+     "cache": 1691648
+    },
+    "tmax-3": {
+     "attach_s": 0.093,
+     "ready_s": 0.562,
+     "cold": {
+      "python_import_sys": [
+       0.475,
+       0
+      ],
+      "git_status": [
+       0.019,
+       128
+      ],
+      "pip_version": [
+       1.903,
+       0
+      ],
+      "pytest_import": [
+       0.713,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.042,
+      "git_status": 0.018,
+      "pip_version": 0.459,
+      "pytest_import": 0.242
+     },
+     "bytes": 22785321,
+     "cache": 1691648
+    },
+    "tmax-4": {
+     "attach_s": 0.094,
+     "ready_s": 0.57,
+     "cold": {
+      "python_import_sys": [
+       0.47,
+       0
+      ],
+      "git_status": [
+       0.019,
+       128
+      ],
+      "pip_version": [
+       1.834,
+       0
+      ],
+      "pytest_import": [
+       0.753,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.042,
+      "git_status": 0.022,
+      "pip_version": 0.47,
+      "pytest_import": 0.252
+     },
+     "bytes": 22721411,
+     "cache": 1691648
+    },
+    "tmax-5": {
+     "attach_s": 0.119,
+     "ready_s": 0.65,
+     "cold": {
+      "python_import_sys": [
+       0.495,
+       0
+      ],
+      "git_status": [
+       0.019,
+       128
+      ],
+      "pip_version": [
+       1.913,
+       0
+      ],
+      "pytest_import": [
+       0.705,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.044,
+      "git_status": 0.018,
+      "pip_version": 0.473,
+      "pytest_import": 0.256
+     },
+     "bytes": 24525625,
+     "cache": 2293760
+    },
+    "tlego-0": {
+     "attach_s": 0.072,
+     "ready_s": 0.514,
+     "cold": {
+      "python_import_sys": [
+       0.477,
+       0
+      ],
+      "git_status": [
+       0.019,
+       128
+      ],
+      "pip_version": [
+       1.825,
+       0
+      ],
+      "pytest_import": [
+       0.076,
+       1
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.066,
+      "git_status": 0.019,
+      "pip_version": 0.325,
+      "pytest_import": 0.089
+     },
+     "bytes": 14816646,
+     "cache": 1331200
+    },
+    "tlego-1": {
+     "attach_s": 0.071,
+     "ready_s": 0.483,
+     "cold": {
+      "python_import_sys": [
+       0.022,
+       128
+      ],
+      "git_status": [
+       0.032,
+       128
+      ],
+      "pip_version": [
+       0.018,
+       128
+      ],
+      "pytest_import": [
+       0.019,
+       128
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.017,
+      "git_status": 0.019,
+      "pip_version": 0.018,
+      "pytest_import": 0.021
+     },
+     "bytes": 2392827,
+     "cache": 1396736
+    },
+    "tlego-2": {
+     "attach_s": 0.07,
+     "ready_s": 0.519,
+     "cold": {
+      "python_import_sys": [
+       0.468,
+       0
+      ],
+      "git_status": [
+       0.018,
+       128
+      ],
+      "pip_version": [
+       1.723,
+       0
+      ],
+      "pytest_import": [
+       0.108,
+       1
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.063,
+      "git_status": 0.018,
+      "pip_version": 0.279,
+      "pytest_import": 0.067
+     },
+     "bytes": 14817989,
+     "cache": 1331200
+    },
+    "tlego-3": {
+     "attach_s": 0.062,
+     "ready_s": 0.499,
+     "cold": {
+      "python_import_sys": [
+       0.02,
+       128
+      ],
+      "git_status": [
+       0.021,
+       128
+      ],
+      "pip_version": [
+       0.029,
+       128
+      ],
+      "pytest_import": [
+       0.019,
+       128
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.017,
+      "git_status": 0.019,
+      "pip_version": 0.02,
+      "pytest_import": 0.017
+     },
+     "bytes": 2218936,
+     "cache": 1196032
+    },
+    "tlego-4": {
+     "attach_s": 0.071,
+     "ready_s": 0.514,
+     "cold": {
+      "python_import_sys": [
+       0.464,
+       0
+      ],
+      "git_status": [
+       0.019,
+       128
+      ],
+      "pip_version": [
+       1.811,
+       0
+      ],
+      "pytest_import": [
+       0.064,
+       1
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.067,
+      "git_status": 0.019,
+      "pip_version": 0.323,
+      "pytest_import": 0.059
+     },
+     "bytes": 14817885,
+     "cache": 1331200
+    },
+    "tlego-5": {
+     "attach_s": 0.09,
+     "ready_s": 0.504,
+     "cold": {
+      "python_import_sys": [
+       0.025,
+       128
+      ],
+      "git_status": [
+       0.149,
+       128
+      ],
+      "pip_version": [
+       0.009,
+       128
+      ],
+      "pytest_import": [
+       0.017,
+       128
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.018,
+      "git_status": 0.03,
+      "pip_version": 0.018,
+      "pytest_import": 0.019
+     },
+     "bytes": 5968721,
+     "cache": 1662976
+    }
+   }
+  },
+  "nbd": {
+   "Python images (ScaleSWE, TMax 1-5, T-Lego 0/2/4)": {
+    "n": 16,
+    "attach_s": 0.165,
+    "ready_s (attach+overlay+runsc start)": 0.658,
+    "cold": {
+     "python_import_sys": 0.514,
+     "git_status": 0.258,
+     "pip_version": 3.454,
+     "pytest_import": 1.177
+    },
+    "warm": {
+     "python_import_sys": 0.044,
+     "git_status": 0.031,
+     "pip_version": 0.433,
+     "pytest_import": 0.22
+    },
+    "bytes_fetched": 54209036.5,
+    "bytes_fetched_sum": 809794597,
+    "cache_allocated_bytes": 53825536.0,
+    "cache_allocated_sum": 804159488,
+    "daemon_cpu_s": 1.61,
+    "host_busy_cpu_s": 8.86
+   },
+   "all": {
+    "n": 20,
+    "attach_s": 0.165,
+    "ready_s (attach+overlay+runsc start)": 0.656,
+    "cold": {
+     "python_import_sys": 0.514,
+     "git_status": 0.258,
+     "pip_version": 3.454,
+     "pytest_import": 1.177
+    },
+    "warm": {
+     "python_import_sys": 0.044,
+     "git_status": 0.031,
+     "pip_version": 0.433,
+     "pytest_import": 0.22
+    },
+    "bytes_fetched": 48041095.0,
+    "bytes_fetched_sum": 830631038,
+    "cache_allocated_bytes": 47751168.0,
+    "cache_allocated_sum": 824705024,
+    "daemon_cpu_s": 1.59,
+    "host_busy_cpu_s": 8.6
+   },
+   "no python3 (TMax 0, T-Lego 1/3/5)": {
+    "n": 4,
+    "attach_s": 0.135,
+    "ready_s (attach+overlay+runsc start)": 0.58,
+    "cold": {
+     "python_import_sys": null,
+     "git_status": null,
+     "pip_version": null,
+     "pytest_import": null
+    },
+    "warm": {
+     "python_import_sys": null,
+     "git_status": null,
+     "pip_version": null,
+     "pytest_import": null
+    },
+    "bytes_fetched": 3972179.0,
+    "bytes_fetched_sum": 20836441,
+    "cache_allocated_bytes": 3952640.0,
+    "cache_allocated_sum": 20545536,
+    "daemon_cpu_s": 0.1,
+    "host_busy_cpu_s": 0.765
+   },
+   "per_image": {
+    "scaleswe-responses-0": {
+     "attach_s": 0.112,
+     "ready_s": 0.604,
+     "cold": {
+      "python_import_sys": [
+       0.516,
+       0
+      ],
+      "git_status": [
+       0.221,
+       0
+      ],
+      "pip_version": [
+       3.583,
+       0
+      ],
+      "pytest_import": [
+       1.233,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.044,
+      "git_status": 0.03,
+      "pip_version": 0.428,
+      "pytest_import": 0.218
+     },
+     "bytes": 60376458,
+     "cache": 59899904
+    },
+    "scaleswe-responses-1": {
+     "attach_s": 0.173,
+     "ready_s": 0.658,
+     "cold": {
+      "python_import_sys": [
+       0.507,
+       0
+      ],
+      "git_status": [
+       0.229,
+       0
+      ],
+      "pip_version": [
+       3.643,
+       0
+      ],
+      "pytest_import": [
+       1.219,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.053,
+      "git_status": 0.033,
+      "pip_version": 0.461,
+      "pytest_import": 0.253
+     },
+     "bytes": 60384991,
+     "cache": 59904000
+    },
+    "scaleswe-responses-2": {
+     "attach_s": 0.174,
+     "ready_s": 0.668,
+     "cold": {
+      "python_import_sys": [
+       0.531,
+       0
+      ],
+      "git_status": [
+       0.219,
+       0
+      ],
+      "pip_version": [
+       3.678,
+       0
+      ],
+      "pytest_import": [
+       1.177,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.046,
+      "git_status": 0.034,
+      "pip_version": 0.467,
+      "pytest_import": 0.211
+     },
+     "bytes": 60384575,
+     "cache": 59904000
+    },
+    "scaleswe-responses-3": {
+     "attach_s": 0.168,
+     "ready_s": 0.671,
+     "cold": {
+      "python_import_sys": [
+       0.511,
+       0
+      ],
+      "git_status": [
+       0.2,
+       0
+      ],
+      "pip_version": [
+       3.568,
+       0
+      ],
+      "pytest_import": [
+       1.145,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.041,
+      "git_status": 0.028,
+      "pip_version": 0.425,
+      "pytest_import": 0.221
+     },
+     "bytes": 60384419,
+     "cache": 59904000
+    },
+    "scaleswe-oauthlib-0": {
+     "attach_s": 0.108,
+     "ready_s": 0.589,
+     "cold": {
+      "python_import_sys": [
+       0.504,
+       0
+      ],
+      "git_status": [
+       0.316,
+       0
+      ],
+      "pip_version": [
+       3.54,
+       0
+      ],
+      "pytest_import": [
+       1.282,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.043,
+      "git_status": 0.031,
+      "pip_version": 0.438,
+      "pytest_import": 0.225
+     },
+     "bytes": 63595122,
+     "cache": 63127552
+    },
+    "scaleswe-oauthlib-1": {
+     "attach_s": 0.168,
+     "ready_s": 0.659,
+     "cold": {
+      "python_import_sys": [
+       0.51,
+       0
+      ],
+      "git_status": [
+       0.313,
+       0
+      ],
+      "pip_version": [
+       3.623,
+       0
+      ],
+      "pytest_import": [
+       1.319,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.042,
+      "git_status": 0.031,
+      "pip_version": 0.472,
+      "pytest_import": 0.226
+     },
+     "bytes": 63602823,
+     "cache": 63135744
+    },
+    "scaleswe-traitlets-0": {
+     "attach_s": 0.099,
+     "ready_s": 0.586,
+     "cold": {
+      "python_import_sys": [
+       0.497,
+       0
+      ],
+      "git_status": [
+       0.293,
+       0
+      ],
+      "pip_version": [
+       3.769,
+       0
+      ],
+      "pytest_import": [
+       1.271,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.047,
+      "git_status": 0.03,
+      "pip_version": 0.467,
+      "pytest_import": 0.228
+     },
+     "bytes": 61513910,
+     "cache": 61050880
+    },
+    "scaleswe-traitlets-1": {
+     "attach_s": 0.16,
+     "ready_s": 0.673,
+     "cold": {
+      "python_import_sys": [
+       0.512,
+       0
+      ],
+      "git_status": [
+       0.288,
+       0
+      ],
+      "pip_version": [
+       3.933,
+       0
+      ],
+      "pytest_import": [
+       1.121,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.043,
+      "git_status": 0.032,
+      "pip_version": 0.445,
+      "pytest_import": 0.256
+     },
+     "bytes": 61522079,
+     "cache": 61059072
+    },
+    "tmax-0": {
+     "attach_s": 0.1,
+     "ready_s": 0.553,
+     "cold": {
+      "python_import_sys": [
+       0.02,
+       128
+      ],
+      "git_status": [
+       0.036,
+       128
+      ],
+      "pip_version": [
+       0.019,
+       128
+      ],
+      "pytest_import": [
+       0.019,
+       128
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.017,
+      "git_status": 0.018,
+      "pip_version": 0.019,
+      "pytest_import": 0.02
+     },
+     "bytes": 3971987,
+     "cache": 3952640
+    },
+    "tmax-1": {
+     "attach_s": 0.171,
+     "ready_s": 0.676,
+     "cold": {
+      "python_import_sys": [
+       0.792,
+       0
+      ],
+      "git_status": [
+       0.019,
+       128
+      ],
+      "pip_version": [
+       3.307,
+       0
+      ],
+      "pytest_import": [
+       1.11,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.06,
+      "git_status": 0.013,
+      "pip_version": 0.448,
+      "pytest_import": 0.21
+     },
+     "bytes": 48041095,
+     "cache": 47751168
+    },
+    "tmax-2": {
+     "attach_s": 0.169,
+     "ready_s": 0.67,
+     "cold": {
+      "python_import_sys": [
+       0.759,
+       0
+      ],
+      "git_status": [
+       0.02,
+       128
+      ],
+      "pip_version": [
+       3.368,
+       0
+      ],
+      "pytest_import": [
+       1.172,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.044,
+      "git_status": 0.017,
+      "pip_version": 0.422,
+      "pytest_import": 0.2
+     },
+     "bytes": 48041615,
+     "cache": 47751168
+    },
+    "tmax-3": {
+     "attach_s": 0.163,
+     "ready_s": 0.657,
+     "cold": {
+      "python_import_sys": [
+       0.752,
+       0
+      ],
+      "git_status": [
+       0.017,
+       128
+      ],
+      "pip_version": [
+       3.189,
+       0
+      ],
+      "pytest_import": [
+       1.131,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.04,
+      "git_status": 0.019,
+      "pip_version": 0.416,
+      "pytest_import": 0.201
+     },
+     "bytes": 48041095,
+     "cache": 47751168
+    },
+    "tmax-4": {
+     "attach_s": 0.173,
+     "ready_s": 0.654,
+     "cold": {
+      "python_import_sys": [
+       0.721,
+       0
+      ],
+      "git_status": [
+       0.02,
+       128
+      ],
+      "pip_version": [
+       3.362,
+       0
+      ],
+      "pytest_import": [
+       1.174,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.047,
+      "git_status": 0.02,
+      "pip_version": 0.413,
+      "pytest_import": 0.215
+     },
+     "bytes": 47778797,
+     "cache": 47489024
+    },
+    "tmax-5": {
+     "attach_s": 0.174,
+     "ready_s": 0.675,
+     "cold": {
+      "python_import_sys": [
+       0.783,
+       0
+      ],
+      "git_status": [
+       0.019,
+       128
+      ],
+      "pip_version": [
+       3.24,
+       0
+      ],
+      "pytest_import": [
+       1.294,
+       0
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.042,
+      "git_status": 0.018,
+      "pip_version": 0.503,
+      "pytest_import": 0.22
+     },
+     "bytes": 47076105,
+     "cache": 46702592
+    },
+    "tlego-0": {
+     "attach_s": 0.102,
+     "ready_s": 0.544,
+     "cold": {
+      "python_import_sys": [
+       0.522,
+       0
+      ],
+      "git_status": [
+       0.021,
+       128
+      ],
+      "pip_version": [
+       1.73,
+       0
+      ],
+      "pytest_import": [
+       0.08,
+       1
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.067,
+      "git_status": 0.018,
+      "pip_version": 0.342,
+      "pytest_import": 0.1
+     },
+     "bytes": 26350283,
+     "cache": 26243072
+    },
+    "tlego-1": {
+     "attach_s": 0.17,
+     "ready_s": 0.607,
+     "cold": {
+      "python_import_sys": [
+       0.035,
+       128
+      ],
+      "git_status": [
+       0.03,
+       128
+      ],
+      "pip_version": [
+       0.02,
+       128
+      ],
+      "pytest_import": [
+       0.02,
+       128
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.019,
+      "git_status": 0.016,
+      "pip_version": 0.018,
+      "pytest_import": 0.019
+     },
+     "bytes": 3476258,
+     "cache": 3432448
+    },
+    "tlego-2": {
+     "attach_s": 0.099,
+     "ready_s": 0.534,
+     "cold": {
+      "python_import_sys": [
+       0.51,
+       0
+      ],
+      "git_status": [
+       0.021,
+       128
+      ],
+      "pip_version": [
+       1.734,
+       0
+      ],
+      "pytest_import": [
+       0.067,
+       1
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.044,
+      "git_status": 0.018,
+      "pip_version": 0.271,
+      "pytest_import": 0.099
+     },
+     "bytes": 26350771,
+     "cache": 26243072
+    },
+    "tlego-3": {
+     "attach_s": 0.092,
+     "ready_s": 0.535,
+     "cold": {
+      "python_import_sys": [
+       0.041,
+       128
+      ],
+      "git_status": [
+       0.02,
+       128
+      ],
+      "pip_version": [
+       0.019,
+       128
+      ],
+      "pytest_import": [
+       0.017,
+       128
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.016,
+      "git_status": 0.019,
+      "pip_version": 0.016,
+      "pytest_import": 0.014
+     },
+     "bytes": 3972371,
+     "cache": 3952640
+    },
+    "tlego-4": {
+     "attach_s": 0.101,
+     "ready_s": 0.548,
+     "cold": {
+      "python_import_sys": [
+       0.479,
+       0
+      ],
+      "git_status": [
+       0.019,
+       128
+      ],
+      "pip_version": [
+       1.755,
+       0
+      ],
+      "pytest_import": [
+       0.069,
+       1
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.046,
+      "git_status": 0.019,
+      "pip_version": 0.285,
+      "pytest_import": 0.063
+     },
+     "bytes": 26350459,
+     "cache": 26243072
+    },
+    "tlego-5": {
+     "attach_s": 0.286,
+     "ready_s": 0.736,
+     "cold": {
+      "python_import_sys": [
+       0.028,
+       128
+      ],
+      "git_status": [
+       0.177,
+       128
+      ],
+      "pip_version": [
+       0.018,
+       128
+      ],
+      "pytest_import": [
+       0.019,
+       128
+      ]
+     },
+     "warm": {
+      "python_import_sys": 0.017,
+      "git_status": 0.027,
+      "pip_version": 0.022,
+      "pytest_import": 0.018
+     },
+     "bytes": 9415825,
+     "cache": 9207808
+    }
+   }
+  }
+ },
+ "par": {
+  "fscache": [
+   {
+    "file": "bench-fscache-par-r1.json",
+    "sandboxes": 20,
+    "ok": 20,
+    "errors": [],
+    "wall_s": 3.97,
+    "host_busy_cpu_s": 38.4,
+    "host_cpu_util": 0.64,
+    "peak_cpu_util_0.5s": 0.818,
+    "daemon_cpu_s": 6.76,
+    "bytes_fetched": 245099217,
+    "cache_allocated_bytes": 10022912,
+    "attach_s_median": 0.259,
+    "attach_s_max": 0.415,
+    "first_command_done_s_median": 1.246,
+    "first_command_done_s_max": 1.314,
+    "pip_version_cold_median": 1.79,
+    "all_cold_done_s_max": 3.931,
+    "daemon_metrics": null
+   },
+   {
+    "file": "bench-fscache-par-r2.json",
+    "sandboxes": 20,
+    "ok": 20,
+    "errors": [],
+    "wall_s": 3.97,
+    "host_busy_cpu_s": 38.5,
+    "host_cpu_util": 0.644,
+    "peak_cpu_util_0.5s": 0.826,
+    "daemon_cpu_s": 6.71,
+    "bytes_fetched": 244118104,
+    "cache_allocated_bytes": 10022912,
+    "attach_s_median": 0.244,
+    "attach_s_max": 0.417,
+    "first_command_done_s_median": 1.244,
+    "first_command_done_s_max": 1.328,
+    "pip_version_cold_median": 1.794,
+    "all_cold_done_s_max": 3.942,
+    "daemon_metrics": null
+   },
+   {
+    "file": "bench-fscache-par-r3.json",
+    "sandboxes": 20,
+    "ok": 19,
+    "errors": [
+     "RuntimeError(\"nydusd PUT /api/v2/blobs: 500 b'Resource temporarily unavailable (os error 11)'\")"
+    ],
+    "wall_s": 3.99,
+    "host_busy_cpu_s": 37.5,
+    "host_cpu_util": 0.623,
+    "peak_cpu_util_0.5s": 0.78,
+    "daemon_cpu_s": 6.72,
+    "bytes_fetched": 245883119,
+    "cache_allocated_bytes": 10022912,
+    "attach_s_median": 0.252,
+    "attach_s_max": 0.424,
+    "first_command_done_s_median": 1.291,
+    "first_command_done_s_max": 1.421,
+    "pip_version_cold_median": 1.751,
+    "all_cold_done_s_max": 3.957,
+    "daemon_metrics": null
+   },
+   {
+    "file": "bench-fscache-par-r4.json",
+    "sandboxes": 20,
+    "ok": 20,
+    "errors": [],
+    "wall_s": 4.02,
+    "host_busy_cpu_s": 38.5,
+    "host_cpu_util": 0.637,
+    "peak_cpu_util_0.5s": 0.81,
+    "daemon_cpu_s": 6.96,
+    "bytes_fetched": 245324182,
+    "cache_allocated_bytes": 10018816,
+    "attach_s_median": 0.27,
+    "attach_s_max": 0.444,
+    "first_command_done_s_median": 1.279,
+    "first_command_done_s_max": 1.422,
+    "pip_version_cold_median": 1.734,
+    "all_cold_done_s_max": 3.993,
+    "daemon_metrics": null
+   },
+   {
+    "file": "bench-fscache-par-x3.json",
+    "sandboxes": 60,
+    "ok": 57,
+    "errors": [
+     "RuntimeError(\"nydusd PUT /api/v2/blobs: 500 b'Resource temporarily unavailable (os error 11)'\")",
+     "RuntimeError('nydusd PUT /api/v2/blobs: 500 b\\'{\"code\":\"UNDEFINED\",\"message\":\"CreateBlobObject(DaemonAbnormal(Other(\\\\\\\\\"blob_cache: bootstrap blob already exis"
+    ],
+    "wall_s": 5.62,
+    "host_busy_cpu_s": 77.3,
+    "host_cpu_util": 0.88,
+    "peak_cpu_util_0.5s": 0.993,
+    "daemon_cpu_s": 5.66,
+    "bytes_fetched": 229825459,
+    "cache_allocated_bytes": 9527296,
+    "attach_s_median": 0.0,
+    "attach_s_max": 0.777,
+    "first_command_done_s_median": 1.659,
+    "first_command_done_s_max": 1.984,
+    "pip_version_cold_median": 2.629,
+    "all_cold_done_s_max": 5.562,
+    "daemon_metrics": null
+   }
+  ],
+  "nbd": [
+   {
+    "file": "bench-nbd-par-r1.json",
+    "sandboxes": 20,
+    "ok": 19,
+    "errors": [
+     "ValueError('environment config changed for an existing composition')"
+    ],
+    "wall_s": 8.26,
+    "host_busy_cpu_s": 68.2,
+    "host_cpu_util": 0.544,
+    "peak_cpu_util_0.5s": 0.786,
+    "daemon_cpu_s": 9.82,
+    "bytes_fetched": 380361217,
+    "cache_allocated_bytes": 6606565376,
+    "attach_s_median": 1.653,
+    "attach_s_max": 1.667,
+    "first_command_done_s_median": 2.921,
+    "first_command_done_s_max": 3.223,
+    "pip_version_cold_median": 3.628,
+    "all_cold_done_s_max": 8.232,
+    "daemon_metrics": {
+     "active_components": 28,
+     "cached_bytes": 1025830912,
+     "corruptions": 0,
+     "downloaded_bytes": 1026093056,
+     "fetch_retries": 0,
+     "hits": 55246,
+     "metadata_hint_absent": 28,
+     "metadata_hint_present": 0,
+     "metadata_hint_unsupported": 0,
+     "metadata_prefetch_bytes": 0,
+     "metadata_prefetch_chunks": 0,
+     "metadata_prefetch_failed_chunks": 0,
+     "metadata_prefetch_jobs": 0,
+     "metadata_prefetch_seconds": 0.0,
+     "metadata_prefetch_skipped_chunks": 0,
+     "metadata_prefetch_truncated": 0,
+     "metadata_prefetch_wait_timeouts": 0,
+     "misses": 3924,
+     "pending_misses": 0,
+     "prefetch_enabled": true,
+     "prefetch_jobs_active": 0,
+     "prefetch_joined_reads": 0,
+     "prefetch_ranges_inflight": 0,
+     "prefetch_start_failures": 0,
+     "trace_chunks_recorded": 3037,
+     "trace_hint_absent": 28,
+     "trace_hint_invalid": 0,
+     "trace_hint_present": 0,
+     "trace_prefetch_bytes": 0,
+     "trace_prefetch_chunks": 0,
+     "trace_prefetch_failed_chunks": 0,
+     "trace_prefetch_jobs": 0,
+     "trace_prefetch_seconds": 0.0,
+     "trace_prefetch_skipped_chunks": 0,
+     "trace_prefetch_truncated": 0,
+     "trace_recordings_started": 24,
+     "traces_recorded": 24,
+     "spike_client_eagain_retries": 1
+    }
+   },
+   {
+    "file": "bench-nbd-par-r2.json",
+    "sandboxes": 20,
+    "ok": 19,
+    "errors": [
+     "ValueError('environment config changed for an existing composition')"
+    ],
+    "wall_s": 8.38,
+    "host_busy_cpu_s": 68.6,
+    "host_cpu_util": 0.539,
+    "peak_cpu_util_0.5s": 0.776,
+    "daemon_cpu_s": 9.8,
+    "bytes_fetched": 380371977,
+    "cache_allocated_bytes": 6606831616,
+    "attach_s_median": 1.677,
+    "attach_s_max": 1.702,
+    "first_command_done_s_median": 3.027,
+    "first_command_done_s_max": 3.301,
+    "pip_version_cold_median": 3.676,
+    "all_cold_done_s_max": 8.357,
+    "daemon_metrics": {
+     "active_components": 28,
+     "cached_bytes": 1026093056,
+     "corruptions": 0,
+     "downloaded_bytes": 1026093056,
+     "fetch_retries": 0,
+     "hits": 55203,
+     "metadata_hint_absent": 28,
+     "metadata_hint_present": 0,
+     "metadata_hint_unsupported": 0,
+     "metadata_prefetch_bytes": 0,
+     "metadata_prefetch_chunks": 0,
+     "metadata_prefetch_failed_chunks": 0,
+     "metadata_prefetch_jobs": 0,
+     "metadata_prefetch_seconds": 0.0,
+     "metadata_prefetch_skipped_chunks": 0,
+     "metadata_prefetch_truncated": 0,
+     "metadata_prefetch_wait_timeouts": 0,
+     "misses": 3924,
+     "pending_misses": 0,
+     "prefetch_enabled": true,
+     "prefetch_jobs_active": 0,
+     "prefetch_joined_reads": 0,
+     "prefetch_ranges_inflight": 0,
+     "prefetch_start_failures": 0,
+     "trace_chunks_recorded": 3022,
+     "trace_hint_absent": 28,
+     "trace_hint_invalid": 0,
+     "trace_hint_present": 0,
+     "trace_prefetch_bytes": 0,
+     "trace_prefetch_chunks": 0,
+     "trace_prefetch_failed_chunks": 0,
+     "trace_prefetch_jobs": 0,
+     "trace_prefetch_seconds": 0.0,
+     "trace_prefetch_skipped_chunks": 0,
+     "trace_prefetch_truncated": 0,
+     "trace_recordings_started": 24,
+     "traces_recorded": 24,
+     "spike_client_eagain_retries": 0
+    }
+   },
+   {
+    "file": "bench-nbd-par-r3.json",
+    "sandboxes": 20,
+    "ok": 19,
+    "errors": [
+     "ValueError('environment config changed for an existing composition')"
+    ],
+    "wall_s": 8.39,
+    "host_busy_cpu_s": 68.5,
+    "host_cpu_util": 0.538,
+    "peak_cpu_util_0.5s": 0.777,
+    "daemon_cpu_s": 9.85,
+    "bytes_fetched": 380467881,
+    "cache_allocated_bytes": 6606839808,
+    "attach_s_median": 1.692,
+    "attach_s_max": 1.704,
+    "first_command_done_s_median": 3.031,
+    "first_command_done_s_max": 3.355,
+    "pip_version_cold_median": 3.65,
+    "all_cold_done_s_max": 8.352,
+    "daemon_metrics": {
+     "active_components": 28,
+     "cached_bytes": 1026093056,
+     "corruptions": 0,
+     "downloaded_bytes": 1026093056,
+     "fetch_retries": 0,
+     "hits": 55201,
+     "metadata_hint_absent": 28,
+     "metadata_hint_present": 0,
+     "metadata_hint_unsupported": 0,
+     "metadata_prefetch_bytes": 0,
+     "metadata_prefetch_chunks": 0,
+     "metadata_prefetch_failed_chunks": 0,
+     "metadata_prefetch_jobs": 0,
+     "metadata_prefetch_seconds": 0.0,
+     "metadata_prefetch_skipped_chunks": 0,
+     "metadata_prefetch_truncated": 0,
+     "metadata_prefetch_wait_timeouts": 0,
+     "misses": 3924,
+     "pending_misses": 0,
+     "prefetch_enabled": true,
+     "prefetch_jobs_active": 0,
+     "prefetch_joined_reads": 0,
+     "prefetch_ranges_inflight": 0,
+     "prefetch_start_failures": 0,
+     "trace_chunks_recorded": 3020,
+     "trace_hint_absent": 28,
+     "trace_hint_invalid": 0,
+     "trace_hint_present": 0,
+     "trace_prefetch_bytes": 0,
+     "trace_prefetch_chunks": 0,
+     "trace_prefetch_failed_chunks": 0,
+     "trace_prefetch_jobs": 0,
+     "trace_prefetch_seconds": 0.0,
+     "trace_prefetch_skipped_chunks": 0,
+     "trace_prefetch_truncated": 0,
+     "trace_recordings_started": 24,
+     "traces_recorded": 24,
+     "spike_client_eagain_retries": 0
+    }
+   },
+   {
+    "file": "bench-nbd-par-r4.json",
+    "sandboxes": 20,
+    "ok": 19,
+    "errors": [
+     "ValueError('environment config changed for an existing composition')"
+    ],
+    "wall_s": 8.24,
+    "host_busy_cpu_s": 68.6,
+    "host_cpu_util": 0.548,
+    "peak_cpu_util_0.5s": 0.785,
+    "daemon_cpu_s": 9.79,
+    "bytes_fetched": 379889541,
+    "cache_allocated_bytes": 376631296,
+    "attach_s_median": 1.612,
+    "attach_s_max": 1.636,
+    "first_command_done_s_median": 2.907,
+    "first_command_done_s_max": 3.223,
+    "pip_version_cold_median": 3.659,
+    "all_cold_done_s_max": 8.215,
+    "daemon_metrics": {
+     "active_components": 28,
+     "cached_bytes": 376352768,
+     "corruptions": 0,
+     "downloaded_bytes": 376352768,
+     "fetch_retries": 0,
+     "hits": 12317,
+     "metadata_hint_absent": 28,
+     "metadata_hint_present": 0,
+     "metadata_hint_unsupported": 0,
+     "metadata_prefetch_bytes": 0,
+     "metadata_prefetch_chunks": 0,
+     "metadata_prefetch_failed_chunks": 0,
+     "metadata_prefetch_jobs": 0,
+     "metadata_prefetch_seconds": 0.0,
+     "metadata_prefetch_skipped_chunks": 0,
+     "metadata_prefetch_truncated": 0,
+     "metadata_prefetch_wait_timeouts": 0,
+     "misses": 1438,
+     "pending_misses": 0,
+     "prefetch_enabled": true,
+     "prefetch_jobs_active": 0,
+     "prefetch_joined_reads": 0,
+     "prefetch_ranges_inflight": 0,
+     "prefetch_start_failures": 0,
+     "trace_chunks_recorded": 0,
+     "trace_hint_absent": 28,
+     "trace_hint_invalid": 0,
+     "trace_hint_present": 0,
+     "trace_prefetch_bytes": 0,
+     "trace_prefetch_chunks": 0,
+     "trace_prefetch_failed_chunks": 0,
+     "trace_prefetch_jobs": 0,
+     "trace_prefetch_seconds": 0.0,
+     "trace_prefetch_skipped_chunks": 0,
+     "trace_prefetch_truncated": 0,
+     "trace_recordings_started": 24,
+     "traces_recorded": 0,
+     "spike_client_eagain_retries": 0
+    }
+   },
+   {
+    "file": "bench-nbd-par-x3.json",
+    "sandboxes": 60,
+    "ok": 57,
+    "errors": [
+     "ValueError('environment config changed for an existing composition')"
+    ],
+    "wall_s": 12.59,
+    "host_busy_cpu_s": 152.2,
+    "host_cpu_util": 0.777,
+    "peak_cpu_util_0.5s": 0.968,
+    "daemon_cpu_s": 8.91,
+    "bytes_fetched": 380373007,
+    "cache_allocated_bytes": 376631296,
+    "attach_s_median": 1.657,
+    "attach_s_max": 1.782,
+    "first_command_done_s_median": 3.589,
+    "first_command_done_s_max": 4.097,
+    "pip_version_cold_median": 6.064,
+    "all_cold_done_s_max": 12.503,
+    "daemon_metrics": {
+     "active_components": 28,
+     "cached_bytes": 376352768,
+     "corruptions": 0,
+     "downloaded_bytes": 376352768,
+     "fetch_retries": 0,
+     "hits": 12541,
+     "metadata_hint_absent": 28,
+     "metadata_hint_present": 0,
+     "metadata_hint_unsupported": 0,
+     "metadata_prefetch_bytes": 0,
+     "metadata_prefetch_chunks": 0,
+     "metadata_prefetch_failed_chunks": 0,
+     "metadata_prefetch_jobs": 0,
+     "metadata_prefetch_seconds": 0.0,
+     "metadata_prefetch_skipped_chunks": 0,
+     "metadata_prefetch_truncated": 0,
+     "metadata_prefetch_wait_timeouts": 0,
+     "misses": 1438,
+     "pending_misses": 0,
+     "prefetch_enabled": true,
+     "prefetch_jobs_active": 0,
+     "prefetch_joined_reads": 0,
+     "prefetch_ranges_inflight": 0,
+     "prefetch_start_failures": 0,
+     "trace_chunks_recorded": 0,
+     "trace_hint_absent": 28,
+     "trace_hint_invalid": 0,
+     "trace_hint_present": 0,
+     "trace_prefetch_bytes": 0,
+     "trace_prefetch_chunks": 0,
+     "trace_prefetch_failed_chunks": 0,
+     "trace_prefetch_jobs": 0,
+     "trace_prefetch_seconds": 0.0,
+     "trace_prefetch_skipped_chunks": 0,
+     "trace_prefetch_truncated": 0,
+     "trace_recordings_started": 24,
+     "traces_recorded": 0,
+     "spike_client_eagain_retries": 0
+    }
+   }
+  ]
+ },
+ "storage": {
+  "oci_layer_bytes": 5505439280,
+  "erofs_component_bytes_sum": 8816480256,
+  "erofs_component_bytes_distinct": 5080162304,
+  "nydus_blob_bytes_sum": 5437995327,
+  "nydus_blob_bytes_distinct": 2890302491,
+  "nydus_bootstrap_bytes": 35575484
+ },
+ "verify-fscache": {
+  "errors": {
+   "contents": "Traceback (most recent call last):\n  File \"/root/s11/verify_fscache.py\", line 445, in <module>\n    {\"contents\": check_contents, \"dict\": check_chunk_dict_sharing,\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n     \"validate\": check_digest_validation, \"failover\": check_failover}[s]()\n     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/root/s11/verify_fscache.py\", line 140, in check_contents\n    \"nydusd_blob_objects\": len(L.api(\"GET\", \"/api/v2/blobs?domain_id=s11\") or []),\n                               ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/s11/s11lib.py\", line 135, in api\n    r = c.getresponse()\n  File \"/usr/lib/python3.14/http/client.py\", line 1459, in getresponse\n    response.begin()\n    ~~~~~~~~~~~~~~^^\n  File \"/usr/lib/python3.14/http/client.py\", line 336, in begin\n    version, status, reason = self._read_status()\n                              ~~~~~~~~~~~~~~~~~^^\n  File \"/usr/lib/python3.14/http/client.py\", line 305, in _read_status\n    raise RemoteDisconnected(\"Remote end closed connection without\"\n                             \" response\")\nhttp.client.RemoteDisconnected: Remote end closed connection without response\n"
+  },
+  "step_seconds": {
+   "contents": 116.8,
+   "dict": 96.9,
+   "validate": 9.5,
+   "sharing": 2.9,
+   "failover": 140.2
+  },
+  "chunk_dict_domain_sharing": {
+   "scaleswe-responses-1-dict": {
+    "base": "scaleswe-responses-0",
+    "child_blobs": 3,
+    "child_blobs_shared_with_base": 1,
+    "child_new_blob_bytes_compressed": 2746483,
+    "base_full_read_fetched_bytes": 454484046,
+    "child_full_read_after_base_fetched_bytes": 0,
+    "child_bootstrap_fetch_bytes": 2877491
+   },
+   "scaleswe-oauthlib-1-dict": {
+    "base": "scaleswe-oauthlib-0",
+    "child_blobs": 3,
+    "child_blobs_shared_with_base": 1,
+    "child_new_blob_bytes_compressed": 2657071,
+    "base_full_read_fetched_bytes": 432438418,
+    "child_full_read_after_base_fetched_bytes": 0,
+    "child_bootstrap_fetch_bytes": 2781341
+   }
+  },
+  "digest_validation": {
+   "corrupted_blob": {
+    "blob": "6e67b1cb49c85d54",
+    "size": 77909772,
+    "bytes_flipped": 397
+   },
+   "validate_True": {
+    "files": 2628,
+    "correct": 2552,
+    "silently_wrong": 0,
+    "read_errors": 76,
+    "errors": [
+     "usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2: [Errno 5] Input/output error",
+     "usr/lib/x86_64-linux-gnu/libacl.so.1.1.2301: [Errno 5] Input/output error",
+     "usr/lib/x86_64-linux-gnu/libapt-pkg.so.6.0.0: [Errno 5] Input/output error"
+    ]
+   },
+   "validate_False": {
+    "files": 2628,
+    "correct": 2552,
+    "silently_wrong": 76,
+    "read_errors": 0,
+    "errors": []
+   },
+   "nydusd_log_digest_lines": [
+    "[2026-10-02 12:37:35.912532 +00:00] INFO RAFS features: COMPRESSION_NONE | HASH_BLAKE3 | EXPLICIT_UID_GID | HAS_XATTR | INLINED_CHUNK_DIGEST | ENCRYPTION_NONE",
+    "[2026-10-02 12:37:38.902231 +00:00] INFO RAFS features: COMPRESSION_NONE | HASH_BLAKE3 | EXPLICIT_UID_GID | HAS_XATTR | INLINED_CHUNK_DIGEST | ENCRYPTION_NONE",
+    "[2026-10-02 12:37:39.423510 +00:00] WARN [/src/cache/mod.rs:631] failed to read data from backend, data digest value doesn't match",
+    "[2026-10-02 12:37:39.423765 +00:00] ERROR [/src/fs_cache.rs:706] fscache: failed to read data from blob object: data digest value doesn't match",
+    "[2026-10-02 12:37:39.428711 +00:00] WARN [/src/cache/mod.rs:631] failed to read data from backend, data digest value doesn't match"
+   ]
+  },
+  "domain_sharing": {
+   "images": 20,
+   "blob_references": 64,
+   "distinct_blobs": 41,
+   "blobs_shared_by_2plus_images": {
+    "d11a7e41810e62d0": [
+     "scaleswe-responses-0",
+     "scaleswe-responses-1",
+     "scaleswe-responses-2",
+     "scaleswe-responses-3"
+    ],
+    "9eb09607e9bf04fc": [
+     "scaleswe-oauthlib-0",
+     "scaleswe-oauthlib-1"
+    ],
+    "459c166f0c123c83": [
+     "scaleswe-traitlets-0",
+     "scaleswe-traitlets-1"
+    ],
+    "254fbbae287dfddc": [
+     "tmax-0",
+     "tmax-1",
+     "tmax-2",
+     "tmax-3",
+     "tmax-4",
+     "tmax-5",
+     "tlego-3"
+    ],
+    "2384ddbce34608f2": [
+     "tlego-0",
+     "tlego-2",
+     "tlego-4",
+     "tlego-5"
+    ],
+    "290ea06542b9b152": [
+     "tlego-0",
+     "tlego-2",
+     "tlego-4"
+    ],
+    "be191ba7df39e2fa": [
+     "tlego-0",
+     "tlego-2",
+     "tlego-4"
+    ],
+    "c8c5385b5308e22b": [
+     "tlego-0",
+     "tlego-2",
+     "tlego-4"
+    ],
+    "f33304043f45967a": [
+     "tlego-2",
+     "tlego-4"
+    ],
+    "6c24424576a85564": [
+     "tlego-2",
+     "tlego-3",
+     "tlego-4"
+    ]
+   },
+   "fscache_files": 74,
+   "fscache_data_files": 0,
+   "fscache_dir_tree_sample": [
+    "19f7c1509f205dbfe9af148b76f7bd1f767ae15fb25344e4ac1595d78eac50ac.blob.digest",
+    "19f7c1509f205dbfe9af148b76f7bd1f767ae15fb25344e4ac1595d78eac50ac.blob.meta",
+    "19f7c1509f205dbfe9af148b76f7bd1f767ae15fb25344e4ac1595d78eac50ac.blob.toc",
+    "2384ddbce34608f259adbdc21470da1359b2d5e61f8adaf3045810c03b2b5114.blob.digest",
+    "2384ddbce34608f259adbdc21470da1359b2d5e61f8adaf3045810c03b2b5114.blob.meta",
+    "2384ddbce34608f259adbdc21470da1359b2d5e61f8adaf3045810c03b2b5114.blob.toc",
+    "254fbbae287dfddcceecc927b1b4d9e64c7b805e79ff70994280d65eef343b6d.blob.digest",
+    "254fbbae287dfddcceecc927b1b4d9e64c7b805e79ff70994280d65eef343b6d.blob.meta"
+   ]
+  },
+  "failover": {
+   "reference_files": 33647,
+   "no_supervisor": {
+    "before_kill": {
+     "files_done": 1083,
+     "errors": 0,
+     "wrong": 0,
+     "finished": false,
+     "seconds_since_progress": 0.02,
+     "first_errors": [
+      "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_codes.cpython-311.pyc: [Errno 105] No buffer space available",
+      "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_replace.cpython-311.pyc: [Errno 105] No buffer space available",
+      "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_export_format.cpython-311.pyc: [Errno 105] No buffer space available"
+     ]
+    },
+    "5s_after_kill": {
+     "files_done": 1312,
+     "errors": 222,
+     "wrong": 0,
+     "finished": true,
+     "seconds_since_progress": 3.81,
+     "first_errors": [
+      "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_codes.cpython-311.pyc: [Errno 105] No buffer space available",
+      "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_replace.cpython-311.pyc: [Errno 105] No buffer space available",
+      "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_export_format.cpython-311.pyc: [Errno 105] No buffer space available"
+     ]
+    },
+    "restart": {
+     "started": true,
+     "seconds": 0.05
+    },
+    "5s_after_restart": {
+     "files_done": 1312,
+     "errors": 222,
+     "wrong": 0,
+     "finished": true,
+     "seconds_since_progress": 8.86,
+     "first_errors": [
+      "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_codes.cpython-311.pyc: [Errno 105] No buffer space available",
+      "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_replace.cpython-311.pyc: [Errno 105] No buffer space available",
+      "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_export_format.cpython-311.pyc: [Errno 105] No buffer space available"
+     ]
+    },
+    "final": {
+     "files_done": 1312,
+     "errors": 222,
+     "wrong": 0,
+     "finished": true,
+     "seconds_since_progress": 8.86,
+     "first_errors": [
+      "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_codes.cpython-311.pyc: [Errno 105] No buffer space available",
+      "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_replace.cpython-311.pyc: [Errno 105] No buffer space available",
+      "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_export_format.cpython-311.pyc: [Errno 105] No buffer space available"
+     ]
+    },
+    "probe": {
+     "old_mount_read": "OSError(105, 'No buffer space available')",
+     "umount_rc": 0,
+     "remount_full_read": {
+      "files_done": 33647,
+      "errors": 0,
+      "wrong": 0,
+      "finished": true,
+      "seconds_since_progress": 0.0,
+      "first_errors": []
+     }
+    }
+   },
+   "with_supervisor": {
+    "saved": {
+     "state_bytes": 1078,
+     "fds": 1
+    },
+    "before_kill": {
+     "files_done": 1197,
+     "errors": 0,
+     "wrong": 0,
+     "finished": false,
+     "seconds_since_progress": 0.0,
+     "first_errors": []
+    },
+    "5s_after_kill": {
+     "files_done": 1199,
+     "errors": 0,
+     "wrong": 0,
+     "finished": false,
+     "seconds_since_progress": 5.0,
+     "first_errors": []
+    },
+    "takeover": {
+     "upgrade_state": "INIT",
+     "after_takeover": "READY",
+     "after_start": "RUNNING",
+     "seconds": 0.06
+    },
+    "5s_after_takeover": {
+     "files_done": 4823,
+     "errors": 0,
+     "wrong": 0,
+     "finished": false,
+     "seconds_since_progress": 0.01,
+     "first_errors": []
+    },
+    "final": {
+     "files_done": 33647,
+     "errors": 0,
+     "wrong": 0,
+     "finished": true,
+     "seconds_since_progress": 0.0,
+     "first_errors": []
+    }
+   }
+  }
+ },
+ "backend-client-eagain": {
+  "ok": 21,
+  "BlockingIOError": 19,
+  "other": 0,
+  "examples": [
+   "BlockingIOError(11, 'Resource temporarily unavailable')",
+   "BlockingIOError(11, 'Resource temporarily unavailable')"
+  ]
+ },
+ "contents_vs_oci": {
+  "images": 20,
+  "sampled_files": 900,
+  "matched": 900
+ }
+}

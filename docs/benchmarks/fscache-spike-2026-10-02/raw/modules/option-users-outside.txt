@@ -1,0 +1,2 @@
+./include/generated/autoconf.h:935:#define CONFIG_CACHEFILES_ONDEMAND 1
+./include/generated/autoconf.h:6540:#define CONFIG_EROFS_FS_ONDEMAND 1

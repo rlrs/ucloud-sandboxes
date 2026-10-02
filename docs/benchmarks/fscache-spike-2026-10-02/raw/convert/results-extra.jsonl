@@ -1,0 +1,5 @@
+{"name":"tlego-3-raw","rc":0,"seconds":3.201099406,"args":"--compressor none"}
+{"name":"scaleswe-oauthlib-1-dict","rc":0,"seconds":20.569028216,"args":"--compressor zstd --chunk-dict bootstrap:registry:127.0.0.1:5001/s11/scaleswe-oauthlib-0:nydus --chunk-dict-insecure"}
+{"name":"scaleswe-responses-3-dict","rc":0,"seconds":20.737211289,"args":"--compressor zstd --chunk-dict bootstrap:registry:127.0.0.1:5001/s11/scaleswe-responses-0:nydus --chunk-dict-insecure"}
+{"name":"scaleswe-responses-1-dict","rc":0,"seconds":21.149432913,"args":"--compressor zstd --chunk-dict bootstrap:registry:127.0.0.1:5001/s11/scaleswe-responses-0:nydus --chunk-dict-insecure"}
+{"name":"scaleswe-responses-2-dict","rc":0,"seconds":21.518556398,"args":"--compressor zstd --chunk-dict bootstrap:registry:127.0.0.1:5001/s11/scaleswe-responses-0:nydus --chunk-dict-insecure"}

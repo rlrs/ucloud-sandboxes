@@ -1,0 +1,4295 @@
+{
+ "path": "fscache",
+ "phase": "seq",
+ "kernel": "7.0.0-30-generic",
+ "images": [
+  {
+   "image": "scaleswe-responses-0",
+   "family": "ScaleSWE",
+   "attach": {
+    "bootstrap_layer_bytes": 3232878,
+    "bootstrap_fetch_s": 0.09670674100016186,
+    "bind_s": 0.008111574999929871,
+    "mount_s": 0.032646301000113453,
+    "attach_s": 0.13746461700020518
+   },
+   "start": {
+    "overlay_s": 0.003974378000293655,
+    "runsc_start_s": 0.4674183639999683
+   },
+   "ready_s": 0.6089427189999697,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.590851816000395,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.19919896299961692,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 2.0066981049999413,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.9100744029997259,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 1.1997945350003647,
+   "all_cold_done_s": 4.315975326000171,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.04191489899994849,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.03099112800009607,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 0.4857279689999814,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.21026095299976078,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "host": {
+    "wall_s": 5.111706885999865,
+    "host_busy_cpu_s": 5.58,
+    "host_cpu_util": 0.0691364143228844,
+    "daemon_cpu_s": 1.09,
+    "bytes_fetched": 33191151
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 120,
+     "read_errors": 0,
+     "read_amount_total": 29843153,
+     "read_cumulative_latency_millis_total": 524,
+     "read_cumulative_latency_millis_dist": [
+      10,
+      2,
+      18,
+      41,
+      52,
+      355,
+      41,
+      5
+     ],
+     "read_count_block_size_dist": [
+      4,
+      1,
+      9,
+      13,
+      15,
+      69,
+      8,
+      1
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       4,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       13,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       15,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       69,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "d11a7e41810e62d0c079ed43fd6a588981cd8fb335ea1a7f85ca1893a6fff69e.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 2790,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    2654208,
+    88145920
+   ]
+  },
+  {
+   "image": "scaleswe-responses-1",
+   "family": "ScaleSWE",
+   "attach": {
+    "bootstrap_layer_bytes": 3233227,
+    "bootstrap_fetch_s": 0.09260221400018054,
+    "bind_s": 0.00783984400004556,
+    "mount_s": 0.031189728999834188,
+    "attach_s": 0.13163178700006029
+   },
+   "start": {
+    "overlay_s": 0.004077967000284843,
+    "runsc_start_s": 0.4714342829997804
+   },
+   "ready_s": 0.6072123070002817,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.5987326499998744,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.18824469299988777,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 1.947356471999683,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.8116441680003845,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 1.2059449570001561,
+   "all_cold_done_s": 4.153418831000181,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.05605369500017332,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.04183621899983336,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 0.5381348070000058,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.24073772999963694,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "host": {
+    "wall_s": 5.056421410999974,
+    "host_busy_cpu_s": 5.49,
+    "host_cpu_util": 0.06879699248120301,
+    "daemon_cpu_s": 1.04,
+    "bytes_fetched": 33204247
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 123,
+     "read_errors": 0,
+     "read_amount_total": 29851393,
+     "read_cumulative_latency_millis_total": 549,
+     "read_cumulative_latency_millis_dist": [
+      12,
+      1,
+      30,
+      42,
+      48,
+      367,
+      40,
+      9
+     ],
+     "read_count_block_size_dist": [
+      5,
+      1,
+      11,
+      13,
+      15,
+      69,
+      8,
+      1
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       5,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       10,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       13,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       2,
+       13,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       68,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "d11a7e41810e62d0c079ed43fd6a588981cd8fb335ea1a7f85ca1893a6fff69e.blob.data",
+      "42b9264ba3ab5783032ef03fd6d36ab374f68677eb237bf5dcddb7d8a17f520d.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 2790,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    2670592,
+    88166400
+   ]
+  },
+  {
+   "image": "scaleswe-responses-2",
+   "family": "ScaleSWE",
+   "attach": {
+    "bootstrap_layer_bytes": 3233229,
+    "bootstrap_fetch_s": 0.0849269989998902,
+    "bind_s": 0.008529206000275735,
+    "mount_s": 0.031183227999918017,
+    "attach_s": 0.12463943300008395
+   },
+   "start": {
+    "overlay_s": 0.0038036470000406553,
+    "runsc_start_s": 0.47079040100015845
+   },
+   "ready_s": 0.599283930999718,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.5916436869997597,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.20831219999990935,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 2.0439519650003604,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.9076392179999857,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 1.1909276179994777,
+   "all_cold_done_s": 4.351014250999924,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.05265881900004388,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.035896636999950715,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 0.4487404100000276,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.21353782899996077,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "host": {
+    "wall_s": 5.128738267000244,
+    "host_busy_cpu_s": 5.55,
+    "host_cpu_util": 0.06858625803262482,
+    "daemon_cpu_s": 1.09,
+    "bytes_fetched": 33205289
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 123,
+     "read_errors": 0,
+     "read_amount_total": 29851393,
+     "read_cumulative_latency_millis_total": 572,
+     "read_cumulative_latency_millis_dist": [
+      14,
+      2,
+      48,
+      41,
+      56,
+      360,
+      46,
+      5
+     ],
+     "read_count_block_size_dist": [
+      5,
+      1,
+      11,
+      13,
+      15,
+      69,
+      8,
+      1
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       5,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       10,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       13,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       15,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       69,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "d11a7e41810e62d0c079ed43fd6a588981cd8fb335ea1a7f85ca1893a6fff69e.blob.data",
+      "39277c4f38694b8169f088ad8503ef770e3f93d6e80a2ce3c67906095a8f020c.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 2790,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    2670592,
+    88178688
+   ]
+  },
+  {
+   "image": "scaleswe-responses-3",
+   "family": "ScaleSWE",
+   "attach": {
+    "bootstrap_layer_bytes": 3233227,
+    "bootstrap_fetch_s": 0.08397146700008307,
+    "bind_s": 0.019425366000177746,
+    "mount_s": 0.02258676200017362,
+    "attach_s": 0.12598359500043443
+   },
+   "start": {
+    "overlay_s": 0.003794926999944437,
+    "runsc_start_s": 0.4741931680000562
+   },
+   "ready_s": 0.6040244900000289,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.6006044830000974,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.20937291200016261,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 2.0336409450001156,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.8996681739999985,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 1.2046289730001263,
+   "all_cold_done_s": 4.347493803999896,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.0637703990000773,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.039485943999807205,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 0.505666805999681,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.23779455400017468,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "host": {
+    "wall_s": 5.221672619999936,
+    "host_busy_cpu_s": 5.78,
+    "host_cpu_util": 0.07005211489516422,
+    "daemon_cpu_s": 1.11,
+    "bytes_fetched": 33205811
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 122,
+     "read_errors": 0,
+     "read_amount_total": 29851393,
+     "read_cumulative_latency_millis_total": 565,
+     "read_cumulative_latency_millis_dist": [
+      14,
+      2,
+      44,
+      43,
+      50,
+      361,
+      46,
+      5
+     ],
+     "read_count_block_size_dist": [
+      5,
+      1,
+      11,
+      13,
+      15,
+      67,
+      9,
+      1
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       5,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       11,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       13,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       15,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       67,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       9,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "d11a7e41810e62d0c079ed43fd6a588981cd8fb335ea1a7f85ca1893a6fff69e.blob.data",
+      "9bee2292ef7f1fdd6d4922d86419dd57238e8fdbd3636abf8dc8ef8dc3173b5f.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 2790,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    2670592,
+    88166400
+   ]
+  },
+  {
+   "image": "scaleswe-oauthlib-0",
+   "family": "ScaleSWE",
+   "attach": {
+    "bootstrap_layer_bytes": 3126118,
+    "bootstrap_fetch_s": 0.08687389299984716,
+    "bind_s": 0.008688806000009208,
+    "mount_s": 0.03139978900026108,
+    "attach_s": 0.12696248800011745
+   },
+   "start": {
+    "overlay_s": 0.003956387000016548,
+    "runsc_start_s": 0.47307605600008173
+   },
+   "ready_s": 0.6040576209998108,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.5509259409996048,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.2700289449999218,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 2.028327666000223,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.9138919399997576,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 1.1549835619994155,
+   "all_cold_done_s": 4.3674101229999,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.05211821700004293,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.03886698299993441,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 0.5657918290003181,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.26719071999968946,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "host": {
+    "wall_s": 5.317984402000093,
+    "host_busy_cpu_s": 5.81,
+    "host_cpu_util": 0.0691913778730499,
+    "daemon_cpu_s": 1.1,
+    "bytes_fetched": 35708770
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 121,
+     "read_errors": 0,
+     "read_amount_total": 32458951,
+     "read_cumulative_latency_millis_total": 533,
+     "read_cumulative_latency_millis_dist": [
+      6,
+      4,
+      15,
+      40,
+      49,
+      365,
+      49,
+      5
+     ],
+     "read_count_block_size_dist": [
+      3,
+      1,
+      8,
+      12,
+      16,
+      70,
+      10,
+      1
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       3,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       7,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       12,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       16,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       69,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       10,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "9eb09607e9bf04fca5f04393bd81914d7feb9e9b6581d4344a6456c0a4bfb52b.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 2803,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    2605056,
+    90386432
+   ]
+  },
+  {
+   "image": "scaleswe-oauthlib-1",
+   "family": "ScaleSWE",
+   "attach": {
+    "bootstrap_layer_bytes": 3126407,
+    "bootstrap_fetch_s": 0.0868722830000479,
+    "bind_s": 0.008426736000274104,
+    "mount_s": 0.03150168899992423,
+    "attach_s": 0.12680070800024623
+   },
+   "start": {
+    "overlay_s": 0.002574905000074068,
+    "runsc_start_s": 0.47320498499993846
+   },
+   "ready_s": 0.6026304080000955,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.5293845109999893,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.2753891150000527,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 2.0219373639997684,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.8765672300000915,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 1.1320149190000848,
+   "all_cold_done_s": 4.306085747999987,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.045721206000052916,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.04108424700007163,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 0.4955403670001033,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.272474919999695,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "host": {
+    "wall_s": 5.188091518999954,
+    "host_busy_cpu_s": 5.88,
+    "host_cpu_util": 0.07166361974405851,
+    "daemon_cpu_s": 1.1199999999999999,
+    "bytes_fetched": 35717178
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 124,
+     "read_errors": 0,
+     "read_amount_total": 32467191,
+     "read_cumulative_latency_millis_total": 550,
+     "read_cumulative_latency_millis_dist": [
+      9,
+      2,
+      25,
+      44,
+      49,
+      357,
+      60,
+      4
+     ],
+     "read_count_block_size_dist": [
+      4,
+      1,
+      10,
+      12,
+      16,
+      70,
+      10,
+      1
+     ],
+     "read_latency_sizes_dist": [
+      [
+       1,
+       3,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       2,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       12,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       16,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       69,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       10,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "f55bfe3e3bf8ccd819dedac53d228b9cbaf603f1ac1d6f082c81dfe779cc0a25.blob.data",
+      "9eb09607e9bf04fca5f04393bd81914d7feb9e9b6581d4344a6456c0a4bfb52b.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 2803,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    2621440,
+    90411008
+   ]
+  },
+  {
+   "image": "scaleswe-traitlets-0",
+   "family": "ScaleSWE",
+   "attach": {
+    "bootstrap_layer_bytes": 3029732,
+    "bootstrap_fetch_s": 0.08774446400002489,
+    "bind_s": 0.007412443999783136,
+    "mount_s": 0.029846936000012647,
+    "attach_s": 0.12500384399982067
+   },
+   "start": {
+    "overlay_s": 0.003997976999926323,
+    "runsc_start_s": 0.4639199190000909
+   },
+   "ready_s": 0.5929784400000244,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.5466186419998849,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.24721783199993297,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 2.0144156500000463,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.9139438590000282,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 1.1395970819999093,
+   "all_cold_done_s": 4.315362324000034,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.03434393399993496,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.028966325000055804,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 0.46272698599977957,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.23672935300010067,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "host": {
+    "wall_s": 5.1047394810002515,
+    "host_busy_cpu_s": 5.5,
+    "host_cpu_util": 0.06825515016133035,
+    "daemon_cpu_s": 1.07,
+    "bytes_fetched": 34948511
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 118,
+     "read_errors": 0,
+     "read_amount_total": 31801979,
+     "read_cumulative_latency_millis_total": 489,
+     "read_cumulative_latency_millis_dist": [
+      4,
+      2,
+      16,
+      42,
+      41,
+      330,
+      54,
+      0
+     ],
+     "read_count_block_size_dist": [
+      2,
+      1,
+      8,
+      13,
+      14,
+      69,
+      11,
+      0
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       2,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       13,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       14,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       68,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       11,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "459c166f0c123c83ab057c8a6cbe226c0a100eed7f18364e75ac0efa2c0822e2.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 2741,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    2555904,
+    88866816
+   ]
+  },
+  {
+   "image": "scaleswe-traitlets-1",
+   "family": "ScaleSWE",
+   "attach": {
+    "bootstrap_layer_bytes": 3030032,
+    "bootstrap_fetch_s": 0.08919358699995428,
+    "bind_s": 0.008868096000242076,
+    "mount_s": 0.029960385999856953,
+    "attach_s": 0.1280220690000533
+   },
+   "start": {
+    "overlay_s": 0.003996568000275147,
+    "runsc_start_s": 0.47189801300010004
+   },
+   "ready_s": 0.6039561700004015,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.5301331119999304,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.25292107299992495,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 1.9618758810001964,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.9082321999999294,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 1.1340892820003319,
+   "all_cold_done_s": 4.2572981960001925,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.05933735100006743,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.04161361799970109,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 0.4965784190003433,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.24142140100002507,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "host": {
+    "wall_s": 5.116842115000054,
+    "host_busy_cpu_s": 5.66,
+    "host_cpu_util": 0.07002350612396388,
+    "daemon_cpu_s": 1.07,
+    "bytes_fetched": 34960726
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 121,
+     "read_errors": 0,
+     "read_amount_total": 31810219,
+     "read_cumulative_latency_millis_total": 525,
+     "read_cumulative_latency_millis_dist": [
+      6,
+      3,
+      24,
+      41,
+      40,
+      346,
+      65,
+      0
+     ],
+     "read_count_block_size_dist": [
+      3,
+      1,
+      10,
+      13,
+      14,
+      69,
+      11,
+      0
+     ],
+     "read_latency_sizes_dist": [
+      [
+       1,
+       2,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       2,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       13,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       14,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       69,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       11,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "459c166f0c123c83ab057c8a6cbe226c0a100eed7f18364e75ac0efa2c0822e2.blob.data",
+      "4ab0a793a0fbacd7cb04372ea9386eae6164aa86f9b75312885908b94aca6112.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 2741,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    2572288,
+    88887296
+   ]
+  },
+  {
+   "image": "tmax-0",
+   "family": "TMax",
+   "attach": {
+    "bootstrap_layer_bytes": 245729,
+    "bootstrap_fetch_s": 0.023788585000147577,
+    "bind_s": 0.008114164999824425,
+    "mount_s": 0.03153829900020355,
+    "attach_s": 0.06344104900017555
+   },
+   "start": {
+    "overlay_s": 0.0040317580001101305,
+    "runsc_start_s": 0.4444512109998868
+   },
+   "ready_s": 0.511992138000096,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.03738634999990609,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import sys\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "git_status": {
+     "seconds": 0.01631277999968006,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.015211829000236321,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -m pip --version\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pytest_import": {
+     "seconds": 0.01902383499964344,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import pytest\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    }
+   },
+   "first_command_done_s": 0.5493784880000021,
+   "all_cold_done_s": 0.6000725529997908,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.018114603999947576,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import sys\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "git_status": {
+     "seconds": 0.01864250499966147,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.018267804000061005,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -m pip --version\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pytest_import": {
+     "seconds": 0.022660073000224656,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import pytest\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    }
+   },
+   "host": {
+    "wall_s": 0.7045489679999264,
+    "host_busy_cpu_s": 0.65,
+    "host_cpu_util": 0.05855855855855856,
+    "daemon_cpu_s": 0.1,
+    "bytes_fetched": 2218376
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 10,
+     "read_errors": 0,
+     "read_amount_total": 1960605,
+     "read_cumulative_latency_millis_total": 48,
+     "read_cumulative_latency_millis_dist": [
+      0,
+      0,
+      5,
+      9,
+      2,
+      32,
+      0,
+      0
+     ],
+     "read_count_block_size_dist": [
+      0,
+      0,
+      2,
+      1,
+      1,
+      6,
+      0,
+      0
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       2,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       6,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "254fbbae287dfddcceecc927b1b4d9e64c7b805e79ff70994280d65eef343b6d.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 107,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    1196032,
+    6463488
+   ]
+  },
+  {
+   "image": "tmax-1",
+   "family": "TMax",
+   "attach": {
+    "bootstrap_layer_bytes": 1151102,
+    "bootstrap_fetch_s": 0.05402478099995278,
+    "bind_s": 0.008714426000096864,
+    "mount_s": 0.03243555099970763,
+    "attach_s": 0.09517475799975728
+   },
+   "start": {
+    "overlay_s": 0.004109848000098282,
+    "runsc_start_s": 0.4694232279998687
+   },
+   "ready_s": 0.5687640940000165,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.47828903500021624,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.019956116999765072,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 1.9523360829998637,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.693665448000047,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 1.0470531290002327,
+   "all_cold_done_s": 3.713186567000321,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.04147832799981188,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.0172724020003443,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.46175993399992876,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.2527313430000504,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "host": {
+    "wall_s": 4.514024766000148,
+    "host_busy_cpu_s": 4.74,
+    "host_cpu_util": 0.06643307638402242,
+    "daemon_cpu_s": 0.92,
+    "bytes_fetched": 22785100
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 84,
+     "read_errors": 0,
+     "read_amount_total": 21549727,
+     "read_cumulative_latency_millis_total": 343,
+     "read_cumulative_latency_millis_dist": [
+      2,
+      0,
+      10,
+      34,
+      46,
+      229,
+      22,
+      0
+     ],
+     "read_count_block_size_dist": [
+      1,
+      0,
+      5,
+      8,
+      10,
+      54,
+      6,
+      0
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       5,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       9,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       54,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       6,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "b4f1524e555edc7230179f24a8985c2b4719fbb61540ce4bc6c536cdbbd9586a.blob.data",
+      "254fbbae287dfddcceecc927b1b4d9e64c7b805e79ff70994280d65eef343b6d.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 2770,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    1691648,
+    63594496
+   ]
+  },
+  {
+   "image": "tmax-2",
+   "family": "TMax",
+   "attach": {
+    "bootstrap_layer_bytes": 1151100,
+    "bootstrap_fetch_s": 0.052958079000291036,
+    "bind_s": 0.008534625999800483,
+    "mount_s": 0.0319078890001947,
+    "attach_s": 0.09340059400028622
+   },
+   "start": {
+    "overlay_s": 0.0040513680000913155,
+    "runsc_start_s": 0.4520738659998642
+   },
+   "ready_s": 0.5495889580001858,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.5091383529997984,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.020397017999584932,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 1.8963010190000205,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.6886508379998304,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 1.0587273109999842,
+   "all_cold_done_s": 3.6642802060000577,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.04452952399969945,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.01797531300007904,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.4482497079998211,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.23370837799984656,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "host": {
+    "wall_s": 4.435611200000039,
+    "host_busy_cpu_s": 4.7,
+    "host_cpu_util": 0.06698973774230331,
+    "daemon_cpu_s": 0.9299999999999999,
+    "bytes_fetched": 22785669
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 84,
+     "read_errors": 0,
+     "read_amount_total": 21549622,
+     "read_cumulative_latency_millis_total": 358,
+     "read_cumulative_latency_millis_dist": [
+      2,
+      0,
+      10,
+      33,
+      47,
+      243,
+      23,
+      0
+     ],
+     "read_count_block_size_dist": [
+      1,
+      0,
+      5,
+      8,
+      10,
+      54,
+      6,
+      0
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       4,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       10,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       54,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       6,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "254fbbae287dfddcceecc927b1b4d9e64c7b805e79ff70994280d65eef343b6d.blob.data",
+      "6213de0e2e2810d6f22996f77f1fe63b1b5fae6ff3a4a13dee00a60c826e31f0.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 2770,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    1691648,
+    63594496
+   ]
+  },
+  {
+   "image": "tmax-3",
+   "family": "TMax",
+   "attach": {
+    "bootstrap_layer_bytes": 1151182,
+    "bootstrap_fetch_s": 0.05227737799987153,
+    "bind_s": 0.008494155000335013,
+    "mount_s": 0.03196198999967237,
+    "attach_s": 0.09273352299987891
+   },
+   "start": {
+    "overlay_s": 0.0039110379998419376,
+    "runsc_start_s": 0.4654339810003876
+   },
+   "ready_s": 0.5621315520002099,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.47501204900027005,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.018843424999886338,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 1.9034723810000287,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.7130811039996843,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 1.03714360100048,
+   "all_cold_done_s": 3.672774320999906,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.042073238999819296,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.01799412400032452,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.4592994889999318,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.24204036300034204,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "host": {
+    "wall_s": 4.461295877000339,
+    "host_busy_cpu_s": 4.79,
+    "host_cpu_util": 0.06786625106262398,
+    "daemon_cpu_s": 0.9299999999999999,
+    "bytes_fetched": 22785321
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 84,
+     "read_errors": 0,
+     "read_amount_total": 21549712,
+     "read_cumulative_latency_millis_total": 352,
+     "read_cumulative_latency_millis_dist": [
+      3,
+      0,
+      14,
+      33,
+      46,
+      229,
+      27,
+      0
+     ],
+     "read_count_block_size_dist": [
+      1,
+      0,
+      5,
+      8,
+      10,
+      54,
+      6,
+      0
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       4,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       10,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       54,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       6,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "254fbbae287dfddcceecc927b1b4d9e64c7b805e79ff70994280d65eef343b6d.blob.data",
+      "5b2b9ecd29f6067c7013d42291af42f5ab82b0f0a65a5b9fb9003191674e94af.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 2770,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    1691648,
+    63594496
+   ]
+  },
+  {
+   "image": "tmax-4",
+   "family": "TMax",
+   "attach": {
+    "bootstrap_layer_bytes": 1151448,
+    "bootstrap_fetch_s": 0.053865101000155846,
+    "bind_s": 0.00848995600017588,
+    "mount_s": 0.031973780000043917,
+    "attach_s": 0.09432883700037564
+   },
+   "start": {
+    "overlay_s": 0.003941767000014806,
+    "runsc_start_s": 0.47157389299991337
+   },
+   "ready_s": 0.5699007369998981,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.4704969499998697,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.018690265000259387,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 1.8339801820002322,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.752762058999906,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 1.0403976869997678,
+   "all_cold_done_s": 3.6459869430000253,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.04234862900011649,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.02178089099970748,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.4696199790000719,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.251891040999908,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "host": {
+    "wall_s": 4.458301693000067,
+    "host_busy_cpu_s": 4.65,
+    "host_cpu_util": 0.06602300156183445,
+    "daemon_cpu_s": 0.92,
+    "bytes_fetched": 22721411
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 84,
+     "read_errors": 0,
+     "read_amount_total": 21485224,
+     "read_cumulative_latency_millis_total": 344,
+     "read_cumulative_latency_millis_dist": [
+      2,
+      0,
+      9,
+      33,
+      43,
+      235,
+      22,
+      0
+     ],
+     "read_count_block_size_dist": [
+      1,
+      0,
+      5,
+      8,
+      10,
+      54,
+      6,
+      0
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       2,
+       3,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       10,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       54,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       6,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "f0fd64748e4b38846df4943a506ef1672e8a3179d40e76d0cbbf73d603d38fe0.blob.data",
+      "254fbbae287dfddcceecc927b1b4d9e64c7b805e79ff70994280d65eef343b6d.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 2763,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    1691648,
+    63401984
+   ]
+  },
+  {
+   "image": "tmax-5",
+   "family": "TMax",
+   "attach": {
+    "bootstrap_layer_bytes": 2314150,
+    "bootstrap_fetch_s": 0.07586692199993195,
+    "bind_s": 0.00833825599966076,
+    "mount_s": 0.03521640600001774,
+    "attach_s": 0.11942158399961045
+   },
+   "start": {
+    "overlay_s": 0.0037457969997376495,
+    "runsc_start_s": 0.5267897250000715
+   },
+   "ready_s": 0.6500099859999864,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.4946900459999597,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.01917835600033868,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 1.9126226979997227,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.7053521900002124,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 1.144700031999946,
+   "all_cold_done_s": 3.78201845600006,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.0443792230003055,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.01798045399982584,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.47299438500022006,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.2559765289997813,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "host": {
+    "wall_s": 4.600149007000255,
+    "host_busy_cpu_s": 4.83,
+    "host_cpu_util": 0.06637350556548029,
+    "daemon_cpu_s": 0.95,
+    "bytes_fetched": 24525625
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 84,
+     "read_errors": 0,
+     "read_amount_total": 22123948,
+     "read_cumulative_latency_millis_total": 341,
+     "read_cumulative_latency_millis_dist": [
+      3,
+      0,
+      12,
+      34,
+      26,
+      237,
+      29,
+      0
+     ],
+     "read_count_block_size_dist": [
+      1,
+      0,
+      5,
+      8,
+      9,
+      54,
+      7,
+      0
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       4,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       9,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       54,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       7,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "e5b0dcab00f039f43e3621215c1f919ff8e0c3b2496092da33c6dafabe892659.blob.data",
+      "254fbbae287dfddcceecc927b1b4d9e64c7b805e79ff70994280d65eef343b6d.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 2775,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    2293760,
+    67018752
+   ]
+  },
+  {
+   "image": "tlego-0",
+   "family": "Terminal-Lego",
+   "attach": {
+    "bootstrap_layer_bytes": 479828,
+    "bootstrap_fetch_s": 0.030340126999817585,
+    "bind_s": 0.00855898600002547,
+    "mount_s": 0.03312030200004301,
+    "attach_s": 0.07201941499988607
+   },
+   "start": {
+    "overlay_s": 0.004298328000004403,
+    "runsc_start_s": 0.43760644899975887
+   },
+   "ready_s": 0.5139829120003014,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.4769958229999247,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.019410096000228805,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 1.8250999760002742,
+     "rc": 0,
+     "stdout": "pip 26.2.1 from /usr/local/lib/python3.13/site-packages/pip (python 3.13)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.07609598199996981,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import pytest\nModuleNotFoundError: No module named 'pytest'\n"
+    }
+   },
+   "first_command_done_s": 0.9909787350002262,
+   "all_cold_done_s": 2.911726159000409,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.06616427400012981,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.019135866000397073,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.32548755900006654,
+     "rc": 0,
+     "stdout": "pip 26.2.1 from /usr/local/lib/python3.13/site-packages/pip (python 3.13)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.08929490700029419,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import pytest\nModuleNotFoundError: No module named 'pytest'\n"
+    }
+   },
+   "host": {
+    "wall_s": 3.4385089240004163,
+    "host_busy_cpu_s": 3.7,
+    "host_cpu_util": 0.06806475349521707,
+    "daemon_cpu_s": 0.61,
+    "bytes_fetched": 14816646
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 65,
+     "read_errors": 0,
+     "read_amount_total": 14274423,
+     "read_cumulative_latency_millis_total": 281,
+     "read_cumulative_latency_millis_dist": [
+      0,
+      0,
+      55,
+      33,
+      44,
+      135,
+      14,
+      0
+     ],
+     "read_count_block_size_dist": [
+      0,
+      0,
+      8,
+      8,
+      10,
+      35,
+      4,
+      0
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       2,
+       6,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       7,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       10,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       35,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       4,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "2384ddbce34608f259adbdc21470da1359b2d5e61f8adaf3045810c03b2b5114.blob.data",
+      "290ea06542b9b152ec00b44eda7c3b95151b9242fdb35697bedb139557e02bad.blob.data",
+      "be191ba7df39e2fae4599b8c0ed5b5270558656ca5a696327825247343056417.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 1552,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    1331200,
+    49627136
+   ]
+  },
+  {
+   "image": "tlego-1",
+   "family": "Terminal-Lego",
+   "attach": {
+    "bootstrap_layer_bytes": 524235,
+    "bootstrap_fetch_s": 0.03230166999992434,
+    "bind_s": 0.007439284000156476,
+    "mount_s": 0.031291298999803985,
+    "attach_s": 0.0710322529998848
+   },
+   "start": {
+    "overlay_s": 0.0034657559999686782,
+    "runsc_start_s": 0.4082647340001131
+   },
+   "ready_s": 0.4828094930003317,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.02189915100007056,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import sys\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "git_status": {
+     "seconds": 0.03182453999988866,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.01783896300003107,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -m pip --version\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pytest_import": {
+     "seconds": 0.01902407499983383,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import pytest\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    }
+   },
+   "first_command_done_s": 0.5047086440004023,
+   "all_cold_done_s": 0.5735465930001737,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.016971271999864257,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import sys\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "git_status": {
+     "seconds": 0.01880177500015634,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.01800570399973367,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -m pip --version\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pytest_import": {
+     "seconds": 0.021181560000059108,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import pytest\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    }
+   },
+   "host": {
+    "wall_s": 0.6753399440003705,
+    "host_busy_cpu_s": 0.78,
+    "host_cpu_util": 0.07337723424270931,
+    "daemon_cpu_s": 0.1,
+    "bytes_fetched": 2392827
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 21,
+     "read_errors": 0,
+     "read_amount_total": 1847405,
+     "read_cumulative_latency_millis_total": 155,
+     "read_cumulative_latency_millis_dist": [
+      16,
+      2,
+      70,
+      34,
+      11,
+      22,
+      0,
+      0
+     ],
+     "read_count_block_size_dist": [
+      3,
+      1,
+      9,
+      2,
+      3,
+      3,
+      0,
+      0
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       3,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       2,
+       6,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       2,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       3,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       3,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "fae156fb23177e9ff7a7dc772736b8fb5f0f41b282a66b725fd6da1c6898541b.blob.data",
+      "68d758dff6c59d37d2e4ec6a700dea799fb8484090c56bee4e4a6461fe0c7e1a.blob.data",
+      "19f7c1509f205dbfe9af148b76f7bd1f767ae15fb25344e4ac1595d78eac50ac.blob.data",
+      "3b9de0e84e8fde33887ca6444a617774567d6be013162a8529bfa888783e794c.blob.data",
+      "7c6ab5ca88511ce15433051a066b31d5d0621f2e3e9bd5c276165592cdda1e67.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 38,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    1396736,
+    6332416
+   ]
+  },
+  {
+   "image": "tlego-2",
+   "family": "Terminal-Lego",
+   "attach": {
+    "bootstrap_layer_bytes": 479841,
+    "bootstrap_fetch_s": 0.02990526600024168,
+    "bind_s": 0.00811432499995135,
+    "mount_s": 0.03215877000002365,
+    "attach_s": 0.07017836100021668
+   },
+   "start": {
+    "overlay_s": 0.0038778980001552554,
+    "runsc_start_s": 0.4452750030000061
+   },
+   "ready_s": 0.5193905219998669,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.4681257249999362,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.0180859940001028,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C /app status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 1.7226412029999665,
+     "rc": 0,
+     "stdout": "pip 26.2.1 from /usr/local/lib/python3.13/site-packages/pip (python 3.13)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.10773802199992133,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import pytest\nModuleNotFoundError: No module named 'pytest'\n"
+    }
+   },
+   "first_command_done_s": 0.9875162469998031,
+   "all_cold_done_s": 2.8361400359999607,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.06301801800009343,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.01790692399981708,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C /app status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.2792842220001148,
+     "rc": 0,
+     "stdout": "pip 26.2.1 from /usr/local/lib/python3.13/site-packages/pip (python 3.13)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.06690242500008026,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import pytest\nModuleNotFoundError: No module named 'pytest'\n"
+    }
+   },
+   "host": {
+    "wall_s": 3.2900215059999027,
+    "host_busy_cpu_s": 4.16,
+    "host_cpu_util": 0.08003078106964218,
+    "daemon_cpu_s": 0.57,
+    "bytes_fetched": 14817989
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 65,
+     "read_errors": 0,
+     "read_amount_total": 14274423,
+     "read_cumulative_latency_millis_total": 227,
+     "read_cumulative_latency_millis_dist": [
+      0,
+      0,
+      21,
+      42,
+      28,
+      122,
+      14,
+      0
+     ],
+     "read_count_block_size_dist": [
+      0,
+      0,
+      8,
+      8,
+      10,
+      35,
+      4,
+      0
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       2,
+       6,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       2,
+       6,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       2,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       3,
+       32,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       4,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "be191ba7df39e2fae4599b8c0ed5b5270558656ca5a696327825247343056417.blob.data",
+      "290ea06542b9b152ec00b44eda7c3b95151b9242fdb35697bedb139557e02bad.blob.data",
+      "2384ddbce34608f259adbdc21470da1359b2d5e61f8adaf3045810c03b2b5114.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 1552,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    1331200,
+    49631232
+   ]
+  },
+  {
+   "image": "tlego-3",
+   "family": "Terminal-Lego",
+   "attach": {
+    "bootstrap_layer_bytes": 245791,
+    "bootstrap_fetch_s": 0.0232926740000039,
+    "bind_s": 0.00779374400008237,
+    "mount_s": 0.031365818999802286,
+    "attach_s": 0.062452236999888555
+   },
+   "start": {
+    "overlay_s": 0.0037479170000551676,
+    "runsc_start_s": 0.4323656790002133
+   },
+   "ready_s": 0.4986497130003045,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.01962637700034975,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import sys\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "git_status": {
+     "seconds": 0.021103918999870075,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C /app status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.029497726000045077,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -m pip --version\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pytest_import": {
+     "seconds": 0.019273006000275927,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import pytest\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    }
+   },
+   "first_command_done_s": 0.5182760900006542,
+   "all_cold_done_s": 0.5883065709999755,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.016901812000014615,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import sys\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "git_status": {
+     "seconds": 0.019190185999832465,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C /app status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.01952945599987288,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -m pip --version\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pytest_import": {
+     "seconds": 0.017168492000109836,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import pytest\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    }
+   },
+   "host": {
+    "wall_s": 0.6881938779997654,
+    "host_busy_cpu_s": 0.64,
+    "host_cpu_util": 0.05909510618651893,
+    "daemon_cpu_s": 0.09000000000000001,
+    "bytes_fetched": 2218936
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 10,
+     "read_errors": 0,
+     "read_amount_total": 1960605,
+     "read_cumulative_latency_millis_total": 50,
+     "read_cumulative_latency_millis_dist": [
+      0,
+      0,
+      4,
+      9,
+      2,
+      35,
+      0,
+      0
+     ],
+     "read_count_block_size_dist": [
+      0,
+      0,
+      2,
+      1,
+      1,
+      6,
+      0,
+      0
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       2,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       6,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "254fbbae287dfddcceecc927b1b4d9e64c7b805e79ff70994280d65eef343b6d.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 107,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    1196032,
+    6463488
+   ]
+  },
+  {
+   "image": "tlego-4",
+   "family": "Terminal-Lego",
+   "attach": {
+    "bootstrap_layer_bytes": 479841,
+    "bootstrap_fetch_s": 0.03182126000001517,
+    "bind_s": 0.008111935000215453,
+    "mount_s": 0.03117867799983287,
+    "attach_s": 0.0711118730000635
+   },
+   "start": {
+    "overlay_s": 0.003982128000188823,
+    "runsc_start_s": 0.43893917100012914
+   },
+   "ready_s": 0.5140905019998172,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.46421830899998895,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.018869085000005725,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C /app status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 1.8110365590000583,
+     "rc": 0,
+     "stdout": "pip 26.2.1 from /usr/local/lib/python3.13/site-packages/pip (python 3.13)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.06435817100009444,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import pytest\nModuleNotFoundError: No module named 'pytest'\n"
+    }
+   },
+   "first_command_done_s": 0.9783088109998062,
+   "all_cold_done_s": 2.8727903560002233,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.06714398500025709,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.018936044999918522,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C /app status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.32282853400010936,
+     "rc": 0,
+     "stdout": "pip 26.2.1 from /usr/local/lib/python3.13/site-packages/pip (python 3.13)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.059408071000234486,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import pytest\nModuleNotFoundError: No module named 'pytest'\n"
+    }
+   },
+   "host": {
+    "wall_s": 3.36767367199991,
+    "host_busy_cpu_s": 3.62,
+    "host_cpu_util": 0.06800676310351306,
+    "daemon_cpu_s": 0.58,
+    "bytes_fetched": 14817885
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 65,
+     "read_errors": 0,
+     "read_amount_total": 14274423,
+     "read_cumulative_latency_millis_total": 234,
+     "read_cumulative_latency_millis_dist": [
+      0,
+      0,
+      17,
+      45,
+      36,
+      122,
+      14,
+      0
+     ],
+     "read_count_block_size_dist": [
+      0,
+      0,
+      8,
+      8,
+      10,
+      35,
+      4,
+      0
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       5,
+       3,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       9,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       34,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       4,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "290ea06542b9b152ec00b44eda7c3b95151b9242fdb35697bedb139557e02bad.blob.data",
+      "2384ddbce34608f259adbdc21470da1359b2d5e61f8adaf3045810c03b2b5114.blob.data",
+      "be191ba7df39e2fae4599b8c0ed5b5270558656ca5a696327825247343056417.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 1552,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    1331200,
+    49627136
+   ]
+  },
+  {
+   "image": "tlego-5",
+   "family": "Terminal-Lego",
+   "attach": {
+    "bootstrap_layer_bytes": 956387,
+    "bootstrap_fetch_s": 0.04777897900021344,
+    "bind_s": 0.008245285999691987,
+    "mount_s": 0.034107623000181775,
+    "attach_s": 0.0901318880000872
+   },
+   "start": {
+    "overlay_s": 0.004204448000109551,
+    "runsc_start_s": 0.40991434699981255
+   },
+   "ready_s": 0.5043239830001767,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.024657577000198216,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import sys\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "git_status": {
+     "seconds": 0.14873233799971786,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "fatal: not a git repository (or any of the parent directories): .git\n"
+    },
+    "pip_version": {
+     "seconds": 0.009267267000268475,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -m pip --version\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pytest_import": {
+     "seconds": 0.017420252000192704,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import pytest\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    }
+   },
+   "first_command_done_s": 0.5289815600003749,
+   "all_cold_done_s": 0.7045655780002562,
+   "warm": {
+    "python_import_sys": {
+     "seconds": 0.01781626399997549,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import sys\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "git_status": {
+     "seconds": 0.03018186600002082,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "fatal: not a git repository (or any of the parent directories): .git\n"
+    },
+    "pip_version": {
+     "seconds": 0.018087083999944298,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -m pip --version\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pytest_import": {
+     "seconds": 0.01932120599985865,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import pytest\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    }
+   },
+   "host": {
+    "wall_s": 0.8170652090002477,
+    "host_busy_cpu_s": 1.14,
+    "host_cpu_util": 0.08850931677018634,
+    "daemon_cpu_s": 0.19,
+    "bytes_fetched": 5968721
+   },
+   "daemon_metrics": {
+    "/api/v1/metrics/backend": {
+     "backend_type": "registry",
+     "read_count": 39,
+     "read_errors": 0,
+     "read_amount_total": 4972204,
+     "read_cumulative_latency_millis_total": 406,
+     "read_cumulative_latency_millis_dist": [
+      15,
+      2,
+      234,
+      76,
+      18,
+      50,
+      11,
+      0
+     ],
+     "read_count_block_size_dist": [
+      2,
+      1,
+      19,
+      4,
+      3,
+      8,
+      2,
+      0
+     ],
+     "read_latency_sizes_dist": [
+      [
+       0,
+       2,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       1,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       16,
+       3,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       2,
+       2,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       3,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       8,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       2,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0
+      ]
+     ]
+    },
+    "/api/v1/metrics/blobcache": {
+     "underlying_files": [
+      "2384ddbce34608f259adbdc21470da1359b2d5e61f8adaf3045810c03b2b5114.blob.data",
+      "4579e26c576918626a0e9018caec420920070e84cddc5c4a4a00add489026469.blob.data",
+      "63aa7bab7425e1cefe47f1b3737ea12d5aae97fb96b45842a4d87ed82c57bebc.blob.data",
+      "fc944c3bb009ae0568dcbd0809b153233dbe8f472defc0593028a71784a0c84b.blob.data",
+      "ada9cf64dbd803df5b81391951800dd334064db46e41b6013e2a0ce9e3349468.blob.data",
+      "c54159f15fbe261f1e2bb11b5abe38f3ee541368ec50efc1b353fea76dbff106.blob.data",
+      "d96e4a15a4f695fc1dbfbb7909beaf0a91a9f07b7e59505d62f7cad2731a1acd.blob.data",
+      "f53be5861f09ebfebe5e7ee18e379cee851e480fc03140bac71fd517d3586d88.blob.data",
+      "ebf955408a57f9bac4c26e718623ad1f3510f092f9a8348dfb0abe6f2215e346.blob.data"
+     ],
+     "store_path": "/root/s11/fscache-cache",
+     "partial_hits": 0,
+     "whole_hits": 0,
+     "total": 0,
+     "entries_count": 61,
+     "prefetch_data_amount": 0,
+     "prefetch_requests_count": 0,
+     "prefetch_workers": 0,
+     "prefetch_unmerged_chunks": 0,
+     "prefetch_cumulative_time_millis": 0,
+     "prefetch_begin_time_secs": 0,
+     "prefetch_begin_time_millis": 0,
+     "prefetch_end_time_secs": 0,
+     "prefetch_end_time_millis": 0,
+     "buffered_backend_size": 0,
+     "data_all_ready": false
+    }
+   },
+   "cache_usage_bytes": [
+    1662976,
+    13918208
+   ]
+  }
+ ]
+}

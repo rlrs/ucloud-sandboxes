@@ -1,0 +1,26 @@
+[
+ {
+  "path": "nbd",
+  "image": "scaleswe-responses-0",
+  "counter": 60376614,
+  "daemon": 59854848
+ },
+ {
+  "path": "nbd",
+  "image": "tmax-1",
+  "counter": 48041251,
+  "daemon": 47710208
+ },
+ {
+  "path": "fscache",
+  "image": "scaleswe-responses-0",
+  "counter": 33191151,
+  "daemon": 29843153
+ },
+ {
+  "path": "fscache",
+  "image": "tmax-1",
+  "counter": 22785100,
+  "daemon": 21549727
+ }
+]

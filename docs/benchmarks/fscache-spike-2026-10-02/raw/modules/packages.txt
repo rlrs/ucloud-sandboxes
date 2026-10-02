@@ -1,0 +1,2 @@
+ii  linux-headers-7.0.0-30-generic 7.0.0-30.30  amd64        Linux kernel headers for version 7.0.0
+ii  linux-source-7.0.0             7.0.0-30.30  all          Linux kernel source for version 7.0.0 with Ubuntu patches

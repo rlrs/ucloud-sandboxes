@@ -1,0 +1,848 @@
+{
+ "path": "nbd",
+ "phase": "par",
+ "kernel": "7.0.0-30-generic",
+ "images": [
+  {
+   "image": "scaleswe-responses-0",
+   "family": "ScaleSWE",
+   "attach": {
+    "attach_s": 1.583637236999948,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.015472164000129851,
+    "runsc_start_s": 0.5435133599999062
+   },
+   "ready_s": 2.1426661509999576,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.8863868970001931,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.28428812199990716,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 3.5816814889999478,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 1.2831811120004204,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 3.0290530480001507,
+   "all_cold_done_s": 8.17831021100028
+  },
+  {
+   "image": "scaleswe-responses-1",
+   "family": "ScaleSWE",
+   "attach": {
+    "attach_s": 1.6990832460001002,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.01582663399994999,
+    "runsc_start_s": 0.4261725569999726
+   },
+   "ready_s": 2.1411108269999204,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.8852309649996641,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.2816110160001699,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 3.5987209250001797,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 1.2728907999999137,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 3.0263417919995845,
+   "all_cold_done_s": 8.179756034000093
+  },
+  {
+   "image": "scaleswe-responses-2",
+   "family": "ScaleSWE",
+   "attach": {
+    "attach_s": 1.7000392380000449,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.008342328000253474,
+    "runsc_start_s": 0.43219034000003376
+   },
+   "ready_s": 2.1406039759999658,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.8858724869996877,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.2848207030001504,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 3.5852813669998795,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 1.2884405129998413,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 3.0264764629996534,
+   "all_cold_done_s": 8.185144416000185
+  },
+  {
+   "image": "scaleswe-responses-3",
+   "family": "ScaleSWE",
+   "attach": {
+    "attach_s": 1.6998791080000046,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.011050173999592516,
+    "runsc_start_s": 0.4278876510002192
+   },
+   "ready_s": 2.138847113000338,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.8859481270001197,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.2833214500001304,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 3.587112050000087,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 1.2851977159998569,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 3.024795240000458,
+   "all_cold_done_s": 8.180583636000392
+  },
+  {
+   "image": "scaleswe-oauthlib-0",
+   "family": "ScaleSWE",
+   "attach": {
+    "attach_s": 1.5834847470000568,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.019222621000153595,
+    "runsc_start_s": 0.5710900489998494
+   },
+   "ready_s": 2.1738270269997884,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.8700795530003234,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.3755203679997976,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 3.6499514950000957,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 1.2679289190000418,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 3.0439065800001117,
+   "all_cold_done_s": 8.337424002999796
+  },
+  {
+   "image": "scaleswe-oauthlib-1",
+   "family": "ScaleSWE",
+   "attach": {
+    "attach_s": 1.6965760810003303,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.021662246999767376,
+    "runsc_start_s": 0.45451918800017665
+   },
+   "ready_s": 2.1727920260000246,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.8712769750000007,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.3752448479999657,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 3.6424617299999227,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 1.272776328999953,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 3.0440690010000253,
+   "all_cold_done_s": 8.334663008000007
+  },
+  {
+   "image": "scaleswe-traitlets-0",
+   "family": "ScaleSWE",
+   "attach": {
+    "attach_s": 1.5819910840000375,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.02390612199997122,
+    "runsc_start_s": 0.5840483370002403
+   },
+   "ready_s": 2.189981482999883,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.8397082169999521,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.3527166099997885,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 3.749913959999958,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 1.2100403939998614,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 3.0296896999998353,
+   "all_cold_done_s": 8.342466834999868
+  },
+  {
+   "image": "scaleswe-traitlets-1",
+   "family": "ScaleSWE",
+   "attach": {
+    "attach_s": 1.6937747639999543,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.018960671000058937,
+    "runsc_start_s": 0.47582956399992327
+   },
+   "ready_s": 2.188596698999845,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.8421950629999628,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.35273047900000165,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "pip_version": {
+     "seconds": 3.759524071999749,
+     "rc": 0,
+     "stdout": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 1.1980589579998195,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 3.030791761999808,
+   "all_cold_done_s": 8.34119450099979
+  },
+  {
+   "image": "tmax-0",
+   "family": "TMax",
+   "attach": {
+    "attach_s": 1.5803069200001119,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.028310131000125693,
+    "runsc_start_s": 0.4503084590000981
+   },
+   "ready_s": 2.058975609999834,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.014430590999836568,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import sys\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "git_status": {
+     "seconds": 0.018105658999957086,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.011278235000190762,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -m pip --version\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pytest_import": {
+     "seconds": 0.017517267000130232,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import pytest\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    }
+   },
+   "first_command_done_s": 2.0734062009996705,
+   "all_cold_done_s": 2.1204288619996987
+  },
+  {
+   "image": "tmax-1",
+   "family": "TMax",
+   "attach": {
+    "attach_s": 1.6969929110000521,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.01439716100003352,
+    "runsc_start_s": 0.4019729560000087
+   },
+   "ready_s": 2.113434507999955,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 1.2372780030000285,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.014425741000195558,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 3.6767228929998055,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 1.2947809370002688,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 3.3507125109999834,
+   "all_cold_done_s": 8.336722521999945
+  },
+  {
+   "image": "tmax-2",
+   "family": "TMax",
+   "attach": {
+    "attach_s": 1.6959384790002332,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.010944124000161537,
+    "runsc_start_s": 0.40490803100010453
+   },
+   "ready_s": 2.1118179340001006,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 1.2354102989997955,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.013086028000088845,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 3.679828710000038,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 1.2898785570000655,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 3.347228232999896,
+   "all_cold_done_s": 8.33012072800011
+  },
+  {
+   "image": "tmax-3",
+   "family": "TMax",
+   "attach": {
+    "attach_s": 1.691833029999998,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.018922710999959236,
+    "runsc_start_s": 0.4010123630000635
+   },
+   "ready_s": 2.111797774000024,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 1.2355162690000725,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.013991540000006353,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 3.7115464990001783,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 1.2709221249997427,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 3.3473140430000967,
+   "all_cold_done_s": 8.343882167000174
+  },
+  {
+   "image": "tmax-4",
+   "family": "TMax",
+   "attach": {
+    "attach_s": 1.692390142000022,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.015117611999812652,
+    "runsc_start_s": 0.4509039509998729
+   },
+   "ready_s": 2.158443134999743,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 1.1722474629996213,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.013187828000354784,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 3.696009695000157,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 1.312139883999862,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 3.3306905979993644,
+   "all_cold_done_s": 8.352149734999784
+  },
+  {
+   "image": "tmax-5",
+   "family": "TMax",
+   "attach": {
+    "attach_s": 1.6885841530001926,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.014157410999814601,
+    "runsc_start_s": 0.4687924690001637
+   },
+   "ready_s": 2.171571472999858,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 1.183038296000177,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.014403400999981386,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 3.709122703000048,
+     "rc": 0,
+     "stdout": "pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 1.2646525320001274,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    }
+   },
+   "first_command_done_s": 3.354609769000035,
+   "all_cold_done_s": 8.342907475000175
+  },
+  {
+   "image": "tlego-0",
+   "family": "Terminal-Lego",
+   "attach": {
+    "attach_s": 1.5732718550002573,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.011811545999989903,
+    "runsc_start_s": 0.4708475030001864
+   },
+   "ready_s": 2.055972403999931,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.9182764170000155,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.011262773999987985,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 2.1631182460000673,
+     "rc": 0,
+     "stdout": "pip 26.2.1 from /usr/local/lib/python3.13/site-packages/pip (python 3.13)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.07784010700015642,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import pytest\nModuleNotFoundError: No module named 'pytest'\n"
+    }
+   },
+   "first_command_done_s": 2.9742488209999465,
+   "all_cold_done_s": 5.226577867999822
+  },
+  {
+   "image": "tlego-1",
+   "family": "Terminal-Lego",
+   "attach": {
+    "attach_s": 1.6817393480000646,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.011120454000320024,
+    "runsc_start_s": 0.3234263069998633
+   },
+   "ready_s": 2.0163090989999546,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.028724710999995295,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import sys\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "git_status": {
+     "seconds": 0.009084659000109241,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C / status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.018467800000053103,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -m pip --version\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pytest_import": {
+     "seconds": 0.013028717999986839,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import pytest\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    }
+   },
+   "first_command_done_s": 2.04503380999995,
+   "all_cold_done_s": 2.0857491579999987
+  },
+  {
+   "image": "tlego-2",
+   "family": "Terminal-Lego",
+   "attach": {
+    "attach_s": 1.6190758840002673,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.004447929999969347,
+    "runsc_start_s": 0.4265417679998791
+   },
+   "ready_s": 2.0501035920001414,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.9172374939998917,
+     "rc": 0,
+     "stdout": "",
+     "stderr": ""
+    },
+    "git_status": {
+     "seconds": 0.012403216999700817,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C /app status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 2.1436828840001,
+     "rc": 0,
+     "stdout": "pip 26.2.1 from /usr/local/lib/python3.13/site-packages/pip (python 3.13)\n",
+     "stderr": ""
+    },
+    "pytest_import": {
+     "seconds": 0.07816158800005724,
+     "rc": 1,
+     "stdout": "",
+     "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import pytest\nModuleNotFoundError: No module named 'pytest'\n"
+    }
+   },
+   "first_command_done_s": 2.967341086000033,
+   "all_cold_done_s": 5.2017332149998765
+  },
+  {
+   "image": "tlego-3",
+   "family": "Terminal-Lego",
+   "attach": {
+    "attach_s": 1.564159466000092,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.011313213999983418,
+    "runsc_start_s": 0.49015939499986416
+   },
+   "ready_s": 2.0656673849998697,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.012688427999819396,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import sys\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "git_status": {
+     "seconds": 0.026290966000033222,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"git -C /app status --porcelain --untracked-files=no\" in sandbox: error finding executable \"git\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pip_version": {
+     "seconds": 0.017701168000257894,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -m pip --version\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pytest_import": {
+     "seconds": 0.0256496749998405,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import pytest\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    }
+   },
+   "first_command_done_s": 2.078355812999689,
+   "all_cold_done_s": 2.1480946729998323
+  },
+  {
+   "error": "ValueError('environment config changed for an existing composition')"
+  },
+  {
+   "image": "tlego-5",
+   "family": "Terminal-Lego",
+   "attach": {
+    "attach_s": 1.7039550869999402,
+    "components": null
+   },
+   "start": {
+    "overlay_s": 0.021395836000010604,
+    "runsc_start_s": 0.3675051809996148
+   },
+   "ready_s": 2.0928858039997067,
+   "cold": {
+    "python_import_sys": {
+     "seconds": 0.01779034800028967,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import sys\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "git_status": {
+     "seconds": 0.447537943000043,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "fatal: not a git repository (or any of the parent directories): .git\n"
+    },
+    "pip_version": {
+     "seconds": 0.012412757000220154,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -m pip --version\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    },
+    "pytest_import": {
+     "seconds": 0.012398307000239583,
+     "rc": 128,
+     "stdout": "",
+     "stderr": "executing processes for container: executing command \"python3 -c import pytest\" in sandbox: error finding executable \"python3\" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory\n"
+    }
+   },
+   "first_command_done_s": 2.1106761519999964,
+   "all_cold_done_s": 2.5831619789996694
+  }
+ ],
+ "host": {
+  "wall_s": 8.385594827000205,
+  "host_busy_cpu_s": 68.47,
+  "host_cpu_util": 0.5376521397722811,
+  "daemon_cpu_s": 9.85,
+  "bytes_fetched": 380467881,
+  "peak_cpu_util_0.5s": 0.7772020725388601
+ },
+ "cache_usage_bytes": [
+  6606839808,
+  9203247993
+ ],
+ "daemon_metrics": {
+  "active_components": 28,
+  "cached_bytes": 1026093056,
+  "corruptions": 0,
+  "downloaded_bytes": 1026093056,
+  "fetch_retries": 0,
+  "hits": 55201,
+  "metadata_hint_absent": 28,
+  "metadata_hint_present": 0,
+  "metadata_hint_unsupported": 0,
+  "metadata_prefetch_bytes": 0,
+  "metadata_prefetch_chunks": 0,
+  "metadata_prefetch_failed_chunks": 0,
+  "metadata_prefetch_jobs": 0,
+  "metadata_prefetch_seconds": 0.0,
+  "metadata_prefetch_skipped_chunks": 0,
+  "metadata_prefetch_truncated": 0,
+  "metadata_prefetch_wait_timeouts": 0,
+  "misses": 3924,
+  "pending_misses": 0,
+  "prefetch_enabled": true,
+  "prefetch_jobs_active": 0,
+  "prefetch_joined_reads": 0,
+  "prefetch_ranges_inflight": 0,
+  "prefetch_start_failures": 0,
+  "trace_chunks_recorded": 3020,
+  "trace_hint_absent": 28,
+  "trace_hint_invalid": 0,
+  "trace_hint_present": 0,
+  "trace_prefetch_bytes": 0,
+  "trace_prefetch_chunks": 0,
+  "trace_prefetch_failed_chunks": 0,
+  "trace_prefetch_jobs": 0,
+  "trace_prefetch_seconds": 0.0,
+  "trace_prefetch_skipped_chunks": 0,
+  "trace_prefetch_truncated": 0,
+  "trace_recordings_started": 24,
+  "traces_recorded": 24,
+  "spike_client_eagain_retries": 0
+ },
+ "summary": {
+  "sandboxes": 20,
+  "ok": 19,
+  "max_first_command_done_s": 3.354609769000035,
+  "max_all_cold_done_s": 8.352149734999784
+ },
+ "copies_per_image": 1
+}

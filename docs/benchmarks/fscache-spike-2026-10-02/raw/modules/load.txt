@@ -1,0 +1,68 @@
+++ cat /sys/kernel/security/lockdown
++ echo 'lockdown: [none] integrity confidentiality'
+lockdown: [none] integrity confidentiality
+++ cat /proc/sys/kernel/modules_disabled
++ echo 'modules_disabled: 0'
+modules_disabled: 0
+++ cat /sys/module/module/parameters/sig_enforce
++ echo 'sig_enforce: N'
+sig_enforce: N
+++ mokutil --sb-state
++ echo 'secure boot: This system doesn'\''t support Secure Boot'
+secure boot: This system doesn't support Secure Boot
+++ cat /proc/sys/kernel/tainted
++ echo 'taint before: 0'
+taint before: 0
++ echo 'loaded before:'
+loaded before:
++ lsmod
++ grep -E '^(erofs|cachefiles|netfs) '
++ true
++ grep -E 'erofs|cachefiles' /proc/mounts
++ true
++ modprobe -r erofs
++ modprobe -r cachefiles
++ echo 'after unload:'
+after unload:
++ lsmod
++ grep -E '^(erofs|cachefiles|netfs) '
++ true
++ mkdir -p /lib/modules/7.0.0-30-generic/updates/s11
++ install -m 0644 /root/s11/out/modules/erofs.ko /root/s11/out/modules/cachefiles.ko /lib/modules/7.0.0-30-generic/updates/s11/
++ depmod -a 7.0.0-30-generic
++ modinfo -n erofs
+/lib/modules/7.0.0-30-generic/updates/s11/erofs.ko
++ modinfo -n cachefiles
+/lib/modules/7.0.0-30-generic/updates/s11/cachefiles.ko
++ modprobe cachefiles
++ echo 'cachefiles load rc=0'
+cachefiles load rc=0
++ modprobe erofs
++ echo 'erofs load rc=0'
+erofs load rc=0
++ lsmod
++ grep -E '^(erofs|cachefiles|netfs) '
+erofs                 180224  0
+cachefiles            180224  0
+netfs                 622592  2 erofs,cachefiles
+++ cat /proc/sys/kernel/tainted
++ echo 'taint after: 12288'
+taint after: 12288
++ dmesg
++ grep -iE 'erofs|cachefiles|netfs|verification|taint'
++ tail -10
+[    0.004893] ACPI: Early table checksum verification disabled
+[  935.500148] netfs: FS-Cache loaded
+[  935.501228] cachefiles: loading out-of-tree module taints kernel.
+[  935.501234] cachefiles: module verification failed: signature and/or required key missing - tainting kernel
+[  935.514752] CacheFiles: Loaded
++ ls -la /dev/cachefiles
+crw------- 1 root root 10, 263 Oct  2 12:08 /dev/cachefiles
++ cat /sys/module/erofs/srcversion /sys/module/cachefiles/srcversion
+23D4C8F51DE8EAB8A9C21AE
+401B000B13D0D2020B1C7C9
+++ modinfo /root/s11/out/modules/erofs.ko
++ grep -E '^(srcversion)' /dev/fd/63 /dev/fd/62
+++ modinfo /root/s11/out/modules/cachefiles.ko
+/dev/fd/63:srcversion:     23D4C8F51DE8EAB8A9C21AE
+/dev/fd/62:srcversion:     401B000B13D0D2020B1C7C9

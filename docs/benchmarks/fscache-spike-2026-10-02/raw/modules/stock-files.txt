@@ -1,0 +1,19 @@
+-rw-r--r-- 1 root root 31760 Jul 31 16:27 /lib/modules/7.0.0-30-generic/kernel/drivers/block/nbd.ko.zst
+
+/lib/modules/7.0.0-30-generic/kernel/fs/cachefiles/:
+total 68
+drwxr-xr-x  2 root root  4096 Sep 26 13:59 .
+drwxr-xr-x 54 root root  4096 Sep 26 13:59 ..
+-rw-r--r--  1 root root 60207 Jul 31 16:27 cachefiles.ko.zst
+
+/lib/modules/7.0.0-30-generic/kernel/fs/erofs/:
+total 92
+drwxr-xr-x  2 root root  4096 Sep 26 13:59 .
+drwxr-xr-x 54 root root  4096 Sep 26 13:59 ..
+-rw-r--r--  1 root root 85079 Jul 31 16:27 erofs.ko.zst
+
+/lib/modules/7.0.0-30-generic/kernel/fs/netfs/:
+total 132
+drwxr-xr-x  2 root root   4096 Sep 26 13:59 .
+drwxr-xr-x 54 root root   4096 Sep 26 13:59 ..
+-rw-r--r--  1 root root 126284 Jul 31 16:27 netfs.ko.zst

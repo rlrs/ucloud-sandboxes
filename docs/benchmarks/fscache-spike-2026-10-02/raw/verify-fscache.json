@@ -1,0 +1,511 @@
+{
+ "contents_vs_oci": {
+  "scaleswe-responses-0": {
+   "files_in_tree": 35966,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 3232878,
+    "bootstrap_fetch_s": 0.09136712999998053,
+    "bind_s": 0.008847229999901174,
+    "mount_s": 0.011584607000258984,
+    "attach_s": 0.11179896700014069
+   }
+  },
+  "scaleswe-responses-1": {
+   "files_in_tree": 35966,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 3233227,
+    "bootstrap_fetch_s": 0.051872348000415514,
+    "bind_s": 0.0014206329997250577,
+    "mount_s": 0.00522903099999894,
+    "attach_s": 0.05852201200013951
+   }
+  },
+  "scaleswe-responses-2": {
+   "files_in_tree": 35966,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 3233229,
+    "bootstrap_fetch_s": 0.05668898799967792,
+    "bind_s": 0.0014022430000295572,
+    "mount_s": 0.004333459000008588,
+    "attach_s": 0.062424689999716065
+   }
+  },
+  "scaleswe-responses-3": {
+   "files_in_tree": 35966,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 3233227,
+    "bootstrap_fetch_s": 0.058463121999920986,
+    "bind_s": 0.0012871230001110234,
+    "mount_s": 0.004557439000109298,
+    "attach_s": 0.06430768400014131
+   }
+  },
+  "scaleswe-oauthlib-0": {
+   "files_in_tree": 34676,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 3126118,
+    "bootstrap_fetch_s": 0.05306508100011342,
+    "bind_s": 0.001068982000106189,
+    "mount_s": 0.004386978999718849,
+    "attach_s": 0.05852104199993846
+   }
+  },
+  "scaleswe-oauthlib-1": {
+   "files_in_tree": 34676,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 3126407,
+    "bootstrap_fetch_s": 0.04893914199965366,
+    "bind_s": 0.0009466420001444931,
+    "mount_s": 0.004574770000090211,
+    "attach_s": 0.05446055399988836
+   }
+  },
+  "scaleswe-traitlets-0": {
+   "files_in_tree": 33647,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 3029732,
+    "bootstrap_fetch_s": 0.05305777100011255,
+    "bind_s": 0.00119685199979358,
+    "mount_s": 0.004508410000198637,
+    "attach_s": 0.05876303300010477
+   }
+  },
+  "scaleswe-traitlets-1": {
+   "files_in_tree": 33647,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 3030032,
+    "bootstrap_fetch_s": 0.05285454999966532,
+    "bind_s": 0.001265443000193045,
+    "mount_s": 0.004279378999854089,
+    "attach_s": 0.05839937199971246
+   }
+  },
+  "tmax-0": {
+   "files_in_tree": 2628,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 245729,
+    "bootstrap_fetch_s": 0.013260158000321098,
+    "bind_s": 0.0009421819995623082,
+    "mount_s": 0.004375989000436675,
+    "attach_s": 0.018578329000320082
+   }
+  },
+  "tmax-1": {
+   "files_in_tree": 12420,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 1151102,
+    "bootstrap_fetch_s": 0.027026005999687186,
+    "bind_s": 0.0010683430000426597,
+    "mount_s": 0.004384399000173289,
+    "attach_s": 0.032478747999903135
+   }
+  },
+  "tmax-2": {
+   "files_in_tree": 12420,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 1151100,
+    "bootstrap_fetch_s": 0.04991857400000299,
+    "bind_s": 0.001198301999920659,
+    "mount_s": 0.004605850000189093,
+    "attach_s": 0.05572272600011274
+   }
+  },
+  "tmax-3": {
+   "files_in_tree": 12420,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 1151182,
+    "bootstrap_fetch_s": 0.05079063599987421,
+    "bind_s": 0.00120181300007971,
+    "mount_s": 0.00420631900033186,
+    "attach_s": 0.05619876800028578
+   }
+  },
+  "tmax-4": {
+   "files_in_tree": 12424,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 1151448,
+    "bootstrap_fetch_s": 0.04983148400015125,
+    "bind_s": 0.00107530199966277,
+    "mount_s": 0.004482870000174444,
+    "attach_s": 0.05538965599998846
+   }
+  },
+  "tmax-5": {
+   "files_in_tree": 25121,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 2314150,
+    "bootstrap_fetch_s": 0.04190876800021215,
+    "bind_s": 0.0011421119997976348,
+    "mount_s": 0.004362089000096603,
+    "attach_s": 0.047412969000106386
+   }
+  },
+  "tlego-0": {
+   "files_in_tree": 5026,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 479828,
+    "bootstrap_fetch_s": 0.01678342499963037,
+    "bind_s": 0.0007696210000176507,
+    "mount_s": 0.004448749999937718,
+    "attach_s": 0.022001795999585738
+   }
+  },
+  "tlego-1": {
+   "files_in_tree": 5667,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 524235,
+    "bootstrap_fetch_s": 0.017036485000062385,
+    "bind_s": 0.0007588220000798174,
+    "mount_s": 0.0043790089998765325,
+    "attach_s": 0.022174316000018734
+   }
+  },
+  "tlego-2": {
+   "files_in_tree": 5026,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 479841,
+    "bootstrap_fetch_s": 0.015583312999751797,
+    "bind_s": 0.000742421000268223,
+    "mount_s": 0.004210048999993887,
+    "attach_s": 0.020535783000013907
+   }
+  },
+  "tlego-3": {
+   "files_in_tree": 2628,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 245791,
+    "bootstrap_fetch_s": 0.013469218999944133,
+    "bind_s": 0.0008956309998211509,
+    "mount_s": 0.004261639000105788,
+    "attach_s": 0.01862648899987107
+   }
+  },
+  "tlego-4": {
+   "files_in_tree": 5026,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 479841,
+    "bootstrap_fetch_s": 0.024512711000170384,
+    "bind_s": 0.0009657219998189248,
+    "mount_s": 0.004742210000131308,
+    "attach_s": 0.030220643000120617
+   }
+  },
+  "tlego-5": {
+   "files_in_tree": 10457,
+   "sampled": 45,
+   "matched": 45,
+   "mismatches": [],
+   "attach": {
+    "bootstrap_layer_bytes": 956387,
+    "bootstrap_fetch_s": 0.025312612999641715,
+    "bind_s": 0.0008338820002791181,
+    "mount_s": 0.004246849000082875,
+    "attach_s": 0.030393344000003708
+   }
+  }
+ },
+ "errors": {
+  "contents": "Traceback (most recent call last):\n  File \"/root/s11/verify_fscache.py\", line 445, in <module>\n    {\"contents\": check_contents, \"dict\": check_chunk_dict_sharing,\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n     \"validate\": check_digest_validation, \"failover\": check_failover}[s]()\n     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/root/s11/verify_fscache.py\", line 140, in check_contents\n    \"nydusd_blob_objects\": len(L.api(\"GET\", \"/api/v2/blobs?domain_id=s11\") or []),\n                               ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/s11/s11lib.py\", line 135, in api\n    r = c.getresponse()\n  File \"/usr/lib/python3.14/http/client.py\", line 1459, in getresponse\n    response.begin()\n    ~~~~~~~~~~~~~~^^\n  File \"/usr/lib/python3.14/http/client.py\", line 336, in begin\n    version, status, reason = self._read_status()\n                              ~~~~~~~~~~~~~~~~~^^\n  File \"/usr/lib/python3.14/http/client.py\", line 305, in _read_status\n    raise RemoteDisconnected(\"Remote end closed connection without\"\n                             \" response\")\nhttp.client.RemoteDisconnected: Remote end closed connection without response\n"
+ },
+ "step_seconds": {
+  "contents": 116.8,
+  "dict": 96.9,
+  "validate": 9.5,
+  "sharing": 2.9,
+  "failover": 140.2
+ },
+ "chunk_dict_domain_sharing": {
+  "scaleswe-responses-1-dict": {
+   "base": "scaleswe-responses-0",
+   "child_blobs": 3,
+   "child_blobs_shared_with_base": 1,
+   "child_new_blob_bytes_compressed": 2746483,
+   "base_full_read_fetched_bytes": 454484046,
+   "child_full_read_after_base_fetched_bytes": 0,
+   "child_bootstrap_fetch_bytes": 2877491
+  },
+  "scaleswe-oauthlib-1-dict": {
+   "base": "scaleswe-oauthlib-0",
+   "child_blobs": 3,
+   "child_blobs_shared_with_base": 1,
+   "child_new_blob_bytes_compressed": 2657071,
+   "base_full_read_fetched_bytes": 432438418,
+   "child_full_read_after_base_fetched_bytes": 0,
+   "child_bootstrap_fetch_bytes": 2781341
+  }
+ },
+ "digest_validation": {
+  "corrupted_blob": {
+   "blob": "6e67b1cb49c85d54",
+   "size": 77909772,
+   "bytes_flipped": 397
+  },
+  "validate_True": {
+   "files": 2628,
+   "correct": 2552,
+   "silently_wrong": 0,
+   "read_errors": 76,
+   "errors": [
+    "usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2: [Errno 5] Input/output error",
+    "usr/lib/x86_64-linux-gnu/libacl.so.1.1.2301: [Errno 5] Input/output error",
+    "usr/lib/x86_64-linux-gnu/libapt-pkg.so.6.0.0: [Errno 5] Input/output error"
+   ]
+  },
+  "validate_False": {
+   "files": 2628,
+   "correct": 2552,
+   "silently_wrong": 76,
+   "read_errors": 0,
+   "errors": []
+  },
+  "nydusd_log_digest_lines": [
+   "[2026-10-02 12:37:35.912532 +00:00] INFO RAFS features: COMPRESSION_NONE | HASH_BLAKE3 | EXPLICIT_UID_GID | HAS_XATTR | INLINED_CHUNK_DIGEST | ENCRYPTION_NONE",
+   "[2026-10-02 12:37:38.902231 +00:00] INFO RAFS features: COMPRESSION_NONE | HASH_BLAKE3 | EXPLICIT_UID_GID | HAS_XATTR | INLINED_CHUNK_DIGEST | ENCRYPTION_NONE",
+   "[2026-10-02 12:37:39.423510 +00:00] WARN [/src/cache/mod.rs:631] failed to read data from backend, data digest value doesn't match",
+   "[2026-10-02 12:37:39.423765 +00:00] ERROR [/src/fs_cache.rs:706] fscache: failed to read data from blob object: data digest value doesn't match",
+   "[2026-10-02 12:37:39.428711 +00:00] WARN [/src/cache/mod.rs:631] failed to read data from backend, data digest value doesn't match"
+  ]
+ },
+ "domain_sharing": {
+  "images": 20,
+  "blob_references": 64,
+  "distinct_blobs": 41,
+  "blobs_shared_by_2plus_images": {
+   "d11a7e41810e62d0": [
+    "scaleswe-responses-0",
+    "scaleswe-responses-1",
+    "scaleswe-responses-2",
+    "scaleswe-responses-3"
+   ],
+   "9eb09607e9bf04fc": [
+    "scaleswe-oauthlib-0",
+    "scaleswe-oauthlib-1"
+   ],
+   "459c166f0c123c83": [
+    "scaleswe-traitlets-0",
+    "scaleswe-traitlets-1"
+   ],
+   "254fbbae287dfddc": [
+    "tmax-0",
+    "tmax-1",
+    "tmax-2",
+    "tmax-3",
+    "tmax-4",
+    "tmax-5",
+    "tlego-3"
+   ],
+   "2384ddbce34608f2": [
+    "tlego-0",
+    "tlego-2",
+    "tlego-4",
+    "tlego-5"
+   ],
+   "290ea06542b9b152": [
+    "tlego-0",
+    "tlego-2",
+    "tlego-4"
+   ],
+   "be191ba7df39e2fa": [
+    "tlego-0",
+    "tlego-2",
+    "tlego-4"
+   ],
+   "c8c5385b5308e22b": [
+    "tlego-0",
+    "tlego-2",
+    "tlego-4"
+   ],
+   "f33304043f45967a": [
+    "tlego-2",
+    "tlego-4"
+   ],
+   "6c24424576a85564": [
+    "tlego-2",
+    "tlego-3",
+    "tlego-4"
+   ]
+  },
+  "fscache_files": 74,
+  "fscache_data_files": 0,
+  "fscache_dir_tree_sample": [
+   "19f7c1509f205dbfe9af148b76f7bd1f767ae15fb25344e4ac1595d78eac50ac.blob.digest",
+   "19f7c1509f205dbfe9af148b76f7bd1f767ae15fb25344e4ac1595d78eac50ac.blob.meta",
+   "19f7c1509f205dbfe9af148b76f7bd1f767ae15fb25344e4ac1595d78eac50ac.blob.toc",
+   "2384ddbce34608f259adbdc21470da1359b2d5e61f8adaf3045810c03b2b5114.blob.digest",
+   "2384ddbce34608f259adbdc21470da1359b2d5e61f8adaf3045810c03b2b5114.blob.meta",
+   "2384ddbce34608f259adbdc21470da1359b2d5e61f8adaf3045810c03b2b5114.blob.toc",
+   "254fbbae287dfddcceecc927b1b4d9e64c7b805e79ff70994280d65eef343b6d.blob.digest",
+   "254fbbae287dfddcceecc927b1b4d9e64c7b805e79ff70994280d65eef343b6d.blob.meta"
+  ]
+ },
+ "failover": {
+  "reference_files": 33647,
+  "no_supervisor": {
+   "before_kill": {
+    "files_done": 1083,
+    "errors": 0,
+    "wrong": 0,
+    "finished": false,
+    "seconds_since_progress": 0.02,
+    "first_errors": [
+     "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_codes.cpython-311.pyc: [Errno 105] No buffer space available",
+     "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_replace.cpython-311.pyc: [Errno 105] No buffer space available",
+     "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_export_format.cpython-311.pyc: [Errno 105] No buffer space available"
+    ]
+   },
+   "5s_after_kill": {
+    "files_done": 1312,
+    "errors": 222,
+    "wrong": 0,
+    "finished": true,
+    "seconds_since_progress": 3.81,
+    "first_errors": [
+     "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_codes.cpython-311.pyc: [Errno 105] No buffer space available",
+     "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_replace.cpython-311.pyc: [Errno 105] No buffer space available",
+     "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_export_format.cpython-311.pyc: [Errno 105] No buffer space available"
+    ]
+   },
+   "restart": {
+    "started": true,
+    "seconds": 0.05
+   },
+   "5s_after_restart": {
+    "files_done": 1312,
+    "errors": 222,
+    "wrong": 0,
+    "finished": true,
+    "seconds_since_progress": 8.86,
+    "first_errors": [
+     "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_codes.cpython-311.pyc: [Errno 105] No buffer space available",
+     "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_replace.cpython-311.pyc: [Errno 105] No buffer space available",
+     "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_export_format.cpython-311.pyc: [Errno 105] No buffer space available"
+    ]
+   },
+   "final": {
+    "files_done": 1312,
+    "errors": 222,
+    "wrong": 0,
+    "finished": true,
+    "seconds_since_progress": 8.86,
+    "first_errors": [
+     "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_codes.cpython-311.pyc: [Errno 105] No buffer space available",
+     "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_emoji_replace.cpython-311.pyc: [Errno 105] No buffer space available",
+     "root/.local/share/pipx/shared/lib/python3.11/site-packages/pip/_vendor/rich/__pycache__/_export_format.cpython-311.pyc: [Errno 105] No buffer space available"
+    ]
+   },
+   "probe": {
+    "old_mount_read": "OSError(105, 'No buffer space available')",
+    "umount_rc": 0,
+    "remount_full_read": {
+     "files_done": 33647,
+     "errors": 0,
+     "wrong": 0,
+     "finished": true,
+     "seconds_since_progress": 0.0,
+     "first_errors": []
+    }
+   }
+  },
+  "with_supervisor": {
+   "saved": {
+    "state_bytes": 1078,
+    "fds": 1
+   },
+   "before_kill": {
+    "files_done": 1197,
+    "errors": 0,
+    "wrong": 0,
+    "finished": false,
+    "seconds_since_progress": 0.0,
+    "first_errors": []
+   },
+   "5s_after_kill": {
+    "files_done": 1199,
+    "errors": 0,
+    "wrong": 0,
+    "finished": false,
+    "seconds_since_progress": 5.0,
+    "first_errors": []
+   },
+   "takeover": {
+    "upgrade_state": "INIT",
+    "after_takeover": "READY",
+    "after_start": "RUNNING",
+    "seconds": 0.06
+   },
+   "5s_after_takeover": {
+    "files_done": 4823,
+    "errors": 0,
+    "wrong": 0,
+    "finished": false,
+    "seconds_since_progress": 0.01,
+    "first_errors": []
+   },
+   "final": {
+    "files_done": 33647,
+    "errors": 0,
+    "wrong": 0,
+    "finished": true,
+    "seconds_since_progress": 0.0,
+    "first_errors": []
+   }
+  }
+ }
+}

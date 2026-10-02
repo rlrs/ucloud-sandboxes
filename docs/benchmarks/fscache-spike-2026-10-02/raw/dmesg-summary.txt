@@ -1,0 +1,28 @@
+      2 [ 2904.697899] erofs (device erofs): [deprecated] fscache-based on-demand read feature in use. Use at your own risk!
+      1 [ 3799.173164] block nbd102: shutting down sockets
+      1 [ 3799.173101] block nbd1018: shutting down sockets
+      1 [ 3799.173043] block nbd1008: shutting down sockets
+      1 [ 3799.172973] block nbd1017: shutting down sockets
+      1 [ 3799.172967] block nbd1005: shutting down sockets
+      1 [ 3799.172888] block nbd1012: shutting down sockets
+      1 [ 3799.172859] block nbd1020: shutting down sockets
+      1 [ 3799.172845] block nbd1016: shutting down sockets
+      1 [ 3799.172841] block nbd1002: shutting down sockets
+      1 [ 3799.172838] block nbd1004: shutting down sockets
+      1 [ 3799.172812] block nbd101: shutting down sockets
+      1 [ 3799.172783] block nbd1019: shutting down sockets
+      1 [ 3799.172765] block nbd1021: shutting down sockets
+      1 [ 3799.172760] block nbd1015: shutting down sockets
+      1 [ 3799.172757] block nbd1009: shutting down sockets
+      1 [ 3799.172743] block nbd1014: shutting down sockets
+      1 [ 3799.172738] block nbd1011: shutting down sockets
+      1 [ 3799.172725] block nbd1007: shutting down sockets
+      1 [ 3799.172722] block nbd1013: shutting down sockets
+      1 [ 3799.172441] block nbd1006: shutting down sockets
+      1 [ 3799.172395] block nbd1010: shutting down sockets
+      1 [ 3799.172378] block nbd1001: shutting down sockets
+      1 [ 3799.172258] block nbd1003: shutting down sockets
+      1 [ 3799.172246] block nbd1000: shutting down sockets
+23D4C8F51DE8EAB8A9C21AE
+7.0.0-30-generic
+ 12:57:54 up  1:05,  2 users,  load average: 3.38, 4.85, 3.56

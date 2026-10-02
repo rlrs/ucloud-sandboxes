@@ -1,0 +1,177 @@
+{
+ "scaleswe-oauthlib-0": {
+  "SourceImageSize": 447065600,
+  "TargetImageSize": 436847925,
+  "SourcePullElapsed": 3974182079,
+  "ConversionElapsed": 22305057798,
+  "TargetPushElapsed": 1447580749
+ },
+ "scaleswe-oauthlib-1-dict": {
+  "SourceImageSize": 447066108,
+  "TargetImageSize": 439153640,
+  "SourcePullElapsed": 2734433382,
+  "ConversionElapsed": 17694387367,
+  "TargetPushElapsed": 41436708
+ },
+ "scaleswe-oauthlib-1": {
+  "SourceImageSize": 447066108,
+  "TargetImageSize": 436856355,
+  "SourcePullElapsed": 3885126690,
+  "ConversionElapsed": 22310019421,
+  "TargetPushElapsed": 1459558717
+ },
+ "scaleswe-responses-0": {
+  "SourceImageSize": 470487218,
+  "TargetImageSize": 459025706,
+  "SourcePullElapsed": 3139462019,
+  "ConversionElapsed": 23765909704,
+  "TargetPushElapsed": 1838312642
+ },
+ "scaleswe-responses-1-dict": {
+  "SourceImageSize": 470487723,
+  "TargetImageSize": 461409339,
+  "SourcePullElapsed": 2736703344,
+  "ConversionElapsed": 18253601585,
+  "TargetPushElapsed": 44818850
+ },
+ "scaleswe-responses-1": {
+  "SourceImageSize": 470487723,
+  "TargetImageSize": 459034196,
+  "SourcePullElapsed": 3131683779,
+  "ConversionElapsed": 23688293144,
+  "TargetPushElapsed": 1906475922
+ },
+ "scaleswe-responses-2-dict": {
+  "SourceImageSize": 470487722,
+  "TargetImageSize": 461409328,
+  "SourcePullElapsed": 2727195735,
+  "ConversionElapsed": 18668192851,
+  "TargetPushElapsed": 40938417
+ },
+ "scaleswe-responses-2": {
+  "SourceImageSize": 470487722,
+  "TargetImageSize": 459034192,
+  "SourcePullElapsed": 3126907769,
+  "ConversionElapsed": 23705695814,
+  "TargetPushElapsed": 1798449663
+ },
+ "scaleswe-responses-3-dict": {
+  "SourceImageSize": 470487723,
+  "TargetImageSize": 461409340,
+  "SourcePullElapsed": 2735167913,
+  "ConversionElapsed": 17866631173,
+  "TargetPushElapsed": 41613268
+ },
+ "scaleswe-responses-3": {
+  "SourceImageSize": 470487723,
+  "TargetImageSize": 459034196,
+  "SourcePullElapsed": 3127570219,
+  "ConversionElapsed": 23873068163,
+  "TargetPushElapsed": 1723837673
+ },
+ "scaleswe-traitlets-0": {
+  "SourceImageSize": 438737628,
+  "TargetImageSize": 427530458,
+  "SourcePullElapsed": 3886043790,
+  "ConversionElapsed": 22296656142,
+  "TargetPushElapsed": 1481647972
+ },
+ "scaleswe-traitlets-1": {
+  "SourceImageSize": 438738134,
+  "TargetImageSize": 427538898,
+  "SourcePullElapsed": 3865955990,
+  "ConversionElapsed": 21387073158,
+  "TargetPushElapsed": 875469196
+ },
+ "tlego-0": {
+  "SourceImageSize": 44370914,
+  "TargetImageSize": 48784356,
+  "SourcePullElapsed": 512166841,
+  "ConversionElapsed": 1688999858,
+  "TargetPushElapsed": 112073051
+ },
+ "tlego-1": {
+  "SourceImageSize": 71381705,
+  "TargetImageSize": 74087038,
+  "SourcePullElapsed": 555184066,
+  "ConversionElapsed": 2209695803,
+  "TargetPushElapsed": 140390954
+ },
+ "tlego-2": {
+  "SourceImageSize": 44371569,
+  "TargetImageSize": 48787455,
+  "SourcePullElapsed": 188862278,
+  "ConversionElapsed": 1702288988,
+  "TargetPushElapsed": 123674259
+ },
+ "tlego-3-raw": {
+  "SourceImageSize": 29752017,
+  "TargetImageSize": 78151666,
+  "SourcePullElapsed": 202895435,
+  "ConversionElapsed": 2738079955,
+  "TargetPushElapsed": 211961663
+ },
+ "tlego-3": {
+  "SourceImageSize": 29752017,
+  "TargetImageSize": 32630958,
+  "SourcePullElapsed": 140331824,
+  "ConversionElapsed": 1715437108,
+  "TargetPushElapsed": 118063890
+ },
+ "tlego-4": {
+  "SourceImageSize": 44371545,
+  "TargetImageSize": 48787431,
+  "SourcePullElapsed": 184954593,
+  "ConversionElapsed": 1712919274,
+  "TargetPushElapsed": 98985961
+ },
+ "tlego-5": {
+  "SourceImageSize": 334019449,
+  "TargetImageSize": 322913155,
+  "SourcePullElapsed": 1058445035,
+  "ConversionElapsed": 9931716998,
+  "TargetPushElapsed": 560864816
+ },
+ "tmax-0": {
+  "SourceImageSize": 29751377,
+  "TargetImageSize": 32627825,
+  "SourcePullElapsed": 177489751,
+  "ConversionElapsed": 1555732134,
+  "TargetPushElapsed": 147305185
+ },
+ "tmax-1": {
+  "SourceImageSize": 223308398,
+  "TargetImageSize": 231231329,
+  "SourcePullElapsed": 2078161512,
+  "ConversionElapsed": 12434926678,
+  "TargetPushElapsed": 832608971
+ },
+ "tmax-2": {
+  "SourceImageSize": 223308145,
+  "TargetImageSize": 231231053,
+  "SourcePullElapsed": 2218656977,
+  "ConversionElapsed": 12276123055,
+  "TargetPushElapsed": 839441811
+ },
+ "tmax-3": {
+  "SourceImageSize": 223307605,
+  "TargetImageSize": 231231366,
+  "SourcePullElapsed": 2347053002,
+  "ConversionElapsed": 12140483498,
+  "TargetPushElapsed": 818683799
+ },
+ "tmax-4": {
+  "SourceImageSize": 224171852,
+  "TargetImageSize": 232121741,
+  "SourcePullElapsed": 2058574833,
+  "ConversionElapsed": 12869024300,
+  "TargetPushElapsed": 542739757
+ },
+ "tmax-5": {
+  "SourceImageSize": 359815654,
+  "TargetImageSize": 374286804,
+  "SourcePullElapsed": 1599126920,
+  "ConversionElapsed": 19460014210,
+  "TargetPushElapsed": 851837210
+ }
+}

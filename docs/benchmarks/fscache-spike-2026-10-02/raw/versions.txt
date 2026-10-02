@@ -1,0 +1,17 @@
+nydusd Version: 	v2.4.5
+Git Commit: 	e3190057422fee17f594bb3a5c10741b45dac6ce
+Build Time: 	2026-07-31T02:31:39.697956216Z
+Profile: 	release
+Rustc: 		rustc 1.94.0 (4a4ef493e 2026-03-02)
+
+ Version: 	v2.4.5
+Git Commit: 	e3190057422fee17f594bb3a5c10741b45dac6ce
+Build Time: 	2026-07-31T02:31:39.697956216Z
+Profile: 	release
+Rustc: 		rustc 1.94.0 (4a4ef493e 2026-03-02)
+
+Nydusify version 
+Version	: v2.4.5
+Revision	: e3190057422fee17f594bb3a5c10741b45dac6ce
+Go version	: go1.24.3
+Build time	: 2026-07-31T02:29:19

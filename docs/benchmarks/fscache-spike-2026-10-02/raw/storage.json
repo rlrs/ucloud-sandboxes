@@ -1,0 +1,616 @@
+{
+ "images": {
+  "scaleswe-responses-0": {
+   "nydus_layers": 2,
+   "nydus_bootstrap_layer_bytes": 3232878,
+   "nydus_blobs": 1,
+   "nydus_blob_bytes": 455791916,
+   "nydus_blob_digests": [
+    "d11a7e41810e"
+   ],
+   "oci_layers": 1,
+   "oci_layer_bytes": 470486447,
+   "erofs_components": 1,
+   "erofs_component_bytes": 748507136,
+   "convert_seconds": 28.814961313,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 470487218,
+    "TargetImageSize": 459025706,
+    "SourcePullElapsed": 3139462019,
+    "ConversionElapsed": 23765909704,
+    "TargetPushElapsed": 1838312642
+   }
+  },
+  "scaleswe-responses-1": {
+   "nydus_layers": 3,
+   "nydus_bootstrap_layer_bytes": 3233227,
+   "nydus_blobs": 2,
+   "nydus_blob_bytes": 455799893,
+   "nydus_blob_digests": [
+    "d11a7e41810e",
+    "42b9264ba3ab"
+   ],
+   "oci_layers": 2,
+   "oci_layer_bytes": 470486788,
+   "erofs_components": 2,
+   "erofs_component_bytes": 748511232,
+   "convert_seconds": 28.842295733,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 470487723,
+    "TargetImageSize": 459034196,
+    "SourcePullElapsed": 3131683779,
+    "ConversionElapsed": 23688293144,
+    "TargetPushElapsed": 1906475922
+   }
+  },
+  "scaleswe-responses-2": {
+   "nydus_layers": 3,
+   "nydus_bootstrap_layer_bytes": 3233229,
+   "nydus_blobs": 2,
+   "nydus_blob_bytes": 455799891,
+   "nydus_blob_digests": [
+    "d11a7e41810e",
+    "39277c4f3869"
+   ],
+   "oci_layers": 2,
+   "oci_layer_bytes": 470486791,
+   "erofs_components": 2,
+   "erofs_component_bytes": 748511232,
+   "convert_seconds": 28.728140464,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 470487722,
+    "TargetImageSize": 459034192,
+    "SourcePullElapsed": 3126907769,
+    "ConversionElapsed": 23705695814,
+    "TargetPushElapsed": 1798449663
+   }
+  },
+  "scaleswe-responses-3": {
+   "nydus_layers": 3,
+   "nydus_bootstrap_layer_bytes": 3233227,
+   "nydus_blobs": 2,
+   "nydus_blob_bytes": 455799893,
+   "nydus_blob_digests": [
+    "d11a7e41810e",
+    "9bee2292ef7f"
+   ],
+   "oci_layers": 2,
+   "oci_layer_bytes": 470486788,
+   "erofs_components": 2,
+   "erofs_component_bytes": 748511232,
+   "convert_seconds": 28.804051643,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 470487723,
+    "TargetImageSize": 459034196,
+    "SourcePullElapsed": 3127570219,
+    "ConversionElapsed": 23873068163,
+    "TargetPushElapsed": 1723837673
+   }
+  },
+  "scaleswe-oauthlib-0": {
+   "nydus_layers": 2,
+   "nydus_bootstrap_layer_bytes": 3126118,
+   "nydus_blobs": 1,
+   "nydus_blob_bytes": 433720896,
+   "nydus_blob_digests": [
+    "9eb09607e9bf"
+   ],
+   "oci_layers": 1,
+   "oci_layer_bytes": 447064830,
+   "erofs_components": 1,
+   "erofs_component_bytes": 714764288,
+   "convert_seconds": 27.816525597,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 447065600,
+    "TargetImageSize": 436847925,
+    "SourcePullElapsed": 3974182079,
+    "ConversionElapsed": 22305057798,
+    "TargetPushElapsed": 1447580749
+   }
+  },
+  "scaleswe-oauthlib-1": {
+   "nydus_layers": 3,
+   "nydus_bootstrap_layer_bytes": 3126407,
+   "nydus_blobs": 2,
+   "nydus_blob_bytes": 433728873,
+   "nydus_blob_digests": [
+    "9eb09607e9bf",
+    "f55bfe3e3bf8"
+   ],
+   "oci_layers": 2,
+   "oci_layer_bytes": 447065174,
+   "erofs_components": 2,
+   "erofs_component_bytes": 714768384,
+   "convert_seconds": 27.752087757,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 447066108,
+    "TargetImageSize": 436856355,
+    "SourcePullElapsed": 3885126690,
+    "ConversionElapsed": 22310019421,
+    "TargetPushElapsed": 1459558717
+   }
+  },
+  "scaleswe-traitlets-0": {
+   "nydus_layers": 2,
+   "nydus_bootstrap_layer_bytes": 3029732,
+   "nydus_blobs": 1,
+   "nydus_blob_bytes": 424499814,
+   "nydus_blob_digests": [
+    "459c166f0c12"
+   ],
+   "oci_layers": 1,
+   "oci_layer_bytes": 438736857,
+   "erofs_components": 1,
+   "erofs_component_bytes": 701947904,
+   "convert_seconds": 27.727624636,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 438737628,
+    "TargetImageSize": 427530458,
+    "SourcePullElapsed": 3886043790,
+    "ConversionElapsed": 22296656142,
+    "TargetPushElapsed": 1481647972
+   }
+  },
+  "scaleswe-traitlets-1": {
+   "nydus_layers": 3,
+   "nydus_bootstrap_layer_bytes": 3030032,
+   "nydus_blobs": 2,
+   "nydus_blob_bytes": 424507790,
+   "nydus_blob_digests": [
+    "459c166f0c12",
+    "4ab0a793a0fb"
+   ],
+   "oci_layers": 2,
+   "oci_layer_bytes": 438737199,
+   "erofs_components": 2,
+   "erofs_component_bytes": 701952000,
+   "convert_seconds": 26.240399842,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 438738134,
+    "TargetImageSize": 427538898,
+    "SourcePullElapsed": 3865955990,
+    "ConversionElapsed": 21387073158,
+    "TargetPushElapsed": 875469196
+   }
+  },
+  "tmax-0": {
+   "nydus_layers": 2,
+   "nydus_bootstrap_layer_bytes": 245729,
+   "nydus_blobs": 1,
+   "nydus_blob_bytes": 32380829,
+   "nydus_blob_digests": [
+    "254fbbae287d"
+   ],
+   "oci_layers": 1,
+   "oci_layer_bytes": 29750251,
+   "erofs_components": 1,
+   "erofs_component_bytes": 49516544,
+   "convert_seconds": 1.922421544,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 29751377,
+    "TargetImageSize": 32627825,
+    "SourcePullElapsed": 177489751,
+    "ConversionElapsed": 1555732134,
+    "TargetPushElapsed": 147305185
+   }
+  },
+  "tmax-1": {
+   "nydus_layers": 4,
+   "nydus_bootstrap_layer_bytes": 1151102,
+   "nydus_blobs": 3,
+   "nydus_blob_bytes": 230078287,
+   "nydus_blob_digests": [
+    "254fbbae287d",
+    "ea195d6129d9",
+    "b4f1524e555e"
+   ],
+   "oci_layers": 3,
+   "oci_layer_bytes": 223306599,
+   "erofs_components": 2,
+   "erofs_component_bytes": 362840064,
+   "convert_seconds": 15.413497344,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 223308398,
+    "TargetImageSize": 231231329,
+    "SourcePullElapsed": 2078161512,
+    "ConversionElapsed": 12434926678,
+    "TargetPushElapsed": 832608971
+   }
+  },
+  "tmax-2": {
+   "nydus_layers": 4,
+   "nydus_bootstrap_layer_bytes": 1151100,
+   "nydus_blobs": 3,
+   "nydus_blob_bytes": 230078013,
+   "nydus_blob_digests": [
+    "254fbbae287d",
+    "b63a8a274c10",
+    "6213de0e2e28"
+   ],
+   "oci_layers": 3,
+   "oci_layer_bytes": 223306346,
+   "erofs_components": 2,
+   "erofs_component_bytes": 362840064,
+   "convert_seconds": 15.41723356,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 223308145,
+    "TargetImageSize": 231231053,
+    "SourcePullElapsed": 2218656977,
+    "ConversionElapsed": 12276123055,
+    "TargetPushElapsed": 839441811
+   }
+  },
+  "tmax-3": {
+   "nydus_layers": 4,
+   "nydus_bootstrap_layer_bytes": 1151182,
+   "nydus_blobs": 3,
+   "nydus_blob_bytes": 230078244,
+   "nydus_blob_digests": [
+    "254fbbae287d",
+    "24a314c69630",
+    "5b2b9ecd29f6"
+   ],
+   "oci_layers": 3,
+   "oci_layer_bytes": 223305806,
+   "erofs_components": 2,
+   "erofs_component_bytes": 362840064,
+   "convert_seconds": 15.385050821,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 223307605,
+    "TargetImageSize": 231231366,
+    "SourcePullElapsed": 2347053002,
+    "ConversionElapsed": 12140483498,
+    "TargetPushElapsed": 818683799
+   }
+  },
+  "tmax-4": {
+   "nydus_layers": 4,
+   "nydus_bootstrap_layer_bytes": 1151448,
+   "nydus_blobs": 3,
+   "nydus_blob_bytes": 230968355,
+   "nydus_blob_digests": [
+    "254fbbae287d",
+    "22bcf8984f46",
+    "f0fd64748e4b"
+   ],
+   "oci_layers": 3,
+   "oci_layer_bytes": 224170055,
+   "erofs_components": 2,
+   "erofs_component_bytes": 364109824,
+   "convert_seconds": 15.561048288,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 224171852,
+    "TargetImageSize": 232121741,
+    "SourcePullElapsed": 2058574833,
+    "ConversionElapsed": 12869024300,
+    "TargetPushElapsed": 542739757
+   }
+  },
+  "tmax-5": {
+   "nydus_layers": 4,
+   "nydus_bootstrap_layer_bytes": 2314150,
+   "nydus_blobs": 3,
+   "nydus_blob_bytes": 371970716,
+   "nydus_blob_digests": [
+    "254fbbae287d",
+    "2f7711e0f76e",
+    "e5b0dcab00f0"
+   ],
+   "oci_layers": 3,
+   "oci_layer_bytes": 359813857,
+   "erofs_components": 2,
+   "erofs_component_bytes": 594063360,
+   "convert_seconds": 22.005344233,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 359815654,
+    "TargetImageSize": 374286804,
+    "SourcePullElapsed": 1599126920,
+    "ConversionElapsed": 19460014210,
+    "TargetPushElapsed": 851837210
+   }
+  },
+  "tlego-0": {
+   "nydus_layers": 5,
+   "nydus_bootstrap_layer_bytes": 479828,
+   "nydus_blobs": 4,
+   "nydus_blob_bytes": 48298737,
+   "nydus_blob_digests": [
+    "2384ddbce346",
+    "290ea06542b9",
+    "be191ba7df39",
+    "c8c5385b5308"
+   ],
+   "oci_layers": 4,
+   "oci_layer_bytes": 44365264,
+   "erofs_components": 1,
+   "erofs_component_bytes": 74084352,
+   "convert_seconds": 2.364887908,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 44370914,
+    "TargetImageSize": 48784356,
+    "SourcePullElapsed": 512166841,
+    "ConversionElapsed": 1688999858,
+    "TargetPushElapsed": 112073051
+   }
+  },
+  "tlego-1": {
+   "nydus_layers": 6,
+   "nydus_bootstrap_layer_bytes": 524235,
+   "nydus_blobs": 5,
+   "nydus_blob_bytes": 73555667,
+   "nydus_blob_digests": [
+    "19f7c1509f20",
+    "3b9de0e84e8f",
+    "fae156fb2317",
+    "68d758dff6c5",
+    "7c6ab5ca8851"
+   ],
+   "oci_layers": 5,
+   "oci_layer_bytes": 71374710,
+   "erofs_components": 2,
+   "erofs_component_bytes": 120881152,
+   "convert_seconds": 2.964603464,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 71381705,
+    "TargetImageSize": 74087038,
+    "SourcePullElapsed": 555184066,
+    "ConversionElapsed": 2209695803,
+    "TargetPushElapsed": 140390954
+   }
+  },
+  "tlego-2": {
+   "nydus_layers": 7,
+   "nydus_bootstrap_layer_bytes": 479841,
+   "nydus_blobs": 6,
+   "nydus_blob_bytes": 48301293,
+   "nydus_blob_digests": [
+    "2384ddbce346",
+    "290ea06542b9",
+    "be191ba7df39",
+    "c8c5385b5308",
+    "f33304043f45",
+    "6c24424576a8"
+   ],
+   "oci_layers": 6,
+   "oci_layer_bytes": 44365389,
+   "erofs_components": 1,
+   "erofs_component_bytes": 74084352,
+   "convert_seconds": 2.068425217,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 44371569,
+    "TargetImageSize": 48787455,
+    "SourcePullElapsed": 188862278,
+    "ConversionElapsed": 1702288988,
+    "TargetPushElapsed": 123674259
+   }
+  },
+  "tlego-3": {
+   "nydus_layers": 4,
+   "nydus_bootstrap_layer_bytes": 245791,
+   "nydus_blobs": 3,
+   "nydus_blob_bytes": 32383385,
+   "nydus_blob_digests": [
+    "254fbbae287d",
+    "8d2c1e27eefe",
+    "6c24424576a8"
+   ],
+   "oci_layers": 3,
+   "oci_layer_bytes": 29750376,
+   "erofs_components": 1,
+   "erofs_component_bytes": 49516544,
+   "convert_seconds": 2.00463099,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 29752017,
+    "TargetImageSize": 32630958,
+    "SourcePullElapsed": 140331824,
+    "ConversionElapsed": 1715437108,
+    "TargetPushElapsed": 118063890
+   }
+  },
+  "tlego-4": {
+   "nydus_layers": 7,
+   "nydus_bootstrap_layer_bytes": 479841,
+   "nydus_blobs": 6,
+   "nydus_blob_bytes": 48301293,
+   "nydus_blob_digests": [
+    "2384ddbce346",
+    "290ea06542b9",
+    "be191ba7df39",
+    "c8c5385b5308",
+    "f33304043f45",
+    "6c24424576a8"
+   ],
+   "oci_layers": 6,
+   "oci_layer_bytes": 44365389,
+   "erofs_components": 1,
+   "erofs_component_bytes": 74084352,
+   "convert_seconds": 2.032594232,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 44371545,
+    "TargetImageSize": 48787431,
+    "SourcePullElapsed": 184954593,
+    "ConversionElapsed": 1712919274,
+    "TargetPushElapsed": 98985961
+   }
+  },
+  "tlego-5": {
+   "nydus_layers": 12,
+   "nydus_bootstrap_layer_bytes": 956387,
+   "nydus_blobs": 11,
+   "nydus_blob_bytes": 321951542,
+   "nydus_blob_digests": [
+    "2384ddbce346",
+    "ada9cf64dbd8",
+    "63aa7bab7425",
+    "fc944c3bb009",
+    "417031bfb39c",
+    "c54159f15fbe",
+    "f53be5861f09",
+    "4579e26c5769",
+    "d666a6a89941",
+    "ebf955408a57",
+    "d96e4a15a4f6"
+   ],
+   "oci_layers": 11,
+   "oci_layer_bytes": 334014364,
+   "erofs_components": 4,
+   "erofs_component_bytes": 500146176,
+   "convert_seconds": 11.622409738,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 334019449,
+    "TargetImageSize": 322913155,
+    "SourcePullElapsed": 1058445035,
+    "ConversionElapsed": 9931716998,
+    "TargetPushElapsed": 560864816
+   }
+  },
+  "scaleswe-responses-1-dict": {
+   "nydus_layers": 4,
+   "nydus_bootstrap_layer_bytes": 2869790,
+   "nydus_blobs": 3,
+   "nydus_blob_bytes": 458538399,
+   "nydus_blob_digests": [
+    "954922d105a6",
+    "991b196df65b",
+    "d11a7e41810e"
+   ],
+   "oci_layers": 2,
+   "oci_layer_bytes": 470486788,
+   "erofs_components": 2,
+   "erofs_component_bytes": 748511232,
+   "convert_seconds": 21.149432913,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 470487723,
+    "TargetImageSize": 461409339,
+    "SourcePullElapsed": 2736703344,
+    "ConversionElapsed": 18253601585,
+    "TargetPushElapsed": 44818850
+   }
+  },
+  "scaleswe-responses-2-dict": {
+   "nydus_layers": 4,
+   "nydus_bootstrap_layer_bytes": 2869786,
+   "nydus_blobs": 3,
+   "nydus_blob_bytes": 458538396,
+   "nydus_blob_digests": [
+    "954922d105a6",
+    "94c0266b2bc0",
+    "d11a7e41810e"
+   ],
+   "oci_layers": 2,
+   "oci_layer_bytes": 470486791,
+   "erofs_components": 2,
+   "erofs_component_bytes": 748511232,
+   "convert_seconds": 21.518556398,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 470487722,
+    "TargetImageSize": 461409328,
+    "SourcePullElapsed": 2727195735,
+    "ConversionElapsed": 18668192851,
+    "TargetPushElapsed": 40938417
+   }
+  },
+  "scaleswe-responses-3-dict": {
+   "nydus_layers": 4,
+   "nydus_bootstrap_layer_bytes": 2869791,
+   "nydus_blobs": 3,
+   "nydus_blob_bytes": 458538399,
+   "nydus_blob_digests": [
+    "954922d105a6",
+    "6166d3f9391b",
+    "d11a7e41810e"
+   ],
+   "oci_layers": 2,
+   "oci_layer_bytes": 470486788,
+   "erofs_components": 2,
+   "erofs_component_bytes": 748511232,
+   "convert_seconds": 20.737211289,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 470487723,
+    "TargetImageSize": 461409340,
+    "SourcePullElapsed": 2735167913,
+    "ConversionElapsed": 17866631173,
+    "TargetPushElapsed": 41613268
+   }
+  },
+  "scaleswe-oauthlib-1-dict": {
+   "nydus_layers": 4,
+   "nydus_bootstrap_layer_bytes": 2774524,
+   "nydus_blobs": 3,
+   "nydus_blob_bytes": 436377967,
+   "nydus_blob_digests": [
+    "2e8345e10e36",
+    "7d227bd84cf6",
+    "9eb09607e9bf"
+   ],
+   "oci_layers": 2,
+   "oci_layer_bytes": 447065174,
+   "erofs_components": 2,
+   "erofs_component_bytes": 714768384,
+   "convert_seconds": 20.569028216,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 447066108,
+    "TargetImageSize": 439153640,
+    "SourcePullElapsed": 2734433382,
+    "ConversionElapsed": 17694387367,
+    "TargetPushElapsed": 41436708
+   }
+  },
+  "tlego-3-raw": {
+   "nydus_layers": 4,
+   "nydus_bootstrap_layer_bytes": 237556,
+   "nydus_blobs": 3,
+   "nydus_blob_bytes": 77912328,
+   "nydus_blob_digests": [
+    "6e67b1cb49c8",
+    "fa14db431f78",
+    "c62a343eca78"
+   ],
+   "oci_layers": 3,
+   "oci_layer_bytes": 29750376,
+   "erofs_components": 1,
+   "erofs_component_bytes": 49516544,
+   "convert_seconds": 3.201099406,
+   "convert_rc": 0,
+   "nydusify_metrics": {
+    "SourceImageSize": 29752017,
+    "TargetImageSize": 78151666,
+    "SourcePullElapsed": 202895435,
+    "ConversionElapsed": 2738079955,
+    "TargetPushElapsed": 211961663
+   }
+  }
+ },
+ "totals_20": {
+  "oci_layer_bytes": 5505439280,
+  "erofs_component_bytes_sum": 8816480256,
+  "erofs_component_bytes_distinct": 5080162304,
+  "nydus_blob_bytes_sum": 5437995327,
+  "nydus_blob_bytes_distinct": 2890302491,
+  "nydus_bootstrap_bytes": 35575484
+ }
+}

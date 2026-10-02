@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.8.3 - 2026-10-02
+
+Workers need the new node bundle. The chunk store (`immutable_environments.chunk_store`, plus its `store_node`) is off unless configured. Concurrent attach is always on, and also changes today's EROFS attach path.
+
 - **Chunk store node (C2.6, Phase B), off by default.** S12 found S3's tail in seconds and private-only workers reaching S3 only through the gateway's NAT, so workers now read chunk-store images from a store node on the private network, never from S3. Nothing changes unless `immutable_environments.chunk_store.store_node` is set; rendered configs, node init and gateway units are otherwise the same. Design: `docs/chunk-store-design.md` (§2, "C2.6 store node (as built)"); bring-up: `docs/hetzner.md#chunk-store-node-c26`; benchmarks: `docs/benchmarks/chunk-store-node-2026-10-02/`.
   - **`ucloud-chunk-store`** (`serve-chunk-store`): ranged GETs of packs, bootstraps and chunk maps (those keys only) with the index's read token. Misses fill aligned extents (`extent_bytes`, 4 MiB in production) from S3 with the node's own key through M1's SigV4 presigner. Concurrent misses on one extent share one fill. An S3 GET that stops making progress (no first byte, or no body bytes) for 3× the median time to first byte (150 ms–2 s) is hedged, at most twice; transfers that are slow but flowing are not duplicated. Errors retry with backoff for 60 s, then the read answers 503.
   - **Cache:** LRU under a byte budget on local NVMe. Fills are hashed while written and renamed into place with their sha256 in the name; after a restart each extent is hashed on first use, so a torn one is refetched, never served. Whole packs and chunk maps that do not match their names are not kept.

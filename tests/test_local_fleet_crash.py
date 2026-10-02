@@ -6,10 +6,10 @@ delete, park or wake is blocked inside a fake runtime or storage boundary.
 The in-flight invocation then dies too (or, for the storage daemon, which
 outlives the agent, completes). The restarted agent replays the registry
 and the Warden journal: creates finish exactly once with no orphan sentry,
-deletes complete, captures resume, restores settle, and a sentry that died
-while the agent was down is quarantined. The gateway reports each crash as
-a retryable transport error and recovers the route from the next heartbeat
-or the client's retry.
+deletes complete, abandoned captures resume and leave no checkpoint,
+restores settle, and a sentry that died while the agent was down is
+quarantined. The gateway reports each crash as a retryable transport error
+and recovers the route from the next heartbeat or the client's retry.
 
 Not covered: a crash between the Warden journal commit and the registry's
 owned commit, which has no fake boundary to block in.
@@ -155,13 +155,14 @@ class AgentCrashReplayTests(unittest.TestCase):
                 return fleet.exec("resting", ["cat", "/tmp/memory.txt", "/workspace/disk.txt"]).stdout
 
             # Before or after the checkpoint is written, an unfinished capture
-            # is abandoned and the original, paused sentry resumes.
+            # is discarded and the original, paused sentry resumes.
             original = node.sentry_pid("resting")
             for action in ("hang", "hang-after"):
                 with self.subTest(park=action):
                     crash_during("checkpoint", action, lambda: fleet.park("resting"))
                     self.assertEqual(fleet.route("resting").state, "running")
                     self.assertEqual(node.live_sentries(), [original])
+                    self.assertEqual(list((node.volumes / "resting.sandbox-1").glob("hibernate-*")), [])
                     self.assertEqual(state_intact(), "memorydisk")
 
             # A restore that never ran leaves the sandbox parked for a retry;

@@ -3,9 +3,11 @@
 Tier: contract. Concurrent creates across three workers never overbook a
 worker's disk, the binding resource here (8 GiB sandboxes on 64 GiB
 workers). A worker that closed admission without the gateway knowing makes
-its creates reselect elsewhere under a new generation. Every refusal is
-retryable JSON; once nothing fits, the refusal carries the pending demand.
-The gateway's own create cap answers a retryable busy.
+its creates reselect elsewhere under a new generation, or, with no other
+worker, refuse at the image pull or the create with the demand still
+queued. Every refusal is retryable JSON; once nothing fits, the refusal
+carries the pending demand. The gateway's own create cap answers a
+retryable busy.
 
 Not covered: the PostgreSQL durable placement queue (client disconnect,
 coalesced duplicates), which needs ``queue_placement``.
@@ -43,6 +45,8 @@ class CreateBurstTests(unittest.TestCase):
             self.assertIn("node_admission_closed",
                           [response.json()["error_code"] for response in responses.values() if response.status != 201])
             pending = routing.open_routing_store(fleet.routing_file).load().pending
+            # A reselected create consumed the demand its refusal queued.
+            self.assertFalse(set(created) & set(pending))
             for name, response in responses.items():
                 if response.status != 201:
                     self.assertEqual(response.status, 503, response.body)
@@ -82,6 +86,28 @@ class CreateBurstTests(unittest.TestCase):
             self.assertEqual(fleet.delete("overflow").status, 200)
             demand = fleet.request("GET", "/v1/demand").json()
             self.assertNotIn("overflow", [item["sandbox_id"] for item in demand["pending"]])
+
+    def test_closed_worker_without_alternate_keeps_retryable_demand(self):
+        with LocalFleet() as fleet:
+            node = fleet.nodes[0]
+            # The worker refuses at the image pull, or at the create once the
+            # gateway knows the image is cached. Either answer is forwarded and
+            # the demand stays queued, never pinned to that worker.
+            for name, refused_at in (("cold", "/v1/images/pull"), ("warm", "/v1/sandboxes")):
+                if name == "warm":
+                    self.assertEqual(node.drain("solo", draining=False).status, 200)
+                    fleet.create("seed")
+                    fleet.heartbeat()
+                self.assertEqual(node.drain("solo").status, 200)
+                before = len(node.requests)
+                refused = fleet.request("POST", "/v1/sandboxes", payload={"id": name, **SPEC}, token="sandbox")
+                self.assertEqual(refused.status, 503, refused.body)
+                self.assertEqual((refused.json()["error_code"], refused.json()["retryable"]),
+                                 ("node_admission_closed", True))
+                self.assertEqual([path for method, path in node.requests[before:] if method == "POST"], [refused_at])
+                self.assertIsNone(fleet.route(name))
+                pending = routing.open_routing_store(fleet.routing_file).load().pending
+                self.assertEqual(pending[name].failure_reason, "node_admission_closed")
 
     def test_gateway_create_cap_answers_retryable_busy(self):
         with LocalFleet(max_concurrent_sandbox_creates=1, admission_wait_seconds=0.2) as fleet:

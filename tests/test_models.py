@@ -1,5 +1,8 @@
+import os
+import time
 import unittest
 from datetime import timedelta
+from unittest.mock import patch
 
 from ucloud_sandboxes.models import (
     InstancePhase,
@@ -25,6 +28,17 @@ class TimestampParsingTests(unittest.TestCase):
 
     def test_rejects_invalid_high_precision_timestamp(self) -> None:
         self.assertIsNone(parse_iso_datetime("2026-08-27T13:05:18.123456789oops"))
+
+    def test_naive_timestamp_is_utc_not_host_local(self) -> None:
+        # A UTC host cannot tell the two apart; run as UTC+5 (POSIX TZ).
+        try:
+            with patch.dict(os.environ, {"TZ": "XXX-5"}):
+                time.tzset()
+                parsed = parse_iso_datetime("2026-08-27T13:05:18")
+        finally:
+            time.tzset()
+        assert parsed is not None
+        self.assertEqual(parsed.isoformat(), "2026-08-27T13:05:18+00:00")
 
 
 class SandboxLifecycleObservationTests(unittest.TestCase):

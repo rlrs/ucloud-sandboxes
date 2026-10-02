@@ -1,9 +1,10 @@
 """S10: delete races and generation fencing, over the local fleet harness.
 
-Tier: contract. A delete that overlaps a slow create wins, and the create
-reports that its ownership ended. A failed node delete keeps the route as a
-durable delete intent that fences traffic until a retry completes it. A
-delayed delete for an old generation cannot remove its replacement.
+Tier: contract. Traffic to a slow create is fenced until it is owned; a
+delete that overlaps it wins, and the create reports that its ownership
+ended. A failed node delete keeps the route as a durable delete intent that
+fences traffic until a retry completes it. A delayed delete for an old
+generation cannot remove its replacement.
 
 Not covered: publication readers, detached (portable) routes, the queued
 PostgreSQL create path and registry references, which the harness does not
@@ -44,6 +45,18 @@ class DeleteRaceTests(unittest.TestCase):
             node.wait_hung("create")
             self.assertEqual((fleet.route("alpha").state, node.registration("alpha").phase),
                              ("creating", "rootfs_ready"))
+            # Traffic is fenced until the create is owned and never reaches
+            # the worker: a fresh one is only asked whether the create
+            # finished, a silent one is not asked at all.
+            for silent, asked in ((False, ["/v1/sandboxes?sandbox_id=alpha"]), (True, [])):
+                if silent:
+                    fleet.expire_heartbeat(node)
+                before = len(node.requests)
+                fenced = fleet.start_exec("alpha", ["true"])
+                self.assertEqual((fenced.status, fenced.json()["retryable"]), (503, True), fenced.body)
+                self.assertIn("creation is already in progress", fenced.json()["error"])
+                self.assertEqual([path for _, path in node.requests[before:] if "alpha" in path], asked)
+            fleet.heartbeat()
 
             delete, deleted = in_background(lambda: fleet.delete("alpha"))
             # The delete reaches the worker and waits there for the create.

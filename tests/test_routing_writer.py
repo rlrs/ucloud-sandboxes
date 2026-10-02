@@ -198,8 +198,8 @@ class GatewayRoutingWriterTests(unittest.TestCase):
             return original(*args, **kwargs)
         with patch.object(cases, 'build_server', side_effect=build):
             for name in (
-                'test_gateway_persists_route_before_node_create_finishes',
-                'test_gateway_fences_tool_traffic_until_direct_create_is_owned',
+                'test_closed_node_admission_reselects_another_node_in_same_request',
+                'test_gateway_preserves_route_when_node_delete_returns_client_error',
                 'test_relay_lifecycle_persists_program_request_transitions',
                 'test_successful_exec_implicitly_commits_parked_route_wake',
                 'test_gateway_stamps_heartbeat_receipt_time_and_enforces_deployment',

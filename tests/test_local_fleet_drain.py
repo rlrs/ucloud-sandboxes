@@ -2,9 +2,10 @@
 
 Tier: contract. Drain closes a worker to new creates, wakes, execs and file
 traffic, is owned by its token, and waits out work admitted before it. Live
-admission reads the host sample (``FleetNode.sample_metrics``): an exec
-without headroom is deferred at once, a create waits for headroom only until
-its deadline, and an unknown sample never waits.
+admission reads the host sample (``FleetNode.sample_metrics``): CPU load
+alone defers nothing, an exec without memory headroom is deferred at once, a
+create waits for headroom only until its deadline, and an unknown sample
+never waits.
 
 Not covered: drain during an image pull or a memory wait, and the
 empty-inventory stop proof, which belong to the autoscaler (S9).
@@ -114,9 +115,13 @@ class DrainAdmissionTests(unittest.TestCase):
             def create(name):
                 return fleet.request("POST", "/v1/sandboxes", payload={"id": name, **SPEC}, token="sandbox")
 
-            # CPU load is advice, not a veto, for commands in a resident sandbox.
+            # CPU load is advice, not a veto: commands run and creates are
+            # admitted without waiting for a lower sample.
             node.sample_metrics = lambda: replace(fixed_metrics(), cpu_percent=95.0, load_average_1m=16.0)
             self.assertEqual(fleet.exec("alpha", ["true"]).exit_code, 0)
+            response, elapsed = timed(lambda: create("busy"))
+            self.assertEqual(response.status, 201, response.body)
+            self.assertLess(elapsed, WAIT)
 
             # No headroom: an exec is deferred at once, a create only after
             # waiting out its deadline, and neither runs later.

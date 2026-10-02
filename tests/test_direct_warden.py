@@ -506,25 +506,6 @@ class DirectRunscWardenTests(unittest.TestCase):
         ):
             self.assertIsNone(self.warden._candidate_identity_or_none(self.sandbox))
 
-    def test_capture_recovery_resumes_original_before_any_export_file_exists(self):
-        running = self.warden.create(self.sandbox, operation_id="create:1")
-        journal = self.warden._journal(self.sandbox)
-        capturing = journal.begin_hibernate(
-            operation_id="park:1", expected_revision=running.revision
-        )
-        generation = self.warden.artifacts.prepare_generation(
-            sandbox_id=self.sandbox.sandbox_id,
-            sandbox_generation=1,
-            hibernation_generation=capturing.hibernation_generation,
-        )
-        self.runner.checkpoint = generation
-        self.runner.status = "paused"
-        self.assertFalse((generation / "application_memory.img").exists())
-        recovered = self.warden.reconcile(self.sandbox)
-        self.assertEqual(recovered.state, HibernationState.RUNNING)
-        self.assertEqual(self.runner.status, "running")
-        self.assertEqual(recovered.sentry_pid, running.sentry_pid)
-
     def test_capture_resume_failure_does_not_commit_running(self):
         running = self.warden.create(self.sandbox, operation_id="create:1")
         journal = self.warden._journal(self.sandbox)
@@ -718,13 +699,6 @@ class DirectRunscWardenTests(unittest.TestCase):
                 self.assertTrue(ensure_sandbox_cgroup_parent(parent))
             self.assertEqual(writes, ["+cpu", "+io", "+pids"])
 
-    def test_cleanup_clears_dead_process_without_signalling(self):
-        self.runner.pid = 99999
-        state = self._cleanup_state()
-        self.warden._delete_runtime(self.sandbox)
-        self.assertEqual(json.loads(state.read_text())["sandbox"]["pid"], 0)
-        self.assertEqual(self.fencer.handles, [])
-
     def test_delete_reaps_metadata_after_container_init_exits(self):
         self.warden.create(self.sandbox, operation_id="create:1")
         state = self._cleanup_state()
@@ -902,28 +876,6 @@ class DirectRunscWardenTests(unittest.TestCase):
         self.assertEqual(
             self.warden.resume(self.sandbox, operation_id="wake:2").state,
             HibernationState.RUNNING,
-        )
-
-    def test_two_phase_park_and_new_backend_resume(self) -> None:
-        running = self.warden.create(self.sandbox, operation_id="create:1")
-        parked = self.warden.park(self.sandbox, operation_id="park:1")
-
-        self.assertEqual(parked.state, HibernationState.PARKED)
-        self.assertFalse((self.proc_root / str(running.sentry_pid)).exists())
-        self.assertEqual(self.storage.record["state"], "released")
-
-        restored = self.warden.resume(self.sandbox, operation_id="wake:1")
-
-        self.assertEqual(restored.state, HibernationState.RUNNING)
-        self.assertNotEqual(restored.sentry_pid, running.sentry_pid)
-        self.assertEqual(self._artifact_inventory(), ())
-        self.assertEqual(self.storage.record["state"], "mounted")
-        self.assertTrue(
-            (
-                self.config.memory_root
-                / self.memory_directory
-                / "application_memory.active"
-            ).is_file()
         )
 
     def test_network_preparation_failure_does_not_start_restore_candidate(self) -> None:
@@ -1220,32 +1172,6 @@ class DirectRunscWardenTests(unittest.TestCase):
         reconciled = self.warden.reconcile(self.sandbox)
         self.assertEqual(reconciled.state, HibernationState.PARKED)
         self.assertFalse((self.proc_root / str(record.sentry_pid) / "stat").exists())
-
-    def test_reconcile_resumes_unpublished_live_capture(self) -> None:
-        running = self.warden.create(self.sandbox, operation_id="create:1")
-        journal = self.warden._journal(self.sandbox)
-        hibernating = journal.begin_hibernate(
-            operation_id="park:1",
-            expected_revision=running.revision,
-        )
-        generation = self.warden.artifacts.prepare_generation(
-            sandbox_id=self.sandbox.sandbox_id,
-            sandbox_generation=self.sandbox.sandbox_generation,
-            hibernation_generation=hibernating.hibernation_generation,
-        )
-        self.warden._checked(
-            *self.warden._common(self.sandbox),
-            "checkpoint",
-            "--hibernate",
-            f"--image-path={generation}",
-            self.sandbox.container_id,
-        )
-
-        reconciled = self.warden.reconcile(self.sandbox)
-
-        self.assertEqual(reconciled.state, HibernationState.RUNNING)
-        self.assertEqual(self.runner.status, "running")
-        self.assertFalse(generation.exists())
 
     def test_single_owner_restore_stays_paused_until_candidate_is_fenced(
         self,

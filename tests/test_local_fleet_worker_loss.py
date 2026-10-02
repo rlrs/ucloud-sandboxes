@@ -1,9 +1,10 @@
 """S3: worker silence, reboot and quarantine, over the local fleet harness.
 
 Tier: contract. A silent worker's routes are retryable and never proxied. A
-new boot epoch retires the old boot's routes and sessions as node_lost; a
-restart within one boot keeps them. A quarantined worker keeps serving
-existing work but admits none, and its inventory cannot retire routes.
+new boot epoch retires the old boot's routes and sessions as node_lost,
+over SQLite and PostgreSQL routing; a restart within one boot keeps them. A
+quarantined worker keeps serving existing work but admits none, and its
+inventory cannot retire routes.
 
 The autoscaler half of S3 (provider-reported suspension or power-off, and
 no destructive stop replay) needs the S9 fake provider and is not covered.
@@ -77,7 +78,13 @@ class WorkerLossTests(unittest.TestCase):
             self.assertIsNone(node.registration("doomed"))
 
     def test_reboot_retires_the_old_boot_as_node_lost(self):
-        with LocalFleet() as fleet:
+        self._reboot_retires_the_old_boot(postgres=False)
+
+    def test_reboot_retires_the_old_boot_with_postgres_routing(self):
+        self._reboot_retires_the_old_boot(postgres=True)
+
+    def _reboot_retires_the_old_boot(self, *, postgres: bool) -> None:
+        with LocalFleet(postgres=postgres) as fleet:
             node = fleet.nodes[0]
             fleet.create("alpha")
             fleet.create("resting", parkable=True)

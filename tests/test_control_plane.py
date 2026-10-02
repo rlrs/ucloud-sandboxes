@@ -6,8 +6,8 @@ from http import HTTPStatus
 from io import BytesIO
 from tempfile import TemporaryDirectory
 from http.client import HTTPConnection
-from threading import Event, Lock, Thread
-from time import monotonic, sleep
+from threading import Event, Thread
+from time import monotonic
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import hashlib
@@ -60,7 +60,6 @@ from ucloud_sandboxes.node_agent import (
     build_builder_node_agent_server as _build_builder_node_agent_server,
 )
 from ucloud_sandboxes.routing import (
-    ExecRoute,
     RoutingStore,
     SandboxRoute,
     SandboxRouteAllocation,
@@ -68,7 +67,6 @@ from ucloud_sandboxes.routing import (
     route_with_inventory_snapshot,
 )
 from ucloud_sandboxes.sandbox import (
-    CommandResult,
     SandboxSpec,
     sandbox_spec_fingerprint,
 )
@@ -271,15 +269,6 @@ def _seed_gateway_node(
     return heartbeat_file, route_file
 
 
-def _wait_for(predicate, *, timeout_seconds: float = 2.0) -> bool:
-    deadline = monotonic() + timeout_seconds
-    while monotonic() < deadline:
-        if predicate():
-            return True
-        sleep(0.01)
-    return bool(predicate())
-
-
 @contextmanager
 def _temporary_root():
     with TemporaryDirectory() as raw_dir:
@@ -310,19 +299,6 @@ def _running_server(server: ThreadingHTTPServer):
         server.shutdown()
         thread.join(timeout=1)
         server.server_close()
-
-
-class CountingPullRuntime(DockerImageRuntime):
-    def __init__(self) -> None:
-        super().__init__(dry_run=True)
-        self._lock = Lock()
-        self.pulls: list[str] = []
-
-    def pull(self, image: str) -> CommandResult:
-        sleep(0.05)
-        with self._lock:
-            self.pulls.append(image)
-        return CommandResult(argv=("docker", "pull", image), exit_code=0)
 
 
 class ContextRecordingRuntime(DockerImageRuntime):
@@ -399,23 +375,6 @@ class ControlPlaneTests(unittest.TestCase):
                     self.assertIs(handler._handle_lifecycle_proxy_response(route, "park", {}, response), route)
                     self.assertEqual(transition.call_count, expected)
 
-    def test_exec_requests_wait_for_missing_worker_without_proxying(self) -> None:
-        with _temporary_root() as root:
-            routing = RoutingStore(root / "routes.sqlite")
-            routing.upsert_exec(ExecRoute(
-                session_id="accepted", sandbox_id="sandbox", node_id="node",
-                job_id="job", node_url="http://node.invalid",
-            ))
-            gateway = _gateway_server(root, routing_file=routing.path)
-            with patch.object(gateway.RequestHandlerClass, "_proxy_request") as proxy:
-                with _running_server(gateway) as base:
-                    result = self._json_request(base + "/v1/exec/accepted/events", allow_error=True)
-                proxy.assert_not_called()
-            self.assertEqual(result["status"], 503)
-            self.assertEqual(result["body"]["error_code"], "sandbox_worker_unreachable")
-            self.assertIsNotNone(routing.get_exec("accepted"))
-            self.assertIsNone(routing.get_exec_loss("accepted"))
-
     def test_implicit_wake_transport_errors_fence_original_command_only(self) -> None:
         for failure in ("dns", "timeout", "transport"):
             for failed_phase in ("wake", "exec"):
@@ -459,80 +418,6 @@ class ControlPlaneTests(unittest.TestCase):
                     else:
                         self.assertEqual(proxied, ["wake", "exec"])
                         self.assertNotIn("error_code", result["body"])
-
-    def test_lost_exec_returns_terminal_reason_without_contacting_worker(self) -> None:
-        with _temporary_root() as root:
-            route_file = root / "routes.sqlite"
-            routing = RoutingStore(route_file)
-            route = routing.upsert_sandbox(_sandbox_route(
-                sandbox_id="lost", node_id="node", job_id="job",
-                node_url="http://node.invalid", state="running",
-            ))
-            routing.upsert_exec(ExecRoute(
-                session_id="accepted", sandbox_id=route.sandbox_id,
-                node_id=route.node_id, job_id=route.job_id, node_url=route.node_url,
-            ))
-            routing.delete_sandboxes_for_jobs_with_error(["job"], terminal_error="node_lost")
-            gateway = _gateway_server(root, routing_file=route_file)
-            with _running_server(gateway) as base:
-                for method, suffix in [("GET", ""), ("GET", "/events"), ("POST", "/stdin"), ("POST", "/signal")]:
-                    with self.subTest(method=method, suffix=suffix):
-                        result = self._json_request(
-                            base + "/v1/exec/accepted" + suffix, method=method,
-                            payload={} if method == "POST" else None, allow_error=True,
-                        )
-                        self.assertEqual(result["status"], 410)
-                        self.assertEqual(result["body"]["error_code"], "exec_worker_lost")
-                        self.assertFalse(result["body"]["retryable"])
-                        self.assertEqual(result["body"]["sandbox_generation"], 1)
-                result = self._json_request(base + "/v1/exec/unknown/events", allow_error=True)
-                self.assertEqual(result["status"], 404)
-
-    def test_lost_sandbox_returns_terminal_reason_for_status_and_lifecycle(
-        self,
-    ) -> None:
-        with _temporary_root() as root:
-            route_file = root / "routes.sqlite"
-            routing = RoutingStore(route_file)
-            routing.upsert_sandbox(
-                _sandbox_route(
-                    sandbox_id="lost",
-                    node_id="node",
-                    job_id="job",
-                    node_url="http://node.invalid",
-                    state="running",
-                )
-            )
-            routing.delete_sandboxes_for_jobs_with_error(
-                ["job"], terminal_error="node_lost"
-            )
-            gateway = _gateway_server(root, routing_file=route_file)
-            with _running_server(gateway) as base:
-                for method, path in [
-                    ("GET", "/v1/sandboxes/lost"),
-                    ("GET", "/v1/sandboxes/lost/jobs/job-1"),
-                    ("POST", "/v1/sandboxes/lost/wake"),
-                    ("POST", "/v1/sandboxes/lost/park"),
-                ]:
-                    with self.subTest(method=method, path=path):
-                        result = self._json_request(
-                            base + path,
-                            method=method,
-                            payload={} if method == "POST" else None,
-                            allow_error=True,
-                        )
-                        self.assertEqual(result["status"], 410)
-                        self.assertEqual(result["body"]["error_code"], "node_lost")
-                        self.assertFalse(result["body"]["retryable"])
-                        self.assertEqual(result["body"]["sandbox_generation"], 1)
-                deleted = self._json_request(
-                    base + "/v1/sandboxes/lost", method="DELETE"
-                )
-                self.assertFalse(deleted["deleted"])
-                missing = self._json_request(
-                    base + "/v1/sandboxes/unknown", allow_error=True
-                )
-                self.assertEqual(missing["status"], 404)
 
     def test_exec_signal_is_available_to_the_public_sdk_route(self) -> None:
         self.assertTrue(
@@ -3859,44 +3744,8 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertNotIn("secret-token", js)
         self.assertEqual(unauthorized_metrics["status"], 401)
         self.assertEqual(authorized_metrics["nodes"]["total"], 0)
-
-    def test_gateway_placement_contention_deadline_returns_retryable_json(self) -> None:
-        with _temporary_root() as raw_path:
-            gateway = _gateway_server(
-                raw_path,
-                routing_file=raw_path / "routes.sqlite",
-                metrics_file=raw_path / "metrics.sqlite",
-            )
-            gateway.RequestHandlerClass.admission_wait_seconds = 0.02
-            with _running_server(gateway) as base:
-                self.assertTrue(
-                    placement._GATEWAY_SCHEDULING_LOCK.acquire(blocking=False)
-                )
-                started = monotonic()
-                try:
-                    result = self._json_request(
-                        f"{base}/v1/sandboxes",
-                        method="POST",
-                        payload={
-                            "id": "placement-busy",
-                            "image": "busybox",
-                            "cpus": 1,
-                            "memory_mb": 128,
-                            "disk_mb": 64,
-                        },
-                        allow_error=True,
-                    )
-                finally:
-                    placement._GATEWAY_SCHEDULING_LOCK.release()
-                elapsed = monotonic() - started
-                metrics = self._json_request(f"{base}/v1/metrics")
-
-        self.assertEqual(result["status"], 503)
-        self.assertTrue(result["body"]["retryable"])
-        self.assertIn("reserving sandbox placement", result["body"]["error"])
-        self.assertLess(elapsed, 1)
-        self.assertNotIn("traces", metrics)
-        self.assertFalse(metrics["telemetry"]["enabled"])
+        self.assertFalse(authorized_metrics["telemetry"]["enabled"])
+        self.assertNotIn("traces", authorized_metrics)
 
     def test_gateway_create_burst_returns_only_retryable_json(self) -> None:
         with _temporary_root() as raw_path:
@@ -3998,179 +3847,6 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(busy_body["retryable"], True)
         self.assertEqual(oversized_status, 400)
         self.assertIn("16777216 byte limit", oversized_body["error"])
-
-    def test_gateway_persists_route_before_node_create_finishes(self) -> None:
-        class SlowCreateNode(BaseHTTPRequestHandler):
-            started = Event()
-            release = Event()
-
-            def do_POST(self) -> None:
-                if self.path != "/v1/sandboxes":
-                    self.send_response(404)
-                    self.end_headers()
-                    return
-                length = int(self.headers.get("Content-Length", "0"))
-                raw = json.loads(self.rfile.read(length).decode("utf-8"))
-                operation = raw.pop("_ucloud_operation")
-                self.started.set()
-                self.release.wait(timeout=5)
-                self._write_json(
-                    {
-                        "sandbox": {
-                            "spec": raw,
-                            "state": "running",
-                            "generation": operation["generation"],
-                            "operation_id": operation["operation_id"],
-                            "spec_hash": operation["spec_hash"],
-                        },
-                        "command": ["docker", "run"],
-                        "exit_code": 0,
-                    },
-                    status=201,
-                )
-
-            def log_message(self, format: str, *args: object) -> None:
-                del format, args
-
-            def _write_json(
-                self, payload: dict[str, object], *, status: int = 200
-            ) -> None:
-                body = json.dumps(payload).encode("utf-8")
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-        with _temporary_root() as raw_path:
-            route_file = raw_path / "routes.sqlite"
-            node = ThreadingHTTPServer(("127.0.0.1", 0), SlowCreateNode)
-            with _running_server(node) as node_url:
-                gateway = _gateway_server(
-                    raw_path,
-                    routing_file=route_file,
-                    metrics_file=raw_path / "metrics.sqlite",
-                )
-                with _running_server(gateway) as base:
-                    try:
-                        result = post_heartbeat(
-                            f"{base}/v1/nodes/heartbeat",
-                            build_heartbeat(
-                                job_id="job-1",
-                                node_id="node-1",
-                                node_url=node_url,
-                                capabilities=("sandbox", "image-cache", "disk-quota"),
-                                cached_images=("busybox",),
-                                total_resources=ResourceQuantity(
-                                    vcpu=4,
-                                    memory_mb=4096,
-                                    disk_mb=8192,
-                                ),
-                            ),
-                        )
-                        self.assertEqual(result.status, 200)
-
-                        with ThreadPoolExecutor(max_workers=1) as executor:
-                            future = executor.submit(
-                                self._json_request,
-                                f"{base}/v1/sandboxes",
-                                method="POST",
-                                payload={
-                                    "id": "slow-one",
-                                    "image": "busybox",
-                                    "cpus": 1,
-                                    "memory_mb": 512,
-                                    "disk_mb": 1024,
-                                },
-                            )
-                            self.assertTrue(SlowCreateNode.started.wait(timeout=5))
-                            route = RoutingStore(route_file).get_sandbox("slow-one")
-                            SlowCreateNode.release.set()
-                            created = future.result(timeout=5)
-                    finally:
-                        SlowCreateNode.release.set()
-
-        self.assertIsNotNone(route)
-        self.assertEqual(created["sandbox"]["spec"]["id"], "slow-one")
-
-    def test_gateway_fences_tool_traffic_until_direct_create_is_owned(self) -> None:
-        class PlannedNode(BaseHTTPRequestHandler):
-            post_count = 0
-            record: dict[str, object] = {}
-
-            def do_GET(self) -> None:
-                if self.path.split("?", 1)[0] == "/v1/sandboxes":
-                    self._write_json({"sandboxes": [type(self).record]})
-                    return
-                self.send_response(404)
-                self.end_headers()
-
-            def do_POST(self) -> None:
-                type(self).post_count += 1
-                self._write_json({"error": "tool traffic leaked"}, status=500)
-
-            def log_message(self, format: str, *args: object) -> None:
-                del format, args
-
-            def _write_json(
-                self, payload: dict[str, object], *, status: int = 200
-            ) -> None:
-                body = json.dumps(payload).encode("utf-8")
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-        with _temporary_root() as raw_path:
-            route_file = raw_path / "routes.sqlite"
-            node = ThreadingHTTPServer(("127.0.0.1", 0), PlannedNode)
-            with _running_server(node) as node_url:
-                spec = SandboxSpec(
-                    id="planned-one",
-                    image="busybox",
-                    cpus=1,
-                    memory_mb=512,
-                )
-                spec_hash = control_plane.sandbox_spec_fingerprint(spec)
-                operation_id = "create-planned-one"
-                PlannedNode.record = {
-                    "state": "planned",
-                    "spec": spec.to_dict(),
-                    "generation": 1,
-                    "operation_id": operation_id,
-                    "spec_hash": spec_hash,
-                }
-                RoutingStore(route_file).upsert_sandbox(
-                    _sandbox_route(
-                        sandbox_id=spec.id,
-                        node_id="node-1",
-                        job_id="job-1",
-                        node_url=node_url,
-                        resources=spec.requested_resources(),
-                        spec=spec.to_dict(),
-                        state="planned",
-                        generation=1,
-                        create_operation_id=operation_id,
-                        spec_hash=spec_hash,
-                    )
-                )
-                gateway = _gateway_server(
-                    raw_path,
-                    routing_file=route_file,
-                )
-                with _running_server(gateway) as gateway_url:
-                    result = self._json_request(
-                        f"{gateway_url}/v1/sandboxes/{spec.id}/exec",
-                        method="POST",
-                        payload={"command": ["/bin/true"]},
-                        allow_error=True,
-                    )
-
-        self.assertEqual(result["status"], 503)
-        self.assertTrue(result["body"]["retryable"])
-        self.assertIn("creation is already in progress", result["body"]["error"])
-        self.assertEqual(PlannedNode.post_count, 0)
 
     def test_registry_reference_survives_ambiguous_create_restart_and_reconciliation(
         self,
@@ -4303,90 +3979,6 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIsNotNone(route)
         assert route is not None
         self.assertEqual(route.state, "running")
-
-    def test_closed_node_admission_requeues_create_without_pinning_route(
-        self,
-    ) -> None:
-        class ClosedAdmissionNode(BaseHTTPRequestHandler):
-            def do_GET(self) -> None:
-                self._write_json({"sandboxes": []})
-
-            def do_POST(self) -> None:
-                self._write_json(
-                    {
-                        "error": "direct node admission is closed",
-                        "error_code": "node_admission_closed",
-                        "retryable": True,
-                    },
-                    status=503,
-                )
-
-            def log_message(self, format: str, *args: object) -> None:
-                del format, args
-
-            def _write_json(
-                self, payload: dict[str, object], *, status: int = 200
-            ) -> None:
-                body = json.dumps(payload).encode("utf-8")
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-        with _temporary_root() as raw_path:
-            route_file = raw_path / "routes.sqlite"
-            node = ThreadingHTTPServer(("127.0.0.1", 0), ClosedAdmissionNode)
-            with _running_server(node) as node_url:
-                image = "busybox"
-                gateway = _gateway_server(
-                    raw_path,
-                    routing_file=route_file,
-                )
-                with _running_server(gateway) as base:
-                    self.assertEqual(
-                        post_heartbeat(
-                            f"{base}/v1/nodes/heartbeat",
-                            build_heartbeat(
-                                job_id="job-1",
-                                node_id="node-1",
-                                node_url=node_url,
-                                capabilities=(
-                                    "sandbox",
-                                    "image-cache",
-                                    "disk-quota",
-                                ),
-                                cached_images=(image,),
-                                total_resources=ResourceQuantity(
-                                    vcpu=4,
-                                    memory_mb=4096,
-                                    disk_mb=8192,
-                                ),
-                            ),
-                        ).status,
-                        200,
-                    )
-                    created = self._json_request(
-                        f"{base}/v1/sandboxes",
-                        method="POST",
-                        payload={
-                            "id": "drain-race",
-                            "image": image,
-                            "cpus": 1,
-                            "memory_mb": 512,
-                        },
-                        allow_error=True,
-                    )
-                    state = RoutingStore(route_file).load()
-
-        self.assertEqual(created["status"], 503)
-        self.assertTrue(created["body"]["retryable"])
-        self.assertEqual(created["body"]["error_code"], "node_admission_closed")
-        self.assertNotIn("drain-race", state.sandboxes)
-        self.assertEqual(
-            state.pending["drain-race"].failure_reason,
-            "node_admission_closed",
-        )
 
     def test_closed_node_admission_reselects_another_node_in_same_request(
         self,
@@ -5602,50 +5194,6 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertTrue(
                 (builder_contexts / "sha256" / digest.removeprefix("sha256:")).is_file()
             )
-
-    def test_gateway_records_pending_demand_when_no_node_can_fit(self) -> None:
-        with _temporary_root() as raw_path:
-            gateway = _gateway_server(
-                raw_path,
-                routing_file=raw_path / "routes.json",
-            )
-            with _running_server(gateway) as base:
-                result = self._json_request(
-                    f"{base}/v1/sandboxes",
-                    method="POST",
-                    payload={
-                        "id": "pending-one",
-                        "image": "busybox",
-                        "cpus": 1,
-                        "memory_mb": 512,
-                        "disk_mb": 1024,
-                    },
-                    allow_error=True,
-                )
-                demand = self._json_request(f"{base}/v1/demand")
-                cleanup = self._json_request(
-                    f"{base}/v1/sandboxes/pending-one",
-                    method="DELETE",
-                )
-                demand_after_cleanup = self._json_request(f"{base}/v1/demand")
-
-            self.assertEqual(result["status"], 503)
-            self.assertTrue(result["body"]["retryable"])
-            self.assertEqual(result["headers"]["Retry-After"], "2")
-            self.assertEqual(
-                result["headers"]["X-UCloud-Sandbox-Retryable"],
-                "true",
-            )
-            self.assertEqual(demand["pending_resources"]["vcpu"], 1.0)
-            self.assertEqual(demand["pending_resources"]["memory_mb"], 512)
-            self.assertEqual(demand["pending_resources"]["disk_mb"], 1024)
-            self.assertEqual(demand["pending"][0]["sandbox_id"], "pending-one")
-            self.assertEqual(demand["pending"][0]["attempts"], 1)
-            self.assertEqual(cleanup["ok"], True)
-            self.assertEqual(demand_after_cleanup["pending_resources"]["vcpu"], 0.0)
-            self.assertEqual(demand_after_cleanup["pending_resources"]["memory_mb"], 0)
-            self.assertEqual(demand_after_cleanup["pending_resources"]["disk_mb"], 0)
-            self.assertEqual(demand_after_cleanup["pending"], [])
 
     def test_registry_resolution_failure_does_not_trust_mutable_tag_heartbeat(
         self,

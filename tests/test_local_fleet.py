@@ -56,6 +56,7 @@ class LocalFleetScenarioTests(unittest.TestCase):
         self.assertEqual(list((node.root / "mounts").iterdir()), [])
         fleet.heartbeat()
         self.assertEqual(fleet.status("alpha").json()["sandboxes"], [])
+        self.assertEqual(fleet.request("GET", "/v1/sandboxes/alpha").status, 404)
 
     def test_create_exec_files_delete(self):
         with LocalFleet() as fleet:

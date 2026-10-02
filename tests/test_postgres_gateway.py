@@ -67,9 +67,6 @@ class PostgresGatewayContracts(control_plane.ControlPlaneTests):
 
     _store = postgres_routing.PostgresRoutingContracts._store
 
-    # That SQLite test expects a failure from the removed process-lock path.
-    test_gateway_placement_contention_deadline_returns_retryable_json = None
-
     def test_postgres_placement_does_not_wait_for_legacy_process_lock(self):
         from tempfile import TemporaryDirectory
         from tests.gateway_support import gateway_services

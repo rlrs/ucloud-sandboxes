@@ -1,0 +1,10 @@
++ cd /root/s12
++ python3 fetch.py /root/s12/sample-s10.json
++ python3 convert.py --mode nodict --chunk-size 0x40000 --out /data/work/nodict-256k --workers 44 --seed 13
++ python3 packer.py --rundir /data/work/nodict-256k --sample /data/manifests/sample-manifests.json --tag main --maps all
++ echo MAIN_DONE
++ python3 select_pc.py --candidates /root/s12/pc-candidates.json
++ SAMPLE_MANIFESTS=/data/manifests/pc-manifests.json
++ python3 convert.py --mode nodict --chunk-size 0x40000 --out /data/work/pc-256k --workers 44 --seed 13
++ python3 packer.py --rundir /data/work/pc-256k --sample /data/manifests/pc-manifests.json --tag pc --prefix pc --maps all
++ echo PC_DONE

@@ -1,0 +1,20 @@
+deny_errno_5 {"reader": {"errno": 5, "error": "Input/output error", "s": 0.0015714168548583984, "rc": 0, "correct": false}, "listener_response": ["0x5000002"], "events": 1}
+deny_errno_1 {"reader": {"errno": 5, "error": "Input/output error", "s": 0.0014955997467041016, "rc": 0, "correct": false}, "listener_response": ["0x1000002"], "events": 1}
+deny_errno_11 {"reader": {"errno": 5, "error": "Input/output error", "s": 0.0013968944549560547, "rc": 0, "correct": false}, "listener_response": ["0xb000002"], "events": 1}
+deny_errno_28 {"reader": {"errno": 5, "error": "Input/output error", "s": 0.0014770030975341797, "rc": 0, "correct": false}, "listener_response": ["0x1c000002"], "events": 1}
+deny_errno_16 {"reader": {"errno": 5, "error": "Input/output error", "s": 0.0016636848449707031, "rc": 0, "correct": false}, "listener_response": ["0x10000002"], "events": 1}
+deny_errno_26 {"reader": {"errno": 5, "error": "Input/output error", "s": 0.0014429092407226562, "rc": 0, "correct": false}, "listener_response": ["0x1a000002"], "events": 1}
+deny_errno_122 {"reader": {"errno": 5, "error": "Input/output error", "s": 0.001565694808959961, "rc": 0, "correct": false}, "listener_response": ["0x7a000002"], "events": 1}
+deny_errno_13 {"reader": {"blocked_after_s": 30.03, "state": {"state": "D", "wchan": "fanotify_get_response.isra.0"}}, "listener_response": ["22 Invalid argument"], "events": 1}
+deny_errno_2 {"reader": {"blocked_after_s": 30.03, "state": {"state": "D", "wchan": "fanotify_get_response.isra.0"}}, "listener_response": ["22 Invalid argument"], "events": 1}
+listener_sigkill {"reader_blocked_while_held": true, "pending_read": {"sha": "ee4bda9bf22ebf2d11dea57f48f331cfc8bfe478eaa63b8396c99e16ca470bea", "len": 24325657, "zeros": true, "zero_4k_pages": 5939, "s": 1.0280497074127197, "rc": 0, "correct": false}, "new_read_no_listener": {"sha": "7a5703860f24d34bcdaacd4f4a8ab24e2d13acee3564e9199debd67b11108063", "len": 10633113, "zeros": true, "zero_4k_pages": 2596, "s": 0.0303497314453125, "rc": 0, "correct": false}, "restart_new_group_same_mount": {"same_file_again": {"sha": "ee4bda9bf22ebf2d11dea57f48f331cfc8bfe478eaa63b8396c99e16ca470bea", "len": 24325657, "zeros": true, "zero_4k_pages": 5939, "s": 0.03906106948852539, "rc": 0, "correct": false}, "untouched_file": {"sha": "4329036e72693f5b685d76934eb17fe5a1d6b1edcaf3b0ada687993a705719ba", "len": 5260288, "zeros": false, "zero_4k_pages": 85, "s": 0.027286052703857422, "rc": 0, "correct": true}, "same_file_after_d
+listener_close {"reader_blocked_while_held": true, "pending_read": {"sha": "ee4bda9bf22ebf2d11dea57f48f331cfc8bfe478eaa63b8396c99e16ca470bea", "len": 24325657, "zeros": true, "zero_4k_pages": 5939, "s": 1.0269336700439453, "rc": 0, "correct": false}, "new_read_no_listener": {"sha": "7a5703860f24d34bcdaacd4f4a8ab24e2d13acee3564e9199debd67b11108063", "len": 10633113, "zeros": true, "zero_4k_pages": 2596, "s": 0.031423091888427734, "rc": 0, "correct": false}, "restart_new_group_same_mount": {"same_file_again": {"sha": "ee4bda9bf22ebf2d11dea57f48f331cfc8bfe478eaa63b8396c99e16ca470bea", "len": 24325657, "zeros": true, "zero_4k_pages": 5939, "s": 0.03667926788330078, "rc": 0, "correct": false}, "untouched_file": {"sha": "4329036e72693f5b685d76934eb17fe5a1d6b1edcaf3b0ada687993a705719ba", "len": 5260288, "zeros": false, "zero_4k_pages": 85, "s": 0.025639772415161133, "rc": 0, "correct": true}, "same_file_after
+Traceback (most recent call last):
+  File "/root/s13/gate2.py", line 214, in <module>
+    main()
+    ~~~~^^
+  File "/root/s13/gate2.py", line 174, in main
+    b = Listener(*args, log=f"{G}/g2-take-b-{variant}.jsonl")
+  File "/root/s13/common.py", line 79, in __init__
+    raise RuntimeError("listener failed: " + self.p.stderr.read()[-800:])
+RuntimeError: listener failed: 

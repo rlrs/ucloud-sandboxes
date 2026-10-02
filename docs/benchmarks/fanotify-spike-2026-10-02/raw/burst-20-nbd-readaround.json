@@ -1,0 +1,717 @@
+{
+ "summary": {
+  "n": 20,
+  "ok": 20,
+  "path": "nbd:readaround",
+  "wall_s": 11.481457233428955,
+  "attach_median": 1.6645569801330566,
+  "attach_max": 1.754957675933838,
+  "first_cmd_median": 4.356905460357666,
+  "first_cmd_max": 6.2113566398620605,
+  "pip_median": 6.415542125701904,
+  "all_done_max": 11.470916032791138,
+  "host_busy_cpu_s": 63.83,
+  "backend_cpu_s": 22.46,
+  "bytes_read": 280905273,
+  "events": null,
+  "event_ms": null,
+  "cmd_failures": 1,
+  "errors": []
+ },
+ "backend": {
+  "counters": {
+   "gets_demand": 311,
+   "gets_prefetch": 0,
+   "fetched_bytes_demand": 280905273,
+   "fetched_bytes_prefetch": 0,
+   "chunks_fetched": 23633,
+   "chunks_fetched_bytes_c": 245522812,
+   "chunks_fetched_bytes_u": 587223980,
+   "mem_hits": 11226,
+   "disk_hits": 0,
+   "joined": 860,
+   "misses": 409,
+   "verify_failures": 0,
+   "fetch_errors": 0,
+   "fetch_retries": 0,
+   "hedged": 0,
+   "hedge_won": 0,
+   "status": {}
+  },
+  "get_demand": {
+   "n": 311,
+   "bytes": 280905273,
+   "ttfb_ms": {
+    "p50": 2.72873600033563,
+    "p95": 7.899925999936386,
+    "p99": 16.573030000017752
+   },
+   "total_ms": {
+    "p50": 2.72873600033563,
+    "p95": 7.899925999936386,
+    "p99": 16.573030000017752,
+    "max": 53.23279799995362
+   },
+   "size_p50": 1020683
+  },
+  "get_prefetch": {
+   "n": 0,
+   "bytes": 0,
+   "ttfb_ms": {
+    "p50": 0.0,
+    "p95": 0.0,
+    "p99": 0.0
+   },
+   "total_ms": {
+    "p50": 0.0,
+    "p95": 0.0,
+    "p99": 0.0,
+    "max": 0.0
+   },
+   "size_p50": null
+  },
+  "cpu_s": 22.52
+ },
+ "sandboxes": [
+  {
+   "idx": 4,
+   "family": "ScaleSWE",
+   "attach_s": 1.754957675933838,
+   "import_sys": {
+    "wall": 3.4320693016052246,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 5.223180294036865,
+   "pip_version": {
+    "wall": 5.609572887420654,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 10.856212615966797,
+   "device": {
+    "ok": true,
+    "reads": 773,
+    "read_bytes": 31666176,
+    "touched_chunks": 536,
+    "touched_bytes_c": 12201177,
+    "touched_bytes_u": 30130596,
+    "touched_packs": 12,
+    "read_ms": {
+     "p50": 0.031240000225807307,
+     "p99": 81.64617800002816,
+     "max": 1147.5467290001689,
+     "sum": 5237.841918999038
+    }
+   }
+  },
+  {
+   "idx": 15,
+   "family": "ScaleSWE",
+   "attach_s": 1.6667454242706299,
+   "import_sys": {
+    "wall": 2.575380802154541,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 4.280454158782959,
+   "pip_version": {
+    "wall": 6.52673077583313,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 10.834120035171509,
+   "device": {
+    "ok": true,
+    "reads": 778,
+    "read_bytes": 31883264,
+    "touched_chunks": 560,
+    "touched_bytes_c": 12343407,
+    "touched_bytes_u": 30897772,
+    "touched_packs": 13,
+    "read_ms": {
+     "p50": 0.032160000046133064,
+     "p99": 95.56737399998383,
+     "max": 1269.691476999924,
+     "sum": 4444.6507720040245
+    }
+   }
+  },
+  {
+   "idx": 177,
+   "family": "OpenSWE",
+   "attach_s": 1.580786943435669,
+   "import_sys": {
+    "wall": 2.33266544342041,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 3.9444563388824463,
+   "pip_version": {
+    "wall": 6.35317063331604,
+    "rc": 0,
+    "out": "pip 24.0 from /opt/conda/envs/testbed/lib/python3.7/site-packages/pip (python 3.7)\n"
+   },
+   "all_done_s": 10.329160213470459,
+   "device": {
+    "ok": true,
+    "reads": 740,
+    "read_bytes": 29245440,
+    "touched_chunks": 587,
+    "touched_bytes_c": 12546780,
+    "touched_bytes_u": 29114486,
+    "touched_packs": 11,
+    "read_ms": {
+     "p50": 0.03534000006766291,
+     "p99": 142.71208299987848,
+     "max": 926.9766709999203,
+     "sum": 4818.587856002068
+    }
+   }
+  },
+  {
+   "idx": 50,
+   "family": "ScaleSWE",
+   "attach_s": 1.502817153930664,
+   "import_sys": {
+    "wall": 3.7811803817749023,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 5.3316240310668945,
+   "pip_version": {
+    "wall": 5.49162220954895,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 10.852967500686646,
+   "device": {
+    "ok": true,
+    "reads": 746,
+    "read_bytes": 31424512,
+    "touched_chunks": 601,
+    "touched_bytes_c": 12214681,
+    "touched_bytes_u": 30166034,
+    "touched_packs": 13,
+    "read_ms": {
+     "p50": 0.03191999985574512,
+     "p99": 177.63207199959652,
+     "max": 1502.4517430001652,
+     "sum": 6424.053540000841
+    }
+   }
+  },
+  {
+   "idx": 173,
+   "family": "OpenSWE",
+   "attach_s": 1.7482962608337402,
+   "import_sys": {
+    "wall": 3.7017993927001953,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 5.480260372161865,
+   "pip_version": {
+    "wall": 5.217442035675049,
+    "rc": 0,
+    "out": "pip 26.2.1 from /opt/conda/envs/testbed/lib/python3.13/site-packages/pip (python 3.13)\n"
+   },
+   "all_done_s": 10.730258226394653,
+   "device": {
+    "ok": true,
+    "reads": 501,
+    "read_bytes": 27369472,
+    "touched_chunks": 360,
+    "touched_bytes_c": 12197374,
+    "touched_bytes_u": 28069133,
+    "touched_packs": 8,
+    "read_ms": {
+     "p50": 0.03676999995150254,
+     "p99": 418.22239399971295,
+     "max": 1352.3023129996545,
+     "sum": 6125.61421300461
+    }
+   }
+  },
+  {
+   "idx": 54,
+   "family": "ScaleSWE",
+   "attach_s": 1.6645569801330566,
+   "import_sys": {
+    "wall": 2.6183412075042725,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 4.3248302936553955,
+   "pip_version": {
+    "wall": 6.460484981536865,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 10.814509391784668,
+   "device": {
+    "ok": true,
+    "reads": 763,
+    "read_bytes": 31756288,
+    "touched_chunks": 586,
+    "touched_bytes_c": 12873799,
+    "touched_bytes_u": 30995318,
+    "touched_packs": 11,
+    "read_ms": {
+     "p50": 0.031659999876865186,
+     "p99": 108.61141200030033,
+     "max": 1260.203663000084,
+     "sum": 5319.805911991807
+    }
+   }
+  },
+  {
+   "idx": 37,
+   "family": "ScaleSWE",
+   "attach_s": 1.7415573596954346,
+   "import_sys": {
+    "wall": 3.553577423095703,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 5.335952520370483,
+   "pip_version": {
+    "wall": 5.4914045333862305,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 10.853693723678589,
+   "device": {
+    "ok": true,
+    "reads": 756,
+    "read_bytes": 31461376,
+    "touched_chunks": 595,
+    "touched_bytes_c": 12650935,
+    "touched_bytes_u": 30505013,
+    "touched_packs": 16,
+    "read_ms": {
+     "p50": 0.032559999908698956,
+     "p99": 143.2445909999842,
+     "max": 1021.1390479998954,
+     "sum": 5501.492298990797
+    }
+   }
+  },
+  {
+   "idx": 87,
+   "family": "SWE-rebench v2",
+   "attach_s": 1.7426519393920898,
+   "import_sys": {
+    "wall": 1.9971647262573242,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 3.779816150665283,
+   "pip_version": {
+    "wall": 7.6593217849731445,
+    "rc": 0,
+    "out": "pip 24.2 from /opt/conda/lib/python3.12/site-packages/pip (python 3.12)\n/usr/bin/python3: No module named pip\n"
+   },
+   "all_done_s": 11.470916032791138,
+   "device": {
+    "ok": true,
+    "reads": 707,
+    "read_bytes": 34504704,
+    "touched_chunks": 425,
+    "touched_bytes_c": 14124002,
+    "touched_bytes_u": 33801086,
+    "touched_packs": 18,
+    "read_ms": {
+     "p50": 0.03555000012056553,
+     "p99": 244.4145260001278,
+     "max": 1165.0092680001762,
+     "sum": 7096.714187995985
+    }
+   }
+  },
+  {
+   "idx": 23,
+   "family": "ScaleSWE",
+   "attach_s": 1.7522714138031006,
+   "import_sys": {
+    "wall": 2.552816152572632,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 4.339423418045044,
+   "pip_version": {
+    "wall": 6.470443964004517,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 10.83824872970581,
+   "device": {
+    "ok": true,
+    "reads": 758,
+    "read_bytes": 31592448,
+    "touched_chunks": 571,
+    "touched_bytes_c": 13100506,
+    "touched_bytes_u": 30983502,
+    "touched_packs": 15,
+    "read_ms": {
+     "p50": 0.03256999980294495,
+     "p99": 72.88275400014754,
+     "max": 1268.7347779997253,
+     "sum": 4731.375679002213
+    }
+   }
+  },
+  {
+   "idx": 81,
+   "family": "R2E-Gym",
+   "attach_s": 1.3877525329589844,
+   "import_sys": {
+    "wall": 4.663475513458252,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 6.2113566398620605,
+   "pip_version": {
+    "wall": 0.28375911712646484,
+    "rc": 127,
+    "out": "/testbed/.venv/bin/python3: No module named pip\nsh: 1: pip: not found\n"
+   },
+   "all_done_s": 6.524595737457275,
+   "device": {
+    "ok": true,
+    "reads": 265,
+    "read_bytes": 16285696,
+    "touched_chunks": 133,
+    "touched_bytes_c": 7609743,
+    "touched_bytes_u": 17740634,
+    "touched_packs": 10,
+    "read_ms": {
+     "p50": 0.03363999985595001,
+     "p99": 74.58445099973687,
+     "max": 1622.1059349995812,
+     "sum": 3397.7231779995236
+    }
+   }
+  },
+  {
+   "idx": 170,
+   "family": "OpenSWE",
+   "attach_s": 1.7405612468719482,
+   "import_sys": {
+    "wall": 4.09198260307312,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 5.871070861816406,
+   "pip_version": {
+    "wall": 5.113755941390991,
+    "rc": 0,
+    "out": "pip 25.2 from /opt/conda/envs/testbed/lib/python3.9/site-packages/pip (python 3.9)\n"
+   },
+   "all_done_s": 11.015499353408813,
+   "device": {
+    "ok": true,
+    "reads": 559,
+    "read_bytes": 24469504,
+    "touched_chunks": 407,
+    "touched_bytes_c": 10942958,
+    "touched_bytes_u": 24849411,
+    "touched_packs": 8,
+    "read_ms": {
+     "p50": 0.03265000032115495,
+     "p99": 400.9506339998552,
+     "max": 1344.064847000027,
+     "sum": 6269.140613001582
+    }
+   }
+  },
+  {
+   "idx": 14,
+   "family": "ScaleSWE",
+   "attach_s": 1.5075750350952148,
+   "import_sys": {
+    "wall": 2.7678520679473877,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 4.313858270645142,
+   "pip_version": {
+    "wall": 6.534807443618774,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 10.879751920700073,
+   "device": {
+    "ok": true,
+    "reads": 780,
+    "read_bytes": 31776768,
+    "touched_chunks": 547,
+    "touched_bytes_c": 12420338,
+    "touched_bytes_u": 30329645,
+    "touched_packs": 12,
+    "read_ms": {
+     "p50": 0.031659999876865186,
+     "p99": 103.6093399998208,
+     "max": 1265.3563840003699,
+     "sum": 5270.228316999692
+    }
+   }
+  },
+  {
+   "idx": 13,
+   "family": "ScaleSWE",
+   "attach_s": 1.649263620376587,
+   "import_sys": {
+    "wall": 2.625401258468628,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 4.31218957901001,
+   "pip_version": {
+    "wall": 6.474576234817505,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 10.818494081497192,
+   "device": {
+    "ok": true,
+    "reads": 781,
+    "read_bytes": 31817728,
+    "touched_chunks": 547,
+    "touched_bytes_c": 12420338,
+    "touched_bytes_u": 30329645,
+    "touched_packs": 12,
+    "read_ms": {
+     "p50": 0.03194999999323045,
+     "p99": 112.00376499982667,
+     "max": 1269.312237000122,
+     "sum": 5068.389422994642
+    }
+   }
+  },
+  {
+   "idx": 6,
+   "family": "ScaleSWE",
+   "attach_s": 1.6582300662994385,
+   "import_sys": {
+    "wall": 3.6435327529907227,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 5.335975646972656,
+   "pip_version": {
+    "wall": 4.931288480758667,
+    "rc": 0,
+    "out": "pip 25.3 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 10.298417806625366,
+   "device": {
+    "ok": true,
+    "reads": 618,
+    "read_bytes": 27459584,
+    "touched_chunks": 421,
+    "touched_bytes_c": 11024519,
+    "touched_bytes_u": 27354723,
+    "touched_packs": 10,
+    "read_ms": {
+     "p50": 0.03406999985600123,
+     "p99": 217.55801300014355,
+     "max": 1174.7686220001015,
+     "sum": 4756.387310003447
+    }
+   }
+  },
+  {
+   "idx": 83,
+   "family": "R2E-Gym",
+   "attach_s": 1.6456761360168457,
+   "import_sys": {
+    "wall": 3.695281505584717,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 5.378667116165161,
+   "pip_version": {
+    "wall": 5.576506614685059,
+    "rc": 0,
+    "out": "pip 23.2.1 from /testbed/.venv/lib/python3.9/site-packages/pip (python 3.9)\n"
+   },
+   "all_done_s": 10.985995531082153,
+   "device": {
+    "ok": true,
+    "reads": 760,
+    "read_bytes": 25387008,
+    "touched_chunks": 535,
+    "touched_bytes_c": 10564947,
+    "touched_bytes_u": 25706395,
+    "touched_packs": 18,
+    "read_ms": {
+     "p50": 0.03162100028930581,
+     "p99": 138.3055289998083,
+     "max": 836.9978579999042,
+     "sum": 4695.254153997666
+    }
+   }
+  },
+  {
+   "idx": 36,
+   "family": "ScaleSWE",
+   "attach_s": 1.6591908931732178,
+   "import_sys": {
+    "wall": 2.6233761310577393,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 4.319340705871582,
+   "pip_version": {
+    "wall": 6.516254425048828,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 10.866951942443848,
+   "device": {
+    "ok": true,
+    "reads": 746,
+    "read_bytes": 31485952,
+    "touched_chunks": 555,
+    "touched_bytes_c": 12177516,
+    "touched_bytes_u": 29956277,
+    "touched_packs": 11,
+    "read_ms": {
+     "p50": 0.03164999998261919,
+     "p99": 102.22290300043824,
+     "max": 1265.0202950003404,
+     "sum": 5474.661930007187
+    }
+   }
+  },
+  {
+   "idx": 17,
+   "family": "ScaleSWE",
+   "attach_s": 1.7472562789916992,
+   "import_sys": {
+    "wall": 2.536212921142578,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 4.320005416870117,
+   "pip_version": {
+    "wall": 6.492207050323486,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 10.83984088897705,
+   "device": {
+    "ok": true,
+    "reads": 769,
+    "read_bytes": 31780864,
+    "touched_chunks": 556,
+    "touched_bytes_c": 12608633,
+    "touched_bytes_u": 31264183,
+    "touched_packs": 12,
+    "read_ms": {
+     "p50": 0.032668999665474985,
+     "p99": 72.64932299995053,
+     "max": 1264.0026070002932,
+     "sum": 4583.672433001993
+    }
+   }
+  },
+  {
+   "idx": 46,
+   "family": "ScaleSWE",
+   "attach_s": 1.7293415069580078,
+   "import_sys": {
+    "wall": 2.585354804992676,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 4.356905460357666,
+   "pip_version": {
+    "wall": 6.415542125701904,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 10.80888295173645,
+   "device": {
+    "ok": true,
+    "reads": 820,
+    "read_bytes": 32059392,
+    "touched_chunks": 578,
+    "touched_bytes_c": 13036706,
+    "touched_bytes_u": 31036758,
+    "touched_packs": 13,
+    "read_ms": {
+     "p50": 0.03176000018356717,
+     "p99": 79.31048299997201,
+     "max": 1268.4677890001694,
+     "sum": 4639.161991002766
+    }
+   }
+  },
+  {
+   "idx": 19,
+   "family": "ScaleSWE",
+   "attach_s": 1.5818982124328613,
+   "import_sys": {
+    "wall": 2.7137675285339355,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 4.329590559005737,
+   "pip_version": {
+    "wall": 6.464493989944458,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 10.824266910552979,
+   "device": {
+    "ok": true,
+    "reads": 747,
+    "read_bytes": 31502336,
+    "touched_chunks": 542,
+    "touched_bytes_c": 12403748,
+    "touched_bytes_u": 30184172,
+    "touched_packs": 13,
+    "read_ms": {
+     "p50": 0.03285000002506422,
+     "p99": 100.6050949999917,
+     "max": 1264.6763450002254,
+     "sum": 5272.109056000772
+    }
+   }
+  },
+  {
+   "idx": 176,
+   "family": "OpenSWE",
+   "attach_s": 1.6515097618103027,
+   "import_sys": {
+    "wall": 4.210124731063843,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 5.895411014556885,
+   "pip_version": {
+    "wall": 4.5915610790252686,
+    "rc": 0,
+    "out": "pip 24.3.1 from /opt/conda/envs/testbed/lib/python3.8/site-packages/pip (python 3.8)\n"
+   },
+   "all_done_s": 10.509634256362915,
+   "device": {
+    "ok": true,
+    "reads": 565,
+    "read_bytes": 24371200,
+    "touched_chunks": 433,
+    "touched_bytes_c": 11135209,
+    "touched_bytes_u": 24993447,
+    "touched_packs": 9,
+    "read_ms": {
+     "p50": 0.03506999973978964,
+     "p99": 235.19599199971708,
+     "max": 1357.8240739998364,
+     "sum": 5566.102371997658
+    }
+   }
+  }
+ ]
+}

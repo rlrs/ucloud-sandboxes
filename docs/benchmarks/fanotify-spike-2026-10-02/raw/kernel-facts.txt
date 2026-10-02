@@ -1,0 +1,65 @@
++ uname -a
+Linux sandboxes-spike-s13 7.0.0-30-generic #30-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul 31 18:22:54 UTC 2026 x86_64 GNU/Linux
++ cat /proc/version
+Linux version 7.0.0-30-generic (buildd@lcy02-amd64-048) (x86_64-linux-gnu-gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0, GNU ld (GNU Binutils for Ubuntu) 2.46) #30-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul 31 18:22:54 UTC 2026
++ grep -E 'CONFIG_FANOTIFY|CONFIG_FSNOTIFY|CONFIG_EROFS|CONFIG_FS_STACK|CONFIG_XFS_FS=|CONFIG_BLK_DEV_NBD' /boot/config-7.0.0-30-generic
+CONFIG_BLK_DEV_NBD=m
+CONFIG_FS_STACK=y
+CONFIG_XFS_FS=m
+CONFIG_FSNOTIFY=y
+CONFIG_FANOTIFY=y
+CONFIG_FANOTIFY_ACCESS_PERMISSIONS=y
+CONFIG_EROFS_FS=m
+# CONFIG_EROFS_FS_DEBUG is not set
+CONFIG_EROFS_FS_XATTR=y
+CONFIG_EROFS_FS_POSIX_ACL=y
+CONFIG_EROFS_FS_SECURITY=y
+CONFIG_EROFS_FS_BACKED_BY_FILE=y
+CONFIG_EROFS_FS_ZIP=y
+CONFIG_EROFS_FS_ZIP_LZMA=y
+CONFIG_EROFS_FS_ZIP_DEFLATE=y
+CONFIG_EROFS_FS_ZIP_ZSTD=y
+CONFIG_EROFS_FS_ZIP_ACCEL=y
+# CONFIG_EROFS_FS_ONDEMAND is not set
+CONFIG_EROFS_FS_PCPU_KTHREAD=y
+# CONFIG_EROFS_FS_PCPU_KTHREAD_HIPRI is not set
+# CONFIG_EROFS_FS_PAGE_CACHE_SHARE is not set
++ sysctl fs.fanotify
+fs.fanotify.max_queued_events = 16384
+fs.fanotify.max_user_groups = 128
+fs.fanotify.max_user_marks = 1048576
+fs.fanotify.watchdog_timeout = 0
++ grep -h SUBLEVEL /data/k/linux-source-7.0.0/Makefile
++ head -1
+SUBLEVEL = 12
++ mkfs.erofs --version
++ head -1
+mkfs.erofs (erofs-utils) 1.9
++ python3 --version
+Python 3.14.4
++ xfs_info -V
+xfs_info version 6.18.0
++ grep -n 'PRE_ACCESS\|INFO_TYPE_RANGE\|FAN_DENY_ERRNO\|FAN_ERRNO' /usr/include/linux/fanotify.h
+30:#define FAN_PRE_ACCESS		0x00100000	/* Pre-content access hook */
+153:#define FAN_EVENT_INFO_TYPE_RANGE	6
+249:#define FAN_ERRNO_BITS	8
+250:#define FAN_ERRNO_SHIFT (32 - FAN_ERRNO_BITS)
+251:#define FAN_ERRNO_MASK	((1 << FAN_ERRNO_BITS) - 1)
+252:#define FAN_DENY_ERRNO(err) \
+253:	(FAN_DENY | ((((__u32)(err)) & FAN_ERRNO_MASK) << FAN_ERRNO_SHIFT))
++ cat /proc/cmdline
+BOOT_IMAGE=/boot/vmlinuz-7.0.0-30-generic root=UUID=954bad86-b82f-4260-9a3f-8d2814665150 ro consoleblank=0 systemd.show_status=true console=tty1 console=ttyS0
++ cat /sys/kernel/security/lockdown
+[none] integrity confidentiality
++ lscpu
++ grep -E 'Model name|^CPU\(s\)'
+CPU(s):                                  48
+Model name:                              AMD EPYC-Milan Processor
++ free -g
+               total        used        free      shared  buff/cache   available
+Mem:             184           8         177           0           4         175
+Swap:              0           0           0
++ df -h / /data
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1       901G  5.7G  859G   1% /
+/dev/sda1       901G  5.7G  859G   1% /

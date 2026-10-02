@@ -1,0 +1,53 @@
+{
+ "xfs_info": "meta-data=/dev/loop1             isize=512    agcount=4, agsize=26214400 blks\n         =                       sectsz=512   attr=2, projid32bit=1\n         =                       crc=1        finobt=1, sparse=1, rmapbt=1\n         =                       reflink=1    bigtime=1 inobtcount=1 nrext64=1\n         =                       exchange=0   metadir=0\ndata     =                       bsize=4096   blocks=104857600, imaxpct=25\n         =                       sunit=0      swidth=0 blks\nnaming   =version 2              bsize=4096   ascii-ci=0, ftype=1, parent=0\nlog      =internal log           bsize=4096   blocks=51200, version=2\n         =                       sectsz=512   sunit=0 blks, lazy-count=1\nrealtime =none                   extsz=4096   blocks=0, rtextents=0\n         =                       rgcount=0    rgsize=0 extents\n         =                       zoned=0      start=0 reserved=0\n",
+ "cases": [
+  {
+   "case": "slot 256K -> 4K-aligned dest, len 256K",
+   "result": "ok",
+   "content_equal": true,
+   "us": 1734.4059999686579
+  },
+  {
+   "case": "slot 256K -> dest 1M, len 100000 (unaligned, not at src EOF)",
+   "result": "errno 22 Invalid argument",
+   "content_equal": null,
+   "us": 24.019999955271487
+  },
+  {
+   "case": "slot 256K -> dest 1M, len round_up(100000, 4K)",
+   "result": "ok",
+   "content_equal": true,
+   "us": 298.9199999774428
+  },
+  {
+   "case": "per-chunk file, len 0 (to EOF, 100000 B) -> dest 2M",
+   "result": "errno 22 Invalid argument",
+   "content_equal": null,
+   "us": 249.0090000719647
+  },
+  {
+   "case": "per-chunk file, len 100000 (EOF) -> dest 2M+4K",
+   "result": "errno 22 Invalid argument",
+   "content_equal": null,
+   "us": 8.7999999323074
+  },
+  {
+   "case": "dest offset not 4K-aligned (dest 2M+512)",
+   "result": "errno 22 Invalid argument",
+   "content_equal": null,
+   "us": 5.39000006938295
+  },
+  {
+   "case": "per-chunk file padded to 4K, len 102400 -> dest 3M",
+   "result": "ok",
+   "content_equal": true,
+   "us": 541.6680000962515
+  },
+  {
+   "case": "per-chunk file, len 0 (to EOF) -> dest at its EOF (dest 4M)",
+   "result": "ok",
+   "content_equal": true,
+   "us": 280.2599999540689
+  }
+ ]
+}

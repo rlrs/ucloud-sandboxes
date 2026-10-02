@@ -1,0 +1,92 @@
+{
+ "manifests": 3546,
+ "groups": 14,
+ "top": [
+  {
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2",
+   "n": 2268,
+   "families": {
+    "TMax": 1240,
+    "Terminal-Lego": 1028
+   }
+  },
+  {
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150",
+   "n": 1068,
+   "families": {
+    "Terminal-Lego": 1068
+   }
+  },
+  {
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4",
+   "n": 121,
+   "families": {
+    "Terminal-Lego": 121
+   }
+  },
+  {
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284",
+   "n": 30,
+   "families": {
+    "Terminal-Lego": 30
+   }
+  },
+  {
+   "base": "sha256:254e724d77862dc53abbd3bf0e27f9d2f64293909cdd3d0aad6a8fe5a6680659",
+   "n": 11,
+   "families": {
+    "OpenSWE": 11
+   }
+  },
+  {
+   "base": "sha256:903681d87777d28dc56866a07a2774c3fd5bf65fd734b24c9d0ecd9a13c9f636",
+   "n": 11,
+   "families": {
+    "Terminal-Lego": 11
+   }
+  },
+  {
+   "base": "sha256:6b37362b3da78869050b894b799ad4df04f1f3b52774087db0d81151570244c8",
+   "n": 10,
+   "families": {
+    "Terminal-Lego": 10
+   }
+  },
+  {
+   "base": "sha256:60d98d907669dc22e547405da3e409eb14496606f4ac90692c5f2ef5081c4b1e",
+   "n": 7,
+   "families": {
+    "Terminal-Lego": 7
+   }
+  },
+  {
+   "base": "sha256:6310eb16bf4251731feab01e8f633bf5e2d75a657ccad97f420b1f83cce457be",
+   "n": 6,
+   "families": {
+    "Terminal-Lego": 6
+   }
+  },
+  {
+   "base": "sha256:abe1fea375429ba91b23776f15f53da4ed790fa2b779b40d20f21e69bd66de5a",
+   "n": 5,
+   "families": {
+    "Terminal-Lego": 5
+   }
+  },
+  {
+   "base": "sha256:96c832531c38e688c852576582a5ab43a21815c743665a03b6b066c850ed1522",
+   "n": 3,
+   "families": {
+    "Terminal-Lego": 3
+   }
+  },
+  {
+   "base": "sha256:edd1ed89f0d443580bd42e5a10cd8736aba5a3438b2a0645c2ebb50119bb0eba",
+   "n": 2,
+   "families": {
+    "Terminal-Lego": 2
+   }
+  }
+ ]
+}
+{"chosen": 64, "unique_layers": 147, "unique_layer_bytes": 6281969240, "summed_layer_bytes": 10442604006, "fetched_bytes": 5830358949, "groups": [{"base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2", "n": 2268, "families": {"TMax": 1240, "Terminal-Lego": 1028}}, {"base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150", "n": 1068, "families": {"Terminal-Lego": 1068}}, {"base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4", "n": 121, "families": {"Terminal-Lego": 121}}, {"base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284", "n": 30, "families": {"Terminal-Lego": 30}}]}

@@ -1,0 +1,255 @@
+0 OpenSWE {'pos': 0, 'idx': 171, 'family': 'OpenSWE', 'layers': 6, 'layers_cached': 0, 'new_bytes_c': 763921547, 'new_chunks': 32013, 'packs_written': 14}
+1 SWE-Lego {'pos': 1, 'idx': 60, 'family': 'SWE-Lego', 'layers': 15, 'layers_cached': 1, 'new_bytes_c': 1120309386, 'new_chunks': 45215, 'packs_written': 26}
+2 Terminal-Lego {'pos': 2, 'idx': 147, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 0, 'new_bytes_c': 23330006, 'new_chunks': 1609, 'packs_written': 5}
+3 ScaleSWE {'pos': 3, 'idx': 42, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 322027593, 'new_chunks': 23937, 'packs_written': 6}
+4 ScaleSWE {'pos': 4, 'idx': 11, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 14534898, 'new_chunks': 3163, 'packs_written': 1}
+5 SWE-smith {'pos': 5, 'idx': 69, 'family': 'SWE-smith', 'layers': 14, 'layers_cached': 2, 'new_bytes_c': 133766979, 'new_chunks': 18737, 'packs_written': 11}
+6 Terminal-Lego {'pos': 6, 'idx': 139, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 6119846, 'new_chunks': 967, 'packs_written': 2}
+7 TMax {'pos': 7, 'idx': 98, 'family': 'TMax', 'layers': 3, 'layers_cached': 0, 'new_bytes_c': 276519285, 'new_chunks': 5970, 'packs_written': 6}
+8 ScaleSWE {'pos': 8, 'idx': 58, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 10820022, 'new_chunks': 994, 'packs_written': 1}
+9 ScaleSWE {'pos': 9, 'idx': 22, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 84850947, 'new_chunks': 5858, 'packs_written': 3}
+10 TMax {'pos': 10, 'idx': 118, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 9086448, 'new_chunks': 565, 'packs_written': 2}
+11 ScaleSWE {'pos': 11, 'idx': 29, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 100146333, 'new_chunks': 1975, 'packs_written': 2}
+12 Terminal-Lego {'pos': 12, 'idx': 159, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 193259, 'new_chunks': 11, 'packs_written': 1}
+13 SWE-smith {'pos': 13, 'idx': 79, 'family': 'SWE-smith', 'layers': 15, 'layers_cached': 2, 'new_bytes_c': 908392068, 'new_chunks': 18599, 'packs_written': 21}
+14 ScaleSWE {'pos': 14, 'idx': 10, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 75685045, 'new_chunks': 4423, 'packs_written': 2}
+15 ScaleSWE {'pos': 15, 'idx': 13, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 43171605, 'new_chunks': 1962, 'packs_written': 1}
+16 ScaleSWE {'pos': 16, 'idx': 48, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 14889318, 'new_chunks': 1629, 'packs_written': 1}
+17 ScaleSWE {'pos': 17, 'idx': 40, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 46646327, 'new_chunks': 3441, 'packs_written': 1}
+18 TMax {'pos': 18, 'idx': 105, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 6089097, 'new_chunks': 526, 'packs_written': 2}
+19 TMax {'pos': 19, 'idx': 108, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 129375409, 'new_chunks': 8028, 'packs_written': 3}
+20 ScaleSWE {'pos': 20, 'idx': 12, 'family': 'ScaleSWE', 'layers': 1, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+21 ScaleSWE {'pos': 21, 'idx': 1, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 156511614, 'new_chunks': 5224, 'packs_written': 3}
+22 TMax {'pos': 22, 'idx': 90, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 15782754, 'new_chunks': 799, 'packs_written': 2}
+23 ScaleSWE {'pos': 23, 'idx': 6, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 135576656, 'new_chunks': 6081, 'packs_written': 3}
+24 SWE-rebench v2 {'pos': 24, 'idx': 87, 'family': 'SWE-rebench v2', 'layers': 12, 'layers_cached': 0, 'new_bytes_c': 747236016, 'new_chunks': 41247, 'packs_written': 19}
+25 Terminal-Lego {'pos': 25, 'idx': 153, 'family': 'Terminal-Lego', 'layers': 6, 'layers_cached': 4, 'new_bytes_c': 28872, 'new_chunks': 6, 'packs_written': 1}
+26 ScaleSWE {'pos': 26, 'idx': 15, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 9024923, 'new_chunks': 1420, 'packs_written': 2}
+27 SWE-Lego {'pos': 27, 'idx': 82, 'family': 'SWE-Lego', 'layers': 15, 'layers_cached': 0, 'new_bytes_c': 383059590, 'new_chunks': 7984, 'packs_written': 13}
+28 Terminal-Lego {'pos': 28, 'idx': 143, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 21519527, 'new_chunks': 2665, 'packs_written': 1}
+29 ScaleSWE {'pos': 29, 'idx': 39, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 31473480, 'new_chunks': 3306, 'packs_written': 1}
+30 TMax {'pos': 30, 'idx': 120, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 7191895, 'new_chunks': 742, 'packs_written': 2}
+31 ScaleSWE {'pos': 31, 'idx': 31, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 13609874, 'new_chunks': 1723, 'packs_written': 1}
+32 Terminal-Lego {'pos': 32, 'idx': 145, 'family': 'Terminal-Lego', 'layers': 13, 'layers_cached': 1, 'new_bytes_c': 240671509, 'new_chunks': 5970, 'packs_written': 12}
+33 ScaleSWE {'pos': 33, 'idx': 53, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 23837465, 'new_chunks': 1769, 'packs_written': 1}
+34 TMax {'pos': 34, 'idx': 102, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 48936986, 'new_chunks': 5076, 'packs_written': 2}
+35 TMax {'pos': 35, 'idx': 104, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3274853, 'new_chunks': 493, 'packs_written': 2}
+36 TMax {'pos': 36, 'idx': 128, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3391943, 'new_chunks': 496, 'packs_written': 2}
+37 SWE-smith {'pos': 37, 'idx': 71, 'family': 'SWE-smith', 'layers': 15, 'layers_cached': 9, 'new_bytes_c': 115565975, 'new_chunks': 1761, 'packs_written': 5}
+38 TMax {'pos': 38, 'idx': 123, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3449380, 'new_chunks': 503, 'packs_written': 2}
+39 TMax {'pos': 39, 'idx': 94, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 140444285, 'new_chunks': 11732, 'packs_written': 4}
+40 R2E-Gym {'pos': 40, 'idx': 76, 'family': 'R2E-Gym', 'layers': 20, 'layers_cached': 2, 'new_bytes_c': 322508410, 'new_chunks': 10618, 'packs_written': 18}
+41 SWE-Lego {'pos': 41, 'idx': 61, 'family': 'SWE-Lego', 'layers': 15, 'layers_cached': 6, 'new_bytes_c': 445907755, 'new_chunks': 15151, 'packs_written': 10}
+42 ScaleSWE {'pos': 42, 'idx': 36, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 14281375, 'new_chunks': 408, 'packs_written': 1}
+43 TMax {'pos': 43, 'idx': 107, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 4407013, 'new_chunks': 608, 'packs_written': 2}
+44 SWE-Lego {'pos': 44, 'idx': 86, 'family': 'SWE-Lego', 'layers': 15, 'layers_cached': 3, 'new_bytes_c': 185287102, 'new_chunks': 3813, 'packs_written': 9}
+45 ScaleSWE {'pos': 45, 'idx': 26, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 1547172, 'new_chunks': 372, 'packs_written': 1}
+46 Terminal-Lego {'pos': 46, 'idx': 163, 'family': 'Terminal-Lego', 'layers': 6, 'layers_cached': 1, 'new_bytes_c': 28014417, 'new_chunks': 1056, 'packs_written': 3}
+47 ScaleSWE {'pos': 47, 'idx': 19, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 5994283, 'new_chunks': 440, 'packs_written': 1}
+48 TMax {'pos': 48, 'idx': 129, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 4588434, 'new_chunks': 612, 'packs_written': 2}
+49 TMax {'pos': 49, 'idx': 103, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3388420, 'new_chunks': 497, 'packs_written': 2}
+50 TMax {'pos': 50, 'idx': 126, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3264219, 'new_chunks': 492, 'packs_written': 2}
+51 R2E-Gym {'pos': 51, 'idx': 78, 'family': 'R2E-Gym', 'layers': 19, 'layers_cached': 3, 'new_bytes_c': 45053527, 'new_chunks': 3421, 'packs_written': 8}
+52 TMax {'pos': 52, 'idx': 119, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3264021, 'new_chunks': 492, 'packs_written': 2}
+53 Terminal-Lego {'pos': 53, 'idx': 151, 'family': 'Terminal-Lego', 'layers': 6, 'layers_cached': 5, 'new_bytes_c': 23936539, 'new_chunks': 970, 'packs_written': 1}
+54 Terminal-Lego {'pos': 54, 'idx': 130, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 42652535, 'new_chunks': 3683, 'packs_written': 2}
+55 SWE-smith {'pos': 55, 'idx': 85, 'family': 'SWE-smith', 'layers': 15, 'layers_cached': 9, 'new_bytes_c': 140708898, 'new_chunks': 2131, 'packs_written': 5}
+56 ScaleSWE {'pos': 56, 'idx': 2, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+57 TMax {'pos': 57, 'idx': 96, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3264022, 'new_chunks': 492, 'packs_written': 2}
+58 Terminal-Lego {'pos': 58, 'idx': 137, 'family': 'Terminal-Lego', 'layers': 4, 'layers_cached': 2, 'new_bytes_c': 227513, 'new_chunks': 20, 'packs_written': 1}
+59 Terminal-Lego {'pos': 59, 'idx': 132, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 2, 'new_bytes_c': 296355, 'new_chunks': 15, 'packs_written': 1}
+60 Terminal-Lego {'pos': 60, 'idx': 148, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 262836, 'new_chunks': 31, 'packs_written': 1}
+61 ScaleSWE {'pos': 61, 'idx': 38, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 9157338, 'new_chunks': 988, 'packs_written': 1}
+62 ScaleSWE {'pos': 62, 'idx': 41, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 291146807, 'new_chunks': 3319, 'packs_written': 5}
+63 TMax {'pos': 63, 'idx': 101, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 4515998, 'new_chunks': 586, 'packs_written': 2}
+64 ScaleSWE {'pos': 64, 'idx': 8, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 65614280, 'new_chunks': 2524, 'packs_written': 1}
+65 SWE-Lego {'pos': 65, 'idx': 68, 'family': 'SWE-Lego', 'layers': 15, 'layers_cached': 1, 'new_bytes_c': 295416744, 'new_chunks': 9080, 'packs_written': 11}
+66 TMax {'pos': 66, 'idx': 99, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 137564881, 'new_chunks': 6727, 'packs_written': 4}
+67 ScaleSWE {'pos': 67, 'idx': 14, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+68 Terminal-Lego {'pos': 68, 'idx': 156, 'family': 'Terminal-Lego', 'layers': 6, 'layers_cached': 5, 'new_bytes_c': 151711, 'new_chunks': 19, 'packs_written': 1}
+69 Terminal-Lego {'pos': 69, 'idx': 138, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 0, 'new_bytes_c': 41349078, 'new_chunks': 763, 'packs_written': 6}
+70 Terminal-Lego {'pos': 70, 'idx': 157, 'family': 'Terminal-Lego', 'layers': 9, 'layers_cached': 6, 'new_bytes_c': 260132351, 'new_chunks': 2976, 'packs_written': 5}
+71 ScaleSWE {'pos': 71, 'idx': 23, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 18495891, 'new_chunks': 2424, 'packs_written': 1}
+72 ScaleSWE {'pos': 72, 'idx': 43, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+73 TMax {'pos': 73, 'idx': 116, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3275058, 'new_chunks': 493, 'packs_written': 2}
+74 Terminal-Lego {'pos': 74, 'idx': 131, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 5, 'new_bytes_c': 17141, 'new_chunks': 5, 'packs_written': 1}
+75 ScaleSWE {'pos': 75, 'idx': 4, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 23635922, 'new_chunks': 1316, 'packs_written': 1}
+76 Terminal-Lego {'pos': 76, 'idx': 133, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 1214935, 'new_chunks': 44, 'packs_written': 1}
+77 OpenSWE {'pos': 77, 'idx': 179, 'family': 'OpenSWE', 'layers': 6, 'layers_cached': 4, 'new_bytes_c': 241744536, 'new_chunks': 5027, 'packs_written': 4}
+78 TMax {'pos': 78, 'idx': 100, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3385193, 'new_chunks': 494, 'packs_written': 2}
+79 ScaleSWE {'pos': 79, 'idx': 27, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+80 TMax {'pos': 80, 'idx': 97, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3476719, 'new_chunks': 521, 'packs_written': 2}
+81 Terminal-Lego {'pos': 81, 'idx': 154, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 2, 'new_bytes_c': 1643831, 'new_chunks': 56, 'packs_written': 1}
+82 TMax {'pos': 82, 'idx': 125, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 64003834, 'new_chunks': 3840, 'packs_written': 2}
+83 ScaleSWE {'pos': 83, 'idx': 17, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+84 SWE-smith {'pos': 84, 'idx': 84, 'family': 'SWE-smith', 'layers': 15, 'layers_cached': 8, 'new_bytes_c': 556092721, 'new_chunks': 22026, 'packs_written': 12}
+85 OpenSWE {'pos': 85, 'idx': 180, 'family': 'OpenSWE', 'layers': 6, 'layers_cached': 4, 'new_bytes_c': 54775789, 'new_chunks': 1970, 'packs_written': 1}
+86 Terminal-Lego {'pos': 86, 'idx': 169, 'family': 'Terminal-Lego', 'layers': 6, 'layers_cached': 5, 'new_bytes_c': 604, 'new_chunks': 1, 'packs_written': 1}
+87 TMax {'pos': 87, 'idx': 106, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3451988, 'new_chunks': 503, 'packs_written': 2}
+88 ScaleSWE {'pos': 88, 'idx': 25, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+89 ScaleSWE {'pos': 89, 'idx': 44, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 1806514, 'new_chunks': 284, 'packs_written': 1}
+90 Terminal-Lego {'pos': 90, 'idx': 146, 'family': 'Terminal-Lego', 'layers': 13, 'layers_cached': 11, 'new_bytes_c': 274230, 'new_chunks': 16, 'packs_written': 1}
+91 ScaleSWE {'pos': 91, 'idx': 52, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 20456784, 'new_chunks': 2110, 'packs_written': 2}
+92 ScaleSWE {'pos': 92, 'idx': 20, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+93 Terminal-Lego {'pos': 93, 'idx': 161, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 2, 'new_bytes_c': 84105, 'new_chunks': 10, 'packs_written': 1}
+94 R2E-Gym {'pos': 94, 'idx': 81, 'family': 'R2E-Gym', 'layers': 14, 'layers_cached': 2, 'new_bytes_c': 42505421, 'new_chunks': 2550, 'packs_written': 9}
+95 ScaleSWE {'pos': 95, 'idx': 56, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 70220435, 'new_chunks': 3724, 'packs_written': 3}
+96 OpenSWE {'pos': 96, 'idx': 177, 'family': 'OpenSWE', 'layers': 6, 'layers_cached': 4, 'new_bytes_c': 160202633, 'new_chunks': 3154, 'packs_written': 3}
+97 SWE-smith {'pos': 97, 'idx': 63, 'family': 'SWE-smith', 'layers': 15, 'layers_cached': 9, 'new_bytes_c': 138012160, 'new_chunks': 2353, 'packs_written': 6}
+98 Terminal-Lego {'pos': 98, 'idx': 167, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 2, 'new_bytes_c': 26775, 'new_chunks': 5, 'packs_written': 1}
+99 ScaleSWE {'pos': 99, 'idx': 28, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+100 ScaleSWE {'pos': 100, 'idx': 5, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+101 Terminal-Lego {'pos': 101, 'idx': 165, 'family': 'Terminal-Lego', 'layers': 4, 'layers_cached': 2, 'new_bytes_c': 157829, 'new_chunks': 25, 'packs_written': 1}
+102 TMax {'pos': 102, 'idx': 92, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 16660336, 'new_chunks': 3564, 'packs_written': 2}
+103 ScaleSWE {'pos': 103, 'idx': 0, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+104 ScaleSWE {'pos': 104, 'idx': 49, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 36832865, 'new_chunks': 1118, 'packs_written': 2}
+105 Terminal-Lego {'pos': 105, 'idx': 149, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 2, 'new_bytes_c': 116358, 'new_chunks': 11, 'packs_written': 1}
+106 Terminal-Lego {'pos': 106, 'idx': 142, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 2, 'new_bytes_c': 95358655, 'new_chunks': 3451, 'packs_written': 2}
+107 R2E-Gym {'pos': 107, 'idx': 83, 'family': 'R2E-Gym', 'layers': 19, 'layers_cached': 3, 'new_bytes_c': 22735447, 'new_chunks': 955, 'packs_written': 8}
+108 ScaleSWE {'pos': 108, 'idx': 55, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 8547275, 'new_chunks': 864, 'packs_written': 1}
+109 ScaleSWE {'pos': 109, 'idx': 9, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 3689754, 'new_chunks': 607, 'packs_written': 1}
+110 TMax {'pos': 110, 'idx': 121, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3264143, 'new_chunks': 492, 'packs_written': 2}
+111 ScaleSWE {'pos': 111, 'idx': 46, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 54492175, 'new_chunks': 4282, 'packs_written': 2}
+112 SWE-rebench v2 {'pos': 112, 'idx': 89, 'family': 'SWE-rebench v2', 'layers': 12, 'layers_cached': 1, 'new_bytes_c': 51893223, 'new_chunks': 3870, 'packs_written': 9}
+113 ScaleSWE {'pos': 113, 'idx': 24, 'family': 'ScaleSWE', 'layers': 1, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+114 TMax {'pos': 114, 'idx': 122, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 56340784, 'new_chunks': 1671, 'packs_written': 2}
+115 TMax {'pos': 115, 'idx': 127, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 4253613, 'new_chunks': 605, 'packs_written': 2}
+116 R2E-Gym {'pos': 116, 'idx': 72, 'family': 'R2E-Gym', 'layers': 19, 'layers_cached': 3, 'new_bytes_c': 6478383, 'new_chunks': 739, 'packs_written': 8}
+117 Terminal-Lego {'pos': 117, 'idx': 141, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 2, 'new_bytes_c': 110135, 'new_chunks': 16, 'packs_written': 1}
+118 Terminal-Lego {'pos': 118, 'idx': 158, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 329914371, 'new_chunks': 20505, 'packs_written': 6}
+119 SWE-rebench v2 {'pos': 119, 'idx': 62, 'family': 'SWE-rebench v2', 'layers': 11, 'layers_cached': 1, 'new_bytes_c': 436205501, 'new_chunks': 15696, 'packs_written': 13}
+120 SWE-Lego {'pos': 120, 'idx': 73, 'family': 'SWE-Lego', 'layers': 15, 'layers_cached': 1, 'new_bytes_c': 773866061, 'new_chunks': 19485, 'packs_written': 18}
+121 ScaleSWE {'pos': 121, 'idx': 16, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+122 Terminal-Lego {'pos': 122, 'idx': 135, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 6509346, 'new_chunks': 135, 'packs_written': 2}
+123 ScaleSWE {'pos': 123, 'idx': 50, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+124 Terminal-Lego {'pos': 124, 'idx': 152, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 64245, 'new_chunks': 8, 'packs_written': 1}
+125 SWE-Lego {'pos': 125, 'idx': 77, 'family': 'SWE-Lego', 'layers': 15, 'layers_cached': 1, 'new_bytes_c': 641626589, 'new_chunks': 17786, 'packs_written': 15}
+126 Terminal-Lego {'pos': 126, 'idx': 168, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 27715006, 'new_chunks': 4341, 'packs_written': 2}
+127 TMax {'pos': 127, 'idx': 117, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 4538003, 'new_chunks': 589, 'packs_written': 2}
+128 TMax {'pos': 128, 'idx': 95, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 4449335, 'new_chunks': 513, 'packs_written': 2}
+129 SWE-smith {'pos': 129, 'idx': 64, 'family': 'SWE-smith', 'layers': 15, 'layers_cached': 3, 'new_bytes_c': 642641923, 'new_chunks': 46321, 'packs_written': 17}
+130 Terminal-Lego {'pos': 130, 'idx': 150, 'family': 'Terminal-Lego', 'layers': 6, 'layers_cached': 5, 'new_bytes_c': 616912, 'new_chunks': 195, 'packs_written': 1}
+131 Terminal-Lego {'pos': 131, 'idx': 134, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 2, 'new_bytes_c': 31589164, 'new_chunks': 996, 'packs_written': 1}
+132 ScaleSWE {'pos': 132, 'idx': 51, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 53941597, 'new_chunks': 2897, 'packs_written': 1}
+133 OpenSWE {'pos': 133, 'idx': 173, 'family': 'OpenSWE', 'layers': 6, 'layers_cached': 4, 'new_bytes_c': 79100808, 'new_chunks': 1761, 'packs_written': 2}
+134 ScaleSWE {'pos': 134, 'idx': 45, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 48704209, 'new_chunks': 5579, 'packs_written': 1}
+135 TMax {'pos': 135, 'idx': 113, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3263952, 'new_chunks': 492, 'packs_written': 2}
+136 TMax {'pos': 136, 'idx': 112, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 13083515, 'new_chunks': 1899, 'packs_written': 2}
+137 ScaleSWE {'pos': 137, 'idx': 34, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 48333666, 'new_chunks': 2941, 'packs_written': 2}
+138 TMax {'pos': 138, 'idx': 114, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 4174492, 'new_chunks': 583, 'packs_written': 2}
+139 Terminal-Lego {'pos': 139, 'idx': 160, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 0, 'new_bytes_c': 77594250, 'new_chunks': 4494, 'packs_written': 4}
+140 R2E-Gym {'pos': 140, 'idx': 88, 'family': 'R2E-Gym', 'layers': 20, 'layers_cached': 19, 'new_bytes_c': 13865287, 'new_chunks': 790, 'packs_written': 1}
+141 ScaleSWE {'pos': 141, 'idx': 30, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 26536351, 'new_chunks': 434, 'packs_written': 2}
+142 R2E-Gym {'pos': 142, 'idx': 80, 'family': 'R2E-Gym', 'layers': 19, 'layers_cached': 5, 'new_bytes_c': 5669504, 'new_chunks': 697, 'packs_written': 8}
+143 Terminal-Lego {'pos': 143, 'idx': 162, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 61985250, 'new_chunks': 4227, 'packs_written': 1}
+144 TMax {'pos': 144, 'idx': 93, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 5305137, 'new_chunks': 698, 'packs_written': 2}
+145 TMax {'pos': 145, 'idx': 109, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3401317, 'new_chunks': 497, 'packs_written': 2}
+146 Terminal-Lego {'pos': 146, 'idx': 144, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 27573685, 'new_chunks': 4331, 'packs_written': 2}
+147 Terminal-Lego {'pos': 147, 'idx': 140, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+148 TMax {'pos': 148, 'idx': 124, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3404841, 'new_chunks': 497, 'packs_written': 2}
+149 OpenSWE {'pos': 149, 'idx': 174, 'family': 'OpenSWE', 'layers': 6, 'layers_cached': 4, 'new_bytes_c': 101217011, 'new_chunks': 2145, 'packs_written': 2}
+150 TMax {'pos': 150, 'idx': 91, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 23401800, 'new_chunks': 2095, 'packs_written': 2}
+151 SWE-rebench v2 {'pos': 151, 'idx': 65, 'family': 'SWE-rebench v2', 'layers': 10, 'layers_cached': 0, 'new_bytes_c': 720944600, 'new_chunks': 60044, 'packs_written': 17}
+152 ScaleSWE {'pos': 152, 'idx': 35, 'family': 'ScaleSWE', 'layers': 1, 'layers_cached': 0, 'new_bytes_c': 4138494, 'new_chunks': 137, 'packs_written': 1}
+153 TMax {'pos': 153, 'idx': 111, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3994592, 'new_chunks': 509, 'packs_written': 2}
+154 TMax {'pos': 154, 'idx': 115, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3334860, 'new_chunks': 495, 'packs_written': 2}
+155 SWE-smith {'pos': 155, 'idx': 67, 'family': 'SWE-smith', 'layers': 15, 'layers_cached': 9, 'new_bytes_c': 136509430, 'new_chunks': 4055, 'packs_written': 6}
+156 ScaleSWE {'pos': 156, 'idx': 21, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+157 OpenSWE {'pos': 157, 'idx': 172, 'family': 'OpenSWE', 'layers': 6, 'layers_cached': 4, 'new_bytes_c': 69681170, 'new_chunks': 2134, 'packs_written': 2}
+158 SWE-smith {'pos': 158, 'idx': 70, 'family': 'SWE-smith', 'layers': 17, 'layers_cached': 3, 'new_bytes_c': 546083537, 'new_chunks': 93410, 'packs_written': 19}
+159 ScaleSWE {'pos': 159, 'idx': 3, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+160 Terminal-Lego {'pos': 160, 'idx': 155, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 2, 'new_bytes_c': 416747, 'new_chunks': 20, 'packs_written': 1}
+161 ScaleSWE {'pos': 161, 'idx': 32, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 127171, 'new_chunks': 42, 'packs_written': 1}
+162 TMax {'pos': 162, 'idx': 110, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3389569, 'new_chunks': 497, 'packs_written': 2}
+163 ScaleSWE {'pos': 163, 'idx': 7, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+164 R2E-Gym {'pos': 164, 'idx': 75, 'family': 'R2E-Gym', 'layers': 19, 'layers_cached': 10, 'new_bytes_c': 728095, 'new_chunks': 125, 'packs_written': 8}
+165 ScaleSWE {'pos': 165, 'idx': 54, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 9219564, 'new_chunks': 347, 'packs_written': 1}
+166 Terminal-Lego {'pos': 166, 'idx': 136, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 3961843, 'new_chunks': 408, 'packs_written': 2}
+167 ScaleSWE {'pos': 167, 'idx': 18, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+168 ScaleSWE {'pos': 168, 'idx': 33, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 71065783, 'new_chunks': 5364, 'packs_written': 2}
+169 OpenSWE {'pos': 169, 'idx': 176, 'family': 'OpenSWE', 'layers': 6, 'layers_cached': 4, 'new_bytes_c': 53546388, 'new_chunks': 2397, 'packs_written': 1}
+170 Terminal-Lego {'pos': 170, 'idx': 164, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 2518609, 'new_chunks': 91, 'packs_written': 1}
+171 ScaleSWE {'pos': 171, 'idx': 57, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 2526551, 'new_chunks': 482, 'packs_written': 1}
+172 ScaleSWE {'pos': 172, 'idx': 37, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 0, 'new_bytes_c': 3801897, 'new_chunks': 311, 'packs_written': 1}
+173 OpenSWE {'pos': 173, 'idx': 170, 'family': 'OpenSWE', 'layers': 6, 'layers_cached': 4, 'new_bytes_c': 53030810, 'new_chunks': 1925, 'packs_written': 1}
+174 ScaleSWE {'pos': 174, 'idx': 59, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 9511832, 'new_chunks': 1372, 'packs_written': 1}
+175 Terminal-Lego {'pos': 175, 'idx': 166, 'family': 'Terminal-Lego', 'layers': 14, 'layers_cached': 11, 'new_bytes_c': 77459, 'new_chunks': 7, 'packs_written': 1}
+176 ScaleSWE {'pos': 176, 'idx': 47, 'family': 'ScaleSWE', 'layers': 2, 'layers_cached': 1, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+177 OpenSWE {'pos': 177, 'idx': 178, 'family': 'OpenSWE', 'layers': 6, 'layers_cached': 4, 'new_bytes_c': 70350250, 'new_chunks': 2892, 'packs_written': 2}
+178 OpenSWE {'pos': 178, 'idx': 175, 'family': 'OpenSWE', 'layers': 6, 'layers_cached': 4, 'new_bytes_c': 42686614, 'new_chunks': 2738, 'packs_written': 1}
+179 SWE-smith {'pos': 179, 'idx': 74, 'family': 'SWE-smith', 'layers': 16, 'layers_cached': 7, 'new_bytes_c': 1044367453, 'new_chunks': 93444, 'packs_written': 21}
+180 SWE-rebench v2 {'pos': 180, 'idx': 66, 'family': 'SWE-rebench v2', 'layers': 11, 'layers_cached': 8, 'new_bytes_c': 114308668, 'new_chunks': 11997, 'packs_written': 3}
+{
+ "tag": "main",
+ "pack_wall_s": 138.68128180503845,
+ "conversions": 618,
+ "packs": 623,
+ "pack_bytes": 16857630690,
+ "pack_payload_bytes": 16814716357,
+ "pack_size_median": 9704700,
+ "pack_size_p90": 67087537,
+ "packs_at_cap": 182,
+ "chunk_refs_in_conversions": 3499413,
+ "unique_chunks": 874989,
+ "dup_ratio_by_count": 0.7499612077797048,
+ "refs_bytes_c": 57143440140,
+ "dup_ratio_by_bytes": 0.7057454658696718,
+ "dedupe_factor_bytes": 3.3984183215919113,
+ "stored_raw_chunks": 463020,
+ "zero_chunks": 10,
+ "bootstrap_bytes": 1250742272,
+ "bootstrap_zst_bytes": 439057635,
+ "map_zst_bytes": 231117880,
+ "fanout_packs_per_image": {
+  "median": 39,
+  "p90": 79,
+  "max": 144,
+  "mean": 43.651933701657455
+ },
+ "packs_for_90pct_bytes": {
+  "median": 9,
+  "p90": 18
+ },
+ "fanout_by_family": {
+  "OpenSWE": {
+   "n": 11,
+   "median": 39,
+   "max": 47
+  },
+  "R2E-Gym": {
+   "n": 8,
+   "median": 91,
+   "max": 96
+  },
+  "SWE-Lego": {
+   "n": 7,
+   "median": 79,
+   "max": 129
+  },
+  "SWE-rebench v2": {
+   "n": 5,
+   "median": 87,
+   "max": 144
+  },
+  "SWE-smith": {
+   "n": 10,
+   "median": 83,
+   "max": 117
+  },
+  "ScaleSWE": {
+   "n": 60,
+   "median": 44,
+   "max": 74
+  },
+  "TMax": {
+   "n": 40,
+   "median": 29,
+   "max": 55
+  },
+  "Terminal-Lego": {
+   "n": 40,
+   "median": 23,
+   "max": 45
+  }
+ }
+}

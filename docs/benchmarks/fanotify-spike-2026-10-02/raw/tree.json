@@ -1,0 +1,1189 @@
+[
+ {
+  "idx": 0,
+  "family": "ScaleSWE",
+  "image": "aweaiteam/scaleswe:evergreen-ci_evergreen.py_pr102",
+  "expected_s": 6.7136499881744385,
+  "expected_entries": 54613,
+  "fan:demand": {
+   "read_s": 41.60703992843628,
+   "host_cpu_s": 37.44,
+   "attach_s": 0.11154627799987793,
+   "entries": 54613,
+   "bytes": 1588946857,
+   "stats": {
+    "counters": {
+     "events": 191502,
+     "events_noop": 148828,
+     "events_filled": 42674,
+     "events_denied": 0,
+     "event_range_bytes": 1692844032,
+     "fill_chunks": 42674,
+     "fill_bytes": 1507383512,
+     "clone_chunks": 0,
+     "clone_bytes": 0,
+     "cache_file_writes": 0,
+     "pack_reads": 42674,
+     "pack_bytes": 668843003,
+     "mem_hits": 0,
+     "joined": 0,
+     "verify_failures": 0,
+     "fill_waits": 0,
+     "unmarked_full": 0
+    },
+    "event_ms": {
+     "p50": 0.06810000002133165,
+     "p90": 0.20158000006631482,
+     "p99": 1.537126000016542,
+     "max": 13.709166000012374
+    },
+    "event_range": {
+     "p50": 4096,
+     "p90": 4096,
+     "max": 131072
+    },
+    "n_lat": 191502,
+    "cpu_s": 27.33,
+    "filled": {
+     "/data/s13/bf/tree-0.img": [
+      42674,
+      42674
+     ]
+    }
+   },
+   "refill_read_s": 24.12272596359253,
+   "refill_events": 191498,
+   "refill_event_ms": {
+    "p50": 0.05449000002499815,
+    "p90": 0.07494999999835272,
+    "p99": 0.102628999911758,
+    "max": 3.17170999994687
+   },
+   "filled_after_full_read": [
+    42674,
+    42674
+   ],
+   "backend_cpu_s": 41.86
+  },
+  "nbd:demand": {
+   "read_s": 34.38434147834778,
+   "host_cpu_s": 35.84,
+   "attach_s": 0.13695740699768066,
+   "entries": 54613,
+   "bytes": 1588946857,
+   "stats": {
+    "counters": {
+     "gets_demand": 42658,
+     "gets_prefetch": 0,
+     "fetched_bytes_demand": 668843003,
+     "fetched_bytes_prefetch": 0,
+     "chunks_fetched": 42674,
+     "chunks_fetched_bytes_c": 668843003,
+     "chunks_fetched_bytes_u": 1507383512,
+     "mem_hits": 5178,
+     "disk_hits": 0,
+     "joined": 0,
+     "misses": 42674,
+     "verify_failures": 0,
+     "fetch_errors": 0,
+     "fetch_retries": 0,
+     "hedged": 0,
+     "hedge_won": 0,
+     "status": {}
+    },
+    "get_demand": {
+     "n": 42658,
+     "bytes": 668843003,
+     "ttfb_ms": {
+      "p50": 0.006389999953171355,
+      "p95": 0.31232800006364414,
+      "p99": 0.5389770000192584
+     },
+     "total_ms": {
+      "p50": 0.006389999953171355,
+      "p95": 0.31232800006364414,
+      "p99": 0.5389770000192584,
+      "max": 1.6140950000362864
+     },
+     "size_p50": 2665
+    },
+    "get_prefetch": {
+     "n": 0,
+     "bytes": 0,
+     "ttfb_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+     },
+     "total_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "max": 0.0
+     },
+     "size_p50": null
+    },
+    "cpu_s": 25.310000000000002
+   },
+   "backend_cpu_s": 25.31
+  },
+  "diff_fan_vs_oci": [
+   "etc/gshadow: expected ('file', 416, 0, 42, 373, 'cf4089f5608d70e72c296b4ce4ee31785cf9fff47f7d79e14e45daa4c551f186', 1765238733, ()), found ('file', 416, 0, 0, 373, 'cf4089f5608d70e72c296b4ce4ee31785cf9fff47f7d79e14e45daa4c551f186', 1765238733, ())",
+   "etc/gshadow-: expected ('file', 416, 0, 42, 364, '27d5db44cdaa830dee778f68b22a34cd9ac4b3fa84f185592bcc2952fa22ce26', 1765152000, ()), found ('file', 416, 0, 0, 364, '27d5db44cdaa830dee778f68b22a34cd9ac4b3fa84f185592bcc2952fa22ce26', 1765152000, ())",
+   "etc/shadow: expected ('file', 416, 0, 42, 474, '61db2244312f907ac942cd12ae645758d12a4c56425d6a2fce685b00acb22477', 1765152000, ()), found ('file', 416, 0, 0, 474, '61db2244312f907ac942cd12ae645758d12a4c56425d6a2fce685b00acb22477', 1765152000, ())",
+   "usr/bin/chage: expected ('file', 1517, 0, 42, 80376, '884cb7d8ecf37791651322d043e13d1cb4fdf7d01511a5e68bfce660977f7898', 1744022326, ()), found ('file', 1517, 0, 0, 80376, '884cb7d8ecf37791651322d043e13d1cb4fdf7d01511a5e68bfce660977f7898', 1744022326, ())",
+   "usr/bin/expiry: expected ('file', 1517, 0, 42, 31184, '2e4d778ceb582e1979e3cc0fe5e609ec2fba6a320ac6e259e5de4ae823e7c422', 1744022326, ()), found ('file', 1517, 0, 0, 31184, '2e4d778ceb582e1979e3cc0fe5e609ec2fba6a320ac6e259e5de4ae823e7c422', 1744022326, ())",
+   "usr/bin/ssh-agent: expected ('file', 1517, 0, 101, 485760, '4d53bd7e1bf6d9b938f71900ce178a36fb4c36a6a7ec5026f3c75249e7ce00d9', 1753703980, ()), found ('file', 1517, 0, 0, 485760, '4d53bd7e1bf6d9b938f71900ce178a36fb4c36a6a7ec5026f3c75249e7ce00d9', 1753703980, ())",
+   "usr/local/share/fonts: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "usr/sbin/unix_chkpwd: expected ('file', 1517, 0, 42, 39160, '29396a989bc7c5f8205e3bd1e3ef32e49e0b08ae9a2abc74c06c60c6defe10fb', 1695329712, ()), found ('file', 1517, 0, 0, 39160, '29396a989bc7c5f8205e3bd1e3ef32e49e0b08ae9a2abc74c06c60c6defe10fb', 1695329712, ())",
+   "var/cache/apt/archives/partial: expected ('dir', 448, 42, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/local: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "var/log/apt/term.log: expected ('file', 416, 0, 4, 91022, 'f3402bf9334081833db5422cccf4ec188736ca984959d0f2d94b535dbf327115', 1766187383, ()), found ('file', 416, 0, 0, 91022, 'f3402bf9334081833db5422cccf4ec188736ca984959d0f2d94b535dbf327115', 1766187383, ())",
+   "var/log/btmp: expected ('file', 432, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1765152000, ()), found ('file', 432, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1765152000, ())",
+   "var/log/lastlog: expected ('file', 436, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1765152000, ()), found ('file', 436, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1765152000, ())",
+   "var/log/wtmp: expected ('file', 436, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1765152000, ()), found ('file', 436, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1765152000, ())",
+   "var/mail: expected ('dir', 1533, 0, 8, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())"
+  ],
+  "diff_nbd_vs_oci": [
+   "etc/gshadow: expected ('file', 416, 0, 42, 373, 'cf4089f5608d70e72c296b4ce4ee31785cf9fff47f7d79e14e45daa4c551f186', 1765238733, ()), found ('file', 416, 0, 0, 373, 'cf4089f5608d70e72c296b4ce4ee31785cf9fff47f7d79e14e45daa4c551f186', 1765238733, ())",
+   "etc/gshadow-: expected ('file', 416, 0, 42, 364, '27d5db44cdaa830dee778f68b22a34cd9ac4b3fa84f185592bcc2952fa22ce26', 1765152000, ()), found ('file', 416, 0, 0, 364, '27d5db44cdaa830dee778f68b22a34cd9ac4b3fa84f185592bcc2952fa22ce26', 1765152000, ())",
+   "etc/shadow: expected ('file', 416, 0, 42, 474, '61db2244312f907ac942cd12ae645758d12a4c56425d6a2fce685b00acb22477', 1765152000, ()), found ('file', 416, 0, 0, 474, '61db2244312f907ac942cd12ae645758d12a4c56425d6a2fce685b00acb22477', 1765152000, ())",
+   "usr/bin/chage: expected ('file', 1517, 0, 42, 80376, '884cb7d8ecf37791651322d043e13d1cb4fdf7d01511a5e68bfce660977f7898', 1744022326, ()), found ('file', 1517, 0, 0, 80376, '884cb7d8ecf37791651322d043e13d1cb4fdf7d01511a5e68bfce660977f7898', 1744022326, ())",
+   "usr/bin/expiry: expected ('file', 1517, 0, 42, 31184, '2e4d778ceb582e1979e3cc0fe5e609ec2fba6a320ac6e259e5de4ae823e7c422', 1744022326, ()), found ('file', 1517, 0, 0, 31184, '2e4d778ceb582e1979e3cc0fe5e609ec2fba6a320ac6e259e5de4ae823e7c422', 1744022326, ())",
+   "usr/bin/ssh-agent: expected ('file', 1517, 0, 101, 485760, '4d53bd7e1bf6d9b938f71900ce178a36fb4c36a6a7ec5026f3c75249e7ce00d9', 1753703980, ()), found ('file', 1517, 0, 0, 485760, '4d53bd7e1bf6d9b938f71900ce178a36fb4c36a6a7ec5026f3c75249e7ce00d9', 1753703980, ())",
+   "usr/local/share/fonts: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "usr/sbin/unix_chkpwd: expected ('file', 1517, 0, 42, 39160, '29396a989bc7c5f8205e3bd1e3ef32e49e0b08ae9a2abc74c06c60c6defe10fb', 1695329712, ()), found ('file', 1517, 0, 0, 39160, '29396a989bc7c5f8205e3bd1e3ef32e49e0b08ae9a2abc74c06c60c6defe10fb', 1695329712, ())",
+   "var/cache/apt/archives/partial: expected ('dir', 448, 42, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/local: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "var/log/apt/term.log: expected ('file', 416, 0, 4, 91022, 'f3402bf9334081833db5422cccf4ec188736ca984959d0f2d94b535dbf327115', 1766187383, ()), found ('file', 416, 0, 0, 91022, 'f3402bf9334081833db5422cccf4ec188736ca984959d0f2d94b535dbf327115', 1766187383, ())",
+   "var/log/btmp: expected ('file', 432, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1765152000, ()), found ('file', 432, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1765152000, ())",
+   "var/log/lastlog: expected ('file', 436, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1765152000, ()), found ('file', 436, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1765152000, ())",
+   "var/log/wtmp: expected ('file', 436, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1765152000, ()), found ('file', 436, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1765152000, ())",
+   "var/mail: expected ('dir', 1533, 0, 8, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())"
+  ],
+  "fan_equals_nbd": true,
+  "equal": false
+ },
+ {
+  "idx": 60,
+  "family": "SWE-Lego",
+  "image": "jierun/sweb.eval.x86_64.reata_1776_sqllineage-107:latest",
+  "expected_s": 12.136845588684082,
+  "expected_entries": 97058,
+  "fan:demand": {
+   "read_s": 45.71561813354492,
+   "host_cpu_s": 41.19,
+   "attach_s": 0.1224832534790039,
+   "entries": 97058,
+   "bytes": 3384965841,
+   "stats": {
+    "counters": {
+     "events": 197111,
+     "events_noop": 137405,
+     "events_filled": 59706,
+     "events_denied": 0,
+     "event_range_bytes": 3119345664,
+     "fill_chunks": 59706,
+     "fill_bytes": 2840415324,
+     "clone_chunks": 0,
+     "clone_bytes": 0,
+     "cache_file_writes": 0,
+     "pack_reads": 54821,
+     "pack_bytes": 1182154165,
+     "mem_hits": 4885,
+     "joined": 0,
+     "verify_failures": 0,
+     "fill_waits": 0,
+     "unmarked_full": 0
+    },
+    "event_ms": {
+     "p50": 0.058110000054512057,
+     "p90": 0.20185800008221122,
+     "p99": 1.5049109999836219,
+     "max": 16.92107600001691
+    },
+    "event_range": {
+     "p50": 4096,
+     "p90": 16384,
+     "max": 131072
+    },
+    "n_lat": 197111,
+    "cpu_s": 28.29,
+    "filled": {
+     "/data/s13/bf/tree-60.img": [
+      59706,
+      59706
+     ]
+    }
+   },
+   "refill_read_s": 24.558801889419556,
+   "refill_events": 197099,
+   "refill_event_ms": {
+    "p50": 0.05032000012761273,
+    "p90": 0.06641000004492525,
+    "p99": 0.09947900002771348,
+    "max": 1.7567560000770754
+   },
+   "filled_after_full_read": [
+    59706,
+    59706
+   ],
+   "backend_cpu_s": 40.89
+  },
+  "nbd:demand": {
+   "read_s": 44.61059546470642,
+   "host_cpu_s": 50.24,
+   "attach_s": 0.12933659553527832,
+   "entries": 97058,
+   "bytes": 3384965841,
+   "stats": {
+    "counters": {
+     "gets_demand": 54819,
+     "gets_prefetch": 0,
+     "fetched_bytes_demand": 1182146423,
+     "fetched_bytes_prefetch": 0,
+     "chunks_fetched": 54819,
+     "chunks_fetched_bytes_c": 1182146423,
+     "chunks_fetched_bytes_u": 2776957323,
+     "mem_hits": 8781,
+     "disk_hits": 7,
+     "joined": 0,
+     "misses": 54819,
+     "verify_failures": 0,
+     "fetch_errors": 0,
+     "fetch_retries": 0,
+     "hedged": 0,
+     "hedge_won": 0,
+     "status": {}
+    },
+    "get_demand": {
+     "n": 54819,
+     "bytes": 1182146423,
+     "ttfb_ms": {
+      "p50": 0.0062900001012167195,
+      "p95": 0.32399999986409966,
+      "p99": 0.6347080000068672
+     },
+     "total_ms": {
+      "p50": 0.0062900001012167195,
+      "p95": 0.32399999986409966,
+      "p99": 0.6347080000068672,
+      "max": 9.920297999997274
+     },
+     "size_p50": 2444
+    },
+    "get_prefetch": {
+     "n": 0,
+     "bytes": 0,
+     "ttfb_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+     },
+     "total_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "max": 0.0
+     },
+     "size_p50": null
+    },
+    "cpu_s": 35.65
+   },
+   "backend_cpu_s": 35.65
+  },
+  "diff_fan_vs_oci": [
+   "etc/gshadow: expected ('file', 416, 0, 42, 410, '118fc91f94178b793bf206bfbab9d804203b05e512bb4fa7cb778f3212917704', 1758053810, ()), found ('file', 416, 0, 0, 410, '118fc91f94178b793bf206bfbab9d804203b05e512bb4fa7cb778f3212917704', 1758053810, ())",
+   "etc/gshadow-: expected ('file', 416, 0, 42, 395, '149e9efac9c6ca2a2f184b4dd52ed70c654698997d9b28355080f45cb94ecc3b', 1757656713, ()), found ('file', 416, 0, 0, 395, '149e9efac9c6ca2a2f184b4dd52ed70c654698997d9b28355080f45cb94ecc3b', 1757656713, ())",
+   "etc/shadow: expected ('file', 416, 0, 42, 562, '4361daea4743b72a056437a9f0e31ba13b78b71309d01948618c8ec51840518f', 1758053810, ()), found ('file', 416, 0, 0, 562, '4361daea4743b72a056437a9f0e31ba13b78b71309d01948618c8ec51840518f', 1758053810, ())",
+   "etc/shadow-: expected ('file', 416, 0, 42, 562, '4361daea4743b72a056437a9f0e31ba13b78b71309d01948618c8ec51840518f', 1758053810, ()), found ('file', 416, 0, 0, 562, '4361daea4743b72a056437a9f0e31ba13b78b71309d01948618c8ec51840518f', 1758053810, ())",
+   "home/nonroot: expected ('dir', 488, 1000, 1000, 0, None, None, ()), found ('dir', 488, 0, 0, 0, None, None, ())",
+   "home/nonroot/.bash_logout: expected ('file', 420, 1000, 1000, 220, '26882b79471c25f945c970f8233d8ce29d54e9d5eedcd2884f88affa84a18f56', 1757656713, ()), found ('file', 420, 0, 0, 220, '26882b79471c25f945c970f8233d8ce29d54e9d5eedcd2884f88affa84a18f56', 1757656713, ())",
+   "home/nonroot/.bashrc: expected ('file', 420, 1000, 1000, 3771, '342099da4dd28c394d3f8782d90d7465cb2eaa611193f8f378d6918261cb9bb8', 1757656713, ()), found ('file', 420, 0, 0, 3771, '342099da4dd28c394d3f8782d90d7465cb2eaa611193f8f378d6918261cb9bb8', 1757656713, ())",
+   "home/nonroot/.profile: expected ('file', 420, 1000, 1000, 807, '28b4a453b68dde64f814e94bab14ee651f4f162e15dd9920490aa1d49f05d2a4', 1757656713, ()), found ('file', 420, 0, 0, 807, '28b4a453b68dde64f814e94bab14ee651f4f162e15dd9920490aa1d49f05d2a4', 1757656713, ())",
+   "usr/bin/chage: expected ('file', 1517, 0, 42, 72184, '3d1cd4d8b36d12bea9d4111e6cb354bfb88ea499e9c7779907b15f062ab3a571', 1707224063, ()), found ('file', 1517, 0, 0, 72184, '3d1cd4d8b36d12bea9d4111e6cb354bfb88ea499e9c7779907b15f062ab3a571', 1707224063, ())",
+   "usr/bin/expiry: expected ('file', 1517, 0, 42, 23136, 'd72dfad840fbc7b7008908c7c0a756b0ad4e68ca56e263bcf43af633b242d718', 1707224063, ()), found ('file', 1517, 0, 0, 23136, 'd72dfad840fbc7b7008908c7c0a756b0ad4e68ca56e263bcf43af633b242d718', 1707224063, ())",
+   "usr/bin/ssh-agent: expected ('file', 1517, 0, 101, 293304, '7e8e7cb0da47024af5920f44ac1d1bab544836c1c03629363d7f3db3357e6823', 1744373147, ()), found ('file', 1517, 0, 0, 293304, '7e8e7cb0da47024af5920f44ac1d1bab544836c1c03629363d7f3db3357e6823', 1744373147, ())",
+   "usr/lib/dbus-1.0/dbus-daemon-launch-helper: expected ('file', 2540, 0, 102, 35112, '8ebed2f3db2d4cc089b5396b8be52072729cbbc53677f0c294d41ab1e4ddf141', 1666703707, ()), found ('file', 2540, 0, 0, 35112, '8ebed2f3db2d4cc089b5396b8be52072729cbbc53677f0c294d41ab1e4ddf141', 1666703707, ())",
+   "usr/local/share/fonts: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "usr/local/share/fonts/.uuid: expected ('file', 420, 0, 50, 36, '883a8073259c646d2bd619bce2efbeed736df6d10146ac1c858a39d8b7c50c63', 1758053808, ()), found ('file', 420, 0, 0, 36, '883a8073259c646d2bd619bce2efbeed736df6d10146ac1c858a39d8b7c50c63', 1758053808, ())",
+   "usr/sbin/pam_extrausers_chkpwd: expected ('file', 1517, 0, 42, 22680, '1fb17bf388d95141c8f0abb87a24b38d89446ddd758586babd863f2073c4539f', 1749739528, ()), found ('file', 1517, 0, 0, 22680, '1fb17bf388d95141c8f0abb87a24b38d89446ddd758586babd863f2073c4539f', 1749739528, ())",
+   "usr/sbin/unix_chkpwd: expected ('file', 1517, 0, 42, 26776, '764daa1ad61234dc124e8aa2163b43e4ee42dda9055ce8a7cb955dffa528d899', 1749739528, ()), found ('file', 1517, 0, 0, 26776, '764daa1ad61234dc124e8aa2163b43e4ee42dda9055ce8a7cb955dffa528d899', 1749739528, ())",
+   "var/cache/apt/archives/partial: expected ('dir', 448, 100, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/auxfiles: expected ('dir', 493, 100, 0, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/partial: expected ('dir', 448, 100, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/local: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())"
+  ],
+  "diff_nbd_vs_oci": [
+   "etc/gshadow: expected ('file', 416, 0, 42, 410, '118fc91f94178b793bf206bfbab9d804203b05e512bb4fa7cb778f3212917704', 1758053810, ()), found ('file', 416, 0, 0, 410, '118fc91f94178b793bf206bfbab9d804203b05e512bb4fa7cb778f3212917704', 1758053810, ())",
+   "etc/gshadow-: expected ('file', 416, 0, 42, 395, '149e9efac9c6ca2a2f184b4dd52ed70c654698997d9b28355080f45cb94ecc3b', 1757656713, ()), found ('file', 416, 0, 0, 395, '149e9efac9c6ca2a2f184b4dd52ed70c654698997d9b28355080f45cb94ecc3b', 1757656713, ())",
+   "etc/shadow: expected ('file', 416, 0, 42, 562, '4361daea4743b72a056437a9f0e31ba13b78b71309d01948618c8ec51840518f', 1758053810, ()), found ('file', 416, 0, 0, 562, '4361daea4743b72a056437a9f0e31ba13b78b71309d01948618c8ec51840518f', 1758053810, ())",
+   "etc/shadow-: expected ('file', 416, 0, 42, 562, '4361daea4743b72a056437a9f0e31ba13b78b71309d01948618c8ec51840518f', 1758053810, ()), found ('file', 416, 0, 0, 562, '4361daea4743b72a056437a9f0e31ba13b78b71309d01948618c8ec51840518f', 1758053810, ())",
+   "home/nonroot: expected ('dir', 488, 1000, 1000, 0, None, None, ()), found ('dir', 488, 0, 0, 0, None, None, ())",
+   "home/nonroot/.bash_logout: expected ('file', 420, 1000, 1000, 220, '26882b79471c25f945c970f8233d8ce29d54e9d5eedcd2884f88affa84a18f56', 1757656713, ()), found ('file', 420, 0, 0, 220, '26882b79471c25f945c970f8233d8ce29d54e9d5eedcd2884f88affa84a18f56', 1757656713, ())",
+   "home/nonroot/.bashrc: expected ('file', 420, 1000, 1000, 3771, '342099da4dd28c394d3f8782d90d7465cb2eaa611193f8f378d6918261cb9bb8', 1757656713, ()), found ('file', 420, 0, 0, 3771, '342099da4dd28c394d3f8782d90d7465cb2eaa611193f8f378d6918261cb9bb8', 1757656713, ())",
+   "home/nonroot/.profile: expected ('file', 420, 1000, 1000, 807, '28b4a453b68dde64f814e94bab14ee651f4f162e15dd9920490aa1d49f05d2a4', 1757656713, ()), found ('file', 420, 0, 0, 807, '28b4a453b68dde64f814e94bab14ee651f4f162e15dd9920490aa1d49f05d2a4', 1757656713, ())",
+   "usr/bin/chage: expected ('file', 1517, 0, 42, 72184, '3d1cd4d8b36d12bea9d4111e6cb354bfb88ea499e9c7779907b15f062ab3a571', 1707224063, ()), found ('file', 1517, 0, 0, 72184, '3d1cd4d8b36d12bea9d4111e6cb354bfb88ea499e9c7779907b15f062ab3a571', 1707224063, ())",
+   "usr/bin/expiry: expected ('file', 1517, 0, 42, 23136, 'd72dfad840fbc7b7008908c7c0a756b0ad4e68ca56e263bcf43af633b242d718', 1707224063, ()), found ('file', 1517, 0, 0, 23136, 'd72dfad840fbc7b7008908c7c0a756b0ad4e68ca56e263bcf43af633b242d718', 1707224063, ())",
+   "usr/bin/ssh-agent: expected ('file', 1517, 0, 101, 293304, '7e8e7cb0da47024af5920f44ac1d1bab544836c1c03629363d7f3db3357e6823', 1744373147, ()), found ('file', 1517, 0, 0, 293304, '7e8e7cb0da47024af5920f44ac1d1bab544836c1c03629363d7f3db3357e6823', 1744373147, ())",
+   "usr/lib/dbus-1.0/dbus-daemon-launch-helper: expected ('file', 2540, 0, 102, 35112, '8ebed2f3db2d4cc089b5396b8be52072729cbbc53677f0c294d41ab1e4ddf141', 1666703707, ()), found ('file', 2540, 0, 0, 35112, '8ebed2f3db2d4cc089b5396b8be52072729cbbc53677f0c294d41ab1e4ddf141', 1666703707, ())",
+   "usr/local/share/fonts: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "usr/local/share/fonts/.uuid: expected ('file', 420, 0, 50, 36, '883a8073259c646d2bd619bce2efbeed736df6d10146ac1c858a39d8b7c50c63', 1758053808, ()), found ('file', 420, 0, 0, 36, '883a8073259c646d2bd619bce2efbeed736df6d10146ac1c858a39d8b7c50c63', 1758053808, ())",
+   "usr/sbin/pam_extrausers_chkpwd: expected ('file', 1517, 0, 42, 22680, '1fb17bf388d95141c8f0abb87a24b38d89446ddd758586babd863f2073c4539f', 1749739528, ()), found ('file', 1517, 0, 0, 22680, '1fb17bf388d95141c8f0abb87a24b38d89446ddd758586babd863f2073c4539f', 1749739528, ())",
+   "usr/sbin/unix_chkpwd: expected ('file', 1517, 0, 42, 26776, '764daa1ad61234dc124e8aa2163b43e4ee42dda9055ce8a7cb955dffa528d899', 1749739528, ()), found ('file', 1517, 0, 0, 26776, '764daa1ad61234dc124e8aa2163b43e4ee42dda9055ce8a7cb955dffa528d899', 1749739528, ())",
+   "var/cache/apt/archives/partial: expected ('dir', 448, 100, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/auxfiles: expected ('dir', 493, 100, 0, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/partial: expected ('dir', 448, 100, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/local: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())"
+  ],
+  "fan_equals_nbd": true,
+  "equal": false
+ },
+ {
+  "idx": 63,
+  "family": "SWE-smith",
+  "image": "swebench/swesmith.x86_64.oauthlib_1776_oauthlib.1fd52536",
+  "expected_s": 12.34426474571228,
+  "expected_entries": 74724,
+  "fan:demand": {
+   "read_s": 39.267406702041626,
+   "host_cpu_s": 36.37,
+   "attach_s": 0.11877870559692383,
+   "entries": 74724,
+   "bytes": 4181478861,
+   "stats": {
+    "counters": {
+     "events": 171930,
+     "events_noop": 122951,
+     "events_filled": 48979,
+     "events_denied": 0,
+     "event_range_bytes": 3341971456,
+     "fill_chunks": 48979,
+     "fill_bytes": 3058129210,
+     "clone_chunks": 0,
+     "clone_bytes": 0,
+     "cache_file_writes": 0,
+     "pack_reads": 43626,
+     "pack_bytes": 1285378030,
+     "mem_hits": 5353,
+     "joined": 0,
+     "verify_failures": 0,
+     "fill_waits": 0,
+     "unmarked_full": 0
+    },
+    "event_ms": {
+     "p50": 0.05306000002747169,
+     "p90": 0.20633999997698993,
+     "p99": 1.5816580000773683,
+     "max": 35.947627999803444
+    },
+    "event_range": {
+     "p50": 4096,
+     "p90": 131072,
+     "max": 131072
+    },
+    "n_lat": 171930,
+    "cpu_s": 23.52,
+    "filled": {
+     "/data/s13/bf/tree-63.img": [
+      48979,
+      48979
+     ]
+    }
+   },
+   "refill_read_s": 25.87949275970459,
+   "refill_events": 171926,
+   "refill_event_ms": {
+    "p50": 0.055330000122921774,
+    "p90": 0.07426000001942157,
+    "p99": 0.10381000015513564,
+    "max": 3.1308750001244334
+   },
+   "filled_after_full_read": [
+    48979,
+    48979
+   ],
+   "backend_cpu_s": 36.47
+  },
+  "nbd:demand": {
+   "read_s": 41.83035397529602,
+   "host_cpu_s": 50.56,
+   "attach_s": 0.14602923393249512,
+   "entries": 74724,
+   "bytes": 4181478861,
+   "stats": {
+    "counters": {
+     "gets_demand": 43612,
+     "gets_prefetch": 0,
+     "fetched_bytes_demand": 1285338021,
+     "fetched_bytes_prefetch": 0,
+     "chunks_fetched": 43614,
+     "chunks_fetched_bytes_c": 1285338021,
+     "chunks_fetched_bytes_u": 2983738014,
+     "mem_hits": 9446,
+     "disk_hits": 27,
+     "joined": 0,
+     "misses": 43614,
+     "verify_failures": 0,
+     "fetch_errors": 0,
+     "fetch_retries": 0,
+     "hedged": 0,
+     "hedge_won": 0,
+     "status": {}
+    },
+    "get_demand": {
+     "n": 43612,
+     "bytes": 1285338021,
+     "ttfb_ms": {
+      "p50": 0.007229999937408138,
+      "p95": 0.38784999992458324,
+      "p99": 0.6629590000102326
+     },
+     "total_ms": {
+      "p50": 0.007229999937408138,
+      "p95": 0.38784999992458324,
+      "p99": 0.6629590000102326,
+      "max": 3.973481000002721
+     },
+     "size_p50": 2890
+    },
+    "get_prefetch": {
+     "n": 0,
+     "bytes": 0,
+     "ttfb_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+     },
+     "total_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "max": 0.0
+     },
+     "size_p50": null
+    },
+    "cpu_s": 35.33
+   },
+   "backend_cpu_s": 35.33
+  },
+  "diff_fan_vs_oci": [
+   "etc/gshadow: expected ('file', 416, 0, 42, 410, '118fc91f94178b793bf206bfbab9d804203b05e512bb4fa7cb778f3212917704', 1739991499, ()), found ('file', 416, 0, 0, 410, '118fc91f94178b793bf206bfbab9d804203b05e512bb4fa7cb778f3212917704', 1739991499, ())",
+   "etc/gshadow-: expected ('file', 416, 0, 42, 395, '149e9efac9c6ca2a2f184b4dd52ed70c654698997d9b28355080f45cb94ecc3b', 1739991474, ()), found ('file', 416, 0, 0, 395, '149e9efac9c6ca2a2f184b4dd52ed70c654698997d9b28355080f45cb94ecc3b', 1739991474, ())",
+   "etc/shadow: expected ('file', 416, 0, 42, 562, '62126f17c9769a9207defc008347bb290a207a95544dd130caca35730ead6c9b', 1739991499, ()), found ('file', 416, 0, 0, 562, '62126f17c9769a9207defc008347bb290a207a95544dd130caca35730ead6c9b', 1739991499, ())",
+   "etc/shadow-: expected ('file', 416, 0, 42, 562, '62126f17c9769a9207defc008347bb290a207a95544dd130caca35730ead6c9b', 1739991499, ()), found ('file', 416, 0, 0, 562, '62126f17c9769a9207defc008347bb290a207a95544dd130caca35730ead6c9b', 1739991499, ())",
+   "home/nonroot: expected ('dir', 488, 1000, 1000, 0, None, None, ()), found ('dir', 488, 0, 0, 0, None, None, ())",
+   "home/nonroot/.bash_logout: expected ('file', 420, 1000, 1000, 220, '26882b79471c25f945c970f8233d8ce29d54e9d5eedcd2884f88affa84a18f56', 1739991474, ()), found ('file', 420, 0, 0, 220, '26882b79471c25f945c970f8233d8ce29d54e9d5eedcd2884f88affa84a18f56', 1739991474, ())",
+   "home/nonroot/.bashrc: expected ('file', 420, 1000, 1000, 3771, '342099da4dd28c394d3f8782d90d7465cb2eaa611193f8f378d6918261cb9bb8', 1739991474, ()), found ('file', 420, 0, 0, 3771, '342099da4dd28c394d3f8782d90d7465cb2eaa611193f8f378d6918261cb9bb8', 1739991474, ())",
+   "home/nonroot/.profile: expected ('file', 420, 1000, 1000, 807, '28b4a453b68dde64f814e94bab14ee651f4f162e15dd9920490aa1d49f05d2a4', 1739991474, ()), found ('file', 420, 0, 0, 807, '28b4a453b68dde64f814e94bab14ee651f4f162e15dd9920490aa1d49f05d2a4', 1739991474, ())",
+   "usr/bin/chage: expected ('file', 1517, 0, 42, 72184, '3d1cd4d8b36d12bea9d4111e6cb354bfb88ea499e9c7779907b15f062ab3a571', 1707224063, ()), found ('file', 1517, 0, 0, 72184, '3d1cd4d8b36d12bea9d4111e6cb354bfb88ea499e9c7779907b15f062ab3a571', 1707224063, ())",
+   "usr/bin/expiry: expected ('file', 1517, 0, 42, 23136, 'd72dfad840fbc7b7008908c7c0a756b0ad4e68ca56e263bcf43af633b242d718', 1707224063, ()), found ('file', 1517, 0, 0, 23136, 'd72dfad840fbc7b7008908c7c0a756b0ad4e68ca56e263bcf43af633b242d718', 1707224063, ())",
+   "usr/bin/ssh-agent: expected ('file', 1517, 0, 101, 293304, 'f216df63d39f94a869af793aac802c5a07eeadbb1f54ba6e6c8e21584179c408', 1739281911, ()), found ('file', 1517, 0, 0, 293304, 'f216df63d39f94a869af793aac802c5a07eeadbb1f54ba6e6c8e21584179c408', 1739281911, ())",
+   "usr/lib/dbus-1.0/dbus-daemon-launch-helper: expected ('file', 2540, 0, 102, 35112, '8ebed2f3db2d4cc089b5396b8be52072729cbbc53677f0c294d41ab1e4ddf141', 1666703707, ()), found ('file', 2540, 0, 0, 35112, '8ebed2f3db2d4cc089b5396b8be52072729cbbc53677f0c294d41ab1e4ddf141', 1666703707, ())",
+   "usr/local/share/fonts: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "usr/local/share/fonts/.uuid: expected ('file', 420, 0, 50, 36, '4357f988fa334c16ded42b00422083ebe675a77342d72de0100ed4211e1e3022', 1739991496, ()), found ('file', 420, 0, 0, 36, '4357f988fa334c16ded42b00422083ebe675a77342d72de0100ed4211e1e3022', 1739991496, ())",
+   "usr/sbin/pam_extrausers_chkpwd: expected ('file', 1517, 0, 42, 22680, '8edd75f152358b0988cd0ff1f50d3b7aa747ed1ca41cc07dd4bb7239c8558a67', 1731838642, ()), found ('file', 1517, 0, 0, 22680, '8edd75f152358b0988cd0ff1f50d3b7aa747ed1ca41cc07dd4bb7239c8558a67', 1731838642, ())",
+   "usr/sbin/unix_chkpwd: expected ('file', 1517, 0, 42, 26776, '221db1e61b4331e2ec945670228f9042c91b58b8cd9470eaedc38dbd8065d593', 1731838642, ()), found ('file', 1517, 0, 0, 26776, '221db1e61b4331e2ec945670228f9042c91b58b8cd9470eaedc38dbd8065d593', 1731838642, ())",
+   "var/cache/apt/archives/partial: expected ('dir', 448, 100, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/auxfiles: expected ('dir', 493, 100, 0, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/partial: expected ('dir', 448, 100, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/local: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())"
+  ],
+  "diff_nbd_vs_oci": [
+   "etc/gshadow: expected ('file', 416, 0, 42, 410, '118fc91f94178b793bf206bfbab9d804203b05e512bb4fa7cb778f3212917704', 1739991499, ()), found ('file', 416, 0, 0, 410, '118fc91f94178b793bf206bfbab9d804203b05e512bb4fa7cb778f3212917704', 1739991499, ())",
+   "etc/gshadow-: expected ('file', 416, 0, 42, 395, '149e9efac9c6ca2a2f184b4dd52ed70c654698997d9b28355080f45cb94ecc3b', 1739991474, ()), found ('file', 416, 0, 0, 395, '149e9efac9c6ca2a2f184b4dd52ed70c654698997d9b28355080f45cb94ecc3b', 1739991474, ())",
+   "etc/shadow: expected ('file', 416, 0, 42, 562, '62126f17c9769a9207defc008347bb290a207a95544dd130caca35730ead6c9b', 1739991499, ()), found ('file', 416, 0, 0, 562, '62126f17c9769a9207defc008347bb290a207a95544dd130caca35730ead6c9b', 1739991499, ())",
+   "etc/shadow-: expected ('file', 416, 0, 42, 562, '62126f17c9769a9207defc008347bb290a207a95544dd130caca35730ead6c9b', 1739991499, ()), found ('file', 416, 0, 0, 562, '62126f17c9769a9207defc008347bb290a207a95544dd130caca35730ead6c9b', 1739991499, ())",
+   "home/nonroot: expected ('dir', 488, 1000, 1000, 0, None, None, ()), found ('dir', 488, 0, 0, 0, None, None, ())",
+   "home/nonroot/.bash_logout: expected ('file', 420, 1000, 1000, 220, '26882b79471c25f945c970f8233d8ce29d54e9d5eedcd2884f88affa84a18f56', 1739991474, ()), found ('file', 420, 0, 0, 220, '26882b79471c25f945c970f8233d8ce29d54e9d5eedcd2884f88affa84a18f56', 1739991474, ())",
+   "home/nonroot/.bashrc: expected ('file', 420, 1000, 1000, 3771, '342099da4dd28c394d3f8782d90d7465cb2eaa611193f8f378d6918261cb9bb8', 1739991474, ()), found ('file', 420, 0, 0, 3771, '342099da4dd28c394d3f8782d90d7465cb2eaa611193f8f378d6918261cb9bb8', 1739991474, ())",
+   "home/nonroot/.profile: expected ('file', 420, 1000, 1000, 807, '28b4a453b68dde64f814e94bab14ee651f4f162e15dd9920490aa1d49f05d2a4', 1739991474, ()), found ('file', 420, 0, 0, 807, '28b4a453b68dde64f814e94bab14ee651f4f162e15dd9920490aa1d49f05d2a4', 1739991474, ())",
+   "usr/bin/chage: expected ('file', 1517, 0, 42, 72184, '3d1cd4d8b36d12bea9d4111e6cb354bfb88ea499e9c7779907b15f062ab3a571', 1707224063, ()), found ('file', 1517, 0, 0, 72184, '3d1cd4d8b36d12bea9d4111e6cb354bfb88ea499e9c7779907b15f062ab3a571', 1707224063, ())",
+   "usr/bin/expiry: expected ('file', 1517, 0, 42, 23136, 'd72dfad840fbc7b7008908c7c0a756b0ad4e68ca56e263bcf43af633b242d718', 1707224063, ()), found ('file', 1517, 0, 0, 23136, 'd72dfad840fbc7b7008908c7c0a756b0ad4e68ca56e263bcf43af633b242d718', 1707224063, ())",
+   "usr/bin/ssh-agent: expected ('file', 1517, 0, 101, 293304, 'f216df63d39f94a869af793aac802c5a07eeadbb1f54ba6e6c8e21584179c408', 1739281911, ()), found ('file', 1517, 0, 0, 293304, 'f216df63d39f94a869af793aac802c5a07eeadbb1f54ba6e6c8e21584179c408', 1739281911, ())",
+   "usr/lib/dbus-1.0/dbus-daemon-launch-helper: expected ('file', 2540, 0, 102, 35112, '8ebed2f3db2d4cc089b5396b8be52072729cbbc53677f0c294d41ab1e4ddf141', 1666703707, ()), found ('file', 2540, 0, 0, 35112, '8ebed2f3db2d4cc089b5396b8be52072729cbbc53677f0c294d41ab1e4ddf141', 1666703707, ())",
+   "usr/local/share/fonts: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "usr/local/share/fonts/.uuid: expected ('file', 420, 0, 50, 36, '4357f988fa334c16ded42b00422083ebe675a77342d72de0100ed4211e1e3022', 1739991496, ()), found ('file', 420, 0, 0, 36, '4357f988fa334c16ded42b00422083ebe675a77342d72de0100ed4211e1e3022', 1739991496, ())",
+   "usr/sbin/pam_extrausers_chkpwd: expected ('file', 1517, 0, 42, 22680, '8edd75f152358b0988cd0ff1f50d3b7aa747ed1ca41cc07dd4bb7239c8558a67', 1731838642, ()), found ('file', 1517, 0, 0, 22680, '8edd75f152358b0988cd0ff1f50d3b7aa747ed1ca41cc07dd4bb7239c8558a67', 1731838642, ())",
+   "usr/sbin/unix_chkpwd: expected ('file', 1517, 0, 42, 26776, '221db1e61b4331e2ec945670228f9042c91b58b8cd9470eaedc38dbd8065d593', 1731838642, ()), found ('file', 1517, 0, 0, 26776, '221db1e61b4331e2ec945670228f9042c91b58b8cd9470eaedc38dbd8065d593', 1731838642, ())",
+   "var/cache/apt/archives/partial: expected ('dir', 448, 100, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/auxfiles: expected ('dir', 493, 100, 0, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/partial: expected ('dir', 448, 100, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/local: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())"
+  ],
+  "fan_equals_nbd": true,
+  "equal": false
+ },
+ {
+  "idx": 72,
+  "family": "R2E-Gym",
+  "image": "namanjain12/aiohttp_final:28342351fd0432bae9ef5684779feca25689e249",
+  "expected_s": 5.37671971321106,
+  "expected_entries": 34191,
+  "fan:demand": {
+   "read_s": 24.7098069190979,
+   "host_cpu_s": 22.19,
+   "attach_s": 0.08910679817199707,
+   "entries": 34191,
+   "bytes": 1358775083,
+   "stats": {
+    "counters": {
+     "events": 99031,
+     "events_noop": 73302,
+     "events_filled": 25729,
+     "events_denied": 0,
+     "event_range_bytes": 1294163968,
+     "fill_chunks": 25729,
+     "fill_bytes": 1162995149,
+     "clone_chunks": 0,
+     "clone_bytes": 0,
+     "cache_file_writes": 0,
+     "pack_reads": 24649,
+     "pack_bytes": 465437664,
+     "mem_hits": 1080,
+     "joined": 0,
+     "verify_failures": 0,
+     "fill_waits": 0,
+     "unmarked_full": 0
+    },
+    "event_ms": {
+     "p50": 0.06602999997085135,
+     "p90": 0.221889000158626,
+     "p99": 1.7195660000197677,
+     "max": 5.601407999847652
+    },
+    "event_range": {
+     "p50": 4096,
+     "p90": 4096,
+     "max": 131072
+    },
+    "n_lat": 99031,
+    "cpu_s": 15.709999999999999,
+    "filled": {
+     "/data/s13/bf/tree-72.img": [
+      25729,
+      25729
+     ]
+    }
+   },
+   "refill_read_s": 13.572615146636963,
+   "refill_events": 99030,
+   "refill_event_ms": {
+    "p50": 0.059059000022898545,
+    "p90": 0.07443999993483885,
+    "p99": 0.10869900006582611,
+    "max": 2.7116039998418273
+   },
+   "filled_after_full_read": [
+    25729,
+    25729
+   ],
+   "backend_cpu_s": 23.36
+  },
+  "nbd:demand": {
+   "read_s": 22.3189799785614,
+   "host_cpu_s": 25.05,
+   "attach_s": 0.10500884056091309,
+   "entries": 34191,
+   "bytes": 1358775083,
+   "stats": {
+    "counters": {
+     "gets_demand": 24649,
+     "gets_prefetch": 0,
+     "fetched_bytes_demand": 465437664,
+     "fetched_bytes_prefetch": 0,
+     "chunks_fetched": 24649,
+     "chunks_fetched_bytes_c": 465437664,
+     "chunks_fetched_bytes_u": 1156176242,
+     "mem_hits": 4542,
+     "disk_hits": 0,
+     "joined": 1,
+     "misses": 24649,
+     "verify_failures": 0,
+     "fetch_errors": 0,
+     "fetch_retries": 0,
+     "hedged": 0,
+     "hedge_won": 0,
+     "status": {}
+    },
+    "get_demand": {
+     "n": 24649,
+     "bytes": 465437664,
+     "ttfb_ms": {
+      "p50": 0.007139999979699496,
+      "p95": 0.35321000018484483,
+      "p99": 0.5740490000789578
+     },
+     "total_ms": {
+      "p50": 0.007139999979699496,
+      "p95": 0.35321000018484483,
+      "p99": 0.5740490000789578,
+      "max": 2.409254999975019
+     },
+     "size_p50": 2390
+    },
+    "get_prefetch": {
+     "n": 0,
+     "bytes": 0,
+     "ttfb_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+     },
+     "total_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "max": 0.0
+     },
+     "size_p50": null
+    },
+    "cpu_s": 18.0
+   },
+   "backend_cpu_s": 18.0
+  },
+  "diff_fan_vs_oci": [
+   "etc/gshadow: expected ('file', 416, 0, 42, 383, '28a8cba13838f95135f64e8d50167ff368137675a84d9eba8b0a19b4b6887846', 1737136905, ()), found ('file', 416, 0, 0, 383, '28a8cba13838f95135f64e8d50167ff368137675a84d9eba8b0a19b4b6887846', 1737136905, ())",
+   "etc/gshadow-: expected ('file', 416, 0, 42, 374, '9f095e317e25ddd4a4bc3b58d5aaa08e20bbe8a0e42ca745b0e6ba6d17d61a34', 1726063473, ()), found ('file', 416, 0, 0, 374, '9f095e317e25ddd4a4bc3b58d5aaa08e20bbe8a0e42ca745b0e6ba6d17d61a34', 1726063473, ())",
+   "etc/shadow: expected ('file', 416, 0, 42, 501, 'd7612c8c319b9c0c5d11ab88fb3500e2369da3e2aa2a79ac724747332a8d4df3', 1726063474, ()), found ('file', 416, 0, 0, 501, 'd7612c8c319b9c0c5d11ab88fb3500e2369da3e2aa2a79ac724747332a8d4df3', 1726063474, ())",
+   "root/.local/bin/uv: expected ('file', 493, 1001, 127, 38735856, 'ae859d6c2102b58381e9d508fc754ad5483c994aa1060da3fe8e29f4f9c70541', 1736983660, ()), found ('file', 493, 0, 0, 38735856, 'ae859d6c2102b58381e9d508fc754ad5483c994aa1060da3fe8e29f4f9c70541', 1736983660, ())",
+   "root/.local/bin/uvx: expected ('file', 493, 1001, 127, 366896, 'ac6341dd5b5679d68cd567c878b1040926819c1b2b31199f39c64528d166b4bc', 1736983660, ()), found ('file', 493, 0, 0, 366896, 'ac6341dd5b5679d68cd567c878b1040926819c1b2b31199f39c64528d166b4bc', 1736983660, ())",
+   "root/.nvm/versions/node/v20.18.1/CHANGELOG.md: expected ('file', 420, 1001, 1001, 690731, '32f5370f159ca2b29b50ed9e539bd97c2dff566966c90267c5553712d3e74f39', 1732110993, ()), found ('file', 420, 0, 0, 690731, '32f5370f159ca2b29b50ed9e539bd97c2dff566966c90267c5553712d3e74f39', 1732110993, ())",
+   "root/.nvm/versions/node/v20.18.1/LICENSE: expected ('file', 420, 1001, 1001, 115733, '4f0e8660d7fe2f8f7759a54c53907300c555992b580e846b30b75121c53ad180', 1732110993, ()), found ('file', 420, 0, 0, 115733, '4f0e8660d7fe2f8f7759a54c53907300c555992b580e846b30b75121c53ad180', 1732110993, ())",
+   "root/.nvm/versions/node/v20.18.1/README.md: expected ('file', 420, 1001, 1001, 40117, '8704aada1827054a4491dfdfc54b8e2572b1d84c54defec19237b07c2e2034ec', 1732110993, ()), found ('file', 420, 0, 0, 40117, '8704aada1827054a4491dfdfc54b8e2572b1d84c54defec19237b07c2e2034ec', 1732110993, ())",
+   "root/.nvm/versions/node/v20.18.1/bin: expected ('dir', 493, 1001, 1001, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "root/.nvm/versions/node/v20.18.1/bin/corepack: expected ('symlink', None, 1001, 1001, 0, '../lib/node_modules/corepack/dist/corepack.js', 1732110988, ()), found ('symlink', None, 0, 0, 0, '../lib/node_modules/corepack/dist/corepack.js', 1732110988, ())",
+   "root/.nvm/versions/node/v20.18.1/bin/node: expected ('file', 493, 1001, 1001, 98426952, '9292f9a3bb76f55338b4d34024bb0ca92c47986f12f6182fc5d992dd4a0b80ed', 1732110983, ()), found ('file', 493, 0, 0, 98426952, '9292f9a3bb76f55338b4d34024bb0ca92c47986f12f6182fc5d992dd4a0b80ed', 1732110983, ())",
+   "root/.nvm/versions/node/v20.18.1/bin/npm: expected ('symlink', None, 1001, 1001, 0, '../lib/node_modules/npm/bin/npm-cli.js', 1732110988, ()), found ('symlink', None, 0, 0, 0, '../lib/node_modules/npm/bin/npm-cli.js', 1732110988, ())",
+   "root/.nvm/versions/node/v20.18.1/bin/npx: expected ('symlink', None, 1001, 1001, 0, '../lib/node_modules/npm/bin/npx-cli.js', 1732110988, ()), found ('symlink', None, 0, 0, 0, '../lib/node_modules/npm/bin/npx-cli.js', 1732110988, ())",
+   "root/.nvm/versions/node/v20.18.1/include: expected ('dir', 493, 1001, 1001, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "root/.nvm/versions/node/v20.18.1/include/node: expected ('dir', 493, 1001, 1001, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "root/.nvm/versions/node/v20.18.1/include/node/common.gypi: expected ('file', 420, 1001, 1001, 24858, 'd9f2271b8ef3b69827b67c379a8b0e3d20781c5253ad4281c01cbde3f37a5b78', 1732096769, ()), found ('file', 420, 0, 0, 24858, 'd9f2271b8ef3b69827b67c379a8b0e3d20781c5253ad4281c01cbde3f37a5b78', 1732096769, ())",
+   "root/.nvm/versions/node/v20.18.1/include/node/config.gypi: expected ('file', 420, 1001, 1001, 27978, '1ad76ebc374481665b89099344bf5a130486a4fdaa230b2a8efb84412a08c4d3', 1732096787, ()), found ('file', 420, 0, 0, 27978, '1ad76ebc374481665b89099344bf5a130486a4fdaa230b2a8efb84412a08c4d3', 1732096787, ())",
+   "root/.nvm/versions/node/v20.18.1/include/node/cppgc: expected ('dir', 493, 1001, 1001, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "root/.nvm/versions/node/v20.18.1/include/node/cppgc/allocation.h: expected ('file', 420, 1001, 1001, 11889, 'bb3c6bdba714de127d89bb1576c601d69ef6accb5080bce98566f68093bb5ace', 1732096771, ()), found ('file', 420, 0, 0, 11889, 'bb3c6bdba714de127d89bb1576c601d69ef6accb5080bce98566f68093bb5ace', 1732096771, ())",
+   "root/.nvm/versions/node/v20.18.1/include/node/cppgc/common.h: expected ('file', 420, 1001, 1001, 643, '3c64e8f6eb258720401ec5079869c2148213f72f6d4d4df6df89d546b07a2c1a', 1731405627, ()), found ('file', 420, 0, 0, 643, '3c64e8f6eb258720401ec5079869c2148213f72f6d4d4df6df89d546b07a2c1a', 1731405627, ())"
+  ],
+  "diff_nbd_vs_oci": [
+   "etc/gshadow: expected ('file', 416, 0, 42, 383, '28a8cba13838f95135f64e8d50167ff368137675a84d9eba8b0a19b4b6887846', 1737136905, ()), found ('file', 416, 0, 0, 383, '28a8cba13838f95135f64e8d50167ff368137675a84d9eba8b0a19b4b6887846', 1737136905, ())",
+   "etc/gshadow-: expected ('file', 416, 0, 42, 374, '9f095e317e25ddd4a4bc3b58d5aaa08e20bbe8a0e42ca745b0e6ba6d17d61a34', 1726063473, ()), found ('file', 416, 0, 0, 374, '9f095e317e25ddd4a4bc3b58d5aaa08e20bbe8a0e42ca745b0e6ba6d17d61a34', 1726063473, ())",
+   "etc/shadow: expected ('file', 416, 0, 42, 501, 'd7612c8c319b9c0c5d11ab88fb3500e2369da3e2aa2a79ac724747332a8d4df3', 1726063474, ()), found ('file', 416, 0, 0, 501, 'd7612c8c319b9c0c5d11ab88fb3500e2369da3e2aa2a79ac724747332a8d4df3', 1726063474, ())",
+   "root/.local/bin/uv: expected ('file', 493, 1001, 127, 38735856, 'ae859d6c2102b58381e9d508fc754ad5483c994aa1060da3fe8e29f4f9c70541', 1736983660, ()), found ('file', 493, 0, 0, 38735856, 'ae859d6c2102b58381e9d508fc754ad5483c994aa1060da3fe8e29f4f9c70541', 1736983660, ())",
+   "root/.local/bin/uvx: expected ('file', 493, 1001, 127, 366896, 'ac6341dd5b5679d68cd567c878b1040926819c1b2b31199f39c64528d166b4bc', 1736983660, ()), found ('file', 493, 0, 0, 366896, 'ac6341dd5b5679d68cd567c878b1040926819c1b2b31199f39c64528d166b4bc', 1736983660, ())",
+   "root/.nvm/versions/node/v20.18.1/CHANGELOG.md: expected ('file', 420, 1001, 1001, 690731, '32f5370f159ca2b29b50ed9e539bd97c2dff566966c90267c5553712d3e74f39', 1732110993, ()), found ('file', 420, 0, 0, 690731, '32f5370f159ca2b29b50ed9e539bd97c2dff566966c90267c5553712d3e74f39', 1732110993, ())",
+   "root/.nvm/versions/node/v20.18.1/LICENSE: expected ('file', 420, 1001, 1001, 115733, '4f0e8660d7fe2f8f7759a54c53907300c555992b580e846b30b75121c53ad180', 1732110993, ()), found ('file', 420, 0, 0, 115733, '4f0e8660d7fe2f8f7759a54c53907300c555992b580e846b30b75121c53ad180', 1732110993, ())",
+   "root/.nvm/versions/node/v20.18.1/README.md: expected ('file', 420, 1001, 1001, 40117, '8704aada1827054a4491dfdfc54b8e2572b1d84c54defec19237b07c2e2034ec', 1732110993, ()), found ('file', 420, 0, 0, 40117, '8704aada1827054a4491dfdfc54b8e2572b1d84c54defec19237b07c2e2034ec', 1732110993, ())",
+   "root/.nvm/versions/node/v20.18.1/bin: expected ('dir', 493, 1001, 1001, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "root/.nvm/versions/node/v20.18.1/bin/corepack: expected ('symlink', None, 1001, 1001, 0, '../lib/node_modules/corepack/dist/corepack.js', 1732110988, ()), found ('symlink', None, 0, 0, 0, '../lib/node_modules/corepack/dist/corepack.js', 1732110988, ())",
+   "root/.nvm/versions/node/v20.18.1/bin/node: expected ('file', 493, 1001, 1001, 98426952, '9292f9a3bb76f55338b4d34024bb0ca92c47986f12f6182fc5d992dd4a0b80ed', 1732110983, ()), found ('file', 493, 0, 0, 98426952, '9292f9a3bb76f55338b4d34024bb0ca92c47986f12f6182fc5d992dd4a0b80ed', 1732110983, ())",
+   "root/.nvm/versions/node/v20.18.1/bin/npm: expected ('symlink', None, 1001, 1001, 0, '../lib/node_modules/npm/bin/npm-cli.js', 1732110988, ()), found ('symlink', None, 0, 0, 0, '../lib/node_modules/npm/bin/npm-cli.js', 1732110988, ())",
+   "root/.nvm/versions/node/v20.18.1/bin/npx: expected ('symlink', None, 1001, 1001, 0, '../lib/node_modules/npm/bin/npx-cli.js', 1732110988, ()), found ('symlink', None, 0, 0, 0, '../lib/node_modules/npm/bin/npx-cli.js', 1732110988, ())",
+   "root/.nvm/versions/node/v20.18.1/include: expected ('dir', 493, 1001, 1001, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "root/.nvm/versions/node/v20.18.1/include/node: expected ('dir', 493, 1001, 1001, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "root/.nvm/versions/node/v20.18.1/include/node/common.gypi: expected ('file', 420, 1001, 1001, 24858, 'd9f2271b8ef3b69827b67c379a8b0e3d20781c5253ad4281c01cbde3f37a5b78', 1732096769, ()), found ('file', 420, 0, 0, 24858, 'd9f2271b8ef3b69827b67c379a8b0e3d20781c5253ad4281c01cbde3f37a5b78', 1732096769, ())",
+   "root/.nvm/versions/node/v20.18.1/include/node/config.gypi: expected ('file', 420, 1001, 1001, 27978, '1ad76ebc374481665b89099344bf5a130486a4fdaa230b2a8efb84412a08c4d3', 1732096787, ()), found ('file', 420, 0, 0, 27978, '1ad76ebc374481665b89099344bf5a130486a4fdaa230b2a8efb84412a08c4d3', 1732096787, ())",
+   "root/.nvm/versions/node/v20.18.1/include/node/cppgc: expected ('dir', 493, 1001, 1001, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "root/.nvm/versions/node/v20.18.1/include/node/cppgc/allocation.h: expected ('file', 420, 1001, 1001, 11889, 'bb3c6bdba714de127d89bb1576c601d69ef6accb5080bce98566f68093bb5ace', 1732096771, ()), found ('file', 420, 0, 0, 11889, 'bb3c6bdba714de127d89bb1576c601d69ef6accb5080bce98566f68093bb5ace', 1732096771, ())",
+   "root/.nvm/versions/node/v20.18.1/include/node/cppgc/common.h: expected ('file', 420, 1001, 1001, 643, '3c64e8f6eb258720401ec5079869c2148213f72f6d4d4df6df89d546b07a2c1a', 1731405627, ()), found ('file', 420, 0, 0, 643, '3c64e8f6eb258720401ec5079869c2148213f72f6d4d4df6df89d546b07a2c1a', 1731405627, ())"
+  ],
+  "fan_equals_nbd": true,
+  "equal": false
+ },
+ {
+  "idx": 90,
+  "family": "TMax",
+  "image": "prime/primeintellect/tmax:task_003753_0602e9c3",
+  "expected_s": 2.556239366531372,
+  "expected_entries": 15517,
+  "fan:demand": {
+   "read_s": 12.784933805465698,
+   "host_cpu_s": 11.22,
+   "attach_s": 0.06212496757507324,
+   "entries": 15517,
+   "bytes": 551049248,
+   "stats": {
+    "counters": {
+     "events": 52508,
+     "events_noop": 39331,
+     "events_filled": 13177,
+     "events_denied": 0,
+     "event_range_bytes": 577089536,
+     "fill_chunks": 13177,
+     "fill_bytes": 542070964,
+     "clone_chunks": 0,
+     "clone_bytes": 0,
+     "cache_file_writes": 0,
+     "pack_reads": 13164,
+     "pack_bytes": 238808949,
+     "mem_hits": 13,
+     "joined": 0,
+     "verify_failures": 0,
+     "fill_waits": 0,
+     "unmarked_full": 0
+    },
+    "event_ms": {
+     "p50": 0.07176999997682287,
+     "p90": 0.23763000012877455,
+     "p99": 1.8436560001191538,
+     "max": 3.885910999997577
+    },
+    "event_range": {
+     "p50": 4096,
+     "p90": 4096,
+     "max": 131072
+    },
+    "n_lat": 52508,
+    "cpu_s": 8.79,
+    "filled": {
+     "/data/s13/bf/tree-90.img": [
+      13177,
+      13177
+     ]
+    }
+   },
+   "refill_read_s": 7.404468297958374,
+   "refill_events": 52507,
+   "refill_event_ms": {
+    "p50": 0.06277000011323253,
+    "p90": 0.07732999984000344,
+    "p99": 0.10429999997541017,
+    "max": 3.5467220000100497
+   },
+   "filled_after_full_read": [
+    13177,
+    13177
+   ],
+   "backend_cpu_s": 13.28
+  },
+  "nbd:demand": {
+   "read_s": 10.45312213897705,
+   "host_cpu_s": 11.06,
+   "attach_s": 0.08078789710998535,
+   "entries": 15517,
+   "bytes": 551049248,
+   "stats": {
+    "counters": {
+     "gets_demand": 13143,
+     "gets_prefetch": 0,
+     "fetched_bytes_demand": 238809885,
+     "fetched_bytes_prefetch": 0,
+     "chunks_fetched": 13164,
+     "chunks_fetched_bytes_c": 238808949,
+     "chunks_fetched_bytes_u": 541868432,
+     "mem_hits": 889,
+     "disk_hits": 0,
+     "joined": 0,
+     "misses": 13164,
+     "verify_failures": 0,
+     "fetch_errors": 0,
+     "fetch_retries": 0,
+     "hedged": 0,
+     "hedge_won": 0,
+     "status": {}
+    },
+    "get_demand": {
+     "n": 13143,
+     "bytes": 238809885,
+     "ttfb_ms": {
+      "p50": 0.006450000000768341,
+      "p95": 0.34876900008384837,
+      "p99": 0.5676880000464735
+     },
+     "total_ms": {
+      "p50": 0.006450000000768341,
+      "p95": 0.34876900008384837,
+      "p99": 0.5676880000464735,
+      "max": 1.3911879998431687
+     },
+     "size_p50": 2719
+    },
+    "get_prefetch": {
+     "n": 0,
+     "bytes": 0,
+     "ttfb_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+     },
+     "total_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "max": 0.0
+     },
+     "size_p50": null
+    },
+    "cpu_s": 8.370000000000001
+   },
+   "backend_cpu_s": 8.37
+  },
+  "diff_fan_vs_oci": [
+   "etc/gshadow: expected ('file', 416, 0, 42, 383, '28a8cba13838f95135f64e8d50167ff368137675a84d9eba8b0a19b4b6887846', 1790786611, ()), found ('file', 416, 0, 0, 383, '28a8cba13838f95135f64e8d50167ff368137675a84d9eba8b0a19b4b6887846', 1790786611, ())",
+   "etc/gshadow-: expected ('file', 416, 0, 42, 374, '9f095e317e25ddd4a4bc3b58d5aaa08e20bbe8a0e42ca745b0e6ba6d17d61a34', 1788294826, ()), found ('file', 416, 0, 0, 374, '9f095e317e25ddd4a4bc3b58d5aaa08e20bbe8a0e42ca745b0e6ba6d17d61a34', 1788294826, ())",
+   "etc/shadow: expected ('file', 416, 0, 42, 501, '04d5b653d16df1d3a825d6737183fb47d4085060f37971625acf19fa7a873c0e', 1788294828, ()), found ('file', 416, 0, 0, 501, '04d5b653d16df1d3a825d6737183fb47d4085060f37971625acf19fa7a873c0e', 1788294828, ())",
+   "usr/bin/chage: expected ('file', 1517, 0, 42, 72184, '3d1cd4d8b36d12bea9d4111e6cb354bfb88ea499e9c7779907b15f062ab3a571', 1707224063, ()), found ('file', 1517, 0, 0, 72184, '3d1cd4d8b36d12bea9d4111e6cb354bfb88ea499e9c7779907b15f062ab3a571', 1707224063, ())",
+   "usr/bin/expiry: expected ('file', 1517, 0, 42, 23136, 'd72dfad840fbc7b7008908c7c0a756b0ad4e68ca56e263bcf43af633b242d718', 1707224063, ()), found ('file', 1517, 0, 0, 23136, 'd72dfad840fbc7b7008908c7c0a756b0ad4e68ca56e263bcf43af633b242d718', 1707224063, ())",
+   "usr/bin/ssh-agent: expected ('file', 1517, 0, 101, 293304, 'd19f6e9120ee5e9ad72724d91806b4ef1af7d56c801ee4756b6a1ef812e412df', 1788201577, ()), found ('file', 1517, 0, 0, 293304, 'd19f6e9120ee5e9ad72724d91806b4ef1af7d56c801ee4756b6a1ef812e412df', 1788201577, ())",
+   "usr/local/share/fonts: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "usr/sbin/pam_extrausers_chkpwd: expected ('file', 1517, 0, 42, 22680, '49dd3573ef97bc9d156dba640cf2502b39c1d6df46a5653fa9db279bce20fba4', 1787772512, ()), found ('file', 1517, 0, 0, 22680, '49dd3573ef97bc9d156dba640cf2502b39c1d6df46a5653fa9db279bce20fba4', 1787772512, ())",
+   "usr/sbin/unix_chkpwd: expected ('file', 1517, 0, 42, 26776, 'd03e1ac4a4717d2172aa55ccac4f02095f6b3531eb1537581a4747ccc3e6ffa8', 1787772512, ()), found ('file', 1517, 0, 0, 26776, 'd03e1ac4a4717d2172aa55ccac4f02095f6b3531eb1537581a4747ccc3e6ffa8', 1787772512, ())",
+   "var/cache/apt/archives/partial: expected ('dir', 448, 100, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/auxfiles: expected ('dir', 493, 100, 0, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/partial: expected ('dir', 448, 100, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/local: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "var/log/apt/term.log: expected ('file', 416, 0, 4, 39782, 'e8520bdc01c170683d4dccb76a0a3e7c13f1bd84dbe84c3d8451beba904c8e70', 1790786614, ()), found ('file', 416, 0, 0, 39782, 'e8520bdc01c170683d4dccb76a0a3e7c13f1bd84dbe84c3d8451beba904c8e70', 1790786614, ())",
+   "var/log/btmp: expected ('file', 432, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1788294815, ()), found ('file', 432, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1788294815, ())",
+   "var/log/lastlog: expected ('file', 436, 0, 43, 29492, 'a04ece22923d2adaafa89580dbe2851cc93eee9f1c8f43264638d002229f2cfe', 1788294827, ()), found ('file', 436, 0, 0, 29492, 'a04ece22923d2adaafa89580dbe2851cc93eee9f1c8f43264638d002229f2cfe', 1788294827, ())",
+   "var/log/wtmp: expected ('file', 436, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1788294815, ()), found ('file', 436, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1788294815, ())",
+   "var/mail: expected ('dir', 1533, 0, 8, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())"
+  ],
+  "diff_nbd_vs_oci": [
+   "etc/gshadow: expected ('file', 416, 0, 42, 383, '28a8cba13838f95135f64e8d50167ff368137675a84d9eba8b0a19b4b6887846', 1790786611, ()), found ('file', 416, 0, 0, 383, '28a8cba13838f95135f64e8d50167ff368137675a84d9eba8b0a19b4b6887846', 1790786611, ())",
+   "etc/gshadow-: expected ('file', 416, 0, 42, 374, '9f095e317e25ddd4a4bc3b58d5aaa08e20bbe8a0e42ca745b0e6ba6d17d61a34', 1788294826, ()), found ('file', 416, 0, 0, 374, '9f095e317e25ddd4a4bc3b58d5aaa08e20bbe8a0e42ca745b0e6ba6d17d61a34', 1788294826, ())",
+   "etc/shadow: expected ('file', 416, 0, 42, 501, '04d5b653d16df1d3a825d6737183fb47d4085060f37971625acf19fa7a873c0e', 1788294828, ()), found ('file', 416, 0, 0, 501, '04d5b653d16df1d3a825d6737183fb47d4085060f37971625acf19fa7a873c0e', 1788294828, ())",
+   "usr/bin/chage: expected ('file', 1517, 0, 42, 72184, '3d1cd4d8b36d12bea9d4111e6cb354bfb88ea499e9c7779907b15f062ab3a571', 1707224063, ()), found ('file', 1517, 0, 0, 72184, '3d1cd4d8b36d12bea9d4111e6cb354bfb88ea499e9c7779907b15f062ab3a571', 1707224063, ())",
+   "usr/bin/expiry: expected ('file', 1517, 0, 42, 23136, 'd72dfad840fbc7b7008908c7c0a756b0ad4e68ca56e263bcf43af633b242d718', 1707224063, ()), found ('file', 1517, 0, 0, 23136, 'd72dfad840fbc7b7008908c7c0a756b0ad4e68ca56e263bcf43af633b242d718', 1707224063, ())",
+   "usr/bin/ssh-agent: expected ('file', 1517, 0, 101, 293304, 'd19f6e9120ee5e9ad72724d91806b4ef1af7d56c801ee4756b6a1ef812e412df', 1788201577, ()), found ('file', 1517, 0, 0, 293304, 'd19f6e9120ee5e9ad72724d91806b4ef1af7d56c801ee4756b6a1ef812e412df', 1788201577, ())",
+   "usr/local/share/fonts: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "usr/sbin/pam_extrausers_chkpwd: expected ('file', 1517, 0, 42, 22680, '49dd3573ef97bc9d156dba640cf2502b39c1d6df46a5653fa9db279bce20fba4', 1787772512, ()), found ('file', 1517, 0, 0, 22680, '49dd3573ef97bc9d156dba640cf2502b39c1d6df46a5653fa9db279bce20fba4', 1787772512, ())",
+   "usr/sbin/unix_chkpwd: expected ('file', 1517, 0, 42, 26776, 'd03e1ac4a4717d2172aa55ccac4f02095f6b3531eb1537581a4747ccc3e6ffa8', 1787772512, ()), found ('file', 1517, 0, 0, 26776, 'd03e1ac4a4717d2172aa55ccac4f02095f6b3531eb1537581a4747ccc3e6ffa8', 1787772512, ())",
+   "var/cache/apt/archives/partial: expected ('dir', 448, 100, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/auxfiles: expected ('dir', 493, 100, 0, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/partial: expected ('dir', 448, 100, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/local: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "var/log/apt/term.log: expected ('file', 416, 0, 4, 39782, 'e8520bdc01c170683d4dccb76a0a3e7c13f1bd84dbe84c3d8451beba904c8e70', 1790786614, ()), found ('file', 416, 0, 0, 39782, 'e8520bdc01c170683d4dccb76a0a3e7c13f1bd84dbe84c3d8451beba904c8e70', 1790786614, ())",
+   "var/log/btmp: expected ('file', 432, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1788294815, ()), found ('file', 432, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1788294815, ())",
+   "var/log/lastlog: expected ('file', 436, 0, 43, 29492, 'a04ece22923d2adaafa89580dbe2851cc93eee9f1c8f43264638d002229f2cfe', 1788294827, ()), found ('file', 436, 0, 0, 29492, 'a04ece22923d2adaafa89580dbe2851cc93eee9f1c8f43264638d002229f2cfe', 1788294827, ())",
+   "var/log/wtmp: expected ('file', 436, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1788294815, ()), found ('file', 436, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1788294815, ())",
+   "var/mail: expected ('dir', 1533, 0, 8, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())"
+  ],
+  "fan_equals_nbd": true,
+  "equal": false
+ },
+ {
+  "idx": 130,
+  "family": "Terminal-Lego",
+  "image": "terminal-lego/004302:latest",
+  "expected_s": 1.2314774990081787,
+  "expected_entries": 11880,
+  "fan:demand": {
+   "read_s": 7.9755377769470215,
+   "host_cpu_s": 7.62,
+   "attach_s": 0.05342245101928711,
+   "entries": 11880,
+   "bytes": 266145424,
+   "stats": {
+    "counters": {
+     "events": 45219,
+     "events_noop": 35271,
+     "events_filled": 9948,
+     "events_denied": 0,
+     "event_range_bytes": 285925376,
+     "fill_chunks": 9948,
+     "fill_bytes": 261642591,
+     "clone_chunks": 0,
+     "clone_bytes": 0,
+     "cache_file_writes": 0,
+     "pack_reads": 9942,
+     "pack_bytes": 96989034,
+     "mem_hits": 6,
+     "joined": 0,
+     "verify_failures": 0,
+     "fill_waits": 0,
+     "unmarked_full": 0
+    },
+    "event_ms": {
+     "p50": 0.0620700000126817,
+     "p90": 0.1721199998883094,
+     "p99": 0.7511189999149792,
+     "max": 2.9929740001080063
+    },
+    "event_range": {
+     "p50": 4096,
+     "p90": 4096,
+     "max": 131072
+    },
+    "n_lat": 45219,
+    "cpu_s": 5.21,
+    "filled": {
+     "/data/s13/bf/tree-130.img": [
+      9948,
+      9948
+     ]
+    }
+   },
+   "refill_read_s": 6.180368661880493,
+   "refill_events": 45219,
+   "refill_event_ms": {
+    "p50": 0.06435000000237778,
+    "p90": 0.07791000007273396,
+    "p99": 0.10571000007075781,
+    "max": 1.8914559998393088
+   },
+   "filled_after_full_read": [
+    9948,
+    9948
+   ],
+   "backend_cpu_s": 9.17
+  },
+  "nbd:demand": {
+   "read_s": 8.588418960571289,
+   "host_cpu_s": 10.83,
+   "attach_s": 0.07004714012145996,
+   "entries": 11880,
+   "bytes": 266145424,
+   "stats": {
+    "counters": {
+     "gets_demand": 9899,
+     "gets_prefetch": 0,
+     "fetched_bytes_demand": 96992701,
+     "fetched_bytes_prefetch": 0,
+     "chunks_fetched": 9942,
+     "chunks_fetched_bytes_c": 96989034,
+     "chunks_fetched_bytes_u": 261640551,
+     "mem_hits": 194,
+     "disk_hits": 0,
+     "joined": 0,
+     "misses": 9942,
+     "verify_failures": 0,
+     "fetch_errors": 0,
+     "fetch_retries": 0,
+     "hedged": 0,
+     "hedge_won": 0,
+     "status": {}
+    },
+    "get_demand": {
+     "n": 9899,
+     "bytes": 96992701,
+     "ttfb_ms": {
+      "p50": 0.007999999979801942,
+      "p95": 0.3573999999844091,
+      "p99": 0.5488389999754872
+     },
+     "total_ms": {
+      "p50": 0.007999999979801942,
+      "p95": 0.3573999999844091,
+      "p99": 0.5488389999754872,
+      "max": 2.686515000050349
+     },
+     "size_p50": 2541
+    },
+    "get_prefetch": {
+     "n": 0,
+     "bytes": 0,
+     "ttfb_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+     },
+     "total_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "max": 0.0
+     },
+     "size_p50": null
+    },
+    "cpu_s": 6.42
+   },
+   "backend_cpu_s": 6.42
+  },
+  "diff_fan_vs_oci": [
+   "etc/gshadow: expected ('file', 416, 0, 42, 364, '27d5db44cdaa830dee778f68b22a34cd9ac4b3fa84f185592bcc2952fa22ce26', 1789689600, ()), found ('file', 416, 0, 0, 364, '27d5db44cdaa830dee778f68b22a34cd9ac4b3fa84f185592bcc2952fa22ce26', 1789689600, ())",
+   "etc/shadow: expected ('file', 416, 0, 42, 474, 'affd5b627a7dd955789ebd5b2daa1451a818fe5b490921c9d00bc800ea34fae9', 1789689600, ()), found ('file', 416, 0, 0, 474, 'affd5b627a7dd955789ebd5b2daa1451a818fe5b490921c9d00bc800ea34fae9', 1789689600, ())",
+   "usr/bin/chage: expected ('file', 1517, 0, 42, 80376, 'f1aced4c56099e77221aa8a408a073a41d971520fd82108bd8e737cad6e7fcd1', 1765720801, ()), found ('file', 1517, 0, 0, 80376, 'f1aced4c56099e77221aa8a408a073a41d971520fd82108bd8e737cad6e7fcd1', 1765720801, ())",
+   "usr/bin/expiry: expected ('file', 1517, 0, 42, 31184, '76ca5abc17ecc1ec50f9716f91b7ec9044bce69431b4fc3f172489b56d41e308', 1765720801, ()), found ('file', 1517, 0, 0, 31184, '76ca5abc17ecc1ec50f9716f91b7ec9044bce69431b4fc3f172489b56d41e308', 1765720801, ())",
+   "usr/sbin/unix_chkpwd: expected ('file', 1517, 0, 42, 39160, '0ef065c7d555e7dc66789956ae2a67547a98a38fc5f846373975c85e95009345', 1754841242, ()), found ('file', 1517, 0, 0, 39160, '0ef065c7d555e7dc66789956ae2a67547a98a38fc5f846373975c85e95009345', 1754841242, ())",
+   "var/cache/apt/archives/partial: expected ('dir', 448, 42, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/local: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "var/log/apt/term.log: expected ('file', 416, 0, 4, 46674, '41c9d7e92686173a3d12b1e32f3e7dd936115428abb3c0093e8b466c98ef27a7', 1790769881, ()), found ('file', 416, 0, 0, 46674, '41c9d7e92686173a3d12b1e32f3e7dd936115428abb3c0093e8b466c98ef27a7', 1790769881, ())",
+   "var/log/btmp: expected ('file', 432, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1789689600, ()), found ('file', 432, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1789689600, ())",
+   "var/log/lastlog: expected ('file', 436, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1789689600, ()), found ('file', 436, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1789689600, ())",
+   "var/log/wtmp: expected ('file', 436, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1789689600, ()), found ('file', 436, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1789689600, ())",
+   "var/mail: expected ('dir', 1533, 0, 8, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())"
+  ],
+  "diff_nbd_vs_oci": [
+   "etc/gshadow: expected ('file', 416, 0, 42, 364, '27d5db44cdaa830dee778f68b22a34cd9ac4b3fa84f185592bcc2952fa22ce26', 1789689600, ()), found ('file', 416, 0, 0, 364, '27d5db44cdaa830dee778f68b22a34cd9ac4b3fa84f185592bcc2952fa22ce26', 1789689600, ())",
+   "etc/shadow: expected ('file', 416, 0, 42, 474, 'affd5b627a7dd955789ebd5b2daa1451a818fe5b490921c9d00bc800ea34fae9', 1789689600, ()), found ('file', 416, 0, 0, 474, 'affd5b627a7dd955789ebd5b2daa1451a818fe5b490921c9d00bc800ea34fae9', 1789689600, ())",
+   "usr/bin/chage: expected ('file', 1517, 0, 42, 80376, 'f1aced4c56099e77221aa8a408a073a41d971520fd82108bd8e737cad6e7fcd1', 1765720801, ()), found ('file', 1517, 0, 0, 80376, 'f1aced4c56099e77221aa8a408a073a41d971520fd82108bd8e737cad6e7fcd1', 1765720801, ())",
+   "usr/bin/expiry: expected ('file', 1517, 0, 42, 31184, '76ca5abc17ecc1ec50f9716f91b7ec9044bce69431b4fc3f172489b56d41e308', 1765720801, ()), found ('file', 1517, 0, 0, 31184, '76ca5abc17ecc1ec50f9716f91b7ec9044bce69431b4fc3f172489b56d41e308', 1765720801, ())",
+   "usr/sbin/unix_chkpwd: expected ('file', 1517, 0, 42, 39160, '0ef065c7d555e7dc66789956ae2a67547a98a38fc5f846373975c85e95009345', 1754841242, ()), found ('file', 1517, 0, 0, 39160, '0ef065c7d555e7dc66789956ae2a67547a98a38fc5f846373975c85e95009345', 1754841242, ())",
+   "var/cache/apt/archives/partial: expected ('dir', 448, 42, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/local: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "var/log/apt/term.log: expected ('file', 416, 0, 4, 46674, '41c9d7e92686173a3d12b1e32f3e7dd936115428abb3c0093e8b466c98ef27a7', 1790769881, ()), found ('file', 416, 0, 0, 46674, '41c9d7e92686173a3d12b1e32f3e7dd936115428abb3c0093e8b466c98ef27a7', 1790769881, ())",
+   "var/log/btmp: expected ('file', 432, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1789689600, ()), found ('file', 432, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1789689600, ())",
+   "var/log/lastlog: expected ('file', 436, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1789689600, ()), found ('file', 436, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1789689600, ())",
+   "var/log/wtmp: expected ('file', 436, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1789689600, ()), found ('file', 436, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1789689600, ())",
+   "var/mail: expected ('dir', 1533, 0, 8, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())"
+  ],
+  "fan_equals_nbd": true,
+  "equal": false
+ },
+ {
+  "idx": 170,
+  "family": "OpenSWE",
+  "image": "openswe/0xpiranhacodes.webpty-12:latest",
+  "expected_s": 7.504611253738403,
+  "expected_entries": 45920,
+  "fan:demand": {
+   "read_s": 27.35444736480713,
+   "host_cpu_s": 25.52,
+   "attach_s": 0.10333776473999023,
+   "entries": 45920,
+   "bytes": 2323745455,
+   "stats": {
+    "counters": {
+     "events": 126681,
+     "events_noop": 90659,
+     "events_filled": 36022,
+     "events_denied": 0,
+     "event_range_bytes": 2241642496,
+     "fill_chunks": 36022,
+     "fill_bytes": 2109656988,
+     "clone_chunks": 0,
+     "clone_bytes": 0,
+     "cache_file_writes": 0,
+     "pack_reads": 31945,
+     "pack_bytes": 718570025,
+     "mem_hits": 4077,
+     "joined": 0,
+     "verify_failures": 0,
+     "fill_waits": 0,
+     "unmarked_full": 0
+    },
+    "event_ms": {
+     "p50": 0.053429999979925924,
+     "p90": 0.20763900010933867,
+     "p99": 1.093118000198956,
+     "max": 4.466001000082542
+    },
+    "event_range": {
+     "p50": 4096,
+     "p90": 131072,
+     "max": 131072
+    },
+    "n_lat": 126681,
+    "cpu_s": 16.17,
+    "filled": {
+     "/data/s13/bf/tree-170.img": [
+      36022,
+      36022
+     ]
+    }
+   },
+   "refill_read_s": 17.7362003326416,
+   "refill_events": 126680,
+   "refill_event_ms": {
+    "p50": 0.053839999964111485,
+    "p90": 0.06869999992886733,
+    "p99": 0.10025999995377788,
+    "max": 2.8798940002161544
+   },
+   "filled_after_full_read": [
+    36022,
+    36022
+   ],
+   "backend_cpu_s": 25.27
+  },
+  "nbd:demand": {
+   "read_s": 25.35660481452942,
+   "host_cpu_s": 29.14,
+   "attach_s": 0.11962366104125977,
+   "entries": 45920,
+   "bytes": 2323745455,
+   "stats": {
+    "counters": {
+     "gets_demand": 31942,
+     "gets_prefetch": 0,
+     "fetched_bytes_demand": 718570025,
+     "fetched_bytes_prefetch": 0,
+     "chunks_fetched": 31945,
+     "chunks_fetched_bytes_c": 718570025,
+     "chunks_fetched_bytes_u": 2090160411,
+     "mem_hits": 5563,
+     "disk_hits": 0,
+     "joined": 0,
+     "misses": 31945,
+     "verify_failures": 0,
+     "fetch_errors": 0,
+     "fetch_retries": 0,
+     "hedged": 0,
+     "hedge_won": 0,
+     "status": {}
+    },
+    "get_demand": {
+     "n": 31942,
+     "bytes": 718570025,
+     "ttfb_ms": {
+      "p50": 0.006080000048314105,
+      "p95": 0.28515899998637906,
+      "p99": 0.5501599998751772
+     },
+     "total_ms": {
+      "p50": 0.006080000048314105,
+      "p95": 0.28515899998637906,
+      "p99": 0.5501599998751772,
+      "max": 1.4485260001038114
+     },
+     "size_p50": 3119
+    },
+    "get_prefetch": {
+     "n": 0,
+     "bytes": 0,
+     "ttfb_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+     },
+     "total_ms": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "max": 0.0
+     },
+     "size_p50": null
+    },
+    "cpu_s": 20.33
+   },
+   "backend_cpu_s": 20.33
+  },
+  "diff_fan_vs_oci": [
+   "etc/gshadow: expected ('file', 416, 0, 42, 373, 'cf4089f5608d70e72c296b4ce4ee31785cf9fff47f7d79e14e45daa4c551f186', 1746456163, ()), found ('file', 416, 0, 0, 373, 'cf4089f5608d70e72c296b4ce4ee31785cf9fff47f7d79e14e45daa4c551f186', 1746456163, ())",
+   "etc/gshadow-: expected ('file', 416, 0, 42, 364, '27d5db44cdaa830dee778f68b22a34cd9ac4b3fa84f185592bcc2952fa22ce26', 1745798400, ()), found ('file', 416, 0, 0, 364, '27d5db44cdaa830dee778f68b22a34cd9ac4b3fa84f185592bcc2952fa22ce26', 1745798400, ())",
+   "etc/shadow: expected ('file', 416, 0, 42, 474, '0b2ae8235b8d4323d102eb83ce1ede93cdcdbbbfcb7e408216ad5bb4c98cdbf4', 1745798400, ()), found ('file', 416, 0, 0, 474, '0b2ae8235b8d4323d102eb83ce1ede93cdcdbbbfcb7e408216ad5bb4c98cdbf4', 1745798400, ())",
+   "usr/bin/chage: expected ('file', 1517, 0, 42, 80376, '59b34f6d71e2eedf46f1fe9552272a258c8a54bf498930e1caf444fb46d1349a', 1679575250, ()), found ('file', 1517, 0, 0, 80376, '59b34f6d71e2eedf46f1fe9552272a258c8a54bf498930e1caf444fb46d1349a', 1679575250, ())",
+   "usr/bin/expiry: expected ('file', 1517, 0, 42, 31184, 'f6c1dd60fac89f4681d6e3d36a4820e1573f4bf85d7ae65261650a07ac60e16a', 1679575250, ()), found ('file', 1517, 0, 0, 31184, 'f6c1dd60fac89f4681d6e3d36a4820e1573f4bf85d7ae65261650a07ac60e16a', 1679575250, ())",
+   "usr/bin/ssh-agent: expected ('file', 1517, 0, 101, 485760, 'cecaab3bb0a34702145f000db427ee7a6280b1dd219038e955f9624d1eade644', 1739538411, ()), found ('file', 1517, 0, 0, 485760, 'cecaab3bb0a34702145f000db427ee7a6280b1dd219038e955f9624d1eade644', 1739538411, ())",
+   "usr/sbin/unix_chkpwd: expected ('file', 1517, 0, 42, 39160, '29396a989bc7c5f8205e3bd1e3ef32e49e0b08ae9a2abc74c06c60c6defe10fb', 1695329712, ()), found ('file', 1517, 0, 0, 39160, '29396a989bc7c5f8205e3bd1e3ef32e49e0b08ae9a2abc74c06c60c6defe10fb', 1695329712, ())",
+   "var/cache/apt/archives/partial: expected ('dir', 448, 42, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/auxfiles: expected ('dir', 493, 42, 0, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/partial: expected ('dir', 448, 42, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/local: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "var/log/apt/term.log: expected ('file', 416, 0, 4, 39194, 'cc9965444a0a1261f8c534c936cadefd793a524e543e375aa5ed1dde75b6ce40', 1790755086, ()), found ('file', 416, 0, 0, 39194, 'cc9965444a0a1261f8c534c936cadefd793a524e543e375aa5ed1dde75b6ce40', 1790755086, ())",
+   "var/log/btmp: expected ('file', 432, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1745798400, ()), found ('file', 432, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1745798400, ())",
+   "var/log/lastlog: expected ('file', 436, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1745798400, ()), found ('file', 436, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1745798400, ())",
+   "var/log/wtmp: expected ('file', 436, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1745798400, ()), found ('file', 436, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1745798400, ())",
+   "var/mail: expected ('dir', 1533, 0, 8, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())"
+  ],
+  "diff_nbd_vs_oci": [
+   "etc/gshadow: expected ('file', 416, 0, 42, 373, 'cf4089f5608d70e72c296b4ce4ee31785cf9fff47f7d79e14e45daa4c551f186', 1746456163, ()), found ('file', 416, 0, 0, 373, 'cf4089f5608d70e72c296b4ce4ee31785cf9fff47f7d79e14e45daa4c551f186', 1746456163, ())",
+   "etc/gshadow-: expected ('file', 416, 0, 42, 364, '27d5db44cdaa830dee778f68b22a34cd9ac4b3fa84f185592bcc2952fa22ce26', 1745798400, ()), found ('file', 416, 0, 0, 364, '27d5db44cdaa830dee778f68b22a34cd9ac4b3fa84f185592bcc2952fa22ce26', 1745798400, ())",
+   "etc/shadow: expected ('file', 416, 0, 42, 474, '0b2ae8235b8d4323d102eb83ce1ede93cdcdbbbfcb7e408216ad5bb4c98cdbf4', 1745798400, ()), found ('file', 416, 0, 0, 474, '0b2ae8235b8d4323d102eb83ce1ede93cdcdbbbfcb7e408216ad5bb4c98cdbf4', 1745798400, ())",
+   "usr/bin/chage: expected ('file', 1517, 0, 42, 80376, '59b34f6d71e2eedf46f1fe9552272a258c8a54bf498930e1caf444fb46d1349a', 1679575250, ()), found ('file', 1517, 0, 0, 80376, '59b34f6d71e2eedf46f1fe9552272a258c8a54bf498930e1caf444fb46d1349a', 1679575250, ())",
+   "usr/bin/expiry: expected ('file', 1517, 0, 42, 31184, 'f6c1dd60fac89f4681d6e3d36a4820e1573f4bf85d7ae65261650a07ac60e16a', 1679575250, ()), found ('file', 1517, 0, 0, 31184, 'f6c1dd60fac89f4681d6e3d36a4820e1573f4bf85d7ae65261650a07ac60e16a', 1679575250, ())",
+   "usr/bin/ssh-agent: expected ('file', 1517, 0, 101, 485760, 'cecaab3bb0a34702145f000db427ee7a6280b1dd219038e955f9624d1eade644', 1739538411, ()), found ('file', 1517, 0, 0, 485760, 'cecaab3bb0a34702145f000db427ee7a6280b1dd219038e955f9624d1eade644', 1739538411, ())",
+   "usr/sbin/unix_chkpwd: expected ('file', 1517, 0, 42, 39160, '29396a989bc7c5f8205e3bd1e3ef32e49e0b08ae9a2abc74c06c60c6defe10fb', 1695329712, ()), found ('file', 1517, 0, 0, 39160, '29396a989bc7c5f8205e3bd1e3ef32e49e0b08ae9a2abc74c06c60c6defe10fb', 1695329712, ())",
+   "var/cache/apt/archives/partial: expected ('dir', 448, 42, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/auxfiles: expected ('dir', 493, 42, 0, 0, None, None, ()), found ('dir', 493, 0, 0, 0, None, None, ())",
+   "var/lib/apt/lists/partial: expected ('dir', 448, 42, 0, 0, None, None, ()), found ('dir', 448, 0, 0, 0, None, None, ())",
+   "var/local: expected ('dir', 1533, 0, 50, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())",
+   "var/log/apt/term.log: expected ('file', 416, 0, 4, 39194, 'cc9965444a0a1261f8c534c936cadefd793a524e543e375aa5ed1dde75b6ce40', 1790755086, ()), found ('file', 416, 0, 0, 39194, 'cc9965444a0a1261f8c534c936cadefd793a524e543e375aa5ed1dde75b6ce40', 1790755086, ())",
+   "var/log/btmp: expected ('file', 432, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1745798400, ()), found ('file', 432, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1745798400, ())",
+   "var/log/lastlog: expected ('file', 436, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1745798400, ()), found ('file', 436, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1745798400, ())",
+   "var/log/wtmp: expected ('file', 436, 0, 43, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1745798400, ()), found ('file', 436, 0, 0, 0, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1745798400, ())",
+   "var/mail: expected ('dir', 1533, 0, 8, 0, None, None, ()), found ('dir', 1533, 0, 0, 0, None, None, ())"
+  ],
+  "fan_equals_nbd": true,
+  "equal": false
+ }
+]

@@ -1,0 +1,146 @@
++ export DEBIAN_FRONTEND=noninteractive
++ DEBIAN_FRONTEND=noninteractive
++ KREL=7.0.0-30-generic
++ UBUNTU=7.0.0-30.30
++ mkdir -p /data/manifests /data/oci/blobs/sha256 /data/s12 /data/results /data/logs /data/mt /data/s13
++ cp /root/s12/rafs.py /root/rafs.py
++ cd /root/s12
++ '[' -s nydus.tgz ']'
++ curl -fsSL -o nydus.tgz https://github.com/dragonflyoss/nydus/releases/download/v2.4.5/nydus-static-v2.4.5-linux-amd64.tgz
++ sha256sum nydus.tgz
++ tee /data/results/nydus.sha256
+1ad7b793a1996577e462b0bf5c1a22e4450b9c04f7e9e99d4b274ccc92f19072  nydus.tgz
++ tar -xzf nydus.tgz
++ install -m 0755 nydus-static/nydus-image /usr/local/bin/nydus-image
++ nydus-image --version
++ head -3
+ Version: 	v2.4.5
+Git Commit: 	e3190057422fee17f594bb3a5c10741b45dac6ce
+Build Time: 	2026-07-31T02:31:39.697956216Z
++ modprobe nbd nbds_max=1024 max_part=0
++ apt-get update -q
+Get:1 https://mirror.hetzner.com/ubuntu/packages resolute InRelease [136 kB]
+Get:2 https://mirror.hetzner.com/ubuntu/packages resolute-updates InRelease [137 kB]
+Get:3 https://mirror.hetzner.com/ubuntu/packages resolute-backports InRelease [137 kB]
+Get:4 https://mirror.hetzner.com/ubuntu/security resolute-security InRelease [137 kB]
+Get:5 https://mirror.hetzner.com/ubuntu/packages resolute/main amd64 Packages [1,480 kB]
+Get:6 https://mirror.hetzner.com/ubuntu/packages resolute/main Translation-en [524 kB]
+Get:7 https://mirror.hetzner.com/ubuntu/packages resolute/main amd64 c-n-f Metadata [32.4 kB]
+Get:8 https://mirror.hetzner.com/ubuntu/packages resolute/universe amd64 Packages [16.0 MB]
+Get:9 https://mirror.hetzner.com/ubuntu/packages resolute/universe Translation-en [6,329 kB]
+Get:10 https://mirror.hetzner.com/ubuntu/packages resolute/universe amd64 c-n-f Metadata [313 kB]
+Get:11 https://mirror.hetzner.com/ubuntu/packages resolute/restricted amd64 Packages [152 kB]
+Get:12 https://mirror.hetzner.com/ubuntu/packages resolute/restricted Translation-en [25.8 kB]
+Get:13 https://mirror.hetzner.com/ubuntu/packages resolute/restricted amd64 c-n-f Metadata [388 B]
+Get:14 https://mirror.hetzner.com/ubuntu/packages resolute/multiverse amd64 Packages [290 kB]
+Get:15 https://mirror.hetzner.com/ubuntu/packages resolute/multiverse Translation-en [127 kB]
+Get:16 https://mirror.hetzner.com/ubuntu/packages resolute/multiverse amd64 c-n-f Metadata [8,276 B]
+Get:17 https://mirror.hetzner.com/ubuntu/packages resolute-updates/main amd64 Packages [717 kB]
+Get:18 https://mirror.hetzner.com/ubuntu/packages resolute-updates/main Translation-en [167 kB]
+Get:19 https://mirror.hetzner.com/ubuntu/packages resolute-updates/main amd64 c-n-f Metadata [5,756 B]
+Get:20 https://mirror.hetzner.com/ubuntu/packages resolute-updates/universe amd64 Packages [315 kB]
+Get:21 https://mirror.hetzner.com/ubuntu/packages resolute-updates/universe Translation-en [101 kB]
+Get:22 https://mirror.hetzner.com/ubuntu/packages resolute-updates/universe amd64 c-n-f Metadata [4,704 B]
+Get:23 https://mirror.hetzner.com/ubuntu/packages resolute-updates/restricted amd64 Packages [486 kB]
+Get:24 https://mirror.hetzner.com/ubuntu/packages resolute-updates/restricted Translation-en [97.7 kB]
+Get:25 https://mirror.hetzner.com/ubuntu/packages resolute-updates/restricted amd64 c-n-f Metadata [392 B]
+Get:26 https://mirror.hetzner.com/ubuntu/packages resolute-updates/multiverse amd64 Packages [11.9 kB]
+Get:27 https://mirror.hetzner.com/ubuntu/packages resolute-updates/multiverse Translation-en [3,276 B]
+Get:28 https://mirror.hetzner.com/ubuntu/packages resolute-updates/multiverse amd64 c-n-f Metadata [256 B]
+Get:29 https://mirror.hetzner.com/ubuntu/packages resolute-backports/main amd64 c-n-f Metadata [112 B]
+Get:30 https://mirror.hetzner.com/ubuntu/packages resolute-backports/universe amd64 Packages [3,132 B]
+Get:31 https://mirror.hetzner.com/ubuntu/packages resolute-backports/universe Translation-en [7,988 B]
+Get:32 https://mirror.hetzner.com/ubuntu/packages resolute-backports/universe amd64 c-n-f Metadata [116 B]
+Get:33 https://mirror.hetzner.com/ubuntu/packages resolute-backports/restricted amd64 c-n-f Metadata [120 B]
+Get:34 https://mirror.hetzner.com/ubuntu/packages resolute-backports/multiverse amd64 c-n-f Metadata [120 B]
+Get:35 https://mirror.hetzner.com/ubuntu/security resolute-security/main amd64 Packages [550 kB]
+Get:36 https://mirror.hetzner.com/ubuntu/security resolute-security/main Translation-en [129 kB]
+Get:37 https://mirror.hetzner.com/ubuntu/security resolute-security/main amd64 c-n-f Metadata [4,616 B]
+Get:38 https://mirror.hetzner.com/ubuntu/security resolute-security/universe amd64 Packages [191 kB]
+Get:39 https://mirror.hetzner.com/ubuntu/security resolute-security/universe Translation-en [60.4 kB]
+Get:40 https://mirror.hetzner.com/ubuntu/security resolute-security/universe amd64 c-n-f Metadata [3,552 B]
+Get:41 https://mirror.hetzner.com/ubuntu/security resolute-security/restricted amd64 Packages [445 kB]
+Get:42 https://mirror.hetzner.com/ubuntu/security resolute-security/restricted Translation-en [89.7 kB]
+Get:43 https://mirror.hetzner.com/ubuntu/security resolute-security/restricted amd64 c-n-f Metadata [396 B]
+Get:44 https://mirror.hetzner.com/ubuntu/security resolute-security/multiverse amd64 Packages [10.8 kB]
+Get:45 https://mirror.hetzner.com/ubuntu/security resolute-security/multiverse Translation-en [2,844 B]
+Get:46 https://mirror.hetzner.com/ubuntu/security resolute-security/multiverse amd64 c-n-f Metadata [120 B]
+Fetched 29.2 MB in 2s (14.2 MB/s)
+Reading package lists...
++ apt-get install -y -q build-essential libelf-dev libdw-dev dwarves zstd kmod linux-source-7.0.0=7.0.0-30.30 linux-headers-7.0.0-30-generic=7.0.0-30.30 erofs-utils xfsprogs attr
++ tail -3
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
++ mkdir -p /data/k
++ cd /data/k
++ '[' -d linux-source-7.0.0 ']'
++ tar -xjf /usr/src/linux-source-7.0.0/linux-source-7.0.0.tar.bz2
++ cat /data/results/kernel-facts.txt
++ uname -a
+Linux sandboxes-spike-s13 7.0.0-30-generic #30-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul 31 18:22:54 UTC 2026 x86_64 GNU/Linux
++ cat /proc/version
+Linux version 7.0.0-30-generic (buildd@lcy02-amd64-048) (x86_64-linux-gnu-gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0, GNU ld (GNU Binutils for Ubuntu) 2.46) #30-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul 31 18:22:54 UTC 2026
++ grep -E 'CONFIG_FANOTIFY|CONFIG_FSNOTIFY|CONFIG_EROFS|CONFIG_FS_STACK|CONFIG_XFS_FS=|CONFIG_BLK_DEV_NBD' /boot/config-7.0.0-30-generic
+CONFIG_BLK_DEV_NBD=m
+CONFIG_FS_STACK=y
+CONFIG_XFS_FS=m
+CONFIG_FSNOTIFY=y
+CONFIG_FANOTIFY=y
+CONFIG_FANOTIFY_ACCESS_PERMISSIONS=y
+CONFIG_EROFS_FS=m
+# CONFIG_EROFS_FS_DEBUG is not set
+CONFIG_EROFS_FS_XATTR=y
+CONFIG_EROFS_FS_POSIX_ACL=y
+CONFIG_EROFS_FS_SECURITY=y
+CONFIG_EROFS_FS_BACKED_BY_FILE=y
+CONFIG_EROFS_FS_ZIP=y
+CONFIG_EROFS_FS_ZIP_LZMA=y
+CONFIG_EROFS_FS_ZIP_DEFLATE=y
+CONFIG_EROFS_FS_ZIP_ZSTD=y
+CONFIG_EROFS_FS_ZIP_ACCEL=y
+# CONFIG_EROFS_FS_ONDEMAND is not set
+CONFIG_EROFS_FS_PCPU_KTHREAD=y
+# CONFIG_EROFS_FS_PCPU_KTHREAD_HIPRI is not set
+# CONFIG_EROFS_FS_PAGE_CACHE_SHARE is not set
++ sysctl fs.fanotify
+fs.fanotify.max_queued_events = 16384
+fs.fanotify.max_user_groups = 128
+fs.fanotify.max_user_marks = 1048576
+fs.fanotify.watchdog_timeout = 0
++ grep -h SUBLEVEL /data/k/linux-source-7.0.0/Makefile
++ head -1
+SUBLEVEL = 12
++ mkfs.erofs --version
++ head -1
+mkfs.erofs (erofs-utils) 1.9
++ python3 --version
+Python 3.14.4
++ xfs_info -V
+xfs_info version 6.18.0
++ grep -n 'PRE_ACCESS\|INFO_TYPE_RANGE\|FAN_DENY_ERRNO\|FAN_ERRNO' /usr/include/linux/fanotify.h
+30:#define FAN_PRE_ACCESS		0x00100000	/* Pre-content access hook */
+153:#define FAN_EVENT_INFO_TYPE_RANGE	6
+249:#define FAN_ERRNO_BITS	8
+250:#define FAN_ERRNO_SHIFT (32 - FAN_ERRNO_BITS)
+251:#define FAN_ERRNO_MASK	((1 << FAN_ERRNO_BITS) - 1)
+252:#define FAN_DENY_ERRNO(err) \
+253:	(FAN_DENY | ((((__u32)(err)) & FAN_ERRNO_MASK) << FAN_ERRNO_SHIFT))
++ cat /proc/cmdline
+BOOT_IMAGE=/boot/vmlinuz-7.0.0-30-generic root=UUID=954bad86-b82f-4260-9a3f-8d2814665150 ro consoleblank=0 systemd.show_status=true console=tty1 console=ttyS0
++ cat /sys/kernel/security/lockdown
+[none] integrity confidentiality
++ lscpu
++ grep -E 'Model name|^CPU\(s\)'
+CPU(s):                                  48
+Model name:                              AMD EPYC-Milan Processor
++ free -g
+               total        used        free      shared  buff/cache   available
+Mem:             184           8         177           0           4         175
+Swap:              0           0           0
++ df -h / /data
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1       901G  5.7G  859G   1% /
+/dev/sda1       901G  5.7G  859G   1% /
++ echo SETUP_DONE
+SETUP_DONE

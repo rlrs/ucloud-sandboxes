@@ -1,0 +1,34 @@
++ KREL=7.0.0-30-generic
++ S=/data/k/linux-source-7.0.0
++ H=/usr/src/linux-headers-7.0.0-30-generic
++ tail -n 3
+++ nproc
++ make -C /usr/src/linux-headers-7.0.0-30-generic M=/data/k/linux-source-7.0.0/fs/erofs CC=x86_64-linux-gnu-gcc CONFIG_EROFS_FS=m CONFIG_EROFS_FS_PAGE_CACHE_SHARE=y KCFLAGS=-DCONFIG_EROFS_FS_PAGE_CACHE_SHARE=1 -j48 modules
+Skipping BTF generation for erofs.ko due to unavailability of vmlinux
+make[1]: Leaving directory '/data/k/linux-source-7.0.0/fs/erofs'
+make: Leaving directory '/usr/src/linux-headers-7.0.0-30-generic'
++ modinfo -F vermagic /data/k/linux-source-7.0.0/fs/erofs/erofs.ko
+7.0.0-30-generic SMP preempt mod_unload modversions 
++ nm /data/k/linux-source-7.0.0/fs/erofs/erofs.ko
++ grep -c ishare
+26
++ sha256sum /data/k/linux-source-7.0.0/fs/erofs/erofs.ko
+2dde3450ab4105cdef0f094e361b89abd38c607f8d1856ecf4941a6d0babd7b6  /data/k/linux-source-7.0.0/fs/erofs/erofs.ko
++ '[' load = load ']'
++ grep -q ' erofs ' /proc/mounts
++ modprobe -r erofs
++ mkdir -p /lib/modules/7.0.0-30-generic/updates
++ cp /data/k/linux-source-7.0.0/fs/erofs/erofs.ko /lib/modules/7.0.0-30-generic/updates/erofs.ko
++ depmod -a
++ modprobe erofs
++ modinfo -F filename erofs
+/lib/modules/7.0.0-30-generic/updates/erofs.ko
++ grep -c ishare /proc/kallsyms
+24
++ dmesg
++ tail -n 3
+[ 3925.509828] I/O error, dev nbd900, sector 616 op 0x0:(READ) flags 0x800000 phys_seg 1 prio class 2
+[ 3932.682425] erofs: loading out-of-tree module taints kernel.
+[ 3932.682439] erofs: module verification failed: signature and/or required key missing - tainting kernel
++ echo BUILD_DONE
+BUILD_DONE

@@ -1,0 +1,488 @@
+{
+ "chosen": 64,
+ "unique_layers": 147,
+ "unique_layer_bytes": 6281969240,
+ "summed_layer_bytes": 10442604006,
+ "fetched_bytes": 5830358949,
+ "groups": [
+  {
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2",
+   "n": 2268,
+   "families": {
+    "TMax": 1240,
+    "Terminal-Lego": 1028
+   }
+  },
+  {
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150",
+   "n": 1068,
+   "families": {
+    "Terminal-Lego": 1068
+   }
+  },
+  {
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4",
+   "n": 121,
+   "families": {
+    "Terminal-Lego": 121
+   }
+  },
+  {
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284",
+   "n": 30,
+   "families": {
+    "Terminal-Lego": 30
+   }
+  }
+ ],
+ "images": [
+  {
+   "idx": 0,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/003106:latest",
+   "layers": 8,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 1,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/005097:latest",
+   "layers": 7,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 2,
+   "family": "TMax",
+   "image": "prime/primeintellect/tmax:task_000425_efb24a23",
+   "layers": 3,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 3,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/005170:latest",
+   "layers": 7,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 4,
+   "family": "TMax",
+   "image": "prime/primeintellect/tmax:task_000415_7307f229",
+   "layers": 3,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 5,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/005734:latest",
+   "layers": 7,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 6,
+   "family": "TMax",
+   "image": "prime/primeintellect/tmax:task_002162_d0482a85",
+   "layers": 3,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 7,
+   "family": "TMax",
+   "image": "prime/primeintellect/tmax:task_005104_07099728",
+   "layers": 3,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 8,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/003072:latest",
+   "layers": 7,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 9,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/006520:latest",
+   "layers": 3,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 10,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/005589:latest",
+   "layers": 13,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 11,
+   "family": "TMax",
+   "image": "prime/primeintellect/tmax:task_002743_b55c2153",
+   "layers": 3,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 12,
+   "family": "TMax",
+   "image": "prime/primeintellect/tmax:task_000685_d6665a1a",
+   "layers": 3,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 13,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/014027:latest",
+   "layers": 7,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 14,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/001812:latest",
+   "layers": 3,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 15,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/005071:latest",
+   "layers": 7,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 16,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/006741:latest",
+   "layers": 7,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 17,
+   "family": "TMax",
+   "image": "prime/primeintellect/tmax:task_001253_95ed6713",
+   "layers": 3,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 18,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/014945:latest",
+   "layers": 7,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 19,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/006909:latest",
+   "layers": 8,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 20,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/008675:latest",
+   "layers": 9,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 21,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/003692:latest",
+   "layers": 7,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 22,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/008450:latest",
+   "layers": 7,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 23,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/006241:latest",
+   "layers": 12,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 24,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/011881:latest",
+   "layers": 8,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 25,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/008572:latest",
+   "layers": 8,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 26,
+   "family": "TMax",
+   "image": "prime/primeintellect/tmax:task_001071_d6a8e8bb",
+   "layers": 3,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 27,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/002779:latest",
+   "layers": 7,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 28,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/000931:latest",
+   "layers": 7,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 29,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/008634:latest",
+   "layers": 8,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 30,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/010963:latest",
+   "layers": 8,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 31,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/005556:latest",
+   "layers": 7,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 32,
+   "family": "TMax",
+   "image": "prime/primeintellect/tmax:task_003757_2641a717",
+   "layers": 3,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 33,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/003057:latest",
+   "layers": 7,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 34,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/013172:latest",
+   "layers": 7,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 35,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/014414:latest",
+   "layers": 7,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 36,
+   "family": "TMax",
+   "image": "prime/primeintellect/tmax:task_001752_025d8959",
+   "layers": 3,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 37,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/012648:latest",
+   "layers": 7,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 38,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/008268:latest",
+   "layers": 8,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 39,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/005568:latest",
+   "layers": 7,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 40,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/012112:latest",
+   "layers": 8,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 41,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/006324:latest",
+   "layers": 8,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 42,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/004695:latest",
+   "layers": 8,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 43,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/003812:latest",
+   "layers": 13,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 44,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/002829:latest",
+   "layers": 8,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 45,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/012732:latest",
+   "layers": 13,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 46,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/008648:latest",
+   "layers": 10,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 47,
+   "family": "TMax",
+   "image": "prime/primeintellect/tmax:task_008794_911eb529",
+   "layers": 3,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 48,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/008357:latest",
+   "layers": 7,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 49,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/006877:latest",
+   "layers": 8,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 50,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/004703:latest",
+   "layers": 7,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 51,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/002969:latest",
+   "layers": 8,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 52,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/003666:latest",
+   "layers": 7,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 53,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/008292:latest",
+   "layers": 3,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 54,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/005760:latest",
+   "layers": 7,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 55,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/003678:latest",
+   "layers": 7,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  },
+  {
+   "idx": 56,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/006327:latest",
+   "layers": 7,
+   "base": "sha256:ff86ea2e5edce334d19a34fbc65d1a511aa1fc823dba1110422f991aa56b44d4"
+  },
+  {
+   "idx": 57,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/005980:latest",
+   "layers": 7,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 58,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/003927:latest",
+   "layers": 14,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 59,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/008393:latest",
+   "layers": 4,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 60,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/004058:latest",
+   "layers": 6,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 61,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/012362:latest",
+   "layers": 6,
+   "base": "sha256:774043ccc8ccd0d0833a9ee0792142ab7ad93df971e59dd248fbf82db16d0150"
+  },
+  {
+   "idx": 62,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/008235:latest",
+   "layers": 5,
+   "base": "sha256:20c3783cc497b5b0df1fc5f92bd64c3d2fbb24057c88692c8fda205b6ea8a2f2"
+  },
+  {
+   "idx": 63,
+   "family": "Terminal-Lego",
+   "image": "terminal-lego/006927:latest",
+   "layers": 8,
+   "base": "sha256:da539b6761059a0a114c6671f1267b57445e3a54da023db5c28be019e40f0284"
+  }
+ ]
+}

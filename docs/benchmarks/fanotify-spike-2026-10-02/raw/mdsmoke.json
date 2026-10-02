@@ -1,0 +1,200 @@
+{
+ "multidev": {
+  "attach": {
+   "ok": true,
+   "boot": "/data/s13/smoke/boot/img-130.boot",
+   "keys": [
+    "blob:eff4423ba3956842673f2b3bf8c1d4c4837a03fed6c269c9faf3ba6d71f35156",
+    "blob:5584df857f9118735fa0aaa3a27116c1f19318ec57495dbaefa62f2e93b62361",
+    "blob:6ca12237892b4ec3b57b4fd5da8c42fd049e4b338e7d314294e10ed7b15b3712",
+    "blob:adc328ee3bde606fefc73b6063b3184c683d84c972da199cdb346b2b59b3c6a4",
+    "blob:85825da7fd3e42b6b3da0114786ad98c1f351db0873327eb9866cb4ec3f6ff89"
+   ],
+   "new_blobs": 5,
+   "attach_s": 0.0501036080004269
+  },
+  "mount": {
+   "rc": 0,
+   "err": "",
+   "s": 0.0020488569998633466
+  },
+  "read_s": 4.644110679626465,
+  "content": {
+   "files": 9844,
+   "equal": 9844,
+   "mismatch": 0,
+   "missing": 0,
+   "examples": []
+  },
+  "errors": 0,
+  "stats": {
+   "counters": {
+    "events": 10911,
+    "events_noop": 963,
+    "events_filled": 9948,
+    "events_denied": 0,
+    "event_range_bytes": 285884416,
+    "fill_chunks": 9948,
+    "fill_bytes": 261642591,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 9942,
+    "pack_bytes": 96989034,
+    "mem_hits": 6,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.12969000044904533,
+    "p90": 0.49051899986807257,
+    "p99": 1.6552970000702771,
+    "max": 3.376103999926272
+   },
+   "event_range": {
+    "p50": 8192,
+    "p90": 81920,
+    "max": 131072
+   }
+  },
+  "reread_s": 3.0820846557617188,
+  "reread_content": {
+   "files": 9844,
+   "equal": 9844,
+   "mismatch": 0,
+   "missing": 0,
+   "examples": []
+  },
+  "reread_events": 11027
+ },
+ "image-odirect": {
+  "attach": {
+   "ok": true,
+   "path": "/data/s13/smoke/img.img",
+   "size": 292200448,
+   "entries": 9948,
+   "attach_s": 0.03218401100002666
+  },
+  "mount": {
+   "rc": 0,
+   "err": "",
+   "s": 0.004076531999999133
+  },
+  "read_s": 15.90890383720398,
+  "content": {
+   "files": 9844,
+   "equal": 9844,
+   "mismatch": 0,
+   "missing": 0,
+   "examples": []
+  },
+  "errors": 0,
+  "stats": {
+   "counters": {
+    "events": 45219,
+    "events_noop": 35271,
+    "events_filled": 9948,
+    "events_denied": 0,
+    "event_range_bytes": 285925376,
+    "fill_chunks": 9948,
+    "fill_bytes": 261642591,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 9942,
+    "pack_bytes": 96989034,
+    "mem_hits": 6,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.07206099962786539,
+    "p90": 0.6099089996496332,
+    "p99": 2.1825660001013603,
+    "max": 8.636533999833773
+   },
+   "event_range": {
+    "p50": 4096,
+    "p90": 4096,
+    "max": 131072
+   }
+  },
+  "reread_s": 8.852101564407349,
+  "reread_content": {
+   "files": 9844,
+   "equal": 9844,
+   "mismatch": 0,
+   "missing": 0,
+   "examples": []
+  },
+  "reread_events": 45219
+ },
+ "image-unmark": {
+  "attach": {
+   "ok": true,
+   "path": "/data/s13/smoke/img.img",
+   "size": 292200448,
+   "entries": 9948,
+   "attach_s": 0.03382396699998935
+  },
+  "mount": {
+   "rc": 0,
+   "err": "",
+   "s": 0.004457110999737779
+  },
+  "read_s": 17.468648195266724,
+  "content": {
+   "files": 9844,
+   "equal": 9844,
+   "mismatch": 0,
+   "missing": 0,
+   "examples": []
+  },
+  "errors": 0,
+  "stats": {
+   "counters": {
+    "events": 45208,
+    "events_noop": 35260,
+    "events_filled": 9948,
+    "events_denied": 0,
+    "event_range_bytes": 285880320,
+    "fill_chunks": 9948,
+    "fill_bytes": 261642591,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 9942,
+    "pack_bytes": 96989034,
+    "mem_hits": 6,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 1
+   },
+   "event_ms": {
+    "p50": 0.061668999478570186,
+    "p90": 0.20733899964398006,
+    "p99": 1.3400779998846701,
+    "max": 3.085395000198332
+   },
+   "event_range": {
+    "p50": 4096,
+    "p90": 4096,
+    "max": 131072
+   }
+  },
+  "reread_s": 3.6550376415252686,
+  "reread_content": {
+   "files": 9844,
+   "equal": 9844,
+   "mismatch": 0,
+   "missing": 0,
+   "examples": []
+  },
+  "reread_events": 0
+ }
+}

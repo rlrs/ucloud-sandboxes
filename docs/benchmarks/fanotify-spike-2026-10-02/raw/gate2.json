@@ -1,0 +1,393 @@
+{
+ "cases": {
+  "deny_errno_5": {
+   "reader": {
+    "errno": 5,
+    "error": "Input/output error",
+    "s": 0.0015714168548583984,
+    "rc": 0,
+    "correct": false
+   },
+   "listener_response": [
+    "0x5000002"
+   ],
+   "events": 1
+  },
+  "deny_errno_1": {
+   "reader": {
+    "errno": 5,
+    "error": "Input/output error",
+    "s": 0.0014955997467041016,
+    "rc": 0,
+    "correct": false
+   },
+   "listener_response": [
+    "0x1000002"
+   ],
+   "events": 1
+  },
+  "deny_errno_11": {
+   "reader": {
+    "errno": 5,
+    "error": "Input/output error",
+    "s": 0.0013968944549560547,
+    "rc": 0,
+    "correct": false
+   },
+   "listener_response": [
+    "0xb000002"
+   ],
+   "events": 1
+  },
+  "deny_errno_28": {
+   "reader": {
+    "errno": 5,
+    "error": "Input/output error",
+    "s": 0.0014770030975341797,
+    "rc": 0,
+    "correct": false
+   },
+   "listener_response": [
+    "0x1c000002"
+   ],
+   "events": 1
+  },
+  "deny_errno_16": {
+   "reader": {
+    "errno": 5,
+    "error": "Input/output error",
+    "s": 0.0016636848449707031,
+    "rc": 0,
+    "correct": false
+   },
+   "listener_response": [
+    "0x10000002"
+   ],
+   "events": 1
+  },
+  "deny_errno_26": {
+   "reader": {
+    "errno": 5,
+    "error": "Input/output error",
+    "s": 0.0014429092407226562,
+    "rc": 0,
+    "correct": false
+   },
+   "listener_response": [
+    "0x1a000002"
+   ],
+   "events": 1
+  },
+  "deny_errno_122": {
+   "reader": {
+    "errno": 5,
+    "error": "Input/output error",
+    "s": 0.001565694808959961,
+    "rc": 0,
+    "correct": false
+   },
+   "listener_response": [
+    "0x7a000002"
+   ],
+   "events": 1
+  },
+  "deny_errno_13": {
+   "reader": {
+    "blocked_after_s": 30.03,
+    "state": {
+     "state": "D",
+     "wchan": "fanotify_get_response.isra.0"
+    }
+   },
+   "listener_response": [
+    "22 Invalid argument"
+   ],
+   "events": 1
+  },
+  "deny_errno_2": {
+   "reader": {
+    "blocked_after_s": 30.03,
+    "state": {
+     "state": "D",
+     "wchan": "fanotify_get_response.isra.0"
+    }
+   },
+   "listener_response": [
+    "22 Invalid argument"
+   ],
+   "events": 1
+  },
+  "listener_sigkill": {
+   "reader_blocked_while_held": true,
+   "pending_read": {
+    "sha": "ee4bda9bf22ebf2d11dea57f48f331cfc8bfe478eaa63b8396c99e16ca470bea",
+    "len": 24325657,
+    "zeros": true,
+    "zero_4k_pages": 5939,
+    "s": 1.0280497074127197,
+    "rc": 0,
+    "correct": false
+   },
+   "new_read_no_listener": {
+    "sha": "7a5703860f24d34bcdaacd4f4a8ab24e2d13acee3564e9199debd67b11108063",
+    "len": 10633113,
+    "zeros": true,
+    "zero_4k_pages": 2596,
+    "s": 0.0303497314453125,
+    "rc": 0,
+    "correct": false
+   },
+   "restart_new_group_same_mount": {
+    "same_file_again": {
+     "sha": "ee4bda9bf22ebf2d11dea57f48f331cfc8bfe478eaa63b8396c99e16ca470bea",
+     "len": 24325657,
+     "zeros": true,
+     "zero_4k_pages": 5939,
+     "s": 0.03906106948852539,
+     "rc": 0,
+     "correct": false
+    },
+    "untouched_file": {
+     "sha": "4329036e72693f5b685d76934eb17fe5a1d6b1edcaf3b0ada687993a705719ba",
+     "len": 5260288,
+     "zeros": false,
+     "zero_4k_pages": 85,
+     "s": 0.027286052703857422,
+     "rc": 0,
+     "correct": true
+    },
+    "same_file_after_drop_caches": {
+     "sha": "432e1c1739731468ba305771af96773939e43016643e2d630f58cb45b6670e96",
+     "len": 24325657,
+     "zeros": false,
+     "zero_4k_pages": 0,
+     "s": 0.14606690406799316,
+     "rc": 0,
+     "correct": true
+    },
+    "events": 309
+   }
+  },
+  "listener_close": {
+   "reader_blocked_while_held": true,
+   "pending_read": {
+    "sha": "ee4bda9bf22ebf2d11dea57f48f331cfc8bfe478eaa63b8396c99e16ca470bea",
+    "len": 24325657,
+    "zeros": true,
+    "zero_4k_pages": 5939,
+    "s": 1.0269336700439453,
+    "rc": 0,
+    "correct": false
+   },
+   "new_read_no_listener": {
+    "sha": "7a5703860f24d34bcdaacd4f4a8ab24e2d13acee3564e9199debd67b11108063",
+    "len": 10633113,
+    "zeros": true,
+    "zero_4k_pages": 2596,
+    "s": 0.031423091888427734,
+    "rc": 0,
+    "correct": false
+   },
+   "restart_new_group_same_mount": {
+    "same_file_again": {
+     "sha": "ee4bda9bf22ebf2d11dea57f48f331cfc8bfe478eaa63b8396c99e16ca470bea",
+     "len": 24325657,
+     "zeros": true,
+     "zero_4k_pages": 5939,
+     "s": 0.03667926788330078,
+     "rc": 0,
+     "correct": false
+    },
+    "untouched_file": {
+     "sha": "4329036e72693f5b685d76934eb17fe5a1d6b1edcaf3b0ada687993a705719ba",
+     "len": 5260288,
+     "zeros": false,
+     "zero_4k_pages": 85,
+     "s": 0.025639772415161133,
+     "rc": 0,
+     "correct": true
+    },
+    "same_file_after_drop_caches": {
+     "sha": "432e1c1739731468ba305771af96773939e43016643e2d630f58cb45b6670e96",
+     "len": 24325657,
+     "zeros": false,
+     "zero_4k_pages": 0,
+     "s": 0.14035987854003906,
+     "rc": 0,
+     "correct": true
+    },
+    "events": 309
+   }
+  },
+  "takeover_journal_allow": {
+   "while_no_listener": {
+    "r1_running": true,
+    "r2_running": true,
+    "r1_state": {
+     "state": "D",
+     "wchan": "fanotify_get_response.isra.0"
+    }
+   },
+   "pending_read_of_dead_listener": {
+    "sha": "432e1c1739731468ba305771af96773939e43016643e2d630f58cb45b6670e96",
+    "len": 24325657,
+    "zeros": false,
+    "zero_4k_pages": 0,
+    "s": 3.6697208881378174,
+    "rc": 0,
+    "correct": true
+   },
+   "queued_read": {
+    "sha": "097e10f2baaf99d5a4655e549a6c76b139e3931681af39068f79c7b3abddadac",
+    "len": 10633113,
+    "zeros": false,
+    "zero_4k_pages": 24,
+    "s": 1.6443252563476562,
+    "rc": 0,
+    "correct": true
+   },
+   "later_read": {
+    "sha": "72db1b3de8b7dfbaba4c056135f408da555f9d5e137c82129478e07e769f8070",
+    "len": 4734232,
+    "zeros": false,
+    "zero_4k_pages": 0,
+    "s": 0.029857158660888672,
+    "rc": 0,
+    "correct": true
+   },
+   "b_orphans": [
+    {
+     "orphan_fd": 9,
+     "ino": 18041732,
+     "off": 315392,
+     "count": 4096,
+     "filled": 4096,
+     "response": "ok",
+     "t": 0.00082
+    }
+   ],
+   "b_events": 424
+  },
+  "takeover_journal_eio": {
+   "while_no_listener": {
+    "r1_running": true,
+    "r2_running": true,
+    "r1_state": {
+     "state": "D",
+     "wchan": "fanotify_get_response.isra.0"
+    }
+   },
+   "pending_read_of_dead_listener": {
+    "errno": 5,
+    "error": "Input/output error",
+    "s": 3.535037040710449,
+    "rc": 0,
+    "correct": false
+   },
+   "queued_read": {
+    "sha": "097e10f2baaf99d5a4655e549a6c76b139e3931681af39068f79c7b3abddadac",
+    "len": 10633113,
+    "zeros": false,
+    "zero_4k_pages": 24,
+    "s": 1.5747435092926025,
+    "rc": 0,
+    "correct": true
+   },
+   "later_read": {
+    "sha": "72db1b3de8b7dfbaba4c056135f408da555f9d5e137c82129478e07e769f8070",
+    "len": 4734232,
+    "zeros": false,
+    "zero_4k_pages": 0,
+    "s": 0.033994436264038086,
+    "rc": 0,
+    "correct": true
+   },
+   "b_orphans": [
+    {
+     "orphan_fd": 9,
+     "ino": 18041732,
+     "off": 315392,
+     "count": 4096,
+     "filled": 4096,
+     "response": "ok",
+     "t": 0.000811
+    }
+   ],
+   "b_events": 198
+  },
+  "takeover_no_orphan_response": {
+   "while_no_listener": {
+    "r1_running": true,
+    "r2_running": true,
+    "r1_state": {
+     "state": "D",
+     "wchan": "fanotify_get_response.isra.0"
+    }
+   },
+   "pending_read_of_dead_listener": {
+    "blocked_after_s": 11.59,
+    "state": {
+     "state": "D",
+     "wchan": "fanotify_get_response.isra.0"
+    },
+    "killed_after_s": 0.003
+   },
+   "queued_read": {
+    "blocked_after_s": 17.59,
+    "state": {
+     "state": "D",
+     "wchan": "d_alloc_parallel"
+    }
+   },
+   "later_read": {
+    "sha": "72db1b3de8b7dfbaba4c056135f408da555f9d5e137c82129478e07e769f8070",
+    "len": 4734232,
+    "zeros": false,
+    "zero_4k_pages": 0,
+    "s": 0.03670692443847656,
+    "rc": 0,
+    "correct": true
+   },
+   "b_orphans": [],
+   "b_events": 76
+  },
+  "holder_dies": {
+   "blocked_until_holder_died": true,
+   "pending_read": {
+    "sha": "ee4bda9bf22ebf2d11dea57f48f331cfc8bfe478eaa63b8396c99e16ca470bea",
+    "len": 24325657,
+    "zeros": true,
+    "zero_4k_pages": 5939,
+    "s": 1.5310900211334229,
+    "rc": 0,
+    "correct": false
+   }
+  }
+ },
+ "files": [
+  [
+   "/usr/local/lib/python3.13/site-packages/numpy.libs/libscipy_openblas64_-f48b354e.so",
+   24325657
+  ],
+  [
+   "/usr/local/lib/python3.13/site-packages/numpy/_core/_multiarray_umath.cpython-313-x86_64-linux-gnu.so",
+   10633113
+  ],
+  [
+   "/usr/local/lib/libpython3.13.so.1.0",
+   5260288
+  ],
+  [
+   "/usr/lib/x86_64-linux-gnu/libcrypto.so.3",
+   4734232
+  ],
+  [
+   "/usr/bin/perl5.36.0",
+   3804464
+  ],
+  [
+   "/usr/bin/perl",
+   3804464
+  ]
+ ]
+}

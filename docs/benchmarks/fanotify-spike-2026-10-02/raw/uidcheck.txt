@@ -1,0 +1,17 @@
+drwxr-xr-x 0/0               0 2026-10-02 19:21 ./
+-rw-r--r-- 0/101             2 2026-10-02 19:21 ./g
+drwxr-xr-x 1000/42           0 2026-10-02 19:21 ./home/
+drwxr-xr-x 1000/42           0 2026-10-02 19:21 ./home/u/
+-rw-r--r-- 1000/42           6 2026-10-02 19:21 ./home/u/f
+== plain
+/mnt/s13uid/home/u 1000:42 755
+/mnt/s13uid/home/u/f 1000:42 644
+/mnt/s13uid/g 0:101 644
+== repeatable
+/mnt/s13uid/home/u 0:0 755
+/mnt/s13uid/home/u/f 0:0 644
+/mnt/s13uid/g 0:0 644
+== mkfs.erofs --tar
+/mnt/s13uid/home/u 1000:42 755
+/mnt/s13uid/home/u/f 1000:42 644
+/mnt/s13uid/g 0:101 644

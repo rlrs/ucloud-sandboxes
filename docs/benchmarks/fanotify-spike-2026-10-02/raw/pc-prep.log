@@ -1,0 +1,111 @@
+{"idx": 0, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 1, "family": "Terminal-Lego", "python3": true, "mkfs_rc": 0, "mkfs_s": 30.8537917137146, "erofs_bytes": 1192292352}
+{"idx": 2, "family": "TMax", "python3": true, "mkfs_rc": 0, "mkfs_s": 11.345604658126831, "erofs_bytes": 522715136}
+{"idx": 3, "family": "Terminal-Lego", "python3": true, "mkfs_rc": 0, "mkfs_s": 3.4269368648529053, "erofs_bytes": 131006464}
+{"idx": 4, "family": "TMax", "python3": true, "mkfs_rc": 0, "mkfs_s": 14.840630054473877, "erofs_bytes": 1001746432}
+{"idx": 5, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 6, "family": "TMax", "python3": true, "mkfs_rc": 0, "mkfs_s": 6.676458835601807, "erofs_bytes": 522715136}
+{"idx": 7, "family": "TMax", "python3": true, "mkfs_rc": 0, "mkfs_s": 9.620252847671509, "erofs_bytes": 917532672}
+{"idx": 8, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 9, "family": "Terminal-Lego", "python3": true, "mkfs_rc": 0, "mkfs_s": 2.7979819774627686, "erofs_bytes": 145756160}
+{"idx": 10, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 11, "family": "TMax", "python3": true, "mkfs_rc": 0, "mkfs_s": 7.367403268814087, "erofs_bytes": 583802880}
+{"idx": 12, "family": "TMax", "python3": true, "mkfs_rc": 0, "mkfs_s": 7.749514579772949, "erofs_bytes": 522661888}
+{"idx": 13, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 14, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 15, "family": "Terminal-Lego", "python3": true, "mkfs_rc": 0, "mkfs_s": 4.983788728713989, "erofs_bytes": 200060928}
+{"idx": 16, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 17, "family": "TMax", "python3": true, "mkfs_rc": 0, "mkfs_s": 16.63149333000183, "erofs_bytes": 1049772032}
+{"idx": 18, "family": "Terminal-Lego", "python3": true, "mkfs_rc": 0, "mkfs_s": 11.70509123802185, "erofs_bytes": 624730112}
+{"idx": 19, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 20, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 21, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 22, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 23, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 24, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 25, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 26, "family": "TMax", "python3": true, "mkfs_rc": 0, "mkfs_s": 10.302971363067627, "erofs_bytes": 523202560}
+{"idx": 27, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 28, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 29, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 30, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 31, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 32, "family": "TMax", "python3": true, "mkfs_rc": 0, "mkfs_s": 7.28837251663208, "erofs_bytes": 523366400}
+{"idx": 33, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 34, "family": "Terminal-Lego", "python3": true, "mkfs_rc": 0, "mkfs_s": 3.0003662109375, "erofs_bytes": 126939136}
+{"idx": 35, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 36, "family": "TMax", "python3": true, "mkfs_rc": 0, "mkfs_s": 15.745834589004517, "erofs_bytes": 1001746432}
+{"idx": 37, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 38, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 39, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 40, "family": "Terminal-Lego", "python3": true, "mkfs_rc": 0, "mkfs_s": 3.785377264022827, "erofs_bytes": 147951616}
+{"idx": 41, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 42, "family": "Terminal-Lego", "python3": true, "mkfs_rc": 0, "mkfs_s": 5.805943489074707, "erofs_bytes": 289988608}
+{"idx": 43, "family": "Terminal-Lego", "python3": true, "mkfs_rc": 0, "mkfs_s": 14.971774578094482, "erofs_bytes": 884404224}
+{"idx": 44, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 45, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 46, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 47, "family": "TMax", "python3": true, "mkfs_rc": 0, "mkfs_s": 6.865240097045898, "erofs_bytes": 528990208}
+{"idx": 48, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 49, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 50, "family": "Terminal-Lego", "python3": true, "mkfs_rc": 0, "mkfs_s": 8.848759412765503, "erofs_bytes": 357732352}
+{"idx": 51, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 52, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 53, "family": "Terminal-Lego", "python3": true, "mkfs_rc": 0, "mkfs_s": 12.267906904220581, "erofs_bytes": 749064192}
+{"idx": 54, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 55, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 56, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 57, "family": "Terminal-Lego", "python3": true, "mkfs_rc": 0, "mkfs_s": 7.265755891799927, "erofs_bytes": 265027584}
+{"idx": 58, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 59, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 60, "family": "Terminal-Lego", "python3": true, "mkfs_rc": 0, "mkfs_s": 6.817893743515015, "erofs_bytes": 296873984}
+{"idx": 61, "family": "Terminal-Lego", "python3": true, "mkfs_rc": 0, "mkfs_s": 2.828765392303467, "erofs_bytes": 126537728}
+{"idx": 62, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{"idx": 63, "family": "Terminal-Lego", "python3": false, "mkfs_rc": null, "mkfs_s": null, "erofs_bytes": null}
+{
+ "candidates": 64,
+ "with_python_and_erofs": 25,
+ "fingerprint": {
+  "/usr/include/boost/core/pointer_traits.hpp": {
+   "content_sha256": "324f21aa7dd05bed3329b2d5a59ba7d5283b32c70d3791724cfbf1c57c6b29cb",
+   "getfattr": [
+    "# file: /mnt/s13fp/usr/include/boost/core/pointer_traits.hpp",
+    "trusted.erofs.fingerprint=0x7368613235363a324f21aa7dd05bed3329b2d5a59ba7d5283b32c70d3791724cfbf1c57c6b29cb"
+   ]
+  },
+  "/usr/include/boost/fusion/adapted/adt/adapt_adt.hpp": {
+   "content_sha256": "34c7939fa471e02ab62fafc3c6da1959f8298540473c86c978fca81cb78314d0",
+   "getfattr": [
+    "# file: /mnt/s13fp/usr/include/boost/fusion/adapted/adt/adapt_adt.hpp",
+    "trusted.erofs.fingerprint=0x7368613235363a34c7939fa471e02ab62fafc3c6da1959f8298540473c86c978fca81cb78314d0"
+   ]
+  },
+  "/usr/share/mime/image/x-kodak-dcr.xml": {
+   "content_sha256": "8b28582a95fc0d39d89da51916b9d36c866d673c40d5aa17e2634819535507ac",
+   "getfattr": [
+    "# file: /mnt/s13fp/usr/share/mime/image/x-kodak-dcr.xml",
+    "trusted.erofs.fingerprint=0x7368613235363a8b28582a95fc0d39d89da51916b9d36c866d673c40d5aa17e2634819535507ac"
+   ]
+  },
+  "/usr/lib/python3/dist-packages/numpy/fft/_pocketfft_internal.cpython-311-x86_64-linux-gnu.so": {
+   "content_sha256": "4e8bfbdf3b63bd4e52fb4003328dc7d61978817b7be914c5f4336ccff17c4e1e",
+   "getfattr": [
+    "# file: /mnt/s13fp/usr/lib/python3/dist-packages/numpy/fft/_pocketfft_internal.cpython-311-x86_64-linux-gnu.so",
+    "trusted.erofs.fingerprint=0x7368613235363a4e8bfbdf3b63bd4e52fb4003328dc7d61978817b7be914c5f4336ccff17c4e1e"
+   ]
+  },
+  "/usr/lib/python3/dist-packages/PIL/FpxImagePlugin.py": {
+   "content_sha256": "8e28a0e51bec08e6da0ab16da65ba0292e584bc141e7605b43f809aefc455fa0",
+   "getfattr": [
+    "# file: /mnt/s13fp/usr/lib/python3/dist-packages/PIL/FpxImagePlugin.py",
+    "trusted.erofs.fingerprint=0x7368613235363a8e28a0e51bec08e6da0ab16da65ba0292e584bc141e7605b43f809aefc455fa0"
+   ]
+  },
+  "superblock": {
+   "feature_compat": "0x37",
+   "feature_incompat": "0x40",
+   "ishare_xattr_prefix_id(byte 105)": 0,
+   "xattr_prefix_count(byte 91)": 1
+  }
+ }
+}

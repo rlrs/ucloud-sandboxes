@@ -1,0 +1,108 @@
+0 Terminal-Lego {'pos': 0, 'idx': 37, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 0, 'new_bytes_c': 40840712, 'new_chunks': 2504, 'packs_written': 5}
+1 Terminal-Lego {'pos': 1, 'idx': 23, 'family': 'Terminal-Lego', 'layers': 12, 'layers_cached': 1, 'new_bytes_c': 31605428, 'new_chunks': 841, 'packs_written': 9}
+2 Terminal-Lego {'pos': 2, 'idx': 29, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 6, 'new_bytes_c': 99451, 'new_chunks': 11, 'packs_written': 1}
+3 TMax {'pos': 3, 'idx': 6, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3409461, 'new_chunks': 502, 'packs_written': 2}
+4 Terminal-Lego {'pos': 4, 'idx': 44, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 5, 'new_bytes_c': 25093495, 'new_chunks': 813, 'packs_written': 2}
+5 Terminal-Lego {'pos': 5, 'idx': 49, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 5, 'new_bytes_c': 76385, 'new_chunks': 8, 'packs_written': 1}
+6 TMax {'pos': 6, 'idx': 12, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3264116, 'new_chunks': 492, 'packs_written': 2}
+7 Terminal-Lego {'pos': 7, 'idx': 22, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 1815603, 'new_chunks': 64, 'packs_written': 1}
+8 Terminal-Lego {'pos': 8, 'idx': 50, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 41952768, 'new_chunks': 3433, 'packs_written': 1}
+9 Terminal-Lego {'pos': 9, 'idx': 19, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 5, 'new_bytes_c': 627, 'new_chunks': 1, 'packs_written': 1}
+10 TMax {'pos': 10, 'idx': 2, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3385313, 'new_chunks': 495, 'packs_written': 2}
+11 Terminal-Lego {'pos': 11, 'idx': 35, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 465936, 'new_chunks': 23, 'packs_written': 1}
+12 Terminal-Lego {'pos': 12, 'idx': 24, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 6, 'new_bytes_c': 1545230, 'new_chunks': 325, 'packs_written': 2}
+13 TMax {'pos': 13, 'idx': 32, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3384640, 'new_chunks': 494, 'packs_written': 2}
+14 Terminal-Lego {'pos': 14, 'idx': 63, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 7, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+15 Terminal-Lego {'pos': 15, 'idx': 31, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 37728, 'new_chunks': 6, 'packs_written': 1}
+16 Terminal-Lego {'pos': 16, 'idx': 20, 'family': 'Terminal-Lego', 'layers': 9, 'layers_cached': 6, 'new_bytes_c': 15382554, 'new_chunks': 2052, 'packs_written': 2}
+17 Terminal-Lego {'pos': 17, 'idx': 3, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 898795, 'new_chunks': 75, 'packs_written': 2}
+18 Terminal-Lego {'pos': 18, 'idx': 10, 'family': 'Terminal-Lego', 'layers': 13, 'layers_cached': 11, 'new_bytes_c': 16907, 'new_chunks': 7, 'packs_written': 1}
+19 Terminal-Lego {'pos': 19, 'idx': 21, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 7, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+20 TMax {'pos': 20, 'idx': 26, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3605742, 'new_chunks': 517, 'packs_written': 2}
+21 Terminal-Lego {'pos': 21, 'idx': 59, 'family': 'Terminal-Lego', 'layers': 4, 'layers_cached': 2, 'new_bytes_c': 28397, 'new_chunks': 6, 'packs_written': 1}
+22 Terminal-Lego {'pos': 22, 'idx': 52, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 151232, 'new_chunks': 10, 'packs_written': 1}
+23 TMax {'pos': 23, 'idx': 36, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3277197, 'new_chunks': 494, 'packs_written': 2}
+24 Terminal-Lego {'pos': 24, 'idx': 15, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 5160609, 'new_chunks': 600, 'packs_written': 1}
+25 TMax {'pos': 25, 'idx': 7, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3395194, 'new_chunks': 497, 'packs_written': 2}
+26 TMax {'pos': 26, 'idx': 47, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 172871, 'new_chunks': 13, 'packs_written': 2}
+27 Terminal-Lego {'pos': 27, 'idx': 39, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 7, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+28 Terminal-Lego {'pos': 28, 'idx': 25, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 6, 'new_bytes_c': 94335, 'new_chunks': 8, 'packs_written': 1}
+29 Terminal-Lego {'pos': 29, 'idx': 45, 'family': 'Terminal-Lego', 'layers': 13, 'layers_cached': 12, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+30 Terminal-Lego {'pos': 30, 'idx': 30, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 7, 'new_bytes_c': 74263, 'new_chunks': 8, 'packs_written': 1}
+31 Terminal-Lego {'pos': 31, 'idx': 40, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 5, 'new_bytes_c': 5105931, 'new_chunks': 506, 'packs_written': 2}
+32 Terminal-Lego {'pos': 32, 'idx': 28, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 7, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+33 Terminal-Lego {'pos': 33, 'idx': 16, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 47369, 'new_chunks': 6, 'packs_written': 1}
+34 Terminal-Lego {'pos': 34, 'idx': 5, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 625, 'new_chunks': 1, 'packs_written': 1}
+35 Terminal-Lego {'pos': 35, 'idx': 60, 'family': 'Terminal-Lego', 'layers': 6, 'layers_cached': 5, 'new_bytes_c': 44587860, 'new_chunks': 2081, 'packs_written': 1}
+36 TMax {'pos': 36, 'idx': 17, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 4625762, 'new_chunks': 599, 'packs_written': 2}
+37 Terminal-Lego {'pos': 37, 'idx': 0, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 6, 'new_bytes_c': 215267, 'new_chunks': 11, 'packs_written': 1}
+38 Terminal-Lego {'pos': 38, 'idx': 38, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 5, 'new_bytes_c': 105870, 'new_chunks': 10, 'packs_written': 1}
+39 Terminal-Lego {'pos': 39, 'idx': 48, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 80866, 'new_chunks': 9, 'packs_written': 1}
+40 Terminal-Lego {'pos': 40, 'idx': 27, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 7, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+41 Terminal-Lego {'pos': 41, 'idx': 1, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 152329247, 'new_chunks': 26251, 'packs_written': 3}
+42 Terminal-Lego {'pos': 42, 'idx': 62, 'family': 'Terminal-Lego', 'layers': 5, 'layers_cached': 2, 'new_bytes_c': 61601845, 'new_chunks': 2547, 'packs_written': 2}
+43 Terminal-Lego {'pos': 43, 'idx': 13, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 632, 'new_chunks': 1, 'packs_written': 1}
+44 Terminal-Lego {'pos': 44, 'idx': 34, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+45 TMax {'pos': 45, 'idx': 4, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3264533, 'new_chunks': 492, 'packs_written': 2}
+46 Terminal-Lego {'pos': 46, 'idx': 8, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 20948, 'new_chunks': 4, 'packs_written': 1}
+47 Terminal-Lego {'pos': 47, 'idx': 55, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 7, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+48 Terminal-Lego {'pos': 48, 'idx': 46, 'family': 'Terminal-Lego', 'layers': 10, 'layers_cached': 6, 'new_bytes_c': 28567, 'new_chunks': 8, 'packs_written': 2}
+49 Terminal-Lego {'pos': 49, 'idx': 57, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 15069473, 'new_chunks': 1856, 'packs_written': 2}
+50 Terminal-Lego {'pos': 50, 'idx': 53, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 2, 'new_bytes_c': 95427654, 'new_chunks': 2082, 'packs_written': 2}
+51 Terminal-Lego {'pos': 51, 'idx': 9, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 2, 'new_bytes_c': 123239, 'new_chunks': 13, 'packs_written': 1}
+52 Terminal-Lego {'pos': 52, 'idx': 42, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 6, 'new_bytes_c': 11664897, 'new_chunks': 1212, 'packs_written': 1}
+53 Terminal-Lego {'pos': 53, 'idx': 14, 'family': 'Terminal-Lego', 'layers': 3, 'layers_cached': 2, 'new_bytes_c': 112128, 'new_chunks': 10, 'packs_written': 1}
+54 Terminal-Lego {'pos': 54, 'idx': 41, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 7, 'new_bytes_c': 10242046, 'new_chunks': 731, 'packs_written': 1}
+55 TMax {'pos': 55, 'idx': 11, 'family': 'TMax', 'layers': 3, 'layers_cached': 1, 'new_bytes_c': 3396842, 'new_chunks': 496, 'packs_written': 2}
+56 Terminal-Lego {'pos': 56, 'idx': 56, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 9720, 'new_chunks': 4, 'packs_written': 1}
+57 Terminal-Lego {'pos': 57, 'idx': 54, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 134493, 'new_chunks': 18, 'packs_written': 1}
+58 Terminal-Lego {'pos': 58, 'idx': 51, 'family': 'Terminal-Lego', 'layers': 8, 'layers_cached': 6, 'new_bytes_c': 17690669, 'new_chunks': 2003, 'packs_written': 2}
+59 Terminal-Lego {'pos': 59, 'idx': 61, 'family': 'Terminal-Lego', 'layers': 6, 'layers_cached': 5, 'new_bytes_c': 238888, 'new_chunks': 13, 'packs_written': 1}
+60 Terminal-Lego {'pos': 60, 'idx': 58, 'family': 'Terminal-Lego', 'layers': 14, 'layers_cached': 11, 'new_bytes_c': 0, 'new_chunks': 0, 'packs_written': 0}
+61 Terminal-Lego {'pos': 61, 'idx': 43, 'family': 'Terminal-Lego', 'layers': 13, 'layers_cached': 11, 'new_bytes_c': 88374, 'new_chunks': 9, 'packs_written': 1}
+62 Terminal-Lego {'pos': 62, 'idx': 18, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 5, 'new_bytes_c': 13403020, 'new_chunks': 1406, 'packs_written': 2}
+63 Terminal-Lego {'pos': 63, 'idx': 33, 'family': 'Terminal-Lego', 'layers': 7, 'layers_cached': 6, 'new_bytes_c': 17705, 'new_chunks': 5, 'packs_written': 1}
+{
+ "tag": "pc",
+ "pack_wall_s": 6.594964027404785,
+ "conversions": 738,
+ "packs": 714,
+ "pack_bytes": 17489283440,
+ "pack_payload_bytes": 17443585816,
+ "pack_size_median": 5593632,
+ "pack_size_p90": 67080144,
+ "packs_at_cap": 185,
+ "chunk_refs_in_conversions": 3850070,
+ "unique_chunks": 931672,
+ "dup_ratio_by_count": 0.7580116725150452,
+ "refs_bytes_c": 63026067403,
+ "dup_ratio_by_bytes": 0.7232322032015328,
+ "dedupe_factor_bytes": 3.6131371191575647,
+ "stored_raw_chunks": 490778,
+ "zero_chunks": 13,
+ "bootstrap_bytes": 152768512,
+ "bootstrap_zst_bytes": 53989544,
+ "map_zst_bytes": 29861798,
+ "fanout_packs_per_image": {
+  "median": 31,
+  "p90": 46,
+  "max": 68,
+  "mean": 31.46875
+ },
+ "packs_for_90pct_bytes": {
+  "median": 8,
+  "p90": 10
+ },
+ "fanout_by_family": {
+  "TMax": {
+   "n": 11,
+   "median": 27,
+   "max": 52
+  },
+  "Terminal-Lego": {
+   "n": 53,
+   "median": 31,
+   "max": 68
+  }
+ }
+}

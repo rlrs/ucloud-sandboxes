@@ -1,0 +1,584 @@
+{
+ "summary": {
+  "n": 20,
+  "ok": 20,
+  "path": "fan:demand+f",
+  "wall_s": 7.908299922943115,
+  "attach_median": 0.7856216430664062,
+  "attach_max": 0.808927059173584,
+  "first_cmd_median": 2.3777594566345215,
+  "first_cmd_max": 3.1118252277374268,
+  "pip_median": 5.360768556594849,
+  "all_done_max": 7.893691778182983,
+  "host_busy_cpu_s": 83.52,
+  "backend_cpu_s": 12.05,
+  "bytes_read": 62565512,
+  "events": 102018,
+  "event_ms": {
+   "p50": 0.4516600001807092,
+   "p90": 1.0995990000992606,
+   "p99": 2.191235999816854,
+   "max": 6.433608999941498
+  },
+  "cmd_failures": 1,
+  "errors": []
+ },
+ "backend": {
+  "counters": {
+   "events": 102018,
+   "events_noop": 92701,
+   "events_filled": 9317,
+   "events_denied": 0,
+   "event_range_bytes": 506802176,
+   "fill_chunks": 9317,
+   "fill_bytes": 533701527,
+   "clone_chunks": 0,
+   "clone_bytes": 0,
+   "cache_file_writes": 0,
+   "pack_reads": 3223,
+   "pack_bytes": 62565512,
+   "mem_hits": 5901,
+   "joined": 193,
+   "verify_failures": 0,
+   "fill_waits": 0,
+   "unmarked_full": 0
+  },
+  "event_ms": {
+   "p50": 0.4516600001807092,
+   "p90": 1.0995990000992606,
+   "p99": 2.191235999816854,
+   "max": 6.433608999941498
+  },
+  "event_range": {
+   "p50": 4096,
+   "p90": 4096,
+   "max": 131072
+  },
+  "n_lat": 102018,
+  "cpu_s": 12.09,
+  "filled": {
+   "/data/s13/bf/burst-4.img": [
+    331,
+    35229
+   ],
+   "/data/s13/bf/burst-6.img": [
+    524,
+    32980
+   ],
+   "/data/s13/bf/burst-3.img": [
+    511,
+    34558
+   ],
+   "/data/s13/bf/burst-9.img": [
+    126,
+    21078
+   ],
+   "/data/s13/bf/burst-0.img": [
+    512,
+    37043
+   ],
+   "/data/s13/bf/burst-12.img": [
+    523,
+    34536
+   ],
+   "/data/s13/bf/burst-10.img": [
+    393,
+    36022
+   ],
+   "/data/s13/bf/burst-18.img": [
+    511,
+    33221
+   ],
+   "/data/s13/bf/burst-5.img": [
+    523,
+    33040
+   ],
+   "/data/s13/bf/burst-2.img": [
+    546,
+    36051
+   ],
+   "/data/s13/bf/burst-11.img": [
+    523,
+    34536
+   ],
+   "/data/s13/bf/burst-7.img": [
+    412,
+    70432
+   ],
+   "/data/s13/bf/burst-15.img": [
+    509,
+    33042
+   ],
+   "/data/s13/bf/burst-13.img": [
+    367,
+    36686
+   ],
+   "/data/s13/bf/burst-14.img": [
+    527,
+    29460
+   ],
+   "/data/s13/bf/burst-16.img": [
+    523,
+    33143
+   ],
+   "/data/s13/bf/burst-19.img": [
+    398,
+    35804
+   ],
+   "/data/s13/bf/burst-1.img": [
+    523,
+    33669
+   ],
+   "/data/s13/bf/burst-8.img": [
+    511,
+    39074
+   ],
+   "/data/s13/bf/burst-17.img": [
+    524,
+    37972
+   ]
+  }
+ },
+ "sandboxes": [
+  {
+   "idx": 4,
+   "family": "ScaleSWE",
+   "attach_s": 0.7618720531463623,
+   "import_sys": {
+    "wall": 1.6540749073028564,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.4445018768310547,
+   "pip_version": {
+    "wall": 5.360768556594849,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 7.821928977966309,
+   "device": {
+    "ok": true,
+    "filled": 512,
+    "entries": 37043
+   }
+  },
+  {
+   "idx": 15,
+   "family": "ScaleSWE",
+   "attach_s": 0.8070988655090332,
+   "import_sys": {
+    "wall": 1.5169868469238281,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.3670096397399902,
+   "pip_version": {
+    "wall": 5.468918561935425,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 7.860274076461792,
+   "device": {
+    "ok": true,
+    "filled": 523,
+    "entries": 33669
+   }
+  },
+  {
+   "idx": 177,
+   "family": "OpenSWE",
+   "attach_s": 0.7888143062591553,
+   "import_sys": {
+    "wall": 1.6265599727630615,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.4562933444976807,
+   "pip_version": {
+    "wall": 5.047771453857422,
+    "rc": 0,
+    "out": "pip 24.0 from /opt/conda/envs/testbed/lib/python3.7/site-packages/pip (python 3.7)\n"
+   },
+   "all_done_s": 7.529879093170166,
+   "device": {
+    "ok": true,
+    "filled": 546,
+    "entries": 36051
+   }
+  },
+  {
+   "idx": 50,
+   "family": "ScaleSWE",
+   "attach_s": 0.7173764705657959,
+   "import_sys": {
+    "wall": 1.7466742992401123,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.4955127239227295,
+   "pip_version": {
+    "wall": 5.306277751922607,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 7.8245134353637695,
+   "device": {
+    "ok": true,
+    "filled": 511,
+    "entries": 34558
+   }
+  },
+  {
+   "idx": 173,
+   "family": "OpenSWE",
+   "attach_s": 0.6009082794189453,
+   "import_sys": {
+    "wall": 1.7244877815246582,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.462090253829956,
+   "pip_version": {
+    "wall": 4.160524129867554,
+    "rc": 0,
+    "out": "pip 26.2.1 from /opt/conda/envs/testbed/lib/python3.13/site-packages/pip (python 3.13)\n"
+   },
+   "all_done_s": 6.64761209487915,
+   "device": {
+    "ok": true,
+    "filled": 331,
+    "entries": 35229
+   }
+  },
+  {
+   "idx": 54,
+   "family": "ScaleSWE",
+   "attach_s": 0.785463809967041,
+   "import_sys": {
+    "wall": 1.5576567649841309,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.376473903656006,
+   "pip_version": {
+    "wall": 5.418359756469727,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 7.826129913330078,
+   "device": {
+    "ok": true,
+    "filled": 523,
+    "entries": 33040
+   }
+  },
+  {
+   "idx": 37,
+   "family": "ScaleSWE",
+   "attach_s": 0.711799144744873,
+   "import_sys": {
+    "wall": 1.7497367858886719,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.4920547008514404,
+   "pip_version": {
+    "wall": 5.294389724731445,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 7.811750888824463,
+   "device": {
+    "ok": true,
+    "filled": 524,
+    "entries": 32980
+   }
+  },
+  {
+   "idx": 87,
+   "family": "SWE-rebench v2",
+   "attach_s": 0.8003289699554443,
+   "import_sys": {
+    "wall": 1.6373136043548584,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.467622756958008,
+   "pip_version": {
+    "wall": 5.199999570846558,
+    "rc": 0,
+    "out": "pip 24.2 from /opt/conda/lib/python3.12/site-packages/pip (python 3.12)\n/usr/bin/python3: No module named pip\n"
+   },
+   "all_done_s": 7.694920539855957,
+   "device": {
+    "ok": true,
+    "filled": 412,
+    "entries": 70432
+   }
+  },
+  {
+   "idx": 23,
+   "family": "ScaleSWE",
+   "attach_s": 0.805290937423706,
+   "import_sys": {
+    "wall": 1.5256257057189941,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.365807294845581,
+   "pip_version": {
+    "wall": 5.408682346343994,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 7.806316375732422,
+   "device": {
+    "ok": true,
+    "filled": 511,
+    "entries": 39074
+   }
+  },
+  {
+   "idx": 81,
+   "family": "R2E-Gym",
+   "attach_s": 0.7359180450439453,
+   "import_sys": {
+    "wall": 2.3441481590270996,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 3.1118252277374268,
+   "pip_version": {
+    "wall": 0.35506606101989746,
+    "rc": 127,
+    "out": "/testbed/.venv/bin/python3: No module named pip\nsh: 1: pip: not found\n"
+   },
+   "all_done_s": 3.4911210536956787,
+   "device": {
+    "ok": true,
+    "filled": 126,
+    "entries": 21078
+   }
+  },
+  {
+   "idx": 170,
+   "family": "OpenSWE",
+   "attach_s": 0.7712807655334473,
+   "import_sys": {
+    "wall": 1.568777322769165,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.3777594566345215,
+   "pip_version": {
+    "wall": 4.117705583572388,
+    "rc": 0,
+    "out": "pip 25.2 from /opt/conda/envs/testbed/lib/python3.9/site-packages/pip (python 3.9)\n"
+   },
+   "all_done_s": 6.527080059051514,
+   "device": {
+    "ok": true,
+    "filled": 393,
+    "entries": 36022
+   }
+  },
+  {
+   "idx": 14,
+   "family": "ScaleSWE",
+   "attach_s": 0.7794973850250244,
+   "import_sys": {
+    "wall": 1.4856460094451904,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.298112154006958,
+   "pip_version": {
+    "wall": 5.491267681121826,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 7.819192409515381,
+   "device": {
+    "ok": true,
+    "filled": 523,
+    "entries": 34536
+   }
+  },
+  {
+   "idx": 13,
+   "family": "ScaleSWE",
+   "attach_s": 0.7672228813171387,
+   "import_sys": {
+    "wall": 1.5690548419952393,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.372302770614624,
+   "pip_version": {
+    "wall": 5.467373847961426,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 7.8673906326293945,
+   "device": {
+    "ok": true,
+    "filled": 523,
+    "entries": 34536
+   }
+  },
+  {
+   "idx": 6,
+   "family": "ScaleSWE",
+   "attach_s": 0.7895209789276123,
+   "import_sys": {
+    "wall": 1.6702721118927002,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.483658790588379,
+   "pip_version": {
+    "wall": 4.229739189147949,
+    "rc": 0,
+    "out": "pip 25.3 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 6.738652229309082,
+   "device": {
+    "ok": true,
+    "filled": 367,
+    "entries": 36686
+   }
+  },
+  {
+   "idx": 83,
+   "family": "R2E-Gym",
+   "attach_s": 0.7867374420166016,
+   "import_sys": {
+    "wall": 2.0264623165130615,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.8467795848846436,
+   "pip_version": {
+    "wall": 5.019211769104004,
+    "rc": 0,
+    "out": "pip 23.2.1 from /testbed/.venv/lib/python3.9/site-packages/pip (python 3.9)\n"
+   },
+   "all_done_s": 7.893691778182983,
+   "device": {
+    "ok": true,
+    "filled": 527,
+    "entries": 29460
+   }
+  },
+  {
+   "idx": 36,
+   "family": "ScaleSWE",
+   "attach_s": 0.7856216430664062,
+   "import_sys": {
+    "wall": 1.5495502948760986,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.3730101585388184,
+   "pip_version": {
+    "wall": 5.411035537719727,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 7.810314655303955,
+   "device": {
+    "ok": true,
+    "filled": 509,
+    "entries": 33042
+   }
+  },
+  {
+   "idx": 17,
+   "family": "ScaleSWE",
+   "attach_s": 0.7919104099273682,
+   "import_sys": {
+    "wall": 1.538360595703125,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.3682169914245605,
+   "pip_version": {
+    "wall": 5.449305772781372,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 7.845436334609985,
+   "device": {
+    "ok": true,
+    "filled": 523,
+    "entries": 33143
+   }
+  },
+  {
+   "idx": 46,
+   "family": "ScaleSWE",
+   "attach_s": 0.808927059173584,
+   "import_sys": {
+    "wall": 1.4546897411346436,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.2985711097717285,
+   "pip_version": {
+    "wall": 5.507742881774902,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 7.831295967102051,
+   "device": {
+    "ok": true,
+    "filled": 524,
+    "entries": 37972
+   }
+  },
+  {
+   "idx": 19,
+   "family": "ScaleSWE",
+   "attach_s": 0.774238109588623,
+   "import_sys": {
+    "wall": 1.4920766353607178,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.3071744441986084,
+   "pip_version": {
+    "wall": 5.46048903465271,
+    "rc": 0,
+    "out": "pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)\n"
+   },
+   "all_done_s": 7.794981241226196,
+   "device": {
+    "ok": true,
+    "filled": 511,
+    "entries": 33221
+   }
+  },
+  {
+   "idx": 176,
+   "family": "OpenSWE",
+   "attach_s": 0.7933895587921143,
+   "import_sys": {
+    "wall": 1.5327296257019043,
+    "rc": 0,
+    "out": ""
+   },
+   "first_command_done_s": 2.369365692138672,
+   "pip_version": {
+    "wall": 4.138575077056885,
+    "rc": 0,
+    "out": "pip 24.3.1 from /opt/conda/envs/testbed/lib/python3.8/site-packages/pip (python 3.8)\n"
+   },
+   "all_done_s": 6.534804582595825,
+   "device": {
+    "ok": true,
+    "filled": 398,
+    "entries": 35804
+   }
+  }
+ ]
+}

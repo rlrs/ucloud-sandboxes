@@ -1,0 +1,43 @@
+PID 12326
+fanotify_get_response.isra.0
+[<0>] fanotify_get_response.isra.0+0x139/0x230
+[<0>] fanotify_handle_event+0x198/0x300
+[<0>] send_to_group+0x17a/0x430
+[<0>] fsnotify+0x3b5/0x1430
+[<0>] __fsnotify_parent+0x171/0x430
+[<0>] fsnotify_pre_content+0xbe/0x190
+[<0>] rw_verify_area+0xa9/0x180
+[<0>] vfs_write+0x7c/0x490
+[<0>] __x64_sys_pwrite64+0xa3/0xe0
+[<0>] x64_sys_call+0x1d12/0x2390
+[<0>] do_syscall_64+0x105/0x5a0
+[<0>] entry_SYSCALL_64_after_hwframe+0x76/0x7e
+PID 12324
+fanotify_get_response.isra.0
+[<0>] fanotify_get_response.isra.0+0x139/0x230
+[<0>] fanotify_handle_event+0x198/0x300
+[<0>] send_to_group+0x17a/0x430
+[<0>] fsnotify+0x3b5/0x1430
+[<0>] __fsnotify_parent+0x171/0x430
+[<0>] fsnotify_pre_content+0xbe/0x190
+[<0>] rw_verify_area+0xa9/0x180
+[<0>] vfs_iocb_iter_read+0xed/0x190
+[<0>] erofs_fileio_rq_submit+0x169/0x200 [erofs]
+[<0>] erofs_fileio_read_folio+0x53/0x110 [erofs]
+[<0>] filemap_read_folio+0x41/0x100
+[<0>] do_read_cache_folio+0xad/0x4e0
+[<0>] read_cache_folio+0x12/0x30
+[<0>] erofs_bread+0xb2/0x190 [erofs]
+PID 12325
+d_alloc_parallel
+[<0>] d_alloc_parallel+0x37b/0x460
+[<0>] __lookup_slow+0x5d/0x150
+[<0>] lookup_slow+0x3c/0x60
+[<0>] link_path_walk+0x348/0x410
+[<0>] path_openat+0x97/0x290
+[<0>] do_file_open+0xdf/0x1a0
+[<0>] do_sys_openat2+0x7a/0xe0
+[<0>] __x64_sys_openat+0x5f/0xa0
+[<0>] x64_sys_call+0x1f4c/0x2390
+[<0>] do_syscall_64+0x105/0x5a0
+[<0>] entry_SYSCALL_64_after_hwframe+0x76/0x7e

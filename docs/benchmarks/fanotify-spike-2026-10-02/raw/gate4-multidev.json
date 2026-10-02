@@ -1,0 +1,1428 @@
+{
+ "mode": "multidev",
+ "summary": {
+  "mode": "multidev",
+  "n": 24,
+  "first_image_bytes": 166301696,
+  "per_extra_image_mean_bytes": 378268449.3913044,
+  "per_extra_image_median_bytes": 208838656,
+  "total_bytes": 8866476032,
+  "image_bytes_read": 11147933617,
+  "read_s_median": 3.6905276775360107,
+  "mismatches": 0,
+  "mount_failures": 0
+ },
+ "xfs_info": "meta-data=/dev/loop1             isize=512    agcount=4, agsize=26214400 blks\n         =                       sectsz=512   attr=2, projid32bit=1\n         =                       crc=1        finobt=1, sparse=1, rmapbt=1\n         =                       reflink=1    bigtime=1 inobtcount=1 nrext64=1\n         =                       exchange=0   metadir=0\ndata     =                       bsize=4096   blocks=104857600, imaxpct=25\n         =                       sunit=0      swidth=0 blks\nnaming   =version 2              bsize=4096   ascii-ci=0, ftype=1, parent=0\nlog      =internal log           bsize=4096   blocks=51200, version=2\n         =                       sectsz=512   sunit=0 blks, lazy-count=1\nrealtime =none                   extsz=4096   blocks=0, rtextents=0\n         =                       rgcount=0    rgsize=0 extents\n         =                       zoned=0      start=0 reserved=0\n",
+ "steps": [
+  {
+   "k": 1,
+   "name": "pc-000",
+   "family": "Terminal-Lego",
+   "base": "sha256:da539b676105",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-000.boot",
+    "devices": [
+     "/xfs/md/blobs/21edbc2a42fefcd0f91033c14056c560736574ab7f961c2d33e12e882d50b508.blob",
+     "/xfs/md/blobs/293a5a03bd7499b2fa92042380ffbbd0efac5fd89266c1a3c20b8b7b238b29a1.blob",
+     "/xfs/md/blobs/e59a6e083d3f2b1871ae2fe150a3ae0f089c9e5c968c0b8e24812dda27831f1b.blob",
+     "/xfs/md/blobs/6c172aeebe24ae8d93712151602383d2cda7d6ac55f8fc82125f2bb47b686621.blob",
+     "/xfs/md/blobs/22ede8728b0767816f1e7ee795e2b9a396c2a9ff386b3a01a3ed052aaa934157.blob"
+    ],
+    "keys": [
+     "blob:21edbc2a42fefcd0f91033c14056c560736574ab7f961c2d33e12e882d50b508",
+     "blob:293a5a03bd7499b2fa92042380ffbbd0efac5fd89266c1a3c20b8b7b238b29a1",
+     "blob:e59a6e083d3f2b1871ae2fe150a3ae0f089c9e5c968c0b8e24812dda27831f1b",
+     "blob:6c172aeebe24ae8d93712151602383d2cda7d6ac55f8fc82125f2bb47b686621",
+     "blob:22ede8728b0767816f1e7ee795e2b9a396c2a9ff386b3a01a3ed052aaa934157"
+    ],
+    "new_blobs": 5,
+    "attach_s": 0.043819376999636006
+   },
+   "read_s": 2.8572089672088623,
+   "files": 5917,
+   "bytes": 154504389,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 2.99543833732605,
+   "counters": {
+    "events": 6900,
+    "events_noop": 857,
+    "events_filled": 6043,
+    "events_denied": 0,
+    "event_range_bytes": 165896192,
+    "fill_chunks": 6043,
+    "fill_bytes": 149922089,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 6036,
+    "pack_bytes": 75645135,
+    "mem_hits": 7,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.11662900033115875,
+    "p90": 0.46800000018265564,
+    "p99": 1.6884070000742213,
+    "max": 3.068664000238641
+   },
+   "fs_used_delta_bytes": 166301696
+  },
+  {
+   "k": 2,
+   "name": "pc-001",
+   "family": "Terminal-Lego",
+   "base": "sha256:774043ccc8cc",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-001.boot",
+    "devices": [
+     "/xfs/md/blobs/eff4423ba3956842673f2b3bf8c1d4c4837a03fed6c269c9faf3ba6d71f35156.blob",
+     "/xfs/md/blobs/5584df857f9118735fa0aaa3a27116c1f19318ec57495dbaefa62f2e93b62361.blob",
+     "/xfs/md/blobs/0f930f2fa8e8dd8bd909f662678fcc4a0470a4c7a545b07155c9bfade45def7d.blob",
+     "/xfs/md/blobs/6ca12237892b4ec3b57b4fd5da8c42fd049e4b338e7d314294e10ed7b15b3712.blob"
+    ],
+    "keys": [
+     "blob:eff4423ba3956842673f2b3bf8c1d4c4837a03fed6c269c9faf3ba6d71f35156",
+     "blob:5584df857f9118735fa0aaa3a27116c1f19318ec57495dbaefa62f2e93b62361",
+     "blob:0f930f2fa8e8dd8bd909f662678fcc4a0470a4c7a545b07155c9bfade45def7d",
+     "blob:6ca12237892b4ec3b57b4fd5da8c42fd049e4b338e7d314294e10ed7b15b3712"
+    ],
+    "new_blobs": 4,
+    "attach_s": 0.1208089130004737
+   },
+   "read_s": 18.95446491241455,
+   "files": 42000,
+   "bytes": 1188426810,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 19.39397358894348,
+   "counters": {
+    "events": 47561,
+    "events_noop": 4150,
+    "events_filled": 43411,
+    "events_denied": 0,
+    "event_range_bytes": 1285718016,
+    "fill_chunks": 43411,
+    "fill_bytes": 1173304152,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 40246,
+    "pack_bytes": 363928377,
+    "mem_hits": 3165,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.12253900058567524,
+    "p90": 0.4417289992488804,
+    "p99": 1.3851870007783873,
+    "max": 5.835508999552985
+   },
+   "fs_used_delta_bytes": 1281708032
+  },
+  {
+   "k": 3,
+   "name": "pc-002",
+   "family": "TMax",
+   "base": "sha256:20c3783cc497",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-002.boot",
+    "devices": [
+     "/xfs/md/blobs/faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8.blob",
+     "/xfs/md/blobs/431395cd8b17cd0a33a81db8d82ae2b10ff51be7af491d5f46379427aa204ff6.blob"
+    ],
+    "keys": [
+     "blob:faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8",
+     "blob:431395cd8b17cd0a33a81db8d82ae2b10ff51be7af491d5f46379427aa204ff6"
+    ],
+    "new_blobs": 2,
+    "attach_s": 0.03860494699983974
+   },
+   "read_s": 5.626962900161743,
+   "files": 12425,
+   "bytes": 525059255,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 5.785370826721191,
+   "counters": {
+    "events": 15251,
+    "events_noop": 2492,
+    "events_filled": 12759,
+    "events_denied": 0,
+    "event_range_bytes": 550064128,
+    "fill_chunks": 12759,
+    "fill_bytes": 516082427,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 10068,
+    "pack_bytes": 220885064,
+    "mem_hits": 2691,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.07489000017812941,
+    "p90": 0.5696989992429735,
+    "p99": 1.4745070002391003,
+    "max": 3.1235050000759657
+   },
+   "fs_used_delta_bytes": 546222080
+  },
+  {
+   "k": 4,
+   "name": "pc-003",
+   "family": "Terminal-Lego",
+   "base": "sha256:774043ccc8cc",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-003.boot",
+    "devices": [
+     "/xfs/md/blobs/eff4423ba3956842673f2b3bf8c1d4c4837a03fed6c269c9faf3ba6d71f35156.blob",
+     "/xfs/md/blobs/5584df857f9118735fa0aaa3a27116c1f19318ec57495dbaefa62f2e93b62361.blob",
+     "/xfs/md/blobs/6ca12237892b4ec3b57b4fd5da8c42fd049e4b338e7d314294e10ed7b15b3712.blob",
+     "/xfs/md/blobs/f8ecd6496afd2c87ef36270662274c50ab880f42db74ab6556f5e90b1e0ba9c6.blob",
+     "/xfs/md/blobs/791cab85c43a1e5d61e3cd360bb100620b1ec011757d71c8751ea7b27c818da4.blob"
+    ],
+    "keys": [
+     "blob:eff4423ba3956842673f2b3bf8c1d4c4837a03fed6c269c9faf3ba6d71f35156",
+     "blob:5584df857f9118735fa0aaa3a27116c1f19318ec57495dbaefa62f2e93b62361",
+     "blob:6ca12237892b4ec3b57b4fd5da8c42fd049e4b338e7d314294e10ed7b15b3712",
+     "blob:f8ecd6496afd2c87ef36270662274c50ab880f42db74ab6556f5e90b1e0ba9c6",
+     "blob:791cab85c43a1e5d61e3cd360bb100620b1ec011757d71c8751ea7b27c818da4"
+    ],
+    "new_blobs": 2,
+    "attach_s": 0.02320355699976062
+   },
+   "read_s": 1.421280860900879,
+   "files": 5680,
+   "bytes": 133672338,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 1.5318195819854736,
+   "counters": {
+    "events": 6324,
+    "events_noop": 5656,
+    "events_filled": 668,
+    "events_denied": 0,
+    "event_range_bytes": 143949824,
+    "fill_chunks": 668,
+    "fill_bytes": 14016986,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 657,
+    "pack_bytes": 5343903,
+    "mem_hits": 11,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.0569200001336867,
+    "p90": 0.09868000051937997,
+    "p99": 0.49145899993163766,
+    "max": 1.8700059999900986
+   },
+   "fs_used_delta_bytes": 16846848
+  },
+  {
+   "k": 5,
+   "name": "pc-004",
+   "family": "TMax",
+   "base": "sha256:20c3783cc497",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-004.boot",
+    "devices": [
+     "/xfs/md/blobs/faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8.blob",
+     "/xfs/md/blobs/1fcd2a6e67b791fcdcd0ceb6de362e6f30c7ba782b1b42a21130b6e5cdc9bc54.blob"
+    ],
+    "keys": [
+     "blob:faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8",
+     "blob:1fcd2a6e67b791fcdcd0ceb6de362e6f30c7ba782b1b42a21130b6e5cdc9bc54"
+    ],
+    "new_blobs": 1,
+    "attach_s": 0.08326472400040075
+   },
+   "read_s": 11.902088165283203,
+   "files": 25108,
+   "bytes": 1001858822,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 12.198652029037476,
+   "counters": {
+    "events": 30897,
+    "events_noop": 6243,
+    "events_filled": 24654,
+    "events_denied": 0,
+    "event_range_bytes": 1061212160,
+    "fill_chunks": 24654,
+    "fill_bytes": 936280465,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 13719,
+    "pack_bytes": 153948972,
+    "mem_hits": 10935,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.11474999973870581,
+    "p90": 0.2661000007719849,
+    "p99": 1.7611279999982798,
+    "max": 2.8365739999571815
+   },
+   "fs_used_delta_bytes": 998031360
+  },
+  {
+   "k": 6,
+   "name": "pc-005",
+   "family": "Terminal-Lego",
+   "base": "sha256:ff86ea2e5edc",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-005.boot",
+    "devices": [
+     "/xfs/md/blobs/4d673d8c47ae8660f7410a2b5286dda464e4fa5f94c6dbb845ae0fca92ba5ca9.blob",
+     "/xfs/md/blobs/02417d3cd34fbc5ab667945ba57b375336cc66e09627996773dabb3a0a08196f.blob",
+     "/xfs/md/blobs/b43d816094d3a3b7bf59660243dc326c36875790d9c50b18a8839654f56b1d0a.blob",
+     "/xfs/md/blobs/12827d18d527af06c0c151c9856fdb928e3e4a0b02de9ba27c18f19553d15dfe.blob",
+     "/xfs/md/blobs/8ce68d16a0d08c8bd6718c0a0e20e3a5e2a3d00967a4c8ca2caea38f51af7e79.blob",
+     "/xfs/md/blobs/7c862e757caad835613130809b7b21c01ffc98c6bb1c072118e06ba1955571f4.blob"
+    ],
+    "keys": [
+     "blob:4d673d8c47ae8660f7410a2b5286dda464e4fa5f94c6dbb845ae0fca92ba5ca9",
+     "blob:02417d3cd34fbc5ab667945ba57b375336cc66e09627996773dabb3a0a08196f",
+     "blob:b43d816094d3a3b7bf59660243dc326c36875790d9c50b18a8839654f56b1d0a",
+     "blob:12827d18d527af06c0c151c9856fdb928e3e4a0b02de9ba27c18f19553d15dfe",
+     "blob:8ce68d16a0d08c8bd6718c0a0e20e3a5e2a3d00967a4c8ca2caea38f51af7e79",
+     "blob:7c862e757caad835613130809b7b21c01ffc98c6bb1c072118e06ba1955571f4"
+    ],
+    "new_blobs": 6,
+    "attach_s": 0.03870759699930204
+   },
+   "read_s": 3.3083858489990234,
+   "files": 5667,
+   "bytes": 200188790,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 3.437985897064209,
+   "counters": {
+    "events": 6915,
+    "events_noop": 1086,
+    "events_filled": 5829,
+    "events_denied": 0,
+    "event_range_bytes": 211050496,
+    "fill_chunks": 5829,
+    "fill_bytes": 193810575,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 5820,
+    "pack_bytes": 75894552,
+    "mem_hits": 9,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.14113899942458374,
+    "p90": 0.6856879999759258,
+    "p99": 1.619785999537271,
+    "max": 11.466059000667883
+   },
+   "fs_used_delta_bytes": 208838656
+  },
+  {
+   "k": 7,
+   "name": "pc-006",
+   "family": "TMax",
+   "base": "sha256:20c3783cc497",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-006.boot",
+    "devices": [
+     "/xfs/md/blobs/faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8.blob",
+     "/xfs/md/blobs/f3e371f4c799ff160039e284d1d00de8710b68bb2bfded5b2a50c7821cc5a720.blob"
+    ],
+    "keys": [
+     "blob:faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8",
+     "blob:f3e371f4c799ff160039e284d1d00de8710b68bb2bfded5b2a50c7821cc5a720"
+    ],
+    "new_blobs": 1,
+    "attach_s": 0.050790594999853056
+   },
+   "read_s": 3.6905276775360107,
+   "files": 12428,
+   "bytes": 525057430,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 3.839186668395996,
+   "counters": {
+    "events": 15333,
+    "events_noop": 4258,
+    "events_filled": 11075,
+    "events_denied": 0,
+    "event_range_bytes": 550068224,
+    "fill_chunks": 11075,
+    "fill_bytes": 460057499,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 779,
+    "pack_bytes": 3936434,
+    "mem_hits": 10296,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.09253900043404428,
+    "p90": 0.14302999989013188,
+    "p99": 0.300768999295542,
+    "max": 2.4812149995341315
+   },
+   "fs_used_delta_bytes": 486035456
+  },
+  {
+   "k": 8,
+   "name": "pc-007",
+   "family": "TMax",
+   "base": "sha256:20c3783cc497",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-007.boot",
+    "devices": [
+     "/xfs/md/blobs/faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8.blob",
+     "/xfs/md/blobs/29594375bf71f6fd16050b1b2a18cf6ab13bb26a57fa36c195b514e0aa5fe496.blob"
+    ],
+    "keys": [
+     "blob:faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8",
+     "blob:29594375bf71f6fd16050b1b2a18cf6ab13bb26a57fa36c195b514e0aa5fe496"
+    ],
+    "new_blobs": 1,
+    "attach_s": 0.05582230399977561
+   },
+   "read_s": 6.729169607162476,
+   "files": 12559,
+   "bytes": 919846660,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 6.922775506973267,
+   "counters": {
+    "events": 18467,
+    "events_noop": 5799,
+    "events_filled": 12668,
+    "events_denied": 0,
+    "event_range_bytes": 945180672,
+    "fill_chunks": 12668,
+    "fill_bytes": 853840616,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 2130,
+    "pack_bytes": 138583999,
+    "mem_hits": 10538,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.09626000064599793,
+    "p90": 0.21594000008917646,
+    "p99": 1.5705280002293875,
+    "max": 3.236084000491246
+   },
+   "fs_used_delta_bytes": 880242688
+  },
+  {
+   "k": 9,
+   "name": "pc-008",
+   "family": "Terminal-Lego",
+   "base": "sha256:da539b676105",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-008.boot",
+    "devices": [
+     "/xfs/md/blobs/21edbc2a42fefcd0f91033c14056c560736574ab7f961c2d33e12e882d50b508.blob",
+     "/xfs/md/blobs/adb8a27679503fbc64eec767725775c81944db3ef23b54605f1bc6844712cdee.blob",
+     "/xfs/md/blobs/e59a6e083d3f2b1871ae2fe150a3ae0f089c9e5c968c0b8e24812dda27831f1b.blob",
+     "/xfs/md/blobs/6c172aeebe24ae8d93712151602383d2cda7d6ac55f8fc82125f2bb47b686621.blob",
+     "/xfs/md/blobs/22ede8728b0767816f1e7ee795e2b9a396c2a9ff386b3a01a3ed052aaa934157.blob"
+    ],
+    "keys": [
+     "blob:21edbc2a42fefcd0f91033c14056c560736574ab7f961c2d33e12e882d50b508",
+     "blob:adb8a27679503fbc64eec767725775c81944db3ef23b54605f1bc6844712cdee",
+     "blob:e59a6e083d3f2b1871ae2fe150a3ae0f089c9e5c968c0b8e24812dda27831f1b",
+     "blob:6c172aeebe24ae8d93712151602383d2cda7d6ac55f8fc82125f2bb47b686621",
+     "blob:22ede8728b0767816f1e7ee795e2b9a396c2a9ff386b3a01a3ed052aaa934157"
+    ],
+    "new_blobs": 1,
+    "attach_s": 0.03963272599958145
+   },
+   "read_s": 1.8275017738342285,
+   "files": 5917,
+   "bytes": 154504389,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 1.961695671081543,
+   "counters": {
+    "events": 6719,
+    "events_noop": 6416,
+    "events_filled": 303,
+    "events_denied": 0,
+    "event_range_bytes": 165896192,
+    "fill_chunks": 303,
+    "fill_bytes": 8014805,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 162,
+    "pack_bytes": 2947549,
+    "mem_hits": 141,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.06375900011335034,
+    "p90": 0.08127099954435835,
+    "p99": 0.2936589999080752,
+    "max": 2.6127440005438984
+   },
+   "fs_used_delta_bytes": 10231808
+  },
+  {
+   "k": 10,
+   "name": "pc-009",
+   "family": "Terminal-Lego",
+   "base": "sha256:20c3783cc497",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-009.boot",
+    "devices": [
+     "/xfs/md/blobs/faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8.blob",
+     "/xfs/md/blobs/94804eb5b6e59840a7ee6bc3626ca75842398e9782431992a222ee761cfa6dbf.blob"
+    ],
+    "keys": [
+     "blob:faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8",
+     "blob:94804eb5b6e59840a7ee6bc3626ca75842398e9782431992a222ee761cfa6dbf"
+    ],
+    "new_blobs": 1,
+    "attach_s": 0.019423144000029424
+   },
+   "read_s": 1.4174950122833252,
+   "files": 3886,
+   "bytes": 148666045,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 1.4970145225524902,
+   "counters": {
+    "events": 4707,
+    "events_noop": 2350,
+    "events_filled": 2357,
+    "events_denied": 0,
+    "event_range_bytes": 154533888,
+    "fill_chunks": 2357,
+    "fill_bytes": 88183008,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 337,
+    "pack_bytes": 7427979,
+    "mem_hits": 2020,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.08751999939704547,
+    "p90": 0.17119900076068006,
+    "p99": 0.9153290002359427,
+    "max": 2.7463749993330566
+   },
+   "fs_used_delta_bytes": 94248960
+  },
+  {
+   "k": 11,
+   "name": "pc-010",
+   "family": "Terminal-Lego",
+   "base": "sha256:774043ccc8cc",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-010.boot",
+    "devices": [
+     "/xfs/md/blobs/eff4423ba3956842673f2b3bf8c1d4c4837a03fed6c269c9faf3ba6d71f35156.blob",
+     "/xfs/md/blobs/61f219bc309b7a702c039aec30b00ec9fc98c5cc9390fa24b52f24aa4cc26c1a.blob",
+     "/xfs/md/blobs/96e120628910846389a13f9eae3a63b756790c896d0f0483fc88c912d5b2c150.blob",
+     "/xfs/md/blobs/17177208307e9b9b72c73eeb29cded8cf86fbca915b932565cabd4bb60f35617.blob",
+     "/xfs/md/blobs/23cf1c64a8f9071d8b43658ae62cea39f9f511e0664a79d8380e47486a743d0e.blob",
+     "/xfs/md/blobs/6d93e8573c0409ee4dcd990084404b7e2c9f6a347f1a35ea905cded9a44a3f1e.blob",
+     "/xfs/md/blobs/46f88b7218dc275fc6e935fda3720f68e624230fb918094957be3fcba63273b7.blob",
+     "/xfs/md/blobs/5edcfe8f4478941d660704f85d78242a65c045cb96de90ad77565611e99f12c8.blob",
+     "/xfs/md/blobs/55dc4ba22747fe7432e2c867098909f6999f6ffb35958a9304f2d31962c57c1d.blob",
+     "/xfs/md/blobs/a38205802c300ac9f6447e7d26b533e31676f466502870e21c3a3fc3bd37c7ca.blob"
+    ],
+    "keys": [
+     "blob:eff4423ba3956842673f2b3bf8c1d4c4837a03fed6c269c9faf3ba6d71f35156",
+     "blob:61f219bc309b7a702c039aec30b00ec9fc98c5cc9390fa24b52f24aa4cc26c1a",
+     "blob:96e120628910846389a13f9eae3a63b756790c896d0f0483fc88c912d5b2c150",
+     "blob:17177208307e9b9b72c73eeb29cded8cf86fbca915b932565cabd4bb60f35617",
+     "blob:23cf1c64a8f9071d8b43658ae62cea39f9f511e0664a79d8380e47486a743d0e",
+     "blob:6d93e8573c0409ee4dcd990084404b7e2c9f6a347f1a35ea905cded9a44a3f1e",
+     "blob:46f88b7218dc275fc6e935fda3720f68e624230fb918094957be3fcba63273b7",
+     "blob:5edcfe8f4478941d660704f85d78242a65c045cb96de90ad77565611e99f12c8",
+     "blob:55dc4ba22747fe7432e2c867098909f6999f6ffb35958a9304f2d31962c57c1d",
+     "blob:a38205802c300ac9f6447e7d26b533e31676f466502870e21c3a3fc3bd37c7ca"
+    ],
+    "new_blobs": 9,
+    "attach_s": 0.06658058500033803
+   },
+   "read_s": 9.23388409614563,
+   "files": 12494,
+   "bytes": 891986417,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 9.458465337753296,
+   "counters": {
+    "events": 17847,
+    "events_noop": 7329,
+    "events_filled": 10518,
+    "events_denied": 0,
+    "event_range_bytes": 918196224,
+    "fill_chunks": 10518,
+    "fill_bytes": 743569255,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 8874,
+    "pack_bytes": 260761776,
+    "mem_hits": 1644,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.11479899967525853,
+    "p90": 1.051207999807957,
+    "p99": 1.8506570004319656,
+    "max": 4.471461000321142
+   },
+   "fs_used_delta_bytes": 766746624
+  },
+  {
+   "k": 12,
+   "name": "pc-011",
+   "family": "TMax",
+   "base": "sha256:20c3783cc497",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-011.boot",
+    "devices": [
+     "/xfs/md/blobs/faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8.blob",
+     "/xfs/md/blobs/757c4fedb792a2f87e9cc7e27b23d583a60a2d1f6de3b88d1881b2704c540667.blob"
+    ],
+    "keys": [
+     "blob:faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8",
+     "blob:757c4fedb792a2f87e9cc7e27b23d583a60a2d1f6de3b88d1881b2704c540667"
+    ],
+    "new_blobs": 1,
+    "attach_s": 0.05617735499981791
+   },
+   "read_s": 8.15445327758789,
+   "files": 13523,
+   "bytes": 585991061,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 8.347662210464478,
+   "counters": {
+    "events": 16820,
+    "events_noop": 4430,
+    "events_filled": 12390,
+    "events_denied": 0,
+    "event_range_bytes": 612683776,
+    "fill_chunks": 12390,
+    "fill_bytes": 526608096,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 11347,
+    "pack_bytes": 208388801,
+    "mem_hits": 1043,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.14962000022933353,
+    "p90": 0.6190690000948962,
+    "p99": 1.854245999311388,
+    "max": 2.8070449998267577
+   },
+   "fs_used_delta_bytes": 554565632
+  },
+  {
+   "k": 13,
+   "name": "pc-012",
+   "family": "TMax",
+   "base": "sha256:20c3783cc497",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-012.boot",
+    "devices": [
+     "/xfs/md/blobs/faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8.blob",
+     "/xfs/md/blobs/34034d2e887200bc3ac54975993a693f56585727d9a74ed0d719cee23d92cb61.blob"
+    ],
+    "keys": [
+     "blob:faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8",
+     "blob:34034d2e887200bc3ac54975993a693f56585727d9a74ed0d719cee23d92cb61"
+    ],
+    "new_blobs": 1,
+    "attach_s": 0.02292748699983349
+   },
+   "read_s": 4.383434295654297,
+   "files": 12420,
+   "bytes": 525006177,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 4.537089109420776,
+   "counters": {
+    "events": 15349,
+    "events_noop": 4282,
+    "events_filled": 11067,
+    "events_denied": 0,
+    "event_range_bytes": 549998592,
+    "fill_chunks": 11067,
+    "fill_bytes": 460006246,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 498,
+    "pack_bytes": 3570355,
+    "mem_hits": 10569,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.11238899969612248,
+    "p90": 0.16548900021007285,
+    "p99": 0.26283000079274643,
+    "max": 2.4173450001399033
+   },
+   "fs_used_delta_bytes": 485965824
+  },
+  {
+   "k": 14,
+   "name": "pc-013",
+   "family": "Terminal-Lego",
+   "base": "sha256:ff86ea2e5edc",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-013.boot",
+    "devices": [
+     "/xfs/md/blobs/4d673d8c47ae8660f7410a2b5286dda464e4fa5f94c6dbb845ae0fca92ba5ca9.blob",
+     "/xfs/md/blobs/02417d3cd34fbc5ab667945ba57b375336cc66e09627996773dabb3a0a08196f.blob",
+     "/xfs/md/blobs/b43d816094d3a3b7bf59660243dc326c36875790d9c50b18a8839654f56b1d0a.blob",
+     "/xfs/md/blobs/12827d18d527af06c0c151c9856fdb928e3e4a0b02de9ba27c18f19553d15dfe.blob",
+     "/xfs/md/blobs/8ce68d16a0d08c8bd6718c0a0e20e3a5e2a3d00967a4c8ca2caea38f51af7e79.blob",
+     "/xfs/md/blobs/3c336168961c8f5905601a69740bd249d929e311fd1d6b29d3ae53e014044be9.blob"
+    ],
+    "keys": [
+     "blob:4d673d8c47ae8660f7410a2b5286dda464e4fa5f94c6dbb845ae0fca92ba5ca9",
+     "blob:02417d3cd34fbc5ab667945ba57b375336cc66e09627996773dabb3a0a08196f",
+     "blob:b43d816094d3a3b7bf59660243dc326c36875790d9c50b18a8839654f56b1d0a",
+     "blob:12827d18d527af06c0c151c9856fdb928e3e4a0b02de9ba27c18f19553d15dfe",
+     "blob:8ce68d16a0d08c8bd6718c0a0e20e3a5e2a3d00967a4c8ca2caea38f51af7e79",
+     "blob:3c336168961c8f5905601a69740bd249d929e311fd1d6b29d3ae53e014044be9"
+    ],
+    "new_blobs": 1,
+    "attach_s": 0.0388034579991654
+   },
+   "read_s": 1.2040798664093018,
+   "files": 5667,
+   "bytes": 200188848,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 1.329822063446045,
+   "counters": {
+    "events": 6854,
+    "events_noop": 6853,
+    "events_filled": 1,
+    "events_denied": 0,
+    "event_range_bytes": 211050496,
+    "fill_chunks": 1,
+    "fill_bytes": 4915,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 1,
+    "pack_bytes": 632,
+    "mem_hits": 0,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.050889999329228885,
+    "p90": 0.06411000049411086,
+    "p99": 0.08370900013687788,
+    "max": 3.672573000585544
+   },
+   "fs_used_delta_bytes": 1347584
+  },
+  {
+   "k": 15,
+   "name": "pc-014",
+   "family": "Terminal-Lego",
+   "base": "sha256:20c3783cc497",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-014.boot",
+    "devices": [
+     "/xfs/md/blobs/faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8.blob",
+     "/xfs/md/blobs/a5229c4f63e98076381262e417ec135ba5bddb8b07c452f76cd0f38c2a4aaa4b.blob"
+    ],
+    "keys": [
+     "blob:faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8",
+     "blob:a5229c4f63e98076381262e417ec135ba5bddb8b07c452f76cd0f38c2a4aaa4b"
+    ],
+    "new_blobs": 1,
+    "attach_s": 0.016987117999633483
+   },
+   "read_s": 1.465268611907959,
+   "files": 4972,
+   "bytes": 156455161,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 1.564587116241455,
+   "counters": {
+    "events": 5748,
+    "events_noop": 3223,
+    "events_filled": 2525,
+    "events_denied": 0,
+    "event_range_bytes": 165482496,
+    "fill_chunks": 2525,
+    "fill_bytes": 75774197,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 193,
+    "pack_bytes": 6775136,
+    "mem_hits": 2332,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.08346899994648993,
+    "p90": 0.1465499999540043,
+    "p99": 0.9355580004921649,
+    "max": 2.2641559999101446
+   },
+   "fs_used_delta_bytes": 83062784
+  },
+  {
+   "k": 16,
+   "name": "pc-015",
+   "family": "Terminal-Lego",
+   "base": "sha256:774043ccc8cc",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-015.boot",
+    "devices": [
+     "/xfs/md/blobs/eff4423ba3956842673f2b3bf8c1d4c4837a03fed6c269c9faf3ba6d71f35156.blob",
+     "/xfs/md/blobs/5584df857f9118735fa0aaa3a27116c1f19318ec57495dbaefa62f2e93b62361.blob",
+     "/xfs/md/blobs/6ca12237892b4ec3b57b4fd5da8c42fd049e4b338e7d314294e10ed7b15b3712.blob",
+     "/xfs/md/blobs/0a5c5b4d524bc26fbd1811e54e76da89e79297add67c00532e606fa7138daf53.blob"
+    ],
+    "keys": [
+     "blob:eff4423ba3956842673f2b3bf8c1d4c4837a03fed6c269c9faf3ba6d71f35156",
+     "blob:5584df857f9118735fa0aaa3a27116c1f19318ec57495dbaefa62f2e93b62361",
+     "blob:6ca12237892b4ec3b57b4fd5da8c42fd049e4b338e7d314294e10ed7b15b3712",
+     "blob:0a5c5b4d524bc26fbd1811e54e76da89e79297add67c00532e606fa7138daf53"
+    ],
+    "new_blobs": 1,
+    "attach_s": 0.029657764999683423
+   },
+   "read_s": 2.6375644207000732,
+   "files": 7300,
+   "bytes": 202425764,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 2.7648606300354004,
+   "counters": {
+    "events": 8222,
+    "events_noop": 5831,
+    "events_filled": 2391,
+    "events_denied": 0,
+    "event_range_bytes": 216711168,
+    "fill_chunks": 2391,
+    "fill_bytes": 81064500,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 2389,
+    "pack_bytes": 26856126,
+    "mem_hits": 2,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.0652999997328152,
+    "p90": 0.2857789995687199,
+    "p99": 1.241838000169082,
+    "max": 1.9104869998045615
+   },
+   "fs_used_delta_bytes": 88190976
+  },
+  {
+   "k": 17,
+   "name": "pc-016",
+   "family": "Terminal-Lego",
+   "base": "sha256:da539b676105",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-016.boot",
+    "devices": [
+     "/xfs/md/blobs/21edbc2a42fefcd0f91033c14056c560736574ab7f961c2d33e12e882d50b508.blob",
+     "/xfs/md/blobs/6c172aeebe24ae8d93712151602383d2cda7d6ac55f8fc82125f2bb47b686621.blob",
+     "/xfs/md/blobs/e59a6e083d3f2b1871ae2fe150a3ae0f089c9e5c968c0b8e24812dda27831f1b.blob",
+     "/xfs/md/blobs/73cc2c798ec5d76f4c86ca068a09a86982d2a7cc0361dd045e58fc7c923e1a15.blob",
+     "/xfs/md/blobs/22ede8728b0767816f1e7ee795e2b9a396c2a9ff386b3a01a3ed052aaa934157.blob"
+    ],
+    "keys": [
+     "blob:21edbc2a42fefcd0f91033c14056c560736574ab7f961c2d33e12e882d50b508",
+     "blob:6c172aeebe24ae8d93712151602383d2cda7d6ac55f8fc82125f2bb47b686621",
+     "blob:e59a6e083d3f2b1871ae2fe150a3ae0f089c9e5c968c0b8e24812dda27831f1b",
+     "blob:73cc2c798ec5d76f4c86ca068a09a86982d2a7cc0361dd045e58fc7c923e1a15",
+     "blob:22ede8728b0767816f1e7ee795e2b9a396c2a9ff386b3a01a3ed052aaa934157"
+    ],
+    "new_blobs": 1,
+    "attach_s": 0.04013040399968304
+   },
+   "read_s": 1.7225046157836914,
+   "files": 5776,
+   "bytes": 148526110,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 1.8558349609375,
+   "counters": {
+    "events": 6522,
+    "events_noop": 6347,
+    "events_filled": 175,
+    "events_denied": 0,
+    "event_range_bytes": 159522816,
+    "fill_chunks": 175,
+    "fill_bytes": 2500374,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 27,
+    "pack_bytes": 273086,
+    "mem_hits": 148,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.0700900000083493,
+    "p90": 0.09033999958774075,
+    "p99": 0.13847099944541696,
+    "max": 1.8659170000319136
+   },
+   "fs_used_delta_bytes": 4349952
+  },
+  {
+   "k": 18,
+   "name": "pc-017",
+   "family": "TMax",
+   "base": "sha256:20c3783cc497",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-017.boot",
+    "devices": [
+     "/xfs/md/blobs/faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8.blob",
+     "/xfs/md/blobs/81f51dfe9bd262687d652a55df02df971dcb414cbaf56a59c17873861118e613.blob"
+    ],
+    "keys": [
+     "blob:faed4c30edbdc50ab7c77d2f7c81e495667a600e30f1baee3884e0ea4d069de8",
+     "blob:81f51dfe9bd262687d652a55df02df971dcb414cbaf56a59c17873861118e613"
+    ],
+    "new_blobs": 1,
+    "attach_s": 0.0864814579999802
+   },
+   "read_s": 12.273427248001099,
+   "files": 28850,
+   "bytes": 1487003832,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 12.590857982635498,
+   "counters": {
+    "events": 34966,
+    "events_noop": 7338,
+    "events_filled": 27628,
+    "events_denied": 0,
+    "event_range_bytes": 1117302784,
+    "fill_chunks": 27628,
+    "fill_bytes": 978664815,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 16221,
+    "pack_bytes": 167805447,
+    "mem_hits": 11407,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.11658899984468007,
+    "p90": 0.22494000040751416,
+    "p99": 1.3525590002245735,
+    "max": 2.962323999781802
+   },
+   "fs_used_delta_bytes": 1049743360
+  },
+  {
+   "k": 19,
+   "name": "pc-018",
+   "family": "Terminal-Lego",
+   "base": "sha256:774043ccc8cc",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-018.boot",
+    "devices": [
+     "/xfs/md/blobs/eff4423ba3956842673f2b3bf8c1d4c4837a03fed6c269c9faf3ba6d71f35156.blob",
+     "/xfs/md/blobs/5584df857f9118735fa0aaa3a27116c1f19318ec57495dbaefa62f2e93b62361.blob",
+     "/xfs/md/blobs/e78a1ccda1da3d52f4539672e39d53495d5213006965c5d9602d639d385597fc.blob",
+     "/xfs/md/blobs/6ca12237892b4ec3b57b4fd5da8c42fd049e4b338e7d314294e10ed7b15b3712.blob",
+     "/xfs/md/blobs/45cc85d0ec3736fe2c498392111bdbf49a8ed338b3eece9269d1979e0e173663.blob"
+    ],
+    "keys": [
+     "blob:eff4423ba3956842673f2b3bf8c1d4c4837a03fed6c269c9faf3ba6d71f35156",
+     "blob:5584df857f9118735fa0aaa3a27116c1f19318ec57495dbaefa62f2e93b62361",
+     "blob:e78a1ccda1da3d52f4539672e39d53495d5213006965c5d9602d639d385597fc",
+     "blob:6ca12237892b4ec3b57b4fd5da8c42fd049e4b338e7d314294e10ed7b15b3712",
+     "blob:45cc85d0ec3736fe2c498392111bdbf49a8ed338b3eece9269d1979e0e173663"
+    ],
+    "new_blobs": 2,
+    "attach_s": 0.061240435000399884
+   },
+   "read_s": 6.736119985580444,
+   "files": 13916,
+   "bytes": 626004456,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 6.943875312805176,
+   "counters": {
+    "events": 17300,
+    "events_noop": 7190,
+    "events_filled": 10110,
+    "events_denied": 0,
+    "event_range_bytes": 655880192,
+    "fill_chunks": 10110,
+    "fill_bytes": 501998375,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 6209,
+    "pack_bytes": 134866737,
+    "mem_hits": 3901,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.09768899963091826,
+    "p90": 0.43967900001007365,
+    "p99": 1.4724269994985661,
+    "max": 2.6442959997439175
+   },
+   "fs_used_delta_bytes": 526278656
+  },
+  {
+   "k": 20,
+   "name": "pc-019",
+   "family": "Terminal-Lego",
+   "base": "sha256:da539b676105",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-019.boot",
+    "devices": [
+     "/xfs/md/blobs/21edbc2a42fefcd0f91033c14056c560736574ab7f961c2d33e12e882d50b508.blob",
+     "/xfs/md/blobs/6c172aeebe24ae8d93712151602383d2cda7d6ac55f8fc82125f2bb47b686621.blob",
+     "/xfs/md/blobs/e59a6e083d3f2b1871ae2fe150a3ae0f089c9e5c968c0b8e24812dda27831f1b.blob",
+     "/xfs/md/blobs/22ede8728b0767816f1e7ee795e2b9a396c2a9ff386b3a01a3ed052aaa934157.blob",
+     "/xfs/md/blobs/3cea18803e0e4982ef23f4d99dc043c36f5411c38e22a395d751dad5482255d2.blob"
+    ],
+    "keys": [
+     "blob:21edbc2a42fefcd0f91033c14056c560736574ab7f961c2d33e12e882d50b508",
+     "blob:6c172aeebe24ae8d93712151602383d2cda7d6ac55f8fc82125f2bb47b686621",
+     "blob:e59a6e083d3f2b1871ae2fe150a3ae0f089c9e5c968c0b8e24812dda27831f1b",
+     "blob:22ede8728b0767816f1e7ee795e2b9a396c2a9ff386b3a01a3ed052aaa934157",
+     "blob:3cea18803e0e4982ef23f4d99dc043c36f5411c38e22a395d751dad5482255d2"
+    ],
+    "new_blobs": 1,
+    "attach_s": 0.025948921000235714
+   },
+   "read_s": 1.4521610736846924,
+   "files": 5776,
+   "bytes": 148530952,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 1.56272554397583,
+   "counters": {
+    "events": 6590,
+    "events_noop": 6584,
+    "events_filled": 6,
+    "events_denied": 0,
+    "event_range_bytes": 159526912,
+    "fill_chunks": 6,
+    "fill_bytes": 264375,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 6,
+    "pack_bytes": 53571,
+    "mem_hits": 0,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.0620299997535767,
+    "p90": 0.07866000032663578,
+    "p99": 0.10664000001270324,
+    "max": 4.567892000522988
+   },
+   "fs_used_delta_bytes": 1695744
+  },
+  {
+   "k": 21,
+   "name": "pc-020",
+   "family": "Terminal-Lego",
+   "base": "sha256:ff86ea2e5edc",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-020.boot",
+    "devices": [
+     "/xfs/md/blobs/94d8237fcf9ad8493067428b8c7cac5343ef7d1fdfe985642e35ce2b7e975a4b.blob",
+     "/xfs/md/blobs/4d673d8c47ae8660f7410a2b5286dda464e4fa5f94c6dbb845ae0fca92ba5ca9.blob",
+     "/xfs/md/blobs/50ac730ec0e6ab260faa219cd0f5a702abf7466f2e33aeb861c28bb53c17b420.blob",
+     "/xfs/md/blobs/02417d3cd34fbc5ab667945ba57b375336cc66e09627996773dabb3a0a08196f.blob",
+     "/xfs/md/blobs/b43d816094d3a3b7bf59660243dc326c36875790d9c50b18a8839654f56b1d0a.blob",
+     "/xfs/md/blobs/12827d18d527af06c0c151c9856fdb928e3e4a0b02de9ba27c18f19553d15dfe.blob",
+     "/xfs/md/blobs/8ce68d16a0d08c8bd6718c0a0e20e3a5e2a3d00967a4c8ca2caea38f51af7e79.blob"
+    ],
+    "keys": [
+     "blob:94d8237fcf9ad8493067428b8c7cac5343ef7d1fdfe985642e35ce2b7e975a4b",
+     "blob:4d673d8c47ae8660f7410a2b5286dda464e4fa5f94c6dbb845ae0fca92ba5ca9",
+     "blob:50ac730ec0e6ab260faa219cd0f5a702abf7466f2e33aeb861c28bb53c17b420",
+     "blob:02417d3cd34fbc5ab667945ba57b375336cc66e09627996773dabb3a0a08196f",
+     "blob:b43d816094d3a3b7bf59660243dc326c36875790d9c50b18a8839654f56b1d0a",
+     "blob:12827d18d527af06c0c151c9856fdb928e3e4a0b02de9ba27c18f19553d15dfe",
+     "blob:8ce68d16a0d08c8bd6718c0a0e20e3a5e2a3d00967a4c8ca2caea38f51af7e79"
+    ],
+    "new_blobs": 2,
+    "attach_s": 0.05528916599996592
+   },
+   "read_s": 3.736544609069824,
+   "files": 9803,
+   "bytes": 279217529,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 3.900015115737915,
+   "counters": {
+    "events": 11397,
+    "events_noop": 7261,
+    "events_filled": 4136,
+    "events_denied": 0,
+    "event_range_bytes": 301772800,
+    "fill_chunks": 4136,
+    "fill_bytes": 80149843,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 4082,
+    "pack_bytes": 23123915,
+    "mem_hits": 54,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.0702499992257799,
+    "p90": 0.3565090000847704,
+    "p99": 0.9561589995428221,
+    "max": 4.0049119998002425
+   },
+   "fs_used_delta_bytes": 93753344
+  },
+  {
+   "k": 22,
+   "name": "pc-021",
+   "family": "Terminal-Lego",
+   "base": "sha256:da539b676105",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-021.boot",
+    "devices": [
+     "/xfs/md/blobs/21edbc2a42fefcd0f91033c14056c560736574ab7f961c2d33e12e882d50b508.blob",
+     "/xfs/md/blobs/6c172aeebe24ae8d93712151602383d2cda7d6ac55f8fc82125f2bb47b686621.blob",
+     "/xfs/md/blobs/e59a6e083d3f2b1871ae2fe150a3ae0f089c9e5c968c0b8e24812dda27831f1b.blob",
+     "/xfs/md/blobs/22ede8728b0767816f1e7ee795e2b9a396c2a9ff386b3a01a3ed052aaa934157.blob"
+    ],
+    "keys": [
+     "blob:21edbc2a42fefcd0f91033c14056c560736574ab7f961c2d33e12e882d50b508",
+     "blob:6c172aeebe24ae8d93712151602383d2cda7d6ac55f8fc82125f2bb47b686621",
+     "blob:e59a6e083d3f2b1871ae2fe150a3ae0f089c9e5c968c0b8e24812dda27831f1b",
+     "blob:22ede8728b0767816f1e7ee795e2b9a396c2a9ff386b3a01a3ed052aaa934157"
+    ],
+    "new_blobs": 0,
+    "attach_s": 0.022983636999924784
+   },
+   "read_s": 1.624422550201416,
+   "files": 5776,
+   "bytes": 148531010,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 1.742945909500122,
+   "counters": {
+    "events": 6573,
+    "events_noop": 6572,
+    "events_filled": 1,
+    "events_denied": 0,
+    "event_range_bytes": 159526912,
+    "fill_chunks": 1,
+    "fill_bytes": 4863,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 1,
+    "pack_bytes": 633,
+    "mem_hits": 0,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.06454899994423613,
+    "p90": 0.077860000601504,
+    "p99": 0.11044900020351633,
+    "max": 1.4762170003450592
+   },
+   "fs_used_delta_bytes": 1421312
+  },
+  {
+   "k": 23,
+   "name": "pc-022",
+   "family": "Terminal-Lego",
+   "base": "sha256:ff86ea2e5edc",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-022.boot",
+    "devices": [
+     "/xfs/md/blobs/4d673d8c47ae8660f7410a2b5286dda464e4fa5f94c6dbb845ae0fca92ba5ca9.blob",
+     "/xfs/md/blobs/d4922460498b9845b12e6b25f1160be7933685d246d33cb664322198d271cff0.blob",
+     "/xfs/md/blobs/02417d3cd34fbc5ab667945ba57b375336cc66e09627996773dabb3a0a08196f.blob",
+     "/xfs/md/blobs/b43d816094d3a3b7bf59660243dc326c36875790d9c50b18a8839654f56b1d0a.blob",
+     "/xfs/md/blobs/12827d18d527af06c0c151c9856fdb928e3e4a0b02de9ba27c18f19553d15dfe.blob",
+     "/xfs/md/blobs/8ce68d16a0d08c8bd6718c0a0e20e3a5e2a3d00967a4c8ca2caea38f51af7e79.blob"
+    ],
+    "keys": [
+     "blob:4d673d8c47ae8660f7410a2b5286dda464e4fa5f94c6dbb845ae0fca92ba5ca9",
+     "blob:d4922460498b9845b12e6b25f1160be7933685d246d33cb664322198d271cff0",
+     "blob:02417d3cd34fbc5ab667945ba57b375336cc66e09627996773dabb3a0a08196f",
+     "blob:b43d816094d3a3b7bf59660243dc326c36875790d9c50b18a8839654f56b1d0a",
+     "blob:12827d18d527af06c0c151c9856fdb928e3e4a0b02de9ba27c18f19553d15dfe",
+     "blob:8ce68d16a0d08c8bd6718c0a0e20e3a5e2a3d00967a4c8ca2caea38f51af7e79"
+    ],
+    "new_blobs": 1,
+    "attach_s": 0.026730029000646027
+   },
+   "read_s": 1.6410136222839355,
+   "files": 5793,
+   "bytes": 214584713,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 1.7518563270568848,
+   "counters": {
+    "events": 7140,
+    "events_noop": 6972,
+    "events_filled": 168,
+    "events_denied": 0,
+    "event_range_bytes": 225767424,
+    "fill_chunks": 168,
+    "fill_bytes": 12253110,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 120,
+    "pack_bytes": 2388286,
+    "mem_hits": 48,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.059729999520641286,
+    "p90": 0.07809900034772,
+    "p99": 0.26047000028484035,
+    "max": 1.9413560003158636
+   },
+   "fs_used_delta_bytes": 13979648
+  },
+  {
+   "k": 24,
+   "name": "pc-023",
+   "family": "Terminal-Lego",
+   "base": "sha256:774043ccc8cc",
+   "mount_rc": 0,
+   "mount_err": "",
+   "attach": {
+    "ok": true,
+    "boot": "/xfs/md/boot/pc-023.boot",
+    "devices": [
+     "/xfs/md/blobs/eff4423ba3956842673f2b3bf8c1d4c4837a03fed6c269c9faf3ba6d71f35156.blob",
+     "/xfs/md/blobs/deb53606d020cc48aa62e8f4be0d086e6bd0b8915dffdde3e3014a15015b5e01.blob",
+     "/xfs/md/blobs/b1a9cfecf23d48567cbde9547541e59f7bfc39ca34acf2ec06719072d4c82bca.blob",
+     "/xfs/md/blobs/4c0906545947558f15e4cb1f1e2076d22352122bd94a0174bcd6446867bc21a1.blob",
+     "/xfs/md/blobs/6f89f69266f921e3965323ddbe57b41dd0b25eec194052e6466f5478cc765a9d.blob",
+     "/xfs/md/blobs/93f3d97c2dd2fac5cc29d1480867d0759f51ae2d9b258d0baa2ac3f71d659fb9.blob",
+     "/xfs/md/blobs/a0d5523daf5afa025051c778305bbaef23b132a0c08e3d6f592c804435b5b1b7.blob",
+     "/xfs/md/blobs/3f18f308e95e1a5af82ccca905d5950dbde79450adcade550f71a38dfea88948.blob",
+     "/xfs/md/blobs/4bdfa89fc2603293df701cdd179761bab4a6b8943e929dd6d7f08ec25a998aec.blob",
+     "/xfs/md/blobs/c372622af6e20ee82a473db7d55f8b8c51ef49934d182f1b267346038ed5ac47.blob"
+    ],
+    "keys": [
+     "blob:eff4423ba3956842673f2b3bf8c1d4c4837a03fed6c269c9faf3ba6d71f35156",
+     "blob:deb53606d020cc48aa62e8f4be0d086e6bd0b8915dffdde3e3014a15015b5e01",
+     "blob:b1a9cfecf23d48567cbde9547541e59f7bfc39ca34acf2ec06719072d4c82bca",
+     "blob:4c0906545947558f15e4cb1f1e2076d22352122bd94a0174bcd6446867bc21a1",
+     "blob:6f89f69266f921e3965323ddbe57b41dd0b25eec194052e6466f5478cc765a9d",
+     "blob:93f3d97c2dd2fac5cc29d1480867d0759f51ae2d9b258d0baa2ac3f71d659fb9",
+     "blob:a0d5523daf5afa025051c778305bbaef23b132a0c08e3d6f592c804435b5b1b7",
+     "blob:3f18f308e95e1a5af82ccca905d5950dbde79450adcade550f71a38dfea88948",
+     "blob:4bdfa89fc2603293df701cdd179761bab4a6b8943e929dd6d7f08ec25a998aec",
+     "blob:c372622af6e20ee82a473db7d55f8b8c51ef49934d182f1b267346038ed5ac47"
+    ],
+    "new_blobs": 9,
+    "attach_s": 0.056738514999779
+   },
+   "read_s": 4.781190395355225,
+   "files": 9151,
+   "bytes": 581696659,
+   "read_errors": 0,
+   "mismatch_vs_copy": 0,
+   "wall_s": 4.962849140167236,
+   "counters": {
+    "events": 12975,
+    "events_noop": 5596,
+    "events_filled": 7379,
+    "events_denied": 0,
+    "event_range_bytes": 600371200,
+    "fill_chunks": 7379,
+    "fill_bytes": 490589342,
+    "clone_chunks": 0,
+    "clone_bytes": 0,
+    "cache_file_writes": 0,
+    "pack_reads": 1919,
+    "pack_bytes": 77251592,
+    "mem_hits": 5460,
+    "joined": 0,
+    "verify_failures": 0,
+    "fill_waits": 0,
+    "unmarked_full": 0
+   },
+   "event_ms": {
+    "p50": 0.09634999969421187,
+    "p90": 0.2409489998171921,
+    "p99": 1.505817000179377,
+    "max": 2.7134739993925905
+   },
+   "fs_used_delta_bytes": 506667008
+  }
+ ]
+}

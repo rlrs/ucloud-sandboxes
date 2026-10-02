@@ -1,0 +1,25 @@
+{
+ "reader_during_kill": {
+  "errno": 5,
+  "error": "Input/output error",
+  "s": 0.008170843124389648,
+  "correct": false,
+  "after_kill_s": 0.044905900955200195
+ },
+ "new_read_after_kill": {
+  "errno": 5,
+  "error": "Input/output error",
+  "s": 0.007353544235229492,
+  "correct": false
+ },
+ "dmesg": [
+  "[ 3925.302888] python3 (230595): drop_caches: 3",
+  "[ 3925.362570] nbd900: detected capacity change from 0 to 570704",
+  "[ 3925.374375] erofs (device nbd900): mounted with root inode @ nid 128.",
+  "[ 3925.426510] block nbd900: shutting down sockets",
+  "[ 3925.454975] I/O error, dev nbd900, sector 616 op 0x0:(READ) flags 0x800000 phys_seg 1 prio class 2",
+  "[ 3925.509828] I/O error, dev nbd900, sector 616 op 0x0:(READ) flags 0x800000 phys_seg 1 prio class 2"
+ ],
+ "nbd_timeout_s": 120,
+ "note": "s3nbd sets NBD_SET_TIMEOUT 120"
+}

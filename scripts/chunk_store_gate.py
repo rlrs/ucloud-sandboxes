@@ -187,7 +187,8 @@ def allocate_ips(spec, count, used=()):
 
 @dataclass(frozen=True)
 class StoreNode:
-    url: str               # Index (and, in Phase B, chunk) URL for builders and workers.
+    url: str               # Index URL, for the converter and locators.
+    chunk_url: str         # Phase B store node URL that workers read; "" without store_node.
     read_token_path: str   # On the store node; the service creates it.
     write_token_path: str  # On the store node; the service creates it.
     index_database: str    # On the store node; read-only tallies.
@@ -208,10 +209,24 @@ def store_node_adapter(block, *, store_ip, store_url="", read_token_file="", wri
         if not isinstance(block.get(name), str) or not block[name]:
             raise GateError(f"the chunk_store block needs {name}")
     port = block["index_listen"].rsplit(":", 1)[1]
-    start = start_command or (
-        f"systemctl is-active --quiet {UNIT}-store || systemd-run --quiet --unit {UNIT}-store "
-        f"-p Restart=on-failure -p EnvironmentFile={env_path} {HOST}/ucs serve-chunk-index --config {config_path}")
-    return StoreNode(url=(store_url or f"http://{store_ip}:{port}").rstrip("/"),
+    node = block.get("store_node")
+    chunk_url = f"http://{store_ip}:{node['listen'].rsplit(':', 1)[1]}" if node else ""
+    if node:
+        # Phase B: both services read the standalone chunk_store JSON (serve_index on the node).
+        json_path = config_path.rsplit("/", 1)[0] + "/chunk-store.json"
+        extract = (f"python3 -c \"import json,sys; json.dump(json.load(open('{config_path}'))['immutable_environments']"
+                   f"['chunk_store'], open('{json_path}', 'w'))\" && mkdir -p {shlex.quote(node['cache_dir'])} "
+                   f"$(dirname {shlex.quote(block['index_database'])})")
+        units = " && ".join(
+            f"(systemctl is-active --quiet {UNIT}-{name} || systemd-run --quiet --unit {UNIT}-{name} "
+            f"-p Restart=on-failure -p EnvironmentFile={env_path} {HOST}/ucs {command} --chunk-store-config {json_path})"
+            for name, command in (("index", "serve-chunk-index"), ("store", "serve-chunk-store")))
+        default = f"{extract} && {units}"
+    else:
+        default = (f"systemctl is-active --quiet {UNIT}-store || systemd-run --quiet --unit {UNIT}-store "
+                   f"-p Restart=on-failure -p EnvironmentFile={env_path} {HOST}/ucs serve-chunk-index --config {config_path}")
+    start = start_command or default
+    return StoreNode(url=(store_url or f"http://{store_ip}:{port}").rstrip("/"), chunk_url=chunk_url,
                      read_token_path=read_token_file or block["read_token_file"],
                      write_token_path=write_token_file or block["write_token_file"],
                      index_database=block["index_database"], start_command=start)
@@ -220,6 +235,12 @@ def store_node_adapter(block, *, store_ip, store_url="", read_token_file="", wri
 def role_blocks(block, store, prefix, staging):
     """The chunk_store block per config copy; only the copies get it."""
     common = {**block, "prefix": prefix, "index_url": store.url}
+    if block.get("store_node"):
+        # The block's addresses are a template; this run's store node replaces them.
+        host = store.url.split("//", 1)[1].rsplit(":", 1)[0]
+        common["index_listen"] = f"{host}:{block['index_listen'].rsplit(':', 1)[1]}"
+        common["store_node"] = {**block["store_node"], "url": store.chunk_url,
+                                "listen": f"{host}:{block['store_node']['listen'].rsplit(':', 1)[1]}"}
     return {"store": {**common, "read_token_file": store.read_token_path, "write_token_file": store.write_token_path},
             "converter": {**common, "read_token_file": "/etc/m1-gate/write.token",
                           "write_token_file": "/etc/m1-gate/write.token", "nydus_image": "/usr/local/bin/nydus-image"},
@@ -511,9 +532,10 @@ class Gate:
             f"--unit {UNIT}-registry -p Restart=on-failure {HOST}/registry-bin/registry serve {HOST}/registry.yml) && "
             f"for i in $(seq 60); do curl -fsS -o /dev/null http://127.0.0.1:{args.gate_registry_port}/v2/ && "
             "exit 0; sleep 1; done; exit 1"), timeout=900), True)[1])
+        health = " ".join(f"{url}/healthz" for url in (store.url, store.chunk_url) if url)
         self.step("configure", "store-service", lambda: (self.on("store", store.start_command), self.on(
-            "converter", f"for i in $(seq 120); do curl -fsS -o /dev/null {store.url}/healthz && exit 0; sleep 2; "
-                         "done; exit 1", timeout=600), store.url)[2])
+            "converter", f"for i in $(seq 120); do ok=1; for u in {health}; do curl -fsS -o /dev/null $u || ok=0; "
+                         "done; [ $ok = 1 ] && exit 0; sleep 2; done; exit 1", timeout=600), store.url)[2])
         # Tokens move host to gateway to host, root or ucloud only, never printed.
         self.step("configure", "tokens", lambda: (
             self.gw("umask 077; " + scp_from_host(self.ip("store"), store.write_token_path,

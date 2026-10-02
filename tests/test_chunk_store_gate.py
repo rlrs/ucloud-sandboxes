@@ -242,6 +242,21 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(self.status(results)["cold_commands"], "fail")
 
 
+class StoreNodeAdapterTests(unittest.TestCase):
+    def test_phase_b_starts_both_services_and_blocks_name_this_run_s_node(self):
+        from ucloud_sandboxes.environment_config import ChunkStoreConfig
+        node = {"url": "http://10.42.0.200:5091", "listen": "10.42.0.200:5091", "cache_dir": "/var/lib/c",
+                "cache_bytes": 1 << 30, "extent_bytes": 1 << 22, "s3_concurrency": 64, "serve_index": True}
+        block = {**BLOCK, "index_listen": "10.42.0.200:8095", "store_node": node}
+        store = gate.store_node_adapter(block, store_ip="10.42.0.49")
+        self.assertEqual((store.url, store.chunk_url), ("http://10.42.0.49:8095", "http://10.42.0.49:5091"))
+        for command in ("serve-chunk-index --chunk-store-config", "serve-chunk-store --chunk-store-config"):
+            self.assertIn(command, store.start_command)
+        for role, value in gate.role_blocks(block, store, "spike/m1/r", "/var/tmp/s").items():
+            parsed = ChunkStoreConfig.from_dict(value)  # The release's own validation, serve_index rules included.
+            self.assertEqual((parsed.store_node.url, parsed.index_url), (store.chunk_url, store.url), role)
+
+
 class RemoteHelperTests(unittest.TestCase):
     def test_derive_config_writes_only_a_copy_under_the_run_prefix(self):
         with tempfile.TemporaryDirectory() as directory:

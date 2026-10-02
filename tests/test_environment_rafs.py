@@ -182,7 +182,7 @@ class ConcurrentAttachTests(unittest.TestCase):
         self.digest = self.registry.publish(image, sign_component(image, source_image="sha256:" + "1" * 64,
                                                                   signing_key=self.key), tag="fixture")
 
-    def backend(self, devices=2):
+    def backend(self, devices=2, attach_concurrency=2):
         self.loads, self.gates, self.factory_calls = [], {}, []
         load = self.registry.load
 
@@ -205,7 +205,8 @@ class ConcurrentAttachTests(unittest.TestCase):
         backend = EnvironmentBackend(self.root / "backend", self.registry,
                                      devices=[Path(f"/dev/nbd{index}") for index in range(devices)],
                                      device_factory=Device, mount=lambda device, target: None,
-                                     unmount=lambda target: None, mounted=lambda path: False)
+                                     unmount=lambda target: None, mounted=lambda path: False,
+                                     attach_concurrency=attach_concurrency)
         self.addCleanup(backend.close)
         return backend
 
@@ -228,6 +229,18 @@ class ConcurrentAttachTests(unittest.TestCase):
             self.gates[self.digest].set()
             self.assertTrue(slow.result(5))
         self.assertEqual(len(self.factory_calls), 2)
+
+    def test_the_default_attaches_one_component_at_a_time(self):
+        backend, other = self.backend(attach_concurrency=1), self.other()
+        self.gates[self.digest] = threading.Event()
+        with ThreadPoolExecutor(2) as pool:
+            slow = pool.submit(backend.ensure, self.digest)
+            time.sleep(.2)
+            blocked = pool.submit(backend.ensure, other)
+            time.sleep(.3)
+            self.assertFalse(blocked.done())  # 0.8.2's serial attach (0.8.3 burst regression)
+            self.gates[self.digest].set()
+            self.assertTrue(slow.result(5) and blocked.result(5))
 
     def test_concurrent_callers_of_one_component_share_one_attach(self):
         backend = self.backend()

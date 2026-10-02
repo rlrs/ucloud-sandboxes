@@ -76,7 +76,7 @@ Group=root
 PrivateMounts=no
 RuntimeDirectory=ucloud-environment
 RuntimeDirectoryMode=0700
-ExecStart=$UCLOUD_AGENT_BIN serve-environment-io --root $UCLOUD_STATE_DIR/environment-io --socket {SOCKET} --cache-bytes {options.environment_cache_bytes}{"" if options.environment_prefetch_enabled else " --disable-prefetch"}{chunk_flags}{registry_flags}
+ExecStart=$UCLOUD_AGENT_BIN serve-environment-io --root $UCLOUD_STATE_DIR/environment-io --socket {SOCKET} --cache-bytes {options.environment_cache_bytes}{"" if options.environment_prefetch_enabled else " --disable-prefetch"}{"" if options.environment_attach_concurrency == 1 else f" --attach-concurrency {int(options.environment_attach_concurrency)}"}{chunk_flags}{registry_flags}
 Restart=no
 
 [Install]

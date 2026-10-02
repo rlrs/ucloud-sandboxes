@@ -266,6 +266,9 @@ class EnvironmentDeploymentConfig:
     # Off switch for attach-time metadata and startup-trace prefetch (C2.2,
     # C2.3). A backend reads it once at start; bootstrap never restarts one.
     prefetch_enabled: bool = True
+    # Concurrent component attaches per worker backend. 1 keeps attach serial,
+    # as before 0.8.3: a 48-way burst ran first commands 7x slower in parallel.
+    attach_concurrency: int = 1
     # Chunk-store (RAFS) images, off by default (C2.13, design §9 M1).
     chunk_store: ChunkStoreConfig | None = None
 
@@ -292,6 +295,8 @@ class EnvironmentDeploymentConfig:
         for name in ("worker_enabled", "builder_enabled", "preserve_mtimes", "prefetch_enabled"):
             if not isinstance(getattr(result, name), bool):
                 raise ValueError(f"immutable environment {name} must be boolean")
+        if type(result.attach_concurrency) is not int or not 1 <= result.attach_concurrency <= 256:
+            raise ValueError("immutable environment attach_concurrency must be an integer from 1 to 256")
         for name in ("trusted_keys_file", "signing_key_file"):
             value = getattr(result, name)
             if not isinstance(value, str) or any(c in value for c in "\0\r\n") or (value and not Path(value).is_absolute()):

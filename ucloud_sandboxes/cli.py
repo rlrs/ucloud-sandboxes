@@ -316,6 +316,7 @@ def build_parser() -> argparse.ArgumentParser:
     environment_io.add_argument("--chunk-index-url", default="", help="ucloud-chunk-index, for RAFS components")
     environment_io.add_argument("--chunk-index-token-file", type=Path)
     environment_io.add_argument("--chunk-concurrent-misses", type=int, default=32)
+    environment_io.add_argument("--attach-concurrency", type=int, default=1, help="concurrent component attaches")
     environment_io.add_argument("--chunk-store-url", default="",
                                 help="read RAFS images only from this store node, with the index read token")
     add_environment_registry_args(environment_io)
@@ -1031,7 +1032,8 @@ def cmd_serve_environment_io(args: argparse.Namespace) -> int:
         if args.chunk_index_url else None
     serve_backend(environment_registry_from_args(args), root=args.root, socket_path=args.socket,
                   cache_bytes=args.cache_bytes, prefetch=not args.disable_prefetch, chunk_index=chunk_index,
-                  concurrent_misses=args.chunk_concurrent_misses, chunk_store_url=args.chunk_store_url or None)
+                  concurrent_misses=args.chunk_concurrent_misses, chunk_store_url=args.chunk_store_url or None,
+                  attach_concurrency=args.attach_concurrency)
     return 0
 
 
@@ -6887,6 +6889,7 @@ def vm_init_options_for_job(
             "environment_trusted_keys_json": json.dumps({key: base64.b64encode(value).decode("ascii") for key, value in trusted_keys.items()}),
             "environment_cache_bytes": selected_environment.cache_bytes,
             "environment_prefetch_enabled": selected_environment.prefetch_enabled,
+            "environment_attach_concurrency": selected_environment.attach_concurrency,
             "environment_allow_paths": selected_environment.allow_paths,
         }
         chunk_store = selected_environment.chunk_store

@@ -46,8 +46,8 @@ import unittest
 #   the store_node config and the index relocation. S12 made it a
 #   precondition of M1 (S3's tail and NAT); it retires nothing yet, and C2.1's
 #   native device replaces the worker read path it feeds, not this node.
-# Lower it whenever a deletion lands; storage-native (C1.3) alone is ~8k lines.
-PACKAGE_LINE_BUDGET = 110_834
+# +13 attach_concurrency (0.8.3 burst fix). Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 110_847
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

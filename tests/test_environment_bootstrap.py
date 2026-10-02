@@ -85,7 +85,8 @@ class EnvironmentBootstrapTests(unittest.TestCase):
         raw["immutable_environments"]["prefetch_enabled"] = False
         self.assertFalse(DeploymentConfig.from_dict(raw).immutable_environments.prefetch_enabled)
         for change in ({"worker_enabled": 1}, {"builder_enabled": True}, {"allow_paths": ["../runtime"]},
-                       {"prefetch_enabled": "false"}, {"prefetch_enabled": 0}):
+                       {"prefetch_enabled": "false"}, {"prefetch_enabled": 0}, {"attach_concurrency": 0},
+                       {"attach_concurrency": True}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 EnvironmentDeploymentConfig.from_dict({"trusted_keys_file": "/etc/producers.json", **change})
 
@@ -179,15 +180,17 @@ class EnvironmentBootstrapTests(unittest.TestCase):
         with TemporaryDirectory() as temporary:
             trust = provision(Path(temporary) / "key")["public_trust_file"]
             base = DeploymentConfig.default(scope_id="test")
-            for enabled in (True, False):
-                selected = EnvironmentDeploymentConfig.from_dict(
-                    {"trusted_keys_file": trust, "worker_enabled": True, "prefetch_enabled": enabled})
+            for enabled, attach in ((True, 1), (False, 4)):
+                selected = EnvironmentDeploymentConfig.from_dict({"trusted_keys_file": trust, "worker_enabled": True,
+                                                                  "prefetch_enabled": enabled, "attach_concurrency": attach})
                 with self.subTest(enabled=enabled), patch.object(cli, "read_bearer_token_source", return_value="t"):
                     options = cli.vm_init_options_for_job(
                         replace(base, immutable_environments=selected), node("worker").job, "sandbox",
                         package_spec="/tmp/package.tar.gz", package_sha256="a" * 64)
                     self.assertIs(options.environment_prefetch_enabled, enabled)
-                    self.assertEqual("--disable-prefetch" in render_vm_init_script(options), not enabled)
+                    script = render_vm_init_script(options)
+                    self.assertEqual("--disable-prefetch" in script, not enabled)
+                    self.assertEqual("--attach-concurrency 4" in script, attach == 4)  # Absent at the default.
 
     def test_worker_and_builder_lifetimes_and_key_separation(self):
         with TemporaryDirectory() as temporary:

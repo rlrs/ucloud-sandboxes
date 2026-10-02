@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 0.8.4 - 2026-10-02
+
+- **Component attach is serial again by default.** 0.8.3 attached image components in parallel on every worker. In a 48-sandbox burst on one CCX63, creates finished sooner (time to ready p50 6.1 s against 9.1 s on 0.8.2), but the first command inside each sandbox took a median of 17.1 s against 2.5 s, and the whole burst took 61 s against 49 s. New `immutable_environments.attach_concurrency` (integer 1–256, default 1) bounds concurrent attaches per worker backend. At 1 a worker attaches one component at a time, as in 0.8.2, and the rendered node init is unchanged. Single flight per component is kept at every setting. Workers need the new node bundle.
 ## 0.8.3 - 2026-10-02
 
 Workers need the new node bundle. The chunk store (`immutable_environments.chunk_store`, plus its `store_node`) is off unless configured. Concurrent attach is always on, and also changes today's EROFS attach path.

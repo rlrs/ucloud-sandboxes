@@ -18,7 +18,7 @@ import socket
 import socketserver
 import stat
 import subprocess
-from threading import Condition, Lock, RLock
+from threading import BoundedSemaphore, Condition, Lock, RLock
 import time
 
 from .environment_artifact import CHUNK_BYTES, RafsEnvironmentComponent, canonical_bytes, require_digest
@@ -106,7 +106,7 @@ class PrefetchPolicy:
 class EnvironmentBackend:
     def __init__(self, root, registry, *, devices=None, device_factory=ReadOnlyEnvironmentDevice,
                  mount=None, unmount=None, mounted=_mounted, referenced=mount_has_dependents, cache_bytes=1024 ** 3,
-                 prefetch=PrefetchPolicy(), traces=None, cache_options=None, rafs=None):
+                 prefetch=PrefetchPolicy(), traces=None, cache_options=None, rafs=None, attach_concurrency=1):
         self.root, self.registry = Path(root), registry
         if not self.root.is_absolute():
             raise ValueError("environment backend root must be absolute")
@@ -141,6 +141,9 @@ class EnvironmentBackend:
         # without a chunk index (docs/chunk-store-design.md §4).
         self._rafs = rafs
         self._attaching = {}  # Digest -> Future of the one attach in flight.
+        if type(attach_concurrency) is not int or attach_concurrency < 1:
+            raise ValueError("attach concurrency must be a positive integer")
+        self._attach_slots = BoundedSemaphore(attach_concurrency)
         self._reserved = set()  # Devices being bound outside the guard.
         self._released = Condition(self._guard)
         self._active = {}
@@ -230,7 +233,8 @@ class EnvironmentBackend:
         if not owner:
             return pending.result()
         try:
-            target = self._attach_owned(digest)
+            with self._attach_slots:
+                target = self._attach_owned(digest)
         except BaseException as exc:
             with self._guard:
                 self._attaching.pop(digest, None)
@@ -475,7 +479,7 @@ class EnvironmentBackendClient:
 
 
 def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetch=True, chunk_index=None,
-                  concurrent_misses=32, chunk_store_url=None):
+                  concurrent_misses=32, chunk_store_url=None, attach_concurrency=1):
     """``chunk_index`` is (URL, read token) when chunk-store images are enabled;
     ``chunk_store_url`` makes the store node, with that token, the only source."""
     if os.geteuid() != 0 or registry is None:
@@ -497,7 +501,7 @@ def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetc
         # S3 demand misses wait 30-100 ms, not the registry's 3 ms.
         cache_options = {"concurrent_misses": concurrent_misses}
     backend = EnvironmentBackend(root, registry, cache_bytes=cache_bytes, prefetch=PrefetchPolicy(enabled=prefetch),
-                                 rafs=rafs, cache_options=cache_options)
+                                 rafs=rafs, cache_options=cache_options, attach_concurrency=attach_concurrency)
     try:
         with EnvironmentBackendServer(socket_path, backend) as server:
             server.serve_forever()

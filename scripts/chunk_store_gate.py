@@ -217,11 +217,17 @@ def store_node_adapter(block, *, store_ip, store_url="", read_token_file="", wri
         extract = (f"python3 -c \"import json,sys; json.dump(json.load(open('{config_path}'))['immutable_environments']"
                    f"['chunk_store'], open('{json_path}', 'w'))\" && mkdir -p {shlex.quote(node['cache_dir'])} "
                    f"$(dirname {shlex.quote(block['index_database'])})")
+        # init-vm --role store writes the index tokens; this run does it here (distinct, root only).
+        tokens = " && ".join(
+            f"([ -s {shlex.quote(path)} ] || (install -d -m 0700 $(dirname {shlex.quote(path)}) && (umask 077; "
+            f"python3 -c 'import secrets; print(secrets.token_hex(32), end=\"\")' > {shlex.quote(path)})))"
+            for path in (block["read_token_file"], block["write_token_file"]))
         units = " && ".join(
-            f"(systemctl is-active --quiet {UNIT}-{name} || systemd-run --quiet --unit {UNIT}-{name} "
-            f"-p Restart=on-failure -p EnvironmentFile={env_path} {HOST}/ucs {command} --chunk-store-config {json_path})"
+            f"(systemctl is-active --quiet {UNIT}-{name} || (systemctl reset-failed {UNIT}-{name} 2>/dev/null; "
+            f"systemd-run --quiet --unit {UNIT}-{name} -p Restart=on-failure -p EnvironmentFile={env_path} "
+            f"{HOST}/ucs {command} --chunk-store-config {json_path}))"
             for name, command in (("index", "serve-chunk-index"), ("store", "serve-chunk-store")))
-        default = f"{extract} && {units}"
+        default = f"{extract} && {tokens} && {units}"
     else:
         default = (f"systemctl is-active --quiet {UNIT}-store || systemd-run --quiet --unit {UNIT}-store "
                    f"-p Restart=on-failure -p EnvironmentFile={env_path} {HOST}/ucs serve-chunk-index --config {config_path}")

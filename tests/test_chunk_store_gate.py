@@ -250,7 +250,7 @@ class StoreNodeAdapterTests(unittest.TestCase):
         block = {**BLOCK, "index_listen": "10.42.0.200:8095", "store_node": node}
         store = gate.store_node_adapter(block, store_ip="10.42.0.49")
         self.assertEqual((store.url, store.chunk_url), ("http://10.42.0.49:8095", "http://10.42.0.49:5091"))
-        for command in ("serve-chunk-index --chunk-store-config", "serve-chunk-store --chunk-store-config"):
+        for command in ("serve-chunk-index --chunk-store-config", "serve-chunk-store --chunk-store-config", "token_hex(32)", "/var/lib/m1-gate/read.token", "reset-failed m1-gate-store"):  # noqa: E501
             self.assertIn(command, store.start_command)
         for role, value in gate.role_blocks(block, store, "spike/m1/r", "/var/tmp/s").items():
             parsed = ChunkStoreConfig.from_dict(value)  # The release's own validation, serve_index rules included.

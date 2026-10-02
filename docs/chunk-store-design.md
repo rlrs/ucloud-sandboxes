@@ -462,6 +462,43 @@ more layer.
 
 **Total:** about 6–8 engineer-weeks.
 
+**M1 gate run** (`scripts/chunk_store_gate.py`, host side in
+`scripts/chunk_store_gate_remote.py`). After S12, cold commands read through the
+store node, not from S3 directly; the run also checks the 10-image `unpack`
+rollback from §7. Every production action is one plain `scripts/hetzner_prod/gw '…'`,
+`gscp` or `hz.py` command (`--dry-run` prints them all). The phases are
+`provision`, `configure`, `convert`, `crash`, `workers`, `rollback`, `report` and
+`teardown`. Each phase records its finished steps in
+`build/m1-gate/<run>/state.json`, and every server, staging directory,
+`known_hosts` entry and the S3 prefix is recorded before it exists, so
+`--phase teardown` cleans up after a crash at any point.
+
+- **Isolation.** The sample is copied once, read-only, from production into a
+  gate registry on the store node. Conversion, attach tags, `unpack` and
+  today's builder write only to that registry. The run signs with its own
+  producer key, writes S3 only under `spike/m1/<run>`, and gives the
+  `chunk_store` block only to config copies; the live gateway config, registry
+  and services are never written.
+- **Canary workers** run VM init from the gateway as `ucloud`, with this
+  release's CLI, the bundle given by `--bundle` and a canary config copy. That
+  copy has the source-config disk overrides, the merged producer trust and the
+  registry alias pointed at the gate registry. They heartbeat to the
+  production gateway, so a production create placed on one would fail, and the
+  phase runs only with `--accept-canary-placement`. The bench drives each
+  canary's node agent directly; workers are drained before anything deletes
+  them.
+- **Crash injection** kills the converter with SIGKILL from its step hook, on
+  fresh images (unique top layer) held back from `convert`. It checks that no
+  attach tag and no unloadable root became visible, then converts twice and
+  requires the same root with no new layers or packs.
+- **Store node adapter.** The store service's interface is `--store-url`,
+  `--store-read-token-file`, `--store-write-token-file`,
+  `--store-start-command` and the `chunk_store` block (`--chunk-store-block`).
+  The default starts today's `serve-chunk-index`.
+- **Cost.** About 4–6 hours of wall time and about 13 VM-hours (CCX43 store
+  node, CCX63 converter, two CCX43 workers for about an hour), roughly EUR 3–4
+  at list price.
+
 **Riskiest unknowns:**
 
 1. **S3 demand latency and per-bucket request limits** under a 500-sandbox

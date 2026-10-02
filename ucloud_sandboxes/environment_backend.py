@@ -342,6 +342,11 @@ class EnvironmentBackendServer(socketserver.ThreadingMixIn, socketserver.UnixStr
     ensure (each composition's liveness check) and drop on the node.
     """
     daemon_threads = True
+    # A create burst opens one connection per composition at once. The
+    # socketserver default of 5 refuses the 7th pending AF_UNIX connect with
+    # EAGAIN; the kernel caps this at net.core.somaxconn.
+    request_queue_size = 1024
+
     def __init__(self, path, backend):
         self.backend = backend
         path = Path(path)
@@ -361,9 +366,10 @@ class EnvironmentBackendClient:
         self.path, self.timeout = str(path), timeout
 
     def _call(self, request, timeout=None):
+        timeout = self.timeout if timeout is None else timeout
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
-            stream.settimeout(self.timeout if timeout is None else timeout)
-            stream.connect(self.path)
+            stream.settimeout(timeout)
+            self._connect(stream, time.monotonic() + timeout)
             stream.sendall(canonical_bytes(request) + b"\n")
             with stream.makefile("rb") as reader:
                 raw = reader.readline(MAX_RPC_BYTES + 1)
@@ -373,6 +379,20 @@ class EnvironmentBackendClient:
             if "error" in response:
                 raise RuntimeError(response["error"])
             return response["result"]
+
+    def _connect(self, stream, deadline):
+        # A timeout makes the socket non-blocking, and a non-blocking AF_UNIX
+        # connect to a full accept queue fails with EAGAIN instead of waiting.
+        # The queue drains as the server accepts, so retry within the deadline.
+        delay = 0.005
+        while True:
+            try:
+                return stream.connect(self.path)
+            except BlockingIOError:
+                if time.monotonic() + delay >= deadline:
+                    raise
+                time.sleep(delay)
+                delay = min(delay * 2, 0.1)
 
     def ensure(self, digest):
         return Path(self._call({"method": "ensure", "digest": require_digest(digest)}))

@@ -32,8 +32,9 @@ import unittest
 # + C2.15 upstream pull-through mirror (+265: config, mirror/trim helpers,
 #   builder mirrors). What it retires, the campaign's upstream cooldowns, lives
 #   in scripts/ outside this count and goes once production runs with it.
+# + the environment backend's deep backlog and EAGAIN connect retry (+15).
 # Lower it whenever a deletion lands; storage-native (C1.3) alone is ~8k lines.
-PACKAGE_LINE_BUDGET = 107_000
+PACKAGE_LINE_BUDGET = 107_015
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

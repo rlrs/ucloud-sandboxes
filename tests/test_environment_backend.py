@@ -6,6 +6,7 @@ import stat
 from types import SimpleNamespace
 from unittest.mock import patch
 from threading import Thread
+import time
 import unittest
 
 # Import the module, not the TestCase: discovery would rerun it here.
@@ -143,6 +144,53 @@ class EnvironmentBackendTests(artifact_fixtures.EnvironmentArtifactTests):
         busy.clear()
         self.assertTrue(replacement.drop(self.digest))
         self.assertTrue(devices[0].closed)
+
+    def test_a_create_burst_is_queued_not_refused_with_eagain(self):
+        # The server is not accepting yet: every call must wait in its backlog.
+        endpoint = self.root / "burst.sock"
+        server = EnvironmentBackendServer(endpoint, SimpleNamespace(metrics=lambda: {"ok": 1}))
+        self.addCleanup(server.server_close)
+        results = []
+        calls = [Thread(target=lambda: results.append(EnvironmentBackendClient(endpoint)._call({"method": "metrics"}, 10)))
+                 for _ in range(64)]
+        for call in calls:
+            call.start()
+        thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+        thread.start()
+        self.addCleanup(lambda: (server.shutdown(), thread.join()))
+        for call in calls:
+            call.join(10)
+        self.assertEqual(results, [{"ok": 1}] * 64)
+
+    def test_client_retries_a_full_accept_queue(self):
+        endpoint = str(self.root / "full.sock")
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.addCleanup(listener.close)
+        listener.bind(endpoint)
+        listener.listen(0)
+        listener.settimeout(5)
+        fillers = []
+        while True:  # Fill the accept queue until a connect is refused.
+            filler = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.addCleanup(filler.close)
+            filler.setblocking(False)
+            try:
+                filler.connect(endpoint)
+            except BlockingIOError:
+                break
+            fillers.append(filler)
+        result = []
+        call = Thread(target=lambda: result.append(EnvironmentBackendClient(endpoint)._call({"method": "metrics"}, 5)))
+        call.start()
+        time.sleep(0.2)  # The client is now retrying EAGAIN.
+        for _ in fillers:  # Accept is FIFO: the queued fillers come first.
+            listener.accept()[0].close()
+        connection = listener.accept()[0]
+        self.assertTrue(connection.makefile("rb").readline().endswith(b"\n"))
+        connection.sendall(b'{"result":{"ok":1}}\n')
+        connection.close()
+        call.join(5)
+        self.assertEqual(result, [{"ok": 1}])
 
     def test_ambiguous_mount_and_cleanup_failure_retain_io_owner(self):
         mounts, devices = set(), []

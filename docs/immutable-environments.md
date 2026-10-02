@@ -154,6 +154,70 @@ local diff files rather than compressed registry tars. It qualifies filesystem
 correctness and component reuse, not production network throughput or high-load
 wake latency. It does not change memory checkpoint parking or restoration.
 
+## Chunk-store images (C2.13, M1)
+
+[`chunk-store-design.md`](chunk-store-design.md) replaces per-image EROFS
+components with Nydus RAFS v6 images whose 256 KiB chunks are stored once, by
+the sha256 of their uncompressed bytes, in S3. Milestone M1 ("store core") is
+in the package and stays off unless `immutable_environments.chunk_store` is
+configured. Without the block, rendered configs, node init and gateway
+behaviour are unchanged; the `ucloud-sandbox-chunk-index.service` unit is
+installed but disabled.
+
+* **Formats** (`chunk_store.py`): packs (at most 64 MiB, named by sha256,
+  address-ordered data and a footer sorted by chunk id), the signed chunk map
+  (`ucloud-chunk-map-v1`, device offset to chunk id) and the unsigned locator
+  (chunk to pack range). zstd runs through the node's `libzstd` (ctypes), or
+  Python 3.14's `compression.zstd`; no package dependency is added.
+* **Signed root.** A new component kind, `ucloud-environment-rafs-v1`, signed
+  under `ucloud.immutable-environment-rafs.v1\0`, binds the bootstrap and
+  chunk-map digests and sizes, the device size, the format and the diff IDs.
+  Its manifest in `environments` has `layers: []`; the root schema is
+  unchanged. Layout `image` is one merged bootstrap bound to the OCI config;
+  layout `layer` is one bootstrap per layer with overlayfs whiteouts, stacked
+  like today's layer components and shared across images.
+  `mount_granularity` picks the layout for new conversions (S12 decides);
+  workers read both.
+* **`ucloud-chunk-index`** (`chunk_index.py`, `serve-chunk-index`) runs on the
+  gateway (decision 5). It keeps the SQLite index of design §1.3, answers batch
+  lookups, commits (after HEAD and footer checks of each pack), layer claims
+  and root registration, and serves each registered component's locator with
+  SigV4-presigned GET URLs. Only it and builders hold the S3 key
+  (`/etc/ucloud-sandboxes/chunk-store.env`); writes need its write token and
+  locators its read token, which it creates on first start.
+* **Converter** (`convert-environment`): per layer, `nydus-image create`
+  (v2.4.5, `--fs-version 6 --digester sha256 --compressor zstd --chunk-size
+  0x40000 --repeatable`, no chunk dictionary) on the layer read from our
+  registry with its digest and diff ID checked. It verifies each chunk the
+  index does not know, packs, PUTs, commits; then merges (layout `image`),
+  uploads the bootstrap and map, signs, verifies, publishes the components,
+  registers them, and publishes the root last. Every object is content
+  addressed, so a crash leaves nothing visible and a rerun yields the same
+  root digest. `--verify-device` mounts the result through the worker's own
+  device and compares the whole tree with the OCI layers (root, Linux 5.16+).
+  `--attach-tag` also tags a copy of the image manifest annotated with the new
+  root, so workers can run it before M2's dispatched roots; the source tag
+  and its digest are never rewritten.
+* **Worker read path** (`environment_rafs.py`): `serve-environment-io
+  --chunk-index-url --chunk-index-token-file` (rendered by node init when the
+  block is set) fetches the locator, then the bootstrap and chunk map, and
+  verifies both before any ioctl. A block read binary-searches the map; holes
+  read as zeros. A miss fetches one window of up to 1 MiB of the same pack,
+  verifies every chunk after decompression and installs its neighbours.
+  The node cache is keyed by chunk id, so images share it. A 403 or a chunk
+  that does not verify refetches the locator once, then fails with EIO. Traces
+  record chunk ids and replay as pack ranges of up to 4 MiB. Misses use 32
+  slots instead of 8.
+* **Concurrent attach.** The backend attaches each component in its own single
+  flight; its guard covers only device selection and its maps, for EROFS
+  components too.
+* **Rollback** (`unpack-environment`): rebuilds the blobs from verified chunks,
+  runs `nydus-image unpack` on a private copy of the bootstrap, and pushes a
+  one-layer OCI image without the old root annotation. Layout `image` only.
+
+M1 does not include GC (M3), the `image_roots` dispatch (M2) or builder
+automation: conversion is an explicit command.
+
 ## Lifetime and ownership
 
 The artifact I/O backend is a **separate nodewide process**, reached only through

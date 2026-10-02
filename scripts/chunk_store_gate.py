@@ -159,11 +159,15 @@ def poll(unit, out):
 
 
 def last_json(text, default=None):
-    for line in reversed((text or "").strip().splitlines()):
-        try:
-            return json.loads(line)
-        except ValueError:
-            continue
+    """The last JSON value in ``text``: a whole line, or an indented object
+    ending the output (the helpers' .done records are multi-line)."""
+    lines = (text or "").strip().splitlines()
+    for index in range(len(lines) - 1, -1, -1):
+        for candidate in (lines[index], "\n".join(lines[index:])):
+            try:
+                return json.loads(candidate)
+            except ValueError:
+                continue
     return default
 
 

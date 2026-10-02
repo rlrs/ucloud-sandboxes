@@ -242,6 +242,12 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(self.status(results)["cold_commands"], "fail")
 
 
+class LastJsonTests(unittest.TestCase):
+    def test_a_multi_line_done_record_is_parsed(self):  # The first gate run read it as "lost".
+        self.assertEqual(gate.last_json('noise\n{\n "finished": 1.5,\n "status": 0\n}\n')["status"], 0)
+        self.assertEqual(gate.last_json('{"status": "running"}\nstarted')["status"], "running")
+
+
 class StoreNodeAdapterTests(unittest.TestCase):
     def test_phase_b_starts_both_services_and_blocks_name_this_run_s_node(self):
         from ucloud_sandboxes.environment_config import ChunkStoreConfig

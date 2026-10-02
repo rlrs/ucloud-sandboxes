@@ -1,4 +1,5 @@
 from contextlib import redirect_stderr, redirect_stdout
+from datetime import datetime, timezone
 import io
 import json
 from pathlib import Path
@@ -8,6 +9,7 @@ import tempfile
 import threading
 from types import SimpleNamespace
 import unittest
+import zipfile
 
 from scripts import bench_rl_scale as bench
 
@@ -40,9 +42,7 @@ class PureComputationTests(unittest.TestCase):
             bench.percentile([], 0.5)
         with self.assertRaises(ValueError):
             bench.percentile([1], 0)
-
-    def test_empty_summary_has_null_percentiles(self):
-        summary = bench.latency_summary([])
+        summary = bench.latency_summary([])  # an empty summary has null percentiles
         self.assertEqual(summary["n"], 0)
         self.assertTrue(all(summary[key] is None for key in ("p50", "p95", "p99", "max")))
 
@@ -138,6 +138,46 @@ class PureComputationTests(unittest.TestCase):
         self.assertNotIn("top-secret-token", text)
         self.assertNotIn("/_relay/abc", text)
 
+    def test_rollout_selection_sampling_and_image_resolution(self):
+        attach = {"task_source_cached": True, "prepared_reference": "reg/p"}
+        entries = [{"family": "ScaleSWE", "image": "up/s", "cached_kind": "source", **attach},
+                   {"family": "SWE-smith", "image": "up/m", "upstream_rows": 9,
+                    "cached_kind": "complete_recipe", **attach},
+                   {"family": "TMax", "image": "tmax:t", "cached_kind": "foundation",
+                    "remaining_build_work": ["context_transfer"], "prepared_reference": "reg/f"}]
+        with tempfile.TemporaryDirectory() as root:
+            selectors = Path(root) / bench.SELECTORS_NAME  # an unpacked directory
+            selectors.write_text(json.dumps({"images": entries}))
+            with zipfile.ZipFile(Path(root) / "s.zip", "w") as archive:
+                archive.write(selectors, "sel/" + bench.SELECTORS_NAME)
+            loaded, provenance = bench.load_selection(Path(root) / "s.zip")
+            self.assertEqual((bench.load_selection(Path(root))[0], provenance["upstream_rows"]),
+                             (loaded, 11))
+        rows = bench.sample_tasks(loaded, count=11, seed=1, weighting="rows")
+        self.assertEqual(sum(e["family"] == "SWE-smith" for e in rows), 9)  # no replacement
+        self.assertEqual(rows, bench.sample_tasks(loaded, count=11, seed=1, weighting="rows"))
+        self.assertEqual(bench.sample_tasks(loaded, count=1, seed=1, weighting="uniform",
+                                            families=["tmax"]), [loaded[2]])
+        self.assertRaises(ValueError, bench.sample_tasks, loaded, count=4, seed=1, weighting="uniform")
+        self.assertEqual([bench.resolve_image(e, "auto")["resolution"] for e in loaded],
+                         ["import_alias", "prepared_reference", "prepared_reference_fallback"])
+        self.assertEqual(bench.resolve_image(loaded[0], "prepared")["reference"], "reg/p")
+
+    def test_heartbeat_snapshot_and_environment_io_deltas(self):
+        def node(name, epoch, hits, age=1.0, cache=0):
+            return {"node_id": name, "node_epoch": epoch, "capabilities": ["sandbox"],
+                    "received_at": datetime.fromtimestamp(100 - age, timezone.utc).isoformat(),
+                    "runtime_metrics": {"environment_io": dict(hits=hits, misses=1, cached_bytes=cache)}}
+        snapshot = lambda *nodes: bench.fleet_snapshot(nodes, now=100, fresh_seconds=120)  # noqa: E731
+        before = snapshot(node("a", 1, 5), node("b", 1, 9, age=500), {})
+        after = snapshot(node("a", 1, 8, cache=7), node("b", 2, 4), node("c", 1, 2))
+        self.assertEqual((before["sandbox_nodes_stored"], before["sandbox_nodes_fresh"]), (2, 1))
+        deltas = bench.environment_io_deltas(before, after)
+        self.assertEqual(deltas["per_node"]["a"]["deltas"], {"hits": 3, "misses": 0})
+        self.assertTrue(deltas["per_node"]["b"]["counted_from_zero"])  # new node_epoch
+        self.assertEqual(deltas["totals"], {"hits": 9, "misses": 2})
+        self.assertEqual(deltas["per_node"]["a"]["gauges"]["cached_bytes"], {"before": 0, "after": 7})
+
     def test_sdk_park_wake_detection(self):
         self.assertIsNone(bench.sdk_park_wake_methods(SimpleNamespace(health=lambda: {})))
         client = SimpleNamespace(park_sandbox=lambda sid: None, wake_sandbox=lambda sid: None)
@@ -156,7 +196,9 @@ class ReportSchemaTests(unittest.TestCase):
     def test_new_report_carries_every_metric(self):
         report = self.finished()
         self.assertEqual(bench.validate_report(report), [])
-        self.assertEqual(tuple(report["metrics"]), bench.METRIC_KEYS)
+        self.assertEqual(tuple(report["metrics"]), bench.REPORT_METRIC_KEYS)
+        legacy = {key: value for key, value in report["metrics"].items() if key != "rollout"}
+        self.assertEqual(bench.validate_report({**report, "metrics": legacy}), [])  # pre-rollout
         self.assertTrue(report["ok"])
         for key in ("bytes_fetched_share", "idle_pss_uss", "page_sharing_ratio"):
             section = report["metrics"][key]
@@ -306,18 +348,9 @@ class FakeSdk:
     __version__ = "0.0-test"
     SandboxApiError = FakeApiError
 
-    class Image:
-        @staticmethod
-        def from_registry(reference):
-            return SimpleNamespace(reference=reference, kind="registry")
-
-        @staticmethod
-        def from_name(reference):
-            return SimpleNamespace(reference=reference, kind="name")
-
-    @staticmethod
-    def SandboxSpec(**fields):
-        return SimpleNamespace(**fields)
+    Image = SimpleNamespace(from_registry=lambda ref: SimpleNamespace(reference=ref, kind="registry"),
+                            from_name=lambda ref: SimpleNamespace(reference=ref, kind="name"))
+    SandboxSpec = staticmethod(lambda **fields: SimpleNamespace(**fields))
 
 
 class FakeClient:
@@ -369,14 +402,14 @@ class FakeClient:
 
 
 class LiveRunTests(unittest.TestCase):
-    def run_scenario(self, client, *argv):
+    def run_scenario(self, client, *argv, operator=None):
         with tempfile.TemporaryDirectory() as root:
             output = Path(root) / "report.json"
             args = bench.parse_args([*argv, "--output", str(output),
                                      "--gateway-url", "http://gw.test:8090",
                                      "--cleanup-timeout-seconds", "5"])
             with redirect_stdout(io.StringIO()):
-                report = bench.run_live(args, sdk=FakeSdk, client=client)
+                report = bench.run_live(args, sdk=FakeSdk, client=client, operator=operator)
             persisted = json.loads(output.read_text())
         self.assertEqual(persisted["run_id"], report["run_id"])
         self.assertEqual(bench.validate_report(persisted), [])
@@ -465,6 +498,30 @@ class LiveRunTests(unittest.TestCase):
         self.assertIsNone(section["bytes_written"])
         self.assertEqual(client.created, [])
         self.assertTrue(report["ok"], report["errors"])
+
+    def test_rollout_issues_all_creates_at_once_and_reports_per_family(self):
+        client, occupied = FakeClient(fail_images={"bad:1"}), FakeClient()
+        create, barrier = client.create_sandbox, threading.Barrier(4, timeout=10)  # all 4 at once
+        client.create_sandbox = lambda spec, **kw: (barrier.wait(), create(spec, **kw))[1]
+        fresh = {"node_id": "n", "capabilities": ["sandbox"], "received_at": bench.utc_now()}
+        with tempfile.TemporaryDirectory() as root:
+            (images := Path(root) / "images.txt").write_text("TMax\tg1\nSWE-smith\tg2\nTMax\tbad:1\nx\n")
+            argv = ("rollout", "--selection", str(images), "--fleet-state", "zero",
+                    "--sampling", "uniform", "--think-seconds", "0:0", "--turns", "3")
+            report = self.run_scenario(client, *argv, "--tasks", "4", "--heartbeat-settle-seconds",
+                                       "0", operator=SimpleNamespace(nodes=lambda: []))
+            refused = self.run_scenario(occupied, *argv, "--tasks", "1",
+                                        operator=SimpleNamespace(nodes=lambda: [fresh]))
+        section = report["metrics"]["rollout"]
+        self.assertEqual((section["n_succeeded"], section["arrival"]["max_concurrent_creates"]), (3, 4))
+        self.assertEqual(section["failures_by_error_code"]["http_504"]["by_phase"], {"create": 1})
+        self.assertEqual(set(section["per_family"]), {"TMax", "SWE-smith", "unknown"})
+        self.assertEqual(section["turns"]["by_kind"]["grep"]["all"]["n"], 3)
+        self.assertEqual((section["node_io"]["status"], report["conditions"]["rollout"]
+                          ["fleet_state"]["verified"]), ("measured", True))
+        self.assertEqual(({spec.profile for spec in client.created}, client.live), ({"linux_host"}, {}))
+        self.assertIn("--fleet-state zero", refused["errors"][0])
+        self.assertEqual(occupied.created, [])
 
     def test_existing_output_is_never_overwritten(self):
         with tempfile.TemporaryDirectory() as root:

@@ -15,11 +15,18 @@ failures are recorded and fail the run. The run refuses an occupied fleet
 unless --allow-occupied-fleet is given. The gateway comes from --gateway-url or
 UCLOUD_SANDBOX_URL; the sandbox API token from --api-token-file or
 UCLOUD_SANDBOX_API_TOKEN. Tokens are never written to the report.
+
+``rollout`` (plan C9.2) samples N tasks from a training selection, issues all N
+creates at once, runs a per-family startup command and M agent turns with think
+time, and writes the ``rollout`` metric section. Its fleet state is declared
+with --fleet-state; the harness never changes the fleet, and only reads node
+heartbeats (GET /v1/nodes) when given --operator-token-file.
 """
 
 from __future__ import annotations
 
 import argparse
+import bisect
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import hashlib
@@ -29,6 +36,7 @@ import math
 import os
 from pathlib import Path
 import platform
+import random
 import re
 import shlex
 import signal
@@ -37,13 +45,15 @@ import sys
 import threading
 import time
 from typing import Any, Callable, Iterable, Sequence
+import urllib.request
 from urllib.parse import urlsplit
 from uuid import uuid4
+import zipfile
 
 
 SCHEMA = "ucloud-rl-scale-bench/v1"
 REPO_ROOT = Path(__file__).resolve().parents[1]
-LIVE_SCENARIOS = ("cold", "warm", "burst", "rate", "density", "park")
+LIVE_SCENARIOS = ("cold", "warm", "burst", "rate", "density", "park", "rollout")
 SCENARIOS = (*LIVE_SCENARIOS, "merged")
 # The ten metrics of the plan's survey table, in table order.
 METRIC_KEYS = (
@@ -58,6 +68,10 @@ METRIC_KEYS = (
     "pause_resume",
     "fork",
 )
+# Scenario metrics outside the survey table. New reports carry them (not_run
+# unless measured); reports written before they existed stay valid without.
+EXTRA_METRIC_KEYS = ("rollout",)
+REPORT_METRIC_KEYS = (*METRIC_KEYS, *EXTRA_METRIC_KEYS)
 SCENARIO_METRIC = {
     "cold": "cold_time_to_first_command",
     "warm": "warm_time_to_first_command",
@@ -65,6 +79,7 @@ SCENARIO_METRIC = {
     "rate": "creation_rate",
     "density": "density_at_latency",
     "park": "pause_resume",
+    "rollout": "rollout",
 }
 # Not observable from the SDK. Each names the probe that measures it.
 EXTERNAL_METRICS = {
@@ -105,6 +120,98 @@ PARK_WAKE_METHOD_PAIRS = (
 RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,63}")
 PRINT_LOCK = threading.Lock()
 _SECRETS: set[str] = set()
+
+# -- rollout (plan C9.2) -----------------------------------------------------
+SELECTORS_NAME = "all-image-selectors.json"
+FLEET_STATES = ("zero", "warm-empty", "warm-seeded")
+TURN_KINDS = ("grep", "test", "edit")
+# Chunk-cache values that are levels, not counters: reported before/after.
+ENVIRONMENT_IO_GAUGES = frozenset({
+    "cached_bytes", "pending_misses", "active_components", "prefetch_enabled",
+    "prefetch_jobs_active", "prefetch_ranges_inflight"})
+RECIPE_GAP = (
+    "the training integration builds this task from its recipe (Dockerfile and task "
+    "context from its image_recipe_db); the gateway matches the recipe to this prepared "
+    "foundation or source and runs the remaining build work on a builder. The selection "
+    "carries no recipe, so the sandbox runs the prepared reference itself: the task "
+    "delta and its live build are not exercised")
+# First-command profile per family: the kind of startup work and where the
+# task's working directory is expected. The image's own cwd ($PWD, under the
+# linux_host profile) is tried first and a generic list last, so a wrong guess
+# shows up as the workdir= marker in the samples, not as a failure.
+FAMILY_PROFILES = {
+    "SWE-smith": ("swe", "/testbed"),
+    "R2E-Gym": ("swe", "/testbed"),
+    "SWE-Lego": ("swe", "/testbed"),
+    "SWE-rebench v2": ("swe", "/testbed"),
+    "ScaleSWE": ("swe", "/testbed"),
+    "OpenSWE": ("swe", "/testbed"),
+    "MultiSWE": ("swe", "/home/*"),
+    "TMax": ("terminal", "/app"),
+    "Terminal-Lego": ("terminal", "/app"),
+}
+_PRELUDE = r'''WD=; REPO=0
+for d in "$PWD" @DIRS@ /testbed /workspace /repo /app /src /home/* /root; do
+  [ "$d" = / ] && continue
+  if [ -d "$d/.git" ]; then WD=$d; REPO=1; break; fi
+done
+if [ -z "$WD" ]; then
+  for d in "$PWD" @DIRS@; do [ "$d" != / ] && [ -d "$d" ] && { WD=$d; break; }; done
+fi
+WD=${WD:-/}; cd "$WD" || exit 90
+SCAN=.; [ "$WD" = / ] && SCAN=/etc
+PY=$(command -v python || command -v python3 || true)
+TO=; command -v timeout >/dev/null 2>&1 && TO="timeout @TIMEOUT@"
+echo "ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}"
+'''
+_PY_STARTUP = '''import os, sys
+mods = []
+for name in ("json", "sqlite3", "ssl", "unittest", "pytest"):
+    try:
+        __import__(name)
+        mods.append(name)
+    except Exception:
+        pass
+entries = 0
+for path in sys.path:
+    if path and os.path.isdir(path):
+        entries += len(os.listdir(path))
+print("ucloud-bench python=%d.%d imported=%s syspath_entries=%d" % (
+    sys.version_info[0], sys.version_info[1], ",".join(mods), entries))
+'''
+_PY_RUN = "if [ -n \"$PY\" ]; then \"$PY\" -c '" + _PY_STARTUP + "' || exit 92; fi\n"
+FIRST_COMMANDS = {
+    # git status reads the index and stats every tracked file; the import
+    # reads the interpreter, stdlib and site-packages.
+    "swe": ('if [ "$REPO" = 1 ]; then git status --porcelain >/tmp/.ucloud-bench-status '
+            '|| exit 91; echo "ucloud-bench git_status_lines=$(wc -l </tmp/.ucloud-bench-status)'
+            ' tracked=$(git ls-files | wc -l)"; fi\n' + _PY_RUN),
+    "terminal": ('echo "ucloud-bench workdir_entries=$(ls -A | wc -l) tree_entries='
+                 '$(find "$SCAN" -maxdepth 3 2>/dev/null | head -n 5000 | wc -l)"\n' + _PY_RUN),
+}
+FIRST_COMMANDS["generic"] = FIRST_COMMANDS["swe"]
+# The rc57 agentic turn mix (docs/image-import.md). Each turn exits 0 unless
+# the sandbox itself fails; test outcomes are markers, not failures.
+TURN_COMMANDS = {
+    "grep": ('P="def |class |func |function "\n'
+             'if [ "$REPO" = 1 ]; then n=$(git grep -n -I -E "$P" 2>/dev/null | head -n 20000 | wc -l)\n'
+             'else n=$(grep -rIn -E "$P" "$SCAN" 2>/dev/null | head -n 20000 | wc -l); fi\n'
+             'echo "ucloud-bench grep_lines=$n"\n'),
+    "test": ('f=; [ "$REPO" = 1 ] && f=$(git ls-files 2>/dev/null | '
+             'grep -E "(^|/)test_[^/]*[.]py$|_test[.]py$" | head -n 1)\n'
+             'if [ -n "$f" ] && [ -n "$PY" ]; then $TO "$PY" -m pytest -q -x -p no:cacheprovider '
+             '"$f" >/dev/null 2>&1; echo "ucloud-bench test=$f rc=$?"\n'
+             'elif [ -n "$PY" ] && [ "$SCAN" = . ]; then $TO "$PY" -m compileall -q . '
+             '>/dev/null 2>&1; echo "ucloud-bench test=compileall rc=$?"\n'
+             'else echo "ucloud-bench test=none"; fi\n'),
+    "edit": ('f=; [ "$REPO" = 1 ] && f=$(git ls-files 2>/dev/null | '
+             'grep -E "[.](py|js|ts|go|rs|java|c|cc|cpp|h|php|rb|md|txt)$" | head -n 1)\n'
+             'if [ -n "$f" ]; then printf "\\n# ucloud-bench edit\\n" >>"$f" || exit 93\n'
+             '  echo "ucloud-bench edit=$f diff_bytes=$(git diff | wc -c)"\n'
+             'else printf "ucloud-bench edit\\n" >>ucloud-bench-edit.txt 2>/dev/null || '
+             'printf "x\\n" >>/tmp/ucloud-bench-edit.txt || exit 93\n'
+             '  echo "ucloud-bench edit=file"; fi\n'),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +354,7 @@ def unsupported_section(reason: str, **extra: Any) -> dict[str, Any]:
 
 def default_metrics() -> dict[str, Any]:
     metrics: dict[str, Any] = {}
-    for key in METRIC_KEYS:
+    for key in REPORT_METRIC_KEYS:
         if key in EXTERNAL_METRICS:
             metrics[key] = external_section(key)
         elif key == "fork":
@@ -502,6 +609,320 @@ def sdk_park_wake_methods(client: object) -> tuple[str, str] | None:
     return None
 
 
+def load_selection(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Entries and provenance from a selection archive, its unpacked directory,
+    its all-image-selectors.json, or a plain images file (REFERENCE or
+    FAMILY<TAB>REFERENCE per line, # comments)."""
+    member = None
+    if path.is_file() and zipfile.is_zipfile(path):
+        with zipfile.ZipFile(path) as archive:
+            names = sorted((name for name in archive.namelist()
+                            if name.rsplit("/", 1)[-1] == SELECTORS_NAME), key=len)
+            if not names:
+                raise ValueError(f"{path} contains no {SELECTORS_NAME}")
+            member, data = names[0], archive.read(names[0])
+    elif path.is_dir():
+        found = next((candidate for candidate in
+                      [path / SELECTORS_NAME, *sorted(path.glob(f"*/{SELECTORS_NAME}"))]
+                      if candidate.is_file()), None)
+        if found is None:
+            raise ValueError(f"{path} contains no {SELECTORS_NAME}")
+        member, data = str(found.relative_to(path)), found.read_bytes()
+    else:
+        data = path.read_bytes()
+    text = data.decode("utf-8")
+    provenance: dict[str, Any] = {"path": str(path), "member": member,
+                                  "sha256": hashlib.sha256(data).hexdigest()}
+    if text.lstrip().startswith("{"):
+        document = json.loads(text)
+        entries = document.get("images") if isinstance(document, dict) else None
+        if not isinstance(entries, list):
+            raise ValueError(f"{path}: selection JSON has no images[] array")
+        provenance.update(format="selectors", **{key: document.get(key) for key in (
+            "schema", "observed_at_utc", "scope", "environment_revision", "verifiers_revision")})
+    else:
+        entries = []
+        for line in text.splitlines():
+            if line.strip() and not line.strip().startswith("#"):
+                family, tab, image = line.strip().rpartition("\t")
+                entries.append({"family": family.strip() if tab else "unknown",
+                                "image": image.strip()})
+        provenance["format"] = "images-file"
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict) or not all(
+                isinstance(entry.get(key), str) and entry[key] for key in ("family", "image")):
+            raise ValueError(f"{path}: entry {index} needs non-empty family and image")
+        rows = entry.setdefault("upstream_rows", 1)
+        if type(rows) is not int or rows <= 0:
+            raise ValueError(f"{path}: entry {index} upstream_rows must be a positive integer")
+    if not entries:
+        raise ValueError(f"{path}: the selection is empty")
+    provenance.update(entries=len(entries),
+                      upstream_rows=sum(entry["upstream_rows"] for entry in entries))
+    return entries, provenance
+
+
+def sample_tasks(entries: Sequence[dict[str, Any]], *, count: int, seed: int,
+                 weighting: str, families: Sequence[str] = ()) -> list[dict[str, Any]]:
+    """Deterministic task sample. ``rows`` draws task rows without replacement,
+    as training does, so an image recurs once per sampled row that uses it;
+    ``uniform`` draws distinct images."""
+    wanted = {family.casefold() for family in families}
+    pool = [entry for entry in entries if not wanted or entry["family"].casefold() in wanted]
+    if not pool:
+        raise ValueError("no selection entry matches --family " + ", ".join(families))
+    rng = random.Random(seed)
+    if weighting == "uniform":
+        if count > len(pool):
+            raise ValueError(f"--tasks {count} exceeds the {len(pool)} images in the pool")
+        return rng.sample(pool, count)
+    cumulative = list(itertools.accumulate(entry["upstream_rows"] for entry in pool))
+    if count > cumulative[-1]:
+        raise ValueError(f"--tasks {count} exceeds the {cumulative[-1]} task rows in the pool")
+    chosen = [pool[bisect.bisect_right(cumulative, row)]
+              for row in rng.sample(range(cumulative[-1]), count)]
+    return chosen
+
+
+def resolve_image(entry: dict[str, Any], source: str) -> dict[str, Any]:
+    """The reference a sandbox names, and how close it is to the training path."""
+    prepared = entry.get("prepared_reference")
+    if "cached_kind" not in entry and not prepared:
+        return {"reference": entry["image"], "resolution": "as_listed"}
+    attach_only = not entry.get("remaining_build_work") and entry.get("task_source_cached") is True
+    if source == "auto" and attach_only and entry.get("cached_kind") == "source":
+        # Source preparation registered the upstream reference as an import
+        # alias of the prepared digest: the gateway resolves it on create.
+        return {"reference": entry["image"], "resolution": "import_alias"}
+    if not isinstance(prepared, str) or not prepared:
+        raise ValueError(f"{entry['image']}: no prepared_reference")
+    if attach_only:
+        return {"reference": prepared, "resolution": "prepared_reference"}
+    return {"reference": prepared, "resolution": "prepared_reference_fallback",
+            "remaining_build_work": list(entry.get("remaining_build_work") or [])}
+
+
+def parse_assignments(items: Sequence[str], *, name: str,
+                      keys: Sequence[str] | None = None) -> dict[str, str]:
+    result = {}
+    for item in items:
+        key, separator, value = item.partition("=")
+        if not separator or not key.strip() or not value.strip():
+            raise ValueError(f"{name} must be KEY=SHELL: {item!r}")
+        if keys is not None and key.strip() not in keys:
+            raise ValueError(f"{name} key must be one of {', '.join(keys)}: {key!r}")
+        result[key.strip()] = value
+    return result
+
+
+def shell_script(dirs: str, body: str, *, timeout_seconds: float) -> list[str]:
+    prelude = _PRELUDE.replace("@DIRS@", dirs).replace(
+        "@TIMEOUT@", str(max(1, int(timeout_seconds) - 5)))
+    return ["sh", "-c", prelude + body]
+
+
+def rollout_commands(families: Iterable[str], *, family_overrides: dict[str, str],
+                     turn_overrides: dict[str, str], timeout_seconds: float) -> dict[str, Any]:
+    """argv per family (first command) and per turn kind, prelude included."""
+    first = {}
+    for family in sorted(set(families)):
+        kind, dirs = FAMILY_PROFILES.get(family, ("generic", ""))
+        body = family_overrides.get(family, family_overrides.get("*", FIRST_COMMANDS[kind]))
+        first[family] = shell_script(dirs, body, timeout_seconds=timeout_seconds)
+    turns = {kind: shell_script("", turn_overrides.get(kind, TURN_COMMANDS[kind]),
+                                timeout_seconds=timeout_seconds) for kind in TURN_KINDS}
+    return {"first": first, "turns": turns}
+
+
+def parse_markers(stdout: str) -> dict[str, str]:
+    """key=value tokens from the commands' ``ucloud-bench`` lines."""
+    markers: dict[str, str] = {}
+    for line in stdout.splitlines():
+        if line.startswith("ucloud-bench "):
+            for token in line.split()[1:]:
+                key, separator, value = token.partition("=")
+                if separator and len(markers) < 24:
+                    markers[key[:64]] = value[:200]
+    return markers
+
+
+def error_code_of(exc: BaseException) -> str:
+    code = getattr(exc, "error_code", None)
+    body = getattr(exc, "body", None)
+    if not code and isinstance(body, dict):
+        code = body.get("error_code")
+    if isinstance(code, str) and code:
+        return code
+    status = getattr(exc, "status_code", None)
+    return f"http_{status}" if isinstance(status, int) else type(exc).__name__
+
+
+def create_phases(timings: object) -> dict[str, float] | None:
+    """C0.2 phase timings from a create response: the worker's own phases and
+    the sandbox manager's (``timings.manager.phases``), in milliseconds."""
+    if not isinstance(timings, dict):
+        return None
+    phases: dict[str, float] = {}
+    manager = timings.get("manager")
+    for source in (timings.get("phases"), manager.get("phases") if isinstance(manager, dict) else None):
+        if isinstance(source, dict):
+            phases.update({str(key): float(value) for key, value in source.items()
+                           if type(value) in (int, float) and math.isfinite(value)})
+    return phases or None
+
+
+def _timestamp(value: object) -> float | None:
+    try:
+        return datetime.fromisoformat(str(value)).timestamp() if value else None
+    except ValueError:
+        return None
+
+
+def fleet_snapshot(nodes: Sequence[dict[str, Any]], *, now: float,
+                   fresh_seconds: float) -> dict[str, Any]:
+    """Sandbox-capable nodes from GET /v1/nodes; fresh = heartbeat received
+    within fresh_seconds (the gateway's default heartbeat TTL is 120 s)."""
+    rows = []
+    for node in nodes:
+        if not isinstance(node, dict) or "sandbox" not in (node.get("capabilities") or []):
+            continue
+        seen = _timestamp(node.get("received_at")) or _timestamp(node.get("updated_at"))
+        age = None if seen is None else round(now - seen, 3)
+        metrics = node.get("runtime_metrics") if isinstance(node.get("runtime_metrics"), dict) else {}
+        rows.append({"node_id": node.get("node_id"), "job_id": node.get("job_id"),
+                     "node_epoch": node.get("node_epoch"), "age_seconds": age,
+                     "fresh": age is not None and age <= fresh_seconds,
+                     "active_sandboxes": node.get("active_sandboxes"),
+                     "environment_io": metrics.get("environment_io")})
+    fresh = [row for row in rows if row["fresh"]]
+    return {"observed_at": datetime.fromtimestamp(now, timezone.utc).isoformat(),
+            "fresh_seconds": fresh_seconds, "sandbox_nodes_stored": len(rows),
+            "sandbox_nodes_fresh": len(fresh),
+            "cached_bytes_fresh": sum((row["environment_io"] or {}).get("cached_bytes", 0)
+                                      for row in fresh), "nodes": rows}
+
+
+def environment_io_deltas(before: dict[str, Any] | None,
+                          after: dict[str, Any]) -> dict[str, Any]:
+    """Per-node counter deltas between two snapshots. A node that is new or
+    restarted (another node_epoch, or a counter went down) counts from zero."""
+    old = {row["node_id"]: row for row in (before or {}).get("nodes", [])}
+    per_node: dict[str, Any] = {}
+    totals: dict[str, float] = {}
+    for row in after["nodes"]:
+        current = row.get("environment_io")
+        if not isinstance(current, dict):
+            continue
+        previous = old.get(row["node_id"]) or {}
+        baseline = previous.get("environment_io") if previous.get(
+            "node_epoch") == row.get("node_epoch") else None
+        counters = {key: value for key, value in current.items()
+                    if key not in ENVIRONMENT_IO_GAUGES and type(value) in (int, float)}
+        reset = not isinstance(baseline, dict) or any(
+            value < baseline.get(key, 0) for key, value in counters.items())
+        deltas = {key: value - (0 if reset else baseline.get(key, 0))
+                  for key, value in counters.items()}
+        for key, value in deltas.items():
+            totals[key] = totals.get(key, 0) + value
+        per_node[str(row["node_id"])] = {
+            "counted_from_zero": reset, "deltas": deltas,
+            "gauges": {key: {"before": None if reset else baseline.get(key),
+                             "after": current.get(key)}
+                       for key in sorted(ENVIRONMENT_IO_GAUGES) if key in current}}
+    lookups = totals.get("hits", 0) + totals.get("misses", 0)
+    return {"totals": totals, "per_node": per_node,
+            "hit_ratio": round(totals.get("hits", 0) / lookups, 6) if lookups else None}
+
+
+def rollout_section(rows: Sequence[dict[str, Any]], *, tasks: int, fleet_state: str,
+                    arrival: dict[str, Any], node_io: dict[str, Any],
+                    slowest: int = 20) -> dict[str, Any]:
+    ok = [row for row in rows if row.get("ok")]
+
+    def steps(group: Sequence[dict[str, Any]]) -> dict[str, Any]:
+        return {"n": len(group), "n_failed": sum(not row.get("ok") for row in group),
+                "time_to_ready": latency_summary(row["time_to_ready_seconds"] for row in group
+                                                 if "time_to_ready_seconds" in row),
+                "time_to_first_command": latency_summary(
+                    row["time_to_first_command_seconds"] for row in group
+                    if row.get("first_command_ok"))}
+
+    families = sorted({row["family"] for row in rows})
+    phases: dict[str, list[float]] = {}
+    failures: dict[str, dict[str, Any]] = {}
+    turns: dict[str, dict[str, list[float]]] = {}
+    turn_failures: dict[str, int] = {}
+    resolutions: dict[str, int] = {}
+    for row in rows:
+        resolutions[row["image_resolution"]] = resolutions.get(row["image_resolution"], 0) + 1
+        for name, value in (row.get("create_phases_ms") or {}).items():
+            phases.setdefault(name, []).append(value)
+        if not row.get("ok"):
+            entry = failures.setdefault(row.get("error_code") or "unknown",
+                                        {"n": 0, "by_phase": {}, "example": row.get("error")})
+            entry["n"] += 1
+            entry["by_phase"][row["phase"]] = entry["by_phase"].get(row["phase"], 0) + 1
+        seen: set[str] = set()
+        for turn in row.get("turns", []):
+            if not turn["ok"]:
+                turn_failures[turn["kind"]] = turn_failures.get(turn["kind"], 0) + 1
+                continue
+            bucket = turns.setdefault(turn["kind"], {"all": [], "first": [], "later": []})
+            bucket["all"].append(turn["seconds"])
+            bucket["later" if turn["kind"] in seen else "first"].append(turn["seconds"])
+            seen.add(turn["kind"])
+    ranked = sorted((row for row in rows if row.get("first_command_ok")),
+                    key=lambda row: row["time_to_first_command_seconds"], reverse=True)
+    distinct = {row["reference"]: row.get("erofs_bytes") for row in rows}
+    image_bytes = sum(value for value in distinct.values() if isinstance(value, int))
+    if node_io.get("status") == "measured" and image_bytes:
+        node_io["bytes_fetched_share_estimate"] = {
+            "value": float(f"{node_io['environment_io']['totals'].get('downloaded_bytes', 0) / image_bytes:.6g}"),
+            "definition": "chunk bytes downloaded by all nodes during the run / EROFS bytes "
+                          "of the distinct references started (selection erofs_bytes)"}
+    return {
+        "status": "measured" if ok else "failed",
+        "unit": "seconds",
+        "definition": (
+            "Every sandbox's create is issued at its arrival offset (all at once unless "
+            "--ramp-seconds), then its family's first command and M turns with think time; "
+            "it is deleted when its turns end. time_to_ready: create request start to create "
+            "returned; time_to_first_command: create request start to first command exit. "
+            "Each summary counts the samples that completed that step."),
+        "fleet_state": fleet_state,
+        "tasks": tasks,
+        "n_started": len(rows),
+        "n_not_started": tasks - len(rows),
+        "n_succeeded": len(ok),
+        "n_failed": len(rows) - len(ok),
+        "arrival": arrival,
+        "images": {"distinct_references": len(distinct), "by_resolution": resolutions,
+                   "erofs_bytes_distinct": image_bytes or None},
+        "overall": steps(rows),
+        "per_family": {family: steps([row for row in rows if row["family"] == family])
+                       for family in families},
+        "first_command": latency_summary(row["first_command_seconds"] for row in rows
+                                         if row.get("first_command_ok")),
+        "slowest": [{key: row.get(key) for key in (
+            "sandbox_id", "family", "image", "reference", "image_resolution", "node",
+            "time_to_ready_seconds", "time_to_first_command_seconds")}
+            for row in ranked[:slowest]],
+        "create_phases_ms": {
+            "source": "create response timings.phases and timings.manager.phases (plan C0.2)",
+            "n_with_phases": sum(bool(row.get("create_phases_ms")) for row in rows),
+            "phases": {name: latency_summary(values) for name, values in sorted(phases.items())}},
+        "failures_by_error_code": failures,
+        "turns": {"n": sum(len(row.get("turns", [])) for row in rows),
+                  "n_failed": sum(turn_failures.values()),
+                  "by_kind": {kind: {"n_failed": turn_failures.get(kind, 0),
+                                     **{name: latency_summary(values) for name, values in
+                                        turns.get(kind, {"all": [], "first": [], "later": []}).items()}}
+                              for kind in sorted(set(turns) | set(turn_failures))}},
+        "node_io": node_io,
+        "samples": list(rows),
+    }
+
+
 def _summary_problems(value: dict[str, Any], path: str) -> list[str]:
     problems = []
     n = value.get("n")
@@ -558,12 +979,12 @@ def validate_report(report: object) -> list[str]:
     if not isinstance(metrics, dict):
         return [*problems, "metrics must be an object"]
     missing = [key for key in METRIC_KEYS if key not in metrics]
-    unknown = sorted(set(metrics) - set(METRIC_KEYS))
+    unknown = sorted(set(metrics) - set(REPORT_METRIC_KEYS))
     if missing:
         problems.append("metrics missing: " + ", ".join(missing))
     if unknown:
         problems.append("unknown metrics: " + ", ".join(unknown))
-    for key in METRIC_KEYS:
+    for key in REPORT_METRIC_KEYS:
         section = metrics.get(key)
         if section is None:
             continue
@@ -620,11 +1041,11 @@ def merge_reports(reports: Sequence[tuple[str, dict[str, Any]]]) -> dict[str, An
         ],
     })
     merged["started_at"] = min(report["started_at"] for _, report in reports)
-    for key in METRIC_KEYS:
+    for key in REPORT_METRIC_KEYS:
         if key in EXTERNAL_METRICS or key == "fork":
             continue
         found = [(source, report["metrics"][key]) for source, report in reports
-                 if report["metrics"][key]["status"] != "not_run"]
+                 if report["metrics"].get(key, {"status": "not_run"})["status"] != "not_run"]
         if len(found) > 1:
             raise ValueError(f"metric {key} is reported by several inputs: "
                              + ", ".join(source for source, _ in found))
@@ -689,6 +1110,24 @@ def _non_negative_float(text: str) -> float:
     return value
 
 
+def _non_negative_int(text: str) -> int:
+    value = int(text)
+    if value < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative integer")
+    return value
+
+
+def _seconds_range(text: str) -> tuple[float, float]:
+    low, _, high = text.partition(":")
+    try:
+        bounds = (_non_negative_float(low), _non_negative_float(high or low))
+    except (ValueError, argparse.ArgumentTypeError) as exc:
+        raise argparse.ArgumentTypeError(f"must be LO:HI seconds: {exc}") from exc
+    if bounds[0] > bounds[1]:
+        raise argparse.ArgumentTypeError("LO must not exceed HI")
+    return bounds
+
+
 def _live_parent() -> argparse.ArgumentParser:
     parent = argparse.ArgumentParser(add_help=False)
     group = parent.add_argument_group("gateway and report")
@@ -715,9 +1154,14 @@ def _live_parent() -> argparse.ArgumentParser:
     shape.add_argument("--image-kind", choices=("registry", "name"), default="registry",
                        help="Image.from_registry (default) or Image.from_name")
     shape.add_argument("--sandbox-command",
-                       help="keep-alive command (default: 'sleep <ttl>'; '' = image default)")
-    shape.add_argument("--first-command", default="true",
-                       help="command whose first success marks a sandbox ready")
+                       help="keep-alive command (default: 'sleep <ttl>', rollout: image "
+                            "default; '' = image default)")
+    shape.add_argument("--profile", choices=("container", "linux_host"),
+                       help="sandbox profile (default: container; rollout: linux_host, "
+                            "as SandboxSpec.benchmark and the training integration use)")
+    shape.add_argument("--first-command",
+                       help="command whose first success marks a sandbox ready (default: "
+                            "true; rollout uses its per-family table, see --family-command)")
     shape.add_argument("--label", action="append", default=[], metavar="KEY=VALUE",
                        help="extra sandbox label; repeatable")
     return parent
@@ -787,6 +1231,49 @@ def build_parser() -> argparse.ArgumentParser:
     park.add_argument("--image", required=True)
     park.add_argument("--cycles", type=_positive_int, default=5)
 
+    rollout = commands.add_parser(
+        "rollout", parents=[live], help="realistic RL rollout start (plan C9.2)",
+        description="N tasks sampled from a training selection, all created at once, "
+                    "each running its family's startup command and M agent turns.")
+    rollout.add_argument("--selection", type=Path, required=True,
+                         help="selection .zip, its unpacked directory, all-image-selectors.json, "
+                              "or a plain images file (REFERENCE or FAMILY<TAB>REFERENCE)")
+    rollout.add_argument("--tasks", type=_positive_int, default=500)
+    rollout.add_argument("--seed", type=int, default=0)
+    rollout.add_argument("--sampling", choices=("rows", "uniform"), default="rows",
+                         help="rows: weighted by upstream_rows, like training (default); "
+                              "uniform: distinct images")
+    rollout.add_argument("--family", action="append", default=[],
+                         help="only sample this family; repeatable")
+    rollout.add_argument("--image-source", choices=("auto", "prepared"), default="auto",
+                         help="auto: what the integration resolves to (import aliases for "
+                              "attach-only sources); prepared: always prepared_reference")
+    rollout.add_argument("--ramp-seconds", type=_non_negative_float, default=0.0,
+                         help="spread arrivals evenly over this window (default: all at once)")
+    rollout.add_argument("--turns", type=_non_negative_int, default=8)
+    rollout.add_argument("--think-seconds", type=_seconds_range, default=(5.0, 30.0),
+                         metavar="LO:HI", help="uniform think time before each turn")
+    rollout.add_argument("--turn-mix", default=",".join(TURN_KINDS),
+                         help="turn kinds rotated per sandbox (default: grep,test,edit)")
+    rollout.add_argument("--family-command", action="append", default=[],
+                         metavar="FAMILY=SHELL",
+                         help="replace a family's first command ('*' = every family); "
+                              "runs after the workdir prelude ($WD, $REPO, $PY, $TO)")
+    rollout.add_argument("--turn-command", action="append", default=[], metavar="KIND=SHELL",
+                         help="replace a turn kind's command (grep, test, edit)")
+    rollout.add_argument("--fleet-state", choices=FLEET_STATES, required=True,
+                         help="declared fleet and cache state; recorded, never changed")
+    rollout.add_argument("--parkable", action="store_true",
+                         help="create parkable sandboxes, so think time can park them")
+    rollout.add_argument("--operator-token-file", type=Path,
+                         help="gateway control token: read GET /v1/nodes to verify "
+                              "--fleet-state zero and record heartbeat environment_io")
+    rollout.add_argument("--node-fresh-seconds", type=_positive_float, default=120.0)
+    rollout.add_argument("--node-poll-seconds", type=_non_negative_float, default=15.0,
+                         help="node-count timeline interval with an operator token (0 = off)")
+    rollout.add_argument("--heartbeat-settle-seconds", type=_non_negative_float, default=20.0,
+                         help="wait before the final heartbeat read")
+
     validate = commands.add_parser("validate", help="validate report files against the schema")
     validate.add_argument("reports", nargs="+", type=Path)
 
@@ -803,7 +1290,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     if args.scenario not in LIVE_SCENARIOS:
         return args
     try:
-        if hasattr(args, "images_file"):
+        if args.scenario == "rollout":
+            if args.first_command is not None:
+                raise ValueError("rollout takes --family-command FAMILY=SHELL, not --first-command")
+            prepare_rollout(args)
+        elif hasattr(args, "images_file"):
             images = list(args.image)
             if args.images_file is not None:
                 images.extend(read_images_file(args.images_file))
@@ -812,8 +1303,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             args.images = images
         else:
             args.images = [args.image]
-        args.first_command_argv = parse_command(args.first_command, name="--first-command")
-        if args.sandbox_command is None:
+        args.profile = args.profile or ("linux_host" if args.scenario == "rollout" else "container")
+        if args.scenario != "rollout":
+            args.first_command_argv = parse_command(
+                "true" if args.first_command is None else args.first_command,
+                name="--first-command")
+        if args.sandbox_command is None and args.scenario == "rollout":
+            # SandboxSpec.benchmark, as the integration creates, passes none.
+            args.sandbox_command_argv = []
+        elif args.sandbox_command is None:
             args.sandbox_command_argv = ["sleep", str(args.ttl_seconds)]
         elif args.sandbox_command.strip():
             args.sandbox_command_argv = parse_command(args.sandbox_command,
@@ -840,7 +1338,53 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         parser.error("--warmup-seconds must be shorter than --window-seconds")
     if args.scenario == "density" and args.step > args.max_resident:
         parser.error("--step cannot exceed --max-resident")
+    if args.scenario == "rollout" and \
+            args.ramp_seconds + args.turns * args.think_seconds[1] >= args.ttl_seconds:
+        parser.error("--ttl-seconds must exceed --ramp-seconds plus --turns times the "
+                     "longest think time")
     return args
+
+
+def prepare_rollout(args: argparse.Namespace) -> None:
+    """Sample the tasks, resolve their images and build their commands."""
+    entries, provenance = load_selection(args.selection)
+    mix = [kind.strip() for kind in args.turn_mix.split(",") if kind.strip()]
+    if not mix or any(kind not in TURN_KINDS for kind in mix):
+        raise ValueError("--turn-mix must list kinds from " + ", ".join(TURN_KINDS))
+    family_overrides = parse_assignments(args.family_command, name="--family-command")
+    turn_overrides = parse_assignments(args.turn_command, name="--turn-command",
+                                       keys=TURN_KINDS)
+    chosen = sample_tasks(entries, count=args.tasks, seed=args.seed,
+                          weighting=args.sampling, families=args.family)
+    tasks = [{"index": index, "family": entry["family"], "image": entry["image"],
+              "task_name": entry.get("task_name"), "cached_kind": entry.get("cached_kind"),
+              "erofs_bytes": entry.get("erofs_bytes"), **resolve_image(entry, args.image_source)}
+             for index, entry in enumerate(chosen)]
+    families = sorted({task["family"] for task in tasks})
+    commands = rollout_commands(families, family_overrides=family_overrides,
+                                turn_overrides=turn_overrides,
+                                timeout_seconds=args.exec_timeout_seconds)
+    fallback = sorted({task["family"] for task in tasks
+                       if task["resolution"] == "prepared_reference_fallback"})
+    args.images = sorted({task["reference"] for task in tasks})
+    # Underscored: kept out of the report's scenario_arguments copy.
+    args._rollout = {"tasks": tasks, "commands": commands, "turn_mix": mix, "conditions": {
+        "selection": provenance,
+        "sampling": {"tasks": args.tasks, "seed": args.seed, "weighting": args.sampling,
+                     "families": list(args.family),
+                     "sampled_per_family": {family: sum(task["family"] == family
+                                                        for task in tasks)
+                                            for family in families}},
+        "image_source": args.image_source,
+        "resolutions": {resolution: sum(task["resolution"] == resolution for task in tasks)
+                        for resolution in sorted({task["resolution"] for task in tasks})},
+        "resolution_gap": {"families": fallback, "detail": RECIPE_GAP} if fallback else None,
+        "family_profiles": {family: dict(zip(("kind", "dirs"), FAMILY_PROFILES.get(
+            family, ("generic", "")))) for family in families},
+        "overrides": {"family_command": sorted(family_overrides),
+                      "turn_command": sorted(turn_overrides)},
+        "commands": commands, "turn_mix": mix,
+    }}
 
 
 # ---------------------------------------------------------------------------
@@ -892,7 +1436,7 @@ def resolve_credentials(args: argparse.Namespace) -> tuple[str, str | None]:
 
 def sanitized_arguments(args: argparse.Namespace) -> dict[str, Any]:
     return {key: (str(value) if isinstance(value, Path) else value)
-            for key, value in sorted(vars(args).items())}
+            for key, value in sorted(vars(args).items()) if not key.startswith("_")}
 
 
 def run_parallel(items: Sequence[Any], operation: Callable[[Any], Any], *, workers: int,
@@ -917,6 +1461,31 @@ def run_parallel(items: Sequence[Any], operation: Callable[[Any], Any], *, worke
         executor.shutdown(wait=True, cancel_futures=True)
 
 
+class OperatorApi:
+    """Read-only operator view: GET /v1/nodes with the gateway control token."""
+
+    def __init__(self, url: str, token: str, timeout_seconds: float) -> None:
+        self.url = url.rstrip("/")
+        self.token = token
+        self.timeout_seconds = timeout_seconds
+
+    def nodes(self) -> list[dict[str, Any]]:
+        request = urllib.request.Request(self.url + "/v1/nodes", headers={
+            "Authorization": f"Bearer {self.token}", "Accept": "application/json"})
+        with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        nodes = payload.get("nodes") if isinstance(payload, dict) else None
+        if not isinstance(nodes, list):
+            raise ValueError("GET /v1/nodes returned no nodes[] list")
+        return nodes
+
+
+class CommandFailed(RuntimeError):
+    def __init__(self, message: str, error_code: str) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+
+
 class LiveRun:
     def __init__(self, args: argparse.Namespace, sdk: Any, client: Any,
                  report: dict[str, Any]) -> None:
@@ -932,6 +1501,7 @@ class LiveRun:
         # times out client-side but succeeds server-side is still deleted.
         self.owned: dict[str, str] = {}
         self.inline_delete_errors: list[str] = []
+        self.operator: OperatorApi | None = None
 
     # -- sandbox primitives -------------------------------------------------
 
@@ -955,7 +1525,12 @@ class LiveRun:
         return self.sdk.Image.from_registry(reference)
 
     def spec(self, sandbox_id: str, reference: str, *, parkable: bool = False) -> Any:
+        # linux_host is what SandboxSpec.benchmark builds: no security or
+        # filesystem override, so the gateway's host defaults apply.
+        profile = ({} if self.args.profile == "container" else
+                   {"profile": self.args.profile, "security": None, "filesystem": None})
         return self.sdk.SandboxSpec(
+            **profile,
             id=sandbox_id,
             image=self.image(reference),
             command=tuple(self.args.sandbox_command_argv),
@@ -969,7 +1544,8 @@ class LiveRun:
             parkable=parkable,
         )
 
-    def run_command(self, sandbox_id: str, command: Sequence[str]) -> dict[str, Any]:
+    def run_command(self, sandbox_id: str, command: Sequence[str], *,
+                    markers: bool = False) -> dict[str, Any]:
         """One exec: start and wait timed separately. Exec is never replayed."""
         started = time.perf_counter()
         handle = self.client.start_exec(sandbox_id, list(command))
@@ -979,6 +1555,8 @@ class LiveRun:
         row = {"seconds": finished - started, "start_seconds": dispatched - started,
                "wait_seconds": finished - dispatched, "exit_code": result.exit_code,
                "status": result.status, "ok": bool(result.success)}
+        if markers:
+            row["markers"] = parse_markers(getattr(result, "stdout", "") or "")
         if not result.success:
             row["error"] = redact(f"command {list(command)!r} failed: status={result.status} "
                                   f"exit_code={result.exit_code} stderr={result.stderr[-400:]!r}")
@@ -1314,6 +1892,191 @@ def scenario_park(run: LiveRun) -> None:
         }
 
 
+def rollout_sandbox(run: LiveRun, task: dict[str, Any], *, t0: float, offset: float,
+                    inflight: dict[str, int]) -> dict[str, Any]:
+    """One rollout: create, the family's first command, M turns, delete."""
+    args, plan = run.args, run.args._rollout
+    sandbox_id = run.new_id("rollout")
+    with run.lock:
+        run.owned[sandbox_id] = "requested"
+    row: dict[str, Any] = {
+        "sandbox_id": sandbox_id, "ok": False, "phase": "create",
+        **{key: task.get(key) for key in ("family", "image", "task_name", "reference",
+                                           "cached_kind", "erofs_bytes")},
+        "image_resolution": task["resolution"], "arrival_offset_seconds": round(offset, 6),
+        "turns": []}
+    started = time.perf_counter()
+    row["start_offset_seconds"] = started - t0
+
+    def check(result: dict[str, Any], phase: str) -> None:
+        if not result["ok"]:
+            code = result["exit_code"] if result["exit_code"] is not None else result["status"]
+            raise CommandFailed(result["error"], f"{phase}_exit_{code}")
+
+    try:
+        with run.lock:
+            inflight["now"] += 1
+            inflight["max"] = max(inflight["max"], inflight["now"])
+        try:
+            handle = run.client.create_sandbox(
+                run.spec(sandbox_id, task["reference"], parkable=args.parkable),
+                request_timeout_seconds=args.create_timeout_seconds)
+        finally:
+            with run.lock:
+                inflight["now"] -= 1
+        with run.lock:
+            run.owned[sandbox_id] = "created"
+        response = getattr(handle, "create_response", None) or {}
+        row.update(time_to_ready_seconds=time.perf_counter() - started,
+                   node=node_identity(response), create_phases_ms=create_phases(
+                       response.get("timings") if isinstance(response, dict) else None),
+                   phase="first_command")
+        first = run.run_command(sandbox_id, plan["commands"]["first"][task["family"]],
+                                markers=True)
+        row.update(first_command_seconds=first["seconds"],
+                   first_command_markers=first.get("markers"))
+        check(first, "first_command")
+        row.update(first_command_ok=True, phase="turn",
+                   time_to_first_command_seconds=time.perf_counter() - started)
+        rng = random.Random(f"{args.seed}:{task['index']}")
+        for turn in range(args.turns):
+            if run.stop.wait(rng.uniform(*args.think_seconds)):
+                raise ScenarioStopped("interrupted during think time")
+            kind = plan["turn_mix"][(task["index"] + turn) % len(plan["turn_mix"])]
+            result = run.run_command(sandbox_id, plan["commands"]["turns"][kind], markers=True)
+            row["turns"].append({"turn": turn, "kind": kind, "ok": result["ok"],
+                                 "seconds": result["seconds"], "markers": result.get("markers"),
+                                 "offset_seconds": time.perf_counter() - t0})
+            check(result, f"turn_{kind}")
+        row.update(ok=True, phase="done")
+    except Exception as exc:
+        row.update(error=safe_error(exc), error_code=error_code_of(exc),
+                   failed_after_seconds=time.perf_counter() - started)
+    finally:
+        # The episode ends with its sandbox, freeing capacity for later arrivals.
+        error = run.delete_one(sandbox_id)
+        if error:
+            with run.lock:
+                run.inline_delete_errors.append(error)
+        row["finished_offset_seconds"] = time.perf_counter() - t0
+    emit("rollout_" + ("done" if row["ok"] else "failed"), sandbox_id=sandbox_id,
+         family=row["family"], ready=row.get("time_to_ready_seconds"),
+         first_command=row.get("time_to_first_command_seconds"), error=row.get("error"))
+    return row
+
+
+def observe_fleet(run: LiveRun) -> dict[str, Any] | None:
+    if run.operator is None:
+        return None
+    return fleet_snapshot(run.operator.nodes(), now=time.time(),
+                          fresh_seconds=run.args.node_fresh_seconds)
+
+
+def scenario_rollout(run: LiveRun) -> None:
+    args, plan = run.args, run.args._rollout
+    tasks = plan["tasks"]
+    conditions = run.report["conditions"]["rollout"] = dict(plan["conditions"])
+    before = observe_fleet(run)
+    fleet: dict[str, Any] = {"declared": args.fleet_state, "verified": None, "before": before}
+    conditions["fleet_state"] = fleet
+    if before is None:
+        fleet["note"] = "declared only: no --operator-token-file to read node heartbeats"
+    elif args.fleet_state == "zero":
+        fleet["verified"] = before["sandbox_nodes_fresh"] == 0
+        if not fleet["verified"]:
+            raise RuntimeError(
+                f"--fleet-state zero, but {before['sandbox_nodes_fresh']} sandbox node(s) "
+                f"heartbeat within {args.node_fresh_seconds:g} s; scale the fleet to zero "
+                "first (this harness never changes it)")
+    else:
+        # Cache state is declared; an empty cache shows as zero cached bytes.
+        fleet["consistent"] = before["sandbox_nodes_fresh"] > 0 and (
+            args.fleet_state == "warm-seeded" or before["cached_bytes_fresh"] == 0)
+    count = len(tasks)
+    offsets = [args.ramp_seconds * index / count for index in range(count)]
+    rows: list[dict[str, Any]] = []
+    timeline: list[dict[str, Any]] = []
+    go, poll_stop = threading.Event(), threading.Event()
+    start = [0.0]
+    inflight = {"now": 0, "max": 0}
+
+    def worker(index: int) -> None:
+        go.wait()
+        if run.stop.wait(max(0.0, start[0] + offsets[index] - time.perf_counter())):
+            return
+        row = rollout_sandbox(run, tasks[index], t0=start[0], offset=offsets[index],
+                              inflight=inflight)
+        with run.lock:
+            rows.append(row)
+
+    def poll() -> None:
+        while not poll_stop.wait(args.node_poll_seconds):
+            entry: dict[str, Any] = {"offset_seconds": round(time.perf_counter() - start[0], 3)}
+            try:
+                entry["sandbox_nodes_fresh"] = observe_fleet(run)["sandbox_nodes_fresh"]
+            except Exception as exc:
+                entry["error"] = safe_error(exc)
+            timeline.append(entry)
+
+    # One thread per sandbox: the client never caps concurrency below N.
+    threads = [threading.Thread(target=worker, args=(index,), name=f"rollout-{index}",
+                                daemon=True) for index in range(count)]
+    poller = (threading.Thread(target=poll, name="rollout-nodes", daemon=True)
+              if run.operator is not None and args.node_poll_seconds > 0 else None)
+    try:
+        for thread in threads:
+            thread.start()
+        start[0] = time.perf_counter()
+        go.set()
+        emit("rollout_started", tasks=count, references=len(args.images),
+             fleet_state=args.fleet_state)
+        if poller is not None:
+            poller.start()
+        for thread in threads:
+            while thread.is_alive():
+                thread.join(0.5)
+    except BaseException:
+        run.stop.set()
+        go.set()
+        for thread in threads:
+            if thread.ident is not None:
+                thread.join()
+        raise
+    finally:
+        poll_stop.set()
+        wall = time.perf_counter() - start[0] if start[0] else 0.0
+        if poller is not None and poller.ident is not None:
+            poller.join(args.request_timeout_seconds)
+        if run.operator is None:
+            node_io: dict[str, Any] = {"status": "not_measured", "reason": (
+                "no --operator-token-file: node heartbeats need the gateway control token")}
+        else:
+            run.stop.wait(args.heartbeat_settle_seconds)
+            try:
+                after = observe_fleet(run)
+                node_io = {
+                    "status": "measured", "after": after,
+                    "sandbox_nodes_fresh": {"before": before["sandbox_nodes_fresh"],
+                                            "after": after["sandbox_nodes_fresh"]},
+                    "node_count_timeline": timeline,
+                    "first_fresh_node_offset_seconds": next(
+                        (entry["offset_seconds"] for entry in timeline
+                         if entry.get("sandbox_nodes_fresh")), None),
+                    "environment_io": environment_io_deltas(before, after)}
+            except Exception as exc:
+                node_io = {"status": "failed", "error": safe_error(exc),
+                           "node_count_timeline": timeline}
+        with run.lock:
+            snapshot = sorted(rows, key=lambda row: row["sandbox_id"])
+        run.report["metrics"]["rollout"] = rollout_section(
+            snapshot, tasks=count, fleet_state=args.fleet_state, node_io=node_io,
+            arrival={"ramp_seconds": args.ramp_seconds, "client_concurrency": count,
+                     "max_concurrent_creates": inflight["max"], "wall_seconds": round(wall, 6),
+                     "turns": args.turns, "think_seconds": list(args.think_seconds),
+                     "turn_mix": plan["turn_mix"], "parkable": args.parkable,
+                     "profile": args.profile})
+
+
 def build_conditions(args: argparse.Namespace, sdk: Any, url: str,
                      health: object) -> dict[str, Any]:
     return {
@@ -1329,7 +2092,9 @@ def build_conditions(args: argparse.Namespace, sdk: Any, url: str,
         "shape": {"cpus": args.cpus, "memory_mb": args.memory_mb, "disk_mb": args.disk_mb,
                   "ttl_seconds": args.ttl_seconds, "network": args.network,
                   "sandbox_command": list(args.sandbox_command_argv)},
-        "first_command": list(args.first_command_argv),
+        "first_command": (list(args.first_command_argv) if hasattr(args, "first_command_argv")
+                          else "per family: conditions.rollout.commands.first"),
+        "profile": args.profile,
         "scenario_arguments": sanitized_arguments(args),
     }
 
@@ -1338,17 +2103,25 @@ def _raise_interrupt(signum: int, _frame: object) -> None:
     raise KeyboardInterrupt(f"signal {signum}")
 
 
-def run_live(args: argparse.Namespace, *, sdk: Any = None, client: Any = None) -> dict[str, Any]:
+def run_live(args: argparse.Namespace, *, sdk: Any = None, client: Any = None,
+             operator: OperatorApi | None = None) -> dict[str, Any]:
     sdk = sdk if sdk is not None else import_sdk()
     url, token = resolve_credentials(args)
     if client is None:
         client = sdk.SandboxClient(url, api_token=token,
                                    timeout_seconds=args.request_timeout_seconds)
+    if operator is None and getattr(args, "operator_token_file", None) is not None:
+        operator_token = args.operator_token_file.read_text(encoding="utf-8").strip()
+        if not operator_token:
+            raise SystemExit(f"empty token file: {args.operator_token_file}")
+        _SECRETS.add(operator_token)
+        operator = OperatorApi(url, operator_token, args.request_timeout_seconds)
     # Reserve only after configuration is known to be usable.
     reserve_output(args.output, overwrite=args.overwrite)
     run_id = args.run_id or "rlbench-" + uuid4().hex[:12]
     report = new_report(run_id, args.scenario, {"scenario_arguments": sanitized_arguments(args)})
     run = LiveRun(args, sdk, client, report)
+    run.operator = operator
     interrupted = False
 
     def persist() -> None:
@@ -1365,7 +2138,8 @@ def run_live(args: argparse.Namespace, *, sdk: Any = None, client: Any = None) -
         if not (args.scenario == "park" and sdk_park_wake_methods(client) is None):
             run.require_idle_fleet()
         runner = {"cold": scenario_cold, "warm": scenario_warm, "burst": scenario_burst,
-                  "rate": scenario_rate, "park": scenario_park}.get(args.scenario)
+                  "rate": scenario_rate, "park": scenario_park,
+                  "rollout": scenario_rollout}.get(args.scenario)
         if args.scenario == "density":
             scenario_density(run, persist=persist)
         else:

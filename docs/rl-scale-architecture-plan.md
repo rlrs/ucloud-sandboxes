@@ -1086,6 +1086,72 @@ before the burst.
   `docs/benchmarks/rl-scale-rollout-*`. Hardware, versions, image set and
   cache state go in the README, so the results can be cited externally.
 
+**C9.2 status: code written (2026-10-02), no runs yet.** Usage:
+
+```sh
+uv run python scripts/bench_rl_scale.py rollout \
+  --selection ~/all-cached-training-tasks-with-terminal-lego-2026-10-01.zip \
+  --tasks 512 --seed 1 --fleet-state zero \
+  --operator-token-file /path/to/gateway-token \
+  --output docs/benchmarks/rl-scale-rollout-<date>/zero-512.json
+```
+
+- **Input.** `--selection` takes the archive, its unpacked directory, its
+  `all-image-selectors.json`, or a plain file (`REFERENCE` or
+  `FAMILY<TAB>REFERENCE` per line).
+- **Sampling.** `--tasks N` (default 500) and `--seed`. `--sampling rows`
+  (default) draws task rows without replacement, weighted by `upstream_rows`,
+  as training does: a SWE-smith environment recurs once per sampled row.
+  `--sampling uniform` draws distinct images. `--family` filters (repeatable).
+- **Images.** The sandbox names what the integration resolves to, where the
+  SDK can drive it:
+  - attach-only `source` entries (MultiSWE, R2E-Gym, SWE-Lego, SWE-rebench v2,
+    ScaleSWE) use the upstream `image`, which the gateway resolves through
+    the import alias that source preparation registered;
+  - SWE-smith `complete_recipe` entries use `prepared_reference`, the digest
+    the integration's `prepared_image` fast path uses.
+  - **Gap:** OpenSWE, TMax and Terminal-Lego are recipe builds (Dockerfile
+    plus task context from the integration's `image_recipe_db`). The
+    selection has no recipes, so they fall back to `prepared_reference`, the
+    foundation or prepared source. The task delta and its live build are not
+    exercised. The report records this per sample (`image_resolution`) and in
+    `conditions.rollout.resolution_gap`.
+  - `--image-source prepared` uses `prepared_reference` for every entry.
+- **Commands.** The first command comes from a per-family table
+  (`FAMILY_PROFILES`):
+  - SWE families: `git status` and `git ls-files` in the repository, then a
+    Python startup (stdlib and pytest import, a `sys.path` scan);
+  - TMax and Terminal-Lego: the working-directory listing plus the same
+    Python startup.
+  - A shared prelude finds the working directory: the image's cwd first, then
+    the family's directory, then a generic list. Samples record it as the
+    `workdir=` marker.
+  - Turns rotate grep (`git grep`), a test file (`pytest -x`) and an edit plus
+    `git diff`, after `--think-seconds LO:HI` (default 5:30) of think time.
+  - `--family-command FAMILY=SHELL` and `--turn-command KIND=SHELL` override
+    the table.
+- **Shape.** Profile `linux_host` with no keep-alive command, as
+  `SandboxSpec.benchmark` creates for the integration.
+- **Arrival and lifetime.** One thread per sandbox, so the client cap is N;
+  the report records `max_concurrent_creates`. `--ramp-seconds` spreads
+  arrivals. A sandbox is deleted after its `--turns` (default 8).
+- **Fleet state.** Declared with `--fleet-state` and never changed. With
+  `--operator-token-file` the run reads `GET /v1/nodes`:
+  - it refuses to start under `zero` while a sandbox node heartbeats;
+  - it records node count over time (`first_fresh_node_offset_seconds` is the
+    provisioning time from zero);
+  - it records per-node `environment_io` counter deltas, from which it
+    estimates `bytes_fetched_share`.
+- **Report.** `metrics.rollout` holds:
+  - time to ready and time to first command, overall and per family;
+  - the 20 slowest sandboxes, with image and family;
+  - C0.2 create phases, when the create response carries them;
+  - failures by `error_code`;
+  - turn latency by kind, split into first and later turns.
+
+  The ten survey metrics stay present: `not_run`, `external` or
+  `unsupported`.
+
 **C9.3 Seed caches before the burst.**
 - **Change:** a run declares its image set. Workers fetch that set's
   foundations and prefetch-trace chunks into the node chunk cache at boot,

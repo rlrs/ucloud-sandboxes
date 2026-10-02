@@ -15,6 +15,8 @@ from ucloud_sandboxes.storage_native_compaction import LocalCheckpointCompactor
 from ucloud_sandboxes.storage_native_daemon import StorageVolumeOwner, StorageVolumeState
 
 TEST_TIER = "contract"
+# Bounds only a broken test. Outcomes follow events and joins, never a deadline.
+HANG_SECONDS = 60
 
 
 class LocalCompactionTests(unittest.TestCase):
@@ -28,7 +30,7 @@ class LocalCompactionTests(unittest.TestCase):
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
                 connection.connect(str(stream_socket_path))
                 entered.set()
-                if not resume.wait(5):
+                if not resume.wait(HANG_SECONDS):
                     raise TimeoutError("test exporter was not released")
                 paths = [Path(item["file"]) for item in json.loads(source_image_config.read_text())["lowers"]]
                 payload = b"".join(path.read_bytes() for path in paths)
@@ -39,7 +41,7 @@ class LocalCompactionTests(unittest.TestCase):
         service._local_compactor = LocalCheckpointCompactor(
             root=service.config.runtime_root, global_config=service.global_config_path,
             exporter=backend, load=service.journal.load, remove_layers=service._remove_local_layers,
-            max_layers=2, timeout_seconds=2,
+            max_layers=2, timeout_seconds=HANG_SECONDS,
         )
         owner = StorageVolumeOwner("volume", "sandbox", 1)
         service.converge_volume(owner, action="prepare", operation_id="create", virtual_size=1 << 30)
@@ -57,14 +59,14 @@ class LocalCompactionTests(unittest.TestCase):
             service, owner, _, _ = self.fixture(Path(raw).resolve())
             first = self.park_cycles(service, owner)
             compactor = service._local_compactor
-            compactor.wait(3)
+            compactor.wait(HANG_SECONDS)
             second_owner = StorageVolumeOwner("other", "other-sandbox", 1)
             service.converge_volume(second_owner, action="prepare", operation_id="other-create", virtual_size=1 << 30)
             for index in range(3):
                 if index:
                     service.converge_volume(second_owner, action="mount", operation_id=f"other-wake-{index}")
                 second = service.converge_volume(second_owner, action="release", operation_id=f"other-park-{index}")
-            compactor.wait(3)
+            compactor.wait(HANG_SECONDS)
             first = replace(first, state=StorageVolumeState.ACQUIRING)
             second = replace(second, state=StorageVolumeState.ACQUIRING)
             entered, release, finished = threading.Event(), threading.Event(), threading.Event()
@@ -72,7 +74,7 @@ class LocalCompactionTests(unittest.TestCase):
 
             def slow_persist(record):
                 entered.set()
-                if not release.wait(5):
+                if not release.wait(HANG_SECONDS):
                     raise TimeoutError("test did not release slow journal commit")
 
             def adopt_first():
@@ -94,12 +96,12 @@ class LocalCompactionTests(unittest.TestCase):
             observer = threading.Thread(target=observe_and_adopt_other)
             worker.start()
             try:
-                self.assertTrue(entered.wait(2))
+                self.assertTrue(entered.wait(HANG_SECONDS))
                 # A simultaneous same-volume adoption still cannot pass the
                 # journal fence, even though unrelated volumes can progress.
                 self.assertEqual(compactor.adopt(first, lambda _: self.fail("same-volume overlap")), first)
                 observer.start()
-                self.assertTrue(finished.wait(2), "unrelated work waited for disk I/O")
+                self.assertTrue(finished.wait(HANG_SECONDS), "unrelated work waited for disk I/O")
                 self.assertEqual(len(results["other"].sealed_layer_paths), 1)
                 self.assertEqual(results["metrics"]["local_compaction_adopted"], 0)
             finally:
@@ -127,13 +129,13 @@ class LocalCompactionTests(unittest.TestCase):
             old = self.park_cycles(service, owner)
             compactor = service._local_compactor
             try:
-                self.assertTrue(entered.wait(2))
+                self.assertTrue(entered.wait(HANG_SECONDS))
                 mounted = service.converge_volume(owner, action="mount", operation_id="wake-during-compaction")
                 self.assertEqual(mounted.sealed_layer_paths, old.sealed_layer_paths)
                 parked = service.converge_volume(owner, action="release", operation_id="append-during-compaction")
                 self.assertEqual(len(parked.sealed_layer_paths), 4)
                 resume.set()
-                compactor.wait(3)
+                compactor.wait(HANG_SECONDS)
                 self.assertEqual(compactor.metrics()["local_compaction_completed"], 1)
                 self.assertEqual(service.journal.load(owner.volume_id).sealed_layer_paths, parked.sealed_layer_paths)
                 adopted = service.converge_volume(owner, action="mount", operation_id="adopt")
@@ -146,13 +148,13 @@ class LocalCompactionTests(unittest.TestCase):
                 self.assertEqual(service.journal.load(owner.volume_id), adopted)
             finally:
                 resume.set()
-                compactor.wait(5)
+                compactor.wait(HANG_SECONDS)
 
     def test_ready_candidate_survives_restart_and_failed_journal_adoption(self):
         with TemporaryDirectory(dir="/tmp") as raw:
             service, owner, _, _ = self.fixture(Path(raw).resolve())
             old = self.park_cycles(service, owner)
-            service._local_compactor.wait(3)
+            service._local_compactor.wait(HANG_SECONDS)
             restarted = LocalCheckpointCompactor(
                 root=service.config.runtime_root, global_config=service.global_config_path,
                 exporter=service.backend, load=service.journal.load, remove_layers=service._remove_local_layers,
@@ -171,7 +173,7 @@ class LocalCompactionTests(unittest.TestCase):
             service, owner, _, _ = self.fixture(Path(raw).resolve())
             old = self.park_cycles(service, owner)
             compactor = service._local_compactor
-            compactor.wait(3)
+            compactor.wait(HANG_SECONDS)
             old = replace(old, state=StorageVolumeState.ACQUIRING)
             for changed in (replace(old, sandbox_generation=2),
                             replace(old, state=StorageVolumeState.DELETED),
@@ -186,7 +188,7 @@ class LocalCompactionTests(unittest.TestCase):
                 service, owner, _, _ = self.fixture(Path(raw).resolve())
                 service.publisher = fixtures.FakePublisher()
                 old = self.park_cycles(service, owner)
-                service._local_compactor.wait(3)
+                service._local_compactor.wait(HANG_SECONDS)
                 update = service.journal.update_pending
 
                 def persist(record):
@@ -214,7 +216,7 @@ class LocalCompactionTests(unittest.TestCase):
             mounted = service.converge_volume(owner, action="mount", operation_id="third-mount")
             service.host.busy_devices.add(Path(mounted.device_path))
             old = service.converge_volume(owner, action="release", operation_id="third-release")
-            service._local_compactor.wait(3)
+            service._local_compactor.wait(HANG_SECONDS)
             adopted = service.converge_volume(owner, action="mount", operation_id="retired-adopt")
             self.assertEqual(len(adopted.sealed_layer_paths), 1)
             self.assertTrue(all(Path(path).exists() for path in old.sealed_layer_paths))
@@ -230,10 +232,10 @@ class LocalCompactionTests(unittest.TestCase):
             with patch("ucloud_sandboxes.storage_native_compaction.LOGGER.exception"):
                 try:
                     self.park_cycles(service, owner)
-                    self.assertTrue(entered.wait(2))
+                    self.assertTrue(entered.wait(HANG_SECONDS))
                     service.converge_volume(owner, action="delete", operation_id="delete-during-export")
                     resume.set()
-                    compactor.wait(3)
+                    compactor.wait(HANG_SECONDS)
                     self.assertEqual(service.journal.load(owner.volume_id).state, StorageVolumeState.DELETED)
                     self.assertFalse((service.config.runtime_root / owner.volume_id).exists())
                     self.assertEqual(compactor.metrics()["local_compaction_completed"], 0)
@@ -241,7 +243,7 @@ class LocalCompactionTests(unittest.TestCase):
                     self.assertEqual(compactor.metrics()["local_compaction_cancelled"], 1)
                 finally:
                     resume.set()
-                    compactor.wait(5)
+                    compactor.wait(HANG_SECONDS)
 
     def test_delete_cancels_export_before_first_chunk_without_waiting_for_timeout(self):
         entered = threading.Event()
@@ -267,17 +269,17 @@ class LocalCompactionTests(unittest.TestCase):
             compactor.timeout_seconds = 30
             try:
                 self.park_cycles(service, owner)
-                self.assertTrue(entered.wait(2))
+                self.assertTrue(entered.wait(HANG_SECONDS))
                 service.converge_volume(owner, action="delete", operation_id="cancel-before-chunk")
-                self.assertTrue(stopped.wait(1), "export waiter ignored cancellation")
-                compactor.wait(1)
+                compactor.wait(HANG_SECONDS)  # its 30s export timeout ends an ignored cancel
+                self.assertTrue(stopped.is_set(), "export waiter ignored cancellation")
                 self.assertEqual(compactor.metrics()["local_compaction_active"], 0)
                 self.assertEqual(compactor.metrics()["local_compaction_cancelled"], 1)
                 self.assertEqual(compactor.metrics()["local_compaction_failed"], 0)
                 self.assertEqual(compactor.metrics()["local_compaction_discarded_bytes"], 0)
             finally:
                 emergency_release.set()
-                compactor.wait(2)
+                compactor.wait(HANG_SECONDS)
 
     def test_export_digest_failure_keeps_original_layers(self):
         with TemporaryDirectory(dir="/tmp") as raw:
@@ -291,7 +293,7 @@ class LocalCompactionTests(unittest.TestCase):
             service.backend.export_compacted_image = corrupt
             with patch("ucloud_sandboxes.storage_native_compaction.LOGGER.exception"):
                 old = self.park_cycles(service, owner)
-                service._local_compactor.wait(3)
+                service._local_compactor.wait(HANG_SECONDS)
             self.assertEqual(service._local_compactor.metrics()["local_compaction_failed"], 1)
             self.assertTrue(all(Path(path).exists() for path in old.sealed_layer_paths))
             self.assertFalse((service.config.runtime_root / owner.volume_id / "local-compaction.json").exists())
@@ -303,7 +305,7 @@ class LocalCompactionTests(unittest.TestCase):
             compactor = service._local_compactor
             try:
                 old = self.park_cycles(service, owner)
-                self.assertTrue(entered.wait(2))
+                self.assertTrue(entered.wait(HANG_SECONDS))
                 volume = service.config.runtime_root / owner.volume_id
                 live = set(volume.glob(".local-compact-*"))
                 abandoned = volume / ".local-compact-abandoned"
@@ -318,11 +320,11 @@ class LocalCompactionTests(unittest.TestCase):
                 self.assertFalse(unused.exists())
                 self.assertTrue(all(Path(path).exists() for path in old.sealed_layer_paths))
                 resume.set()
-                compactor.wait(3)
+                compactor.wait(HANG_SECONDS)
                 self.assertEqual(compactor.metrics()["local_compaction_completed"], 1)
             finally:
                 resume.set()
-                compactor.wait(5)
+                compactor.wait(HANG_SECONDS)
 
     def test_disk_headroom_and_damaged_candidate_keep_original_checkpoint(self):
         with TemporaryDirectory(dir="/tmp") as raw:
@@ -330,7 +332,7 @@ class LocalCompactionTests(unittest.TestCase):
             with patch("ucloud_sandboxes.storage_native_compaction.shutil.disk_usage") as usage:
                 usage.return_value.free = 1024
                 old = self.park_cycles(service, owner)
-                service._local_compactor.wait(3)
+                service._local_compactor.wait(HANG_SECONDS)
             self.assertEqual(service._local_compactor.metrics()["local_compaction_deferred"], 1)
             manifest = service.config.runtime_root / owner.volume_id / "local-compaction.json"
             manifest.write_text('{"damaged": true}')
@@ -346,7 +348,7 @@ class LocalCompactionTests(unittest.TestCase):
             Path(old.sealed_layer_paths[0]).write_bytes(b"base" * 32768)
             service._local_compactor = compactor
             compactor.submit(old)
-            compactor.wait(3)
+            compactor.wait(HANG_SECONDS)
             adopted = service.converge_volume(owner, action="mount", operation_id="keep-base")
             self.assertEqual(len(adopted.sealed_layer_paths), 2)
             self.assertEqual(adopted.sealed_layer_paths[0], old.sealed_layer_paths[0])

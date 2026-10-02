@@ -1,0 +1,131 @@
+{
+ "note": "Transcribed from the spike's console output in the operator session. The VM-side raw files (per-request latencies, per-cycle backend stats) were lost when gateway access ended and the VM was deleted.",
+ "build": {
+  "rows": 500000000,
+  "build_s": 1120.27,
+  "rows_per_s": 446322,
+  "file_bytes": 31341920256,
+  "bytes_per_row": 62.7,
+  "order": "key order, journal_mode=OFF, 1M-row transactions"
+ },
+ "fill_20M_rows": {
+  "sorted": {
+   "bytes": 1236103168,
+   "s": 42.5,
+   "bytes_per_row": 61.8
+  },
+  "random": {
+   "bytes": 1213915136,
+   "s": 125.6,
+   "bytes_per_row": 60.7
+  },
+  "random_over_sorted": 0.982
+ },
+ "probe_30k_ids_half_present": [
+  {
+   "state": "cold",
+   "shape": "in999",
+   "s": 12.53
+  },
+  {
+   "state": "cold",
+   "shape": "point",
+   "s": 11.8
+  },
+  {
+   "state": "cold",
+   "shape": "temp_join",
+   "s": 10.46
+  },
+  {
+   "state": "warm1",
+   "shape": "in999",
+   "s": 10.0
+  },
+  {
+   "state": "warm1",
+   "shape": "point",
+   "s": 9.32
+  },
+  {
+   "state": "warm1",
+   "shape": "temp_join",
+   "s": 7.37
+  },
+  {
+   "state": "warm2",
+   "shape": "in999",
+   "s": 6.68
+  },
+  {
+   "state": "warm2",
+   "shape": "point",
+   "s": 7.06
+  },
+  {
+   "state": "warm2",
+   "shape": "temp_join",
+   "s": 5.94
+  }
+ ],
+ "probe2_sorted_point_lookups_parallel_connections": [
+  {
+   "cache": "cold",
+   "threads": 1,
+   "s": 13.47
+  },
+  {
+   "cache": "cold",
+   "threads": 4,
+   "s": 3.54
+  },
+  {
+   "cache": "cold",
+   "threads": 16,
+   "s": 4.17
+  },
+  {
+   "cache": "cold",
+   "threads": 64,
+   "s": 5.22
+  },
+  {
+   "cache": "file fully in page cache",
+   "threads": 1,
+   "s": 0.508
+  },
+  {
+   "cache": "full",
+   "threads": 4,
+   "s": 0.535
+  },
+  {
+   "cache": "full",
+   "threads": 16,
+   "s": 4.84
+  },
+  {
+   "cache": "full",
+   "threads": 64,
+   "s": 5.12
+  }
+ ],
+ "insert": {
+  "rows": 1005000,
+  "txn_rows": 7500,
+  "s": 222.7,
+  "rows_per_s": 4513,
+  "settings": "WAL, synchronous=NORMAL, cache_size 4 GB, uniform random ids into the 500M-row table after the lookup probes"
+ },
+ "small_scale_check_200k_rows": {
+  "build_rows_per_s": 481006,
+  "file_bytes": 12034048,
+  "warm_lookup_s": {
+   "in999": 0.042,
+   "point": 0.149,
+   "temp_join": 0.112
+  },
+  "insert_rows_per_s": 43437
+ },
+ "disk": "CCX63 local disk (virtio 'QEMU HARDDISK', 915.5 GB)"
+}

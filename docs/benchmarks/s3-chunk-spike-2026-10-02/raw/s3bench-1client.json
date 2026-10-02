@@ -1,0 +1,424 @@
+{
+ "note": "Transcribed from the spike's console output in the operator session. The VM-side raw files (per-request latencies, per-cycle backend stats) were lost when gateway access ended and the VM was deleted.",
+ "client": "CCX63 sandboxes-spike-s12, public IPv4, hel1",
+ "endpoint": "https://ucloud-sandboxes-prod-20260926.hel1.your-objectstorage.com (37.27.175.128)",
+ "method": "presigned GET URLs, Range requests at random 4 KiB-aligned offsets in random packs of 8-64 MiB (623 packs, 16.9 GB), keep-alive TLS per thread, 15 s cells (first second discarded), 30 s read timeout; req/s and MiB/s are over the cell window including overrun by stalled requests, so they are lower bounds",
+ "run": "2026-10-02 15:23-15:46Z",
+ "cells": [
+  {
+   "size_kib": 64,
+   "conc": 1,
+   "requests_ok": 55,
+   "req_per_s": 3.9,
+   "MiB_per_s": 0.2,
+   "ttfb_ms": {
+    "p50": 68.0,
+    "p95": 462.0,
+    "p99": 6871.0,
+    "max": 6871.0
+   },
+   "total_ms": {
+    "p50": 68.0,
+    "p95": 462.0,
+    "p99": 6871.0,
+    "max": 6871.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 0
+  },
+  {
+   "size_kib": 64,
+   "conc": 8,
+   "requests_ok": 478,
+   "req_per_s": 30.7,
+   "MiB_per_s": 1.9,
+   "ttfb_ms": {
+    "p50": 89.0,
+    "p95": 720.0,
+    "p99": 3889.0,
+    "max": 5790.0
+   },
+   "total_ms": {
+    "p50": 91.0,
+    "p95": 792.0,
+    "p99": 3890.0,
+    "max": 5790.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 0
+  },
+  {
+   "size_kib": 64,
+   "conc": 32,
+   "requests_ok": 1675,
+   "req_per_s": 45.3,
+   "MiB_per_s": 2.8,
+   "ttfb_ms": {
+    "p50": 85.0,
+    "p95": 967.0,
+    "p99": 5369.0,
+    "max": 28237.0
+   },
+   "total_ms": {
+    "p50": 88.0,
+    "p95": 1069.0,
+    "p99": 5369.0,
+    "max": 28238.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 0
+  },
+  {
+   "size_kib": 64,
+   "conc": 64,
+   "requests_ok": 3899,
+   "req_per_s": 56.7,
+   "MiB_per_s": 3.5,
+   "ttfb_ms": {
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "total_ms": {
+    "p50": 69.0,
+    "p95": 841.0,
+    "p99": 3676.0,
+    "max": 17480.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 5
+  },
+  {
+   "size_kib": 64,
+   "conc": 128,
+   "requests_ok": 5032,
+   "req_per_s": 68.3,
+   "MiB_per_s": 4.3,
+   "ttfb_ms": {
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "total_ms": {
+    "p50": 46.0,
+    "p95": 2449.0,
+    "p99": 8708.0,
+    "max": 20387.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 12
+  },
+  {
+   "size_kib": 64,
+   "conc": 256,
+   "requests_ok": 6714,
+   "req_per_s": 90.8,
+   "MiB_per_s": 5.7,
+   "ttfb_ms": {
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "total_ms": {
+    "p50": 39.0,
+    "p95": 3254.0,
+    "p99": 15737.0,
+    "max": 29932.0
+   },
+   "slowdown_503": 30,
+   "errors_client_timeouts": 57
+  },
+  {
+   "size_kib": 1024,
+   "conc": 1,
+   "requests_ok": 25,
+   "req_per_s": 1.5,
+   "MiB_per_s": 1.5,
+   "ttfb_ms": {
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "total_ms": {
+    "p50": 70.0,
+    "p95": 2421.0,
+    "p99": 11920.0,
+    "max": 11920.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 0
+  },
+  {
+   "size_kib": 1024,
+   "conc": 8,
+   "requests_ok": 343,
+   "req_per_s": 5.2,
+   "MiB_per_s": 5.2,
+   "ttfb_ms": {
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "total_ms": {
+    "p50": 79.0,
+    "p95": 876.0,
+    "p99": 6978.0,
+    "max": 18889.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 1
+  },
+  {
+   "size_kib": 1024,
+   "conc": 32,
+   "requests_ok": 1928,
+   "req_per_s": 48.6,
+   "MiB_per_s": 48.6,
+   "ttfb_ms": {
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "total_ms": {
+    "p50": 60.0,
+    "p95": 808.0,
+    "p99": 5495.0,
+    "max": 12758.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 0
+  },
+  {
+   "size_kib": 1024,
+   "conc": 64,
+   "requests_ok": 1549,
+   "req_per_s": 25.0,
+   "MiB_per_s": 25.0,
+   "ttfb_ms": {
+    "p50": 58.0,
+    "p95": 2848.0,
+    "p99": 13314.0,
+    "max": 28699.0
+   },
+   "total_ms": {
+    "p50": 70.0,
+    "p95": 4366.0,
+    "p99": 13957.0,
+    "max": 28705.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 1
+  },
+  {
+   "size_kib": 1024,
+   "conc": 128,
+   "requests_ok": 3738,
+   "req_per_s": 130.9,
+   "MiB_per_s": 130.9,
+   "ttfb_ms": {
+    "p50": 52.0,
+    "p95": 2342.0,
+    "p99": 12669.0,
+    "max": 28592.0
+   },
+   "total_ms": {
+    "p50": 63.0,
+    "p95": 3234.0,
+    "p99": 13033.0,
+    "max": 28600.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 0
+  },
+  {
+   "size_kib": 1024,
+   "conc": 256,
+   "requests_ok": 5863,
+   "req_per_s": 82.1,
+   "MiB_per_s": 82.1,
+   "ttfb_ms": {
+    "p50": 74.0,
+    "p95": 2134.0,
+    "p99": 9001.0,
+    "max": 28065.0
+   },
+   "total_ms": {
+    "p50": 288.0,
+    "p95": 3146.0,
+    "p99": 9576.0,
+    "max": 28071.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 4
+  },
+  {
+   "size_kib": 4096,
+   "conc": 1,
+   "requests_ok": 19,
+   "req_per_s": 1.1,
+   "MiB_per_s": 4.6,
+   "ttfb_ms": {
+    "p50": 86.0,
+    "p95": 4450.0,
+    "p99": 4450.0,
+    "max": 4450.0
+   },
+   "total_ms": {
+    "p50": 157.0,
+    "p95": 5839.0,
+    "p99": 5839.0,
+    "max": 5839.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 0
+  },
+  {
+   "size_kib": 4096,
+   "conc": 8,
+   "requests_ok": 189,
+   "req_per_s": 2.6,
+   "MiB_per_s": 10.5,
+   "ttfb_ms": {
+    "p50": 75.0,
+    "p95": 1757.0,
+    "p99": 4219.0,
+    "max": 5377.0
+   },
+   "total_ms": {
+    "p50": 140.0,
+    "p95": 2794.0,
+    "p99": 25363.0,
+    "max": 28967.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 1
+  },
+  {
+   "size_kib": 4096,
+   "conc": 32,
+   "requests_ok": 500,
+   "req_per_s": 7.2,
+   "MiB_per_s": 28.9,
+   "ttfb_ms": {
+    "p50": 70.0,
+    "p95": 3713.0,
+    "p99": 11591.0,
+    "max": 28143.0
+   },
+   "total_ms": {
+    "p50": 150.0,
+    "p95": 7454.0,
+    "p99": 19269.0,
+    "max": 28152.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 2
+  },
+  {
+   "size_kib": 4096,
+   "conc": 64,
+   "requests_ok": 397,
+   "req_per_s": 4.6,
+   "MiB_per_s": 18.5,
+   "ttfb_ms": {
+    "p50": 59.0,
+    "p95": 9916.0,
+    "p99": 24185.0,
+    "max": 25477.0
+   },
+   "total_ms": {
+    "p50": 223.0,
+    "p95": 14582.0,
+    "p99": 24452.0,
+    "max": 28369.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 1
+  },
+  {
+   "size_kib": 4096,
+   "conc": 128,
+   "requests_ok": 1648,
+   "req_per_s": 22.5,
+   "MiB_per_s": 89.8,
+   "ttfb_ms": {
+    "p50": 49.0,
+    "p95": 2675.0,
+    "p99": 17837.0,
+    "max": 28214.0
+   },
+   "total_ms": {
+    "p50": 143.0,
+    "p95": 9525.0,
+    "p99": 23660.0,
+    "max": 29718.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 33
+  },
+  {
+   "size_kib": 4096,
+   "conc": 256,
+   "requests_ok": 1388,
+   "req_per_s": 19.6,
+   "MiB_per_s": 78.3,
+   "ttfb_ms": {
+    "p50": 63.0,
+    "p95": 2184.0,
+    "p99": 15201.0,
+    "max": 28844.0
+   },
+   "total_ms": {
+    "p50": 2675.0,
+    "p95": 7503.0,
+    "p99": 23021.0,
+    "max": 28868.0
+   },
+   "slowdown_503": 0,
+   "errors_client_timeouts": 4
+  }
+ ],
+ "first_attempt_20s_cells_15:14Z": [
+  {
+   "size_kib": 64,
+   "conc": 1,
+   "requests_ok": 74,
+   "total_ms": {
+    "p50": 97.9,
+    "p95": 1323.9,
+    "p99": 4478.1
+   },
+   "errors": 0
+  },
+  {
+   "size_kib": 64,
+   "conc": 8,
+   "requests_ok": 510,
+   "total_ms": {
+    "p50": 73.7,
+    "p95": 459.8,
+    "p99": 8932.5,
+    "max": 17614.9
+   },
+   "errors": 3
+  },
+  {
+   "size_kib": 64,
+   "conc": 32,
+   "requests_ok": 645,
+   "total_ms": {
+    "p50": 51.4,
+    "p95": 5139.7,
+    "p99": 21788.6,
+    "max": 29114.5
+   },
+   "errors": 11
+  }
+ ]
+}

@@ -1,0 +1,87 @@
+{
+ "note": "Transcribed from the spike's console output in the operator session. The VM-side raw files (per-request latencies, per-cycle backend stats) were lost when gateway access ended and the VM was deleted.",
+ "summary": {
+  "tag": "main",
+  "pack_wall_s": 166.3178253173828,
+  "conversions": 618,
+  "packs": 623,
+  "pack_bytes": 16857630690,
+  "pack_payload_bytes": 16814716357,
+  "pack_size_median": 9704700,
+  "pack_size_p90": 67087537,
+  "packs_at_cap": 182,
+  "chunk_refs_in_conversions": 3499413,
+  "unique_chunks": 874989,
+  "dup_ratio_by_count": 0.7499612077797048,
+  "refs_bytes_c": 57143440140,
+  "dup_ratio_by_bytes": 0.7057454658696718,
+  "dedupe_factor_bytes": 3.3984183215919113,
+  "stored_raw_chunks": 463020,
+  "zero_chunks": 10,
+  "bootstrap_bytes": 1250742272,
+  "bootstrap_zst_bytes": 439057635,
+  "map_zst_bytes": 231117880,
+  "fanout_packs_per_image": {
+   "median": 39,
+   "p90": 79,
+   "max": 144,
+   "mean": 43.651933701657455
+  },
+  "packs_for_90pct_bytes": {
+   "median": 9,
+   "p90": 18
+  },
+  "fanout_by_family": {
+   "OpenSWE": {
+    "n": 11,
+    "median": 39,
+    "max": 47
+   },
+   "R2E-Gym": {
+    "n": 8,
+    "median": 91,
+    "max": 96
+   },
+   "SWE-Lego": {
+    "n": 7,
+    "median": 79,
+    "max": 129
+   },
+   "SWE-rebench v2": {
+    "n": 5,
+    "median": 87,
+    "max": 144
+   },
+   "SWE-smith": {
+    "n": 10,
+    "median": 83,
+    "max": 117
+   },
+   "ScaleSWE": {
+    "n": 60,
+    "median": 44,
+    "max": 74
+   },
+   "TMax": {
+    "n": 40,
+    "median": 29,
+    "max": 55
+   },
+   "Terminal-Lego": {
+    "n": 40,
+    "median": 23,
+    "max": 45
+   }
+  }
+ },
+ "inputs": {
+  "sample": "S10 raw/sample.json (181 images)",
+  "fetch": "799 blobs, 86.4 GB summed / 58.6 GB unique layers, fetched in 187.2 s",
+  "convert": "nydus-image v2.4.5 create -t targz-rafs --fs-version 6 --digester sha256 --compressor zstd --chunk-size 0x40000 --repeatable, per unique layer, 40 in parallel, no dictionary; then merge --original-blob-ids per image, in S10's shuffled order (seed 13)"
+ },
+ "s3_objects_uploaded": {
+  "packs": 623,
+  "meta": 362,
+  "bytes": 17527806205
+ }
+}

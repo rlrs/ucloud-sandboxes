@@ -1,0 +1,29 @@
+{
+ "note": "Transcribed from the spike's console output in the operator session. The VM-side raw files (per-request latencies, per-cycle backend stats) were lost when gateway access ended and the VM was deleted.",
+ "vm": {
+  "name": "sandboxes-spike-s12",
+  "id": 168399354,
+  "type": "ccx63",
+  "image": 438728121,
+  "private_ip": "10.42.0.44",
+  "public_ipv4": "46.62.248.195",
+  "created": "2026-10-02T14:56:31Z",
+  "deleted": "2026-10-02T17:00:21Z",
+  "runtime": "2 h 04 min (2.07 VM-hours)",
+  "confirmed": "GET /servers/168399354 -> 404 not_found; name lookups for -s12, -s12-b, -s12-c return none"
+ },
+ "client_vms_b_c": "never created: POST /servers for cpx42 returned 403 resource_limit_exceeded (server_shared_cores_limit) at 15:13Z and 15:35Z",
+ "s3_prefix": {
+  "bucket": "ucloud-sandboxes-prod-20260926",
+  "prefix": "spike-s12/",
+  "objects_before": 985,
+  "bytes_before": 17527806205,
+  "deleted": "984 by one multi-object delete (response truncated) + 1 by single DELETE (204) = 985",
+  "objects_after": 0,
+  "top_level_after": [
+   "prod/"
+  ]
+ },
+ "gateway_access": "gw worked from 14:55Z until about 16:35Z (when the 3-client run and bursts were queued on the VM); the gateway then stopped answering (no SSH banner or ping) until 16:43Z; from 16:44Z publickey authentication failed (6 tries over 15 min, the same state as at the session start, when the gateway-init key was absent from this checkout). The VM was deleted through the Hetzner API at 17:00Z without further access",
+ "left_on_gateway": "/root/s12-staging/ (spike scripts and an empty results/ dir; the credentials copy was deleted at 15:00Z) and a known_hosts entry for 10.42.0.44"
+}

@@ -1,0 +1,31 @@
+{
+ "note": "Transcribed from the spike's console output in the operator session. The VM-side raw files (per-request latencies, per-cycle backend stats) were lost when gateway access ended and the VM was deleted.",
+ "kernel": "7.0.0-30-generic (source linux-source-7.0.0=7.0.0-30.30, SUBLEVEL 12)",
+ "config": {
+  "CONFIG_FS_STACK": "y",
+  "CONFIG_EROFS_FS": "m",
+  "CONFIG_EROFS_FS_XATTR": "y",
+  "CONFIG_EROFS_FS_BACKED_BY_FILE": "y",
+  "CONFIG_EROFS_FS_PAGE_CACHE_SHARE": "unset (off)",
+  "CONFIG_EROFS_FS_ONDEMAND": "unset"
+ },
+ "kconfig": "EROFS_FS_PAGE_CACHE_SHARE: bool 'EROFS page cache share support (experimental)', depends on EROFS_FS && EROFS_FS_XATTR && !EROFS_FS_ONDEMAND",
+ "module_build": {
+  "recipe": "make -C /usr/src/linux-headers-7.0.0-30-generic M=$S/fs/erofs CC=x86_64-linux-gnu-gcc CONFIG_EROFS_FS=m CONFIG_EROFS_FS_PAGE_CACHE_SHARE=y KCFLAGS=-DCONFIG_EROFS_FS_PAGE_CACHE_SHARE=1 modules",
+  "vermagic": "7.0.0-30-generic SMP preempt mod_unload modversions",
+  "ishare_symbols": 26,
+  "sha256": "2dde3450ab4105cdef0f094e361b89abd38c607f8d1856ecf4941a6d0babd7b6",
+  "loaded": false
+ },
+ "mount_options": "inode_share (needs domain_id=%s; refused with FSDAX); silently turned off with 'on-disk ishare xattrs not found' when the superblock lacks COMPAT_ISHARE_XATTRS",
+ "on_disk": {
+  "superblock": "feature_compat bit 0x20 (EROFS_FEATURE_COMPAT_ISHARE_XATTRS) and ishare_xattr_prefix_id (u8 at superblock offset 105), an index into the long xattr name prefix table (xattr_prefix_count / xattr_prefix_start, INCOMPAT_XATTR_PREFIXES 0x40)",
+  "fingerprint": "per regular file, the value of the xattr whose full name is that long prefix (empty suffix); opaque bytes, 1..block size; the kernel appends domain_id, hashes with xxh32 into an internal inode table and compares the full bytes, and refuses to share when i_size differs"
+ },
+ "tools": {
+  "nydus-image v2.4.5": "no option to emit fingerprint xattrs or the superblock fields (only --digester for chunk digests)",
+  "mkfs.erofs 1.9 (Ubuntu 26.04)": "--xattr-inode-digest=X records inode digests in xattr X; test image: feature_compat 0x37 (includes 0x20), feature_incompat 0x40, xattr_prefix_count 1, ishare_xattr_prefix_id 0. Also --tar=f|i|headerball and --oci=f|i[,insecure] inputs",
+  "post-processing a RAFS bootstrap": "needs a long-prefix table plus an xattr in every regular file's inode body, which changes inode sizes and so relayouts the metadata: not a patch-in-place"
+ },
+ "measurement": "not run: gateway access was lost before (e) started"
+}

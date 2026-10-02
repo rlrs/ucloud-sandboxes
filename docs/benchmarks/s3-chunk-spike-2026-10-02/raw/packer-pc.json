@@ -1,0 +1,34 @@
+{
+ "note": "Transcribed from the spike's console output in the operator session. The VM-side raw files (per-request latencies, per-cycle backend stats) were lost when gateway access ended and the VM was deleted.",
+ "summary": {
+  "tag": "pc (cumulative with main)",
+  "conversions": 738,
+  "packs": 714,
+  "pack_bytes": 17489283440,
+  "unique_chunks": 931672,
+  "dup_ratio_by_bytes": 0.7232322032015328,
+  "fanout_packs_per_image": {
+   "median": 31,
+   "p90": 46,
+   "max": 68,
+   "mean": 31.515625
+  },
+  "packs_for_90pct_bytes": {
+   "median": 8,
+   "p90": 10
+  },
+  "fanout_by_family": {
+   "TMax": {
+    "n": 11,
+    "median": 27,
+    "max": 52
+   },
+   "Terminal-Lego": {
+    "n": 53,
+    "median": 31,
+    "max": 68
+   }
+  }
+ },
+ "note2": "The 64 page-cache images, packed into the same index after the 181-image corpus (local packs only, not uploaded)."
+}

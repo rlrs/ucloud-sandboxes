@@ -67,6 +67,8 @@ they change PostgreSQL placement behavior.
    (new metrics), create p95, and relay delivery.
 8. **Take the W0 baseline** with `scripts/bench_rl_scale.py`, every
    scenario, at the declared load, and record it in `docs/benchmarks/`.
+   This baseline covers the control plane at moderate load. The realistic
+   500+-rollout start is the deferred W9 `rollout` scenario.
 
 ## Rollback
 

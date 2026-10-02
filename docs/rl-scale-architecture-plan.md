@@ -935,6 +935,7 @@ is therefore **≤ 78k lines**, with 70k as a stretch goal.
 | **C3.1 commit** (S4 passed) · **C3.3 fork** (S5 passed) · C3.2 group create · C2.7 hydration API | C5.1 in-guest agent: S7 guest-socket mount layout |
 | C4.4 heartbeat sender and fleet table · C4.3 placement library · C4.7 program-scheduler prune | C2.4 Sentry-native EROFS: demoted by S2 to optional cleanup |
 | C2.10 `ucloud-prep` split · C5.3 admission consolidation | |
+| | W9 rollout benchmark and cache seeding: deferred until scheduled; needs a real run's image list |
 
 Several gateway items touch `control_plane.py`. Run C6.1 first, alone, so later
 gateway changes land in separate modules and can proceed in parallel without
@@ -949,6 +950,75 @@ merge conflicts.
   re-issued without downtime.
 - **Commit residue checks.** The C3.1 denylist must run *before* signing, and
   committed components must never include `/run/ucloud` or credential paths.
+
+### W9 — A realistic rollout-start benchmark, and caching for it (deferred)
+
+**Status:** deferred, including the measurements. Nothing here runs until it
+is scheduled. It needs the image list of a real training run.
+
+**Why.** The real load is 500+ rollouts starting at once on distinct prepared
+SWE and terminal images, usually on a fleet scaled to zero. The W0 scenarios
+measure the control plane at moderate load instead:
+- `burst` defaults to 64 sandboxes at concurrency 32 over a few images;
+- the first command is `true`, which reads almost nothing from the image;
+- fleet and cache state are not controlled or recorded;
+- sandboxes are deleted right after their first command;
+- `bytes_fetched_share` is `null`.
+
+The closest evidence is the rc57/rc58 many-image agentic run in
+`docs/image-import.md`: 40 SWE images, one pre-warmed CCX63, 500 live
+sandboxes, create p95 61 s. Its driver was not committed.
+
+The likely limit is data movement, not the control plane. Every image is
+served from the 3 TB registry Volume behind the one CCX23 gateway, so a cold
+start of 500 fans in on one NIC and one network-attached Volume. Foundations
+make most bytes shared: a TMax task adds 24 KB to a 363 MB foundation, and
+all 37 foundations total about 20 GB of EROFS components. A run's working set
+should therefore fit in each worker's 128 GiB chunk cache, if it arrives there
+before the burst.
+
+**C9.1 Registry fan-in ceiling.**
+- **Change:** measure the read throughput of the registry Volume (fio) and of
+  gateway → worker chunk fetches with 1, 3 and N parallel workers.
+- **Where:** extend `scripts/benchmark_hetzner_volume.sh`, plus a parallel
+  fetch probe run from workers.
+- **Output:** the GB/s ceiling, and with it the floor on cold-start time for a
+  given working set.
+
+**C9.2 A `rollout` scenario in `scripts/bench_rl_scale.py`.**
+- **Input:** the run's image list (`--images-file`), with a first command per
+  image family that does real startup work: for SWE, `git status` plus test
+  collection; for terminal tasks, the harness's own startup.
+- **Arrival:** all N creates at once, N ∈ {512, 1,024}, with no client
+  concurrency cap below N.
+- **Fleet state, declared and recorded:** from zero; warm workers with an
+  empty cache; warm workers with a seeded cache (C9.3).
+- **Lifetime:** sandboxes stay alive for M turns with think time, using the
+  rc57 turn mix (a grep over the repo, a test file, an edit plus `git diff`).
+  New starts then overlap with running work.
+- **Report:**
+  - time to ready: p50, p95, p99, max, and the stragglers by image;
+  - C0.2 per-phase create timings;
+  - heartbeat `environment_io` counters, which fill `bytes_fetched_share`;
+  - gateway registry egress;
+  - worker provisioning time;
+  - failures by error code.
+- **Publication:** three comparable runs, with raw JSON under
+  `docs/benchmarks/rl-scale-rollout-*`. Hardware, versions, image set and
+  cache state go in the README, so the results can be cited externally.
+
+**C9.3 Seed caches before the burst.**
+- **Change:** a run declares its image set. Workers fetch that set's
+  foundations and prefetch-trace chunks into the node chunk cache at boot,
+  before or in parallel with admission.
+- **Where:** next to the prepared-capacity API (`docs/api-reference.md`) and
+  the environment backend's prefetch.
+- **If C9.1 shows the gateway is the limit:**
+  - workers serve chunks to each other;
+  - or a second registry replica serves them;
+  - or warm workers are kept ahead of a scheduled run.
+- **Gate:** C9.2 from zero, with and without seeding. With seeding, the bytes
+  fetched during the burst are about the task deltas only.
 
 ## 6. Sequencing
 

@@ -1,0 +1,272 @@
+{
+  "machine": {
+    "cpus": 30,
+    "python": "3.10.13"
+  },
+  "runs": [
+    {
+      "variant": "asyncio",
+      "concurrency": 64,
+      "seconds": 15.03,
+      "requests": 58456,
+      "errors": 0,
+      "first_request_on_new_connection": {
+        "n": 64,
+        "p50_ms": 33.76,
+        "p90_ms": 36.29,
+        "p99_ms": 44.67,
+        "max_ms": 44.67
+      },
+      "throughput_mib_s": 3890.4,
+      "server_cpu_cores": 0.99,
+      "n": 58456,
+      "p50_ms": 15.5,
+      "p90_ms": 20.69,
+      "p99_ms": 24.69,
+      "max_ms": 59.14
+    },
+    {
+      "variant": "asyncio",
+      "concurrency": 128,
+      "seconds": 15.04,
+      "requests": 58326,
+      "errors": 0,
+      "first_request_on_new_connection": {
+        "n": 128,
+        "p50_ms": 22.16,
+        "p90_ms": 33.25,
+        "p99_ms": 41.06,
+        "max_ms": 42.0
+      },
+      "throughput_mib_s": 3877.2,
+      "server_cpu_cores": 1.0,
+      "n": 58326,
+      "p50_ms": 31.06,
+      "p90_ms": 42.37,
+      "p99_ms": 55.84,
+      "max_ms": 86.62
+    },
+    {
+      "variant": "asyncio",
+      "concurrency": 256,
+      "seconds": 15.08,
+      "requests": 56069,
+      "errors": 0,
+      "first_request_on_new_connection": {
+        "n": 256,
+        "p50_ms": 73.73,
+        "p90_ms": 93.86,
+        "p99_ms": 120.69,
+        "max_ms": 121.01
+      },
+      "throughput_mib_s": 3718.9,
+      "server_cpu_cores": 1.0,
+      "n": 56069,
+      "p50_ms": 65.03,
+      "p90_ms": 86.84,
+      "p99_ms": 100.7,
+      "max_ms": 120.87
+    },
+    {
+      "variant": "threaded",
+      "concurrency": 64,
+      "seconds": 15.03,
+      "requests": 59787,
+      "errors": 0,
+      "first_request_on_new_connection": {
+        "n": 64,
+        "p50_ms": 37.5,
+        "p90_ms": 136.07,
+        "p99_ms": 188.81,
+        "max_ms": 188.81
+      },
+      "throughput_mib_s": 3979.0,
+      "server_cpu_cores": 2.05,
+      "n": 59787,
+      "p50_ms": 14.53,
+      "p90_ms": 27.68,
+      "p99_ms": 42.53,
+      "max_ms": 83.27
+    },
+    {
+      "variant": "threaded",
+      "concurrency": 128,
+      "seconds": 15.05,
+      "requests": 58226,
+      "errors": 0,
+      "first_request_on_new_connection": {
+        "n": 128,
+        "p50_ms": 121.33,
+        "p90_ms": 378.81,
+        "p99_ms": 425.97,
+        "max_ms": 441.24
+      },
+      "throughput_mib_s": 3870.0,
+      "server_cpu_cores": 2.04,
+      "n": 58226,
+      "p50_ms": 29.74,
+      "p90_ms": 57.06,
+      "p99_ms": 87.46,
+      "max_ms": 160.41
+    },
+    {
+      "variant": "threaded",
+      "concurrency": 256,
+      "seconds": 15.08,
+      "requests": 56309,
+      "errors": 0,
+      "first_request_on_new_connection": {
+        "n": 256,
+        "p50_ms": 559.37,
+        "p90_ms": 1710.03,
+        "p99_ms": 2048.02,
+        "max_ms": 2105.61
+      },
+      "throughput_mib_s": 3733.3,
+      "server_cpu_cores": 2.1,
+      "n": 56309,
+      "p50_ms": 58.76,
+      "p90_ms": 112.91,
+      "p99_ms": 175.52,
+      "max_ms": 312.91
+    },
+    {
+      "variant": "threaded-copy",
+      "concurrency": 64,
+      "seconds": 15.02,
+      "requests": 67028,
+      "errors": 0,
+      "first_request_on_new_connection": {
+        "n": 64,
+        "p50_ms": 31.47,
+        "p90_ms": 134.0,
+        "p99_ms": 150.69,
+        "max_ms": 150.69
+      },
+      "throughput_mib_s": 4461.8,
+      "server_cpu_cores": 3.36,
+      "n": 67028,
+      "p50_ms": 13.15,
+      "p90_ms": 23.9,
+      "p99_ms": 35.91,
+      "max_ms": 82.23
+    },
+    {
+      "variant": "threaded-copy",
+      "concurrency": 128,
+      "seconds": 15.04,
+      "requests": 65973,
+      "errors": 0,
+      "first_request_on_new_connection": {
+        "n": 128,
+        "p50_ms": 115.78,
+        "p90_ms": 382.97,
+        "p99_ms": 465.94,
+        "max_ms": 467.79
+      },
+      "throughput_mib_s": 4387.4,
+      "server_cpu_cores": 3.34,
+      "n": 65973,
+      "p50_ms": 26.83,
+      "p90_ms": 48.53,
+      "p99_ms": 73.73,
+      "max_ms": 143.11
+    },
+    {
+      "variant": "threaded-copy",
+      "concurrency": 256,
+      "seconds": 15.06,
+      "requests": 62585,
+      "errors": 0,
+      "first_request_on_new_connection": {
+        "n": 256,
+        "p50_ms": 450.9,
+        "p90_ms": 1292.95,
+        "p99_ms": 1539.19,
+        "max_ms": 1627.36
+      },
+      "throughput_mib_s": 4154.8,
+      "server_cpu_cores": 3.39,
+      "n": 62585,
+      "p50_ms": 55.17,
+      "p90_ms": 100.48,
+      "p99_ms": 154.56,
+      "max_ms": 263.89
+    },
+    {
+      "variant": "aiohttp",
+      "concurrency": 64,
+      "seconds": 15.04,
+      "requests": 32971,
+      "errors": 0,
+      "first_request_on_new_connection": {
+        "n": 64,
+        "p50_ms": 61.39,
+        "p90_ms": 66.79,
+        "p99_ms": 68.6,
+        "max_ms": 68.6
+      },
+      "throughput_mib_s": 2192.2,
+      "server_cpu_cores": 1.15,
+      "n": 32971,
+      "p50_ms": 28.82,
+      "p90_ms": 31.67,
+      "p99_ms": 36.7,
+      "max_ms": 108.48
+    },
+    {
+      "variant": "aiohttp",
+      "concurrency": 128,
+      "seconds": 15.07,
+      "requests": 31145,
+      "errors": 0,
+      "first_request_on_new_connection": {
+        "n": 128,
+        "p50_ms": 35.22,
+        "p90_ms": 52.82,
+        "p99_ms": 70.79,
+        "max_ms": 72.16
+      },
+      "throughput_mib_s": 2066.3,
+      "server_cpu_cores": 1.12,
+      "n": 31145,
+      "p50_ms": 59.29,
+      "p90_ms": 64.22,
+      "p99_ms": 112.12,
+      "max_ms": 188.38
+    },
+    {
+      "variant": "aiohttp",
+      "concurrency": 256,
+      "seconds": 15.12,
+      "requests": 32784,
+      "errors": 0,
+      "first_request_on_new_connection": {
+        "n": 256,
+        "p50_ms": 87.25,
+        "p90_ms": 107.56,
+        "p99_ms": 113.05,
+        "max_ms": 114.36
+      },
+      "throughput_mib_s": 2168.2,
+      "server_cpu_cores": 1.14,
+      "n": 32784,
+      "p50_ms": 116.32,
+      "p90_ms": 123.26,
+      "p99_ms": 130.0,
+      "max_ms": 157.31
+    }
+  ],
+  "warm": {
+    "bytes": 4294967296,
+    "cached": 0,
+    "done": 512,
+    "errors": [],
+    "extents": 512,
+    "failed": 0,
+    "job": 1,
+    "objects": 64,
+    "seconds": 1.303,
+    "state": "complete"
+  }
+}

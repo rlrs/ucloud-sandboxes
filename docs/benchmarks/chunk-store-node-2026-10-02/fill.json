@@ -1,0 +1,290 @@
+{
+  "scale": 0.2,
+  "workload": {
+    "images": 64,
+    "readers": 192,
+    "windows_per_reader": 25,
+    "unique_windows": 1599,
+    "object_bytes": 5905580032
+  },
+  "runs": [
+    {
+      "extent_mib": "direct",
+      "max_hedges": 0,
+      "warmed_foundations": null,
+      "burst_seconds": 40.0,
+      "errors": 0,
+      "cold_start_storage_wait": {
+        "n": 192,
+        "p50_ms": 9238.5,
+        "p90_ms": 18446.3,
+        "p99_ms": 25621.0,
+        "max_ms": 33126.0
+      },
+      "window": {
+        "n": 4800,
+        "p50_ms": 192.1,
+        "p90_ms": 588.7,
+        "p99_ms": 7888.5,
+        "max_ms": 15027.0
+      },
+      "s3_gets": 4800,
+      "s3_gib": 4.69,
+      "amplification": 3.0,
+      "hedged": null,
+      "coalesced": null,
+      "wall_seconds": 8.0
+    },
+    {
+      "extent_mib": 1,
+      "max_hedges": 2,
+      "warmed_foundations": null,
+      "burst_seconds": 29.8,
+      "errors": 0,
+      "cold_start_storage_wait": {
+        "n": 192,
+        "p50_ms": 21850.9,
+        "p90_ms": 25168.2,
+        "p99_ms": 25712.5,
+        "max_ms": 25836.1
+      },
+      "window": {
+        "n": 4800,
+        "p50_ms": 895.4,
+        "p90_ms": 1236.7,
+        "p99_ms": 1517.0,
+        "max_ms": 2252.2
+      },
+      "s3_gets": 2541,
+      "s3_gib": 2.36,
+      "amplification": 1.51,
+      "hedged": 248,
+      "coalesced": 1304,
+      "wall_seconds": 6.2
+    },
+    {
+      "extent_mib": 4,
+      "max_hedges": 2,
+      "warmed_foundations": null,
+      "burst_seconds": 20.3,
+      "errors": 0,
+      "cold_start_storage_wait": {
+        "n": 192,
+        "p50_ms": 13132.3,
+        "p90_ms": 16231.4,
+        "p99_ms": 17048.0,
+        "max_ms": 17472.9
+      },
+      "window": {
+        "n": 4800,
+        "p50_ms": 507.5,
+        "p90_ms": 857.2,
+        "p99_ms": 1226.8,
+        "max_ms": 1609.4
+      },
+      "s3_gets": 1048,
+      "s3_gib": 3.79,
+      "amplification": 2.43,
+      "hedged": 108,
+      "coalesced": 396,
+      "wall_seconds": 4.2
+    },
+    {
+      "extent_mib": 4,
+      "max_hedges": 0,
+      "warmed_foundations": null,
+      "burst_seconds": 34.0,
+      "errors": 0,
+      "cold_start_storage_wait": {
+        "n": 192,
+        "p50_ms": 11362.3,
+        "p90_ms": 17701.0,
+        "p99_ms": 29024.5,
+        "max_ms": 30907.8
+      },
+      "window": {
+        "n": 4800,
+        "p50_ms": 334.9,
+        "p90_ms": 653.6,
+        "p99_ms": 5723.6,
+        "max_ms": 13958.4
+      },
+      "s3_gets": 949,
+      "s3_gib": 3.71,
+      "amplification": 2.37,
+      "hedged": 0,
+      "coalesced": 742,
+      "wall_seconds": 6.9
+    },
+    {
+      "extent_mib": 8,
+      "max_hedges": 2,
+      "warmed_foundations": null,
+      "burst_seconds": 21.8,
+      "errors": 0,
+      "cold_start_storage_wait": {
+        "n": 192,
+        "p50_ms": 15015.8,
+        "p90_ms": 18855.4,
+        "p99_ms": 20579.2,
+        "max_ms": 20805.7
+      },
+      "window": {
+        "n": 4800,
+        "p50_ms": 498.9,
+        "p90_ms": 1238.1,
+        "p99_ms": 2156.1,
+        "max_ms": 4712.6
+      },
+      "s3_gets": 675,
+      "s3_gib": 4.82,
+      "amplification": 3.09,
+      "hedged": 93,
+      "coalesced": 666,
+      "wall_seconds": 4.5
+    },
+    {
+      "extent_mib": 16,
+      "max_hedges": 2,
+      "warmed_foundations": null,
+      "burst_seconds": 22.7,
+      "errors": 0,
+      "cold_start_storage_wait": {
+        "n": 192,
+        "p50_ms": 15985.7,
+        "p90_ms": 20252.2,
+        "p99_ms": 21181.2,
+        "max_ms": 21348.2
+      },
+      "window": {
+        "n": 4800,
+        "p50_ms": 390.3,
+        "p90_ms": 1658.2,
+        "p99_ms": 4019.2,
+        "max_ms": 6344.7
+      },
+      "s3_gets": 498,
+      "s3_gib": 5.01,
+      "amplification": 3.21,
+      "hedged": 74,
+      "coalesced": 789,
+      "wall_seconds": 4.7
+    },
+    {
+      "extent_mib": 64,
+      "max_hedges": 2,
+      "warmed_foundations": null,
+      "burst_seconds": 24.4,
+      "errors": 0,
+      "cold_start_storage_wait": {
+        "n": 192,
+        "p50_ms": 16848.9,
+        "p90_ms": 21361.8,
+        "p99_ms": 22652.3,
+        "max_ms": 23551.0
+      },
+      "window": {
+        "n": 4800,
+        "p50_ms": 381.2,
+        "p90_ms": 1392.8,
+        "p99_ms": 6749.6,
+        "max_ms": 10229.5
+      },
+      "s3_gets": 424,
+      "s3_gib": 5.21,
+      "amplification": 3.33,
+      "hedged": 79,
+      "coalesced": 806,
+      "wall_seconds": 5.0
+    },
+    {
+      "extent_mib": 64,
+      "max_hedges": 0,
+      "warmed_foundations": null,
+      "burst_seconds": 24.7,
+      "errors": 0,
+      "cold_start_storage_wait": {
+        "n": 192,
+        "p50_ms": 13989.7,
+        "p90_ms": 18149.2,
+        "p99_ms": 19795.3,
+        "max_ms": 20692.2
+      },
+      "window": {
+        "n": 4800,
+        "p50_ms": 271.4,
+        "p90_ms": 1210.8,
+        "p99_ms": 5769.6,
+        "max_ms": 12736.8
+      },
+      "s3_gets": 351,
+      "s3_gib": 4.62,
+      "amplification": 2.96,
+      "hedged": 0,
+      "coalesced": 806,
+      "wall_seconds": 5.1
+    },
+    {
+      "extent_mib": 4,
+      "max_hedges": 2,
+      "warmed_foundations": {
+        "seconds": 10.6,
+        "state": "complete",
+        "gib": 2.5
+      },
+      "burst_seconds": 12.2,
+      "errors": 0,
+      "cold_start_storage_wait": {
+        "n": 192,
+        "p50_ms": 3916.9,
+        "p90_ms": 4989.0,
+        "p99_ms": 5849.4,
+        "max_ms": 5954.6
+      },
+      "window": {
+        "n": 4800,
+        "p50_ms": 143.2,
+        "p90_ms": 223.6,
+        "p99_ms": 496.0,
+        "max_ms": 1114.2
+      },
+      "s3_gets": 1129,
+      "s3_gib": 4.06,
+      "amplification": 2.6,
+      "hedged": 112,
+      "coalesced": 65,
+      "wall_seconds": 4.7
+    },
+    {
+      "extent_mib": 64,
+      "max_hedges": 2,
+      "warmed_foundations": {
+        "seconds": 11.2,
+        "state": "complete",
+        "gib": 2.5
+      },
+      "burst_seconds": 12.2,
+      "errors": 0,
+      "cold_start_storage_wait": {
+        "n": 192,
+        "p50_ms": 4144.3,
+        "p90_ms": 5507.1,
+        "p99_ms": 6803.2,
+        "max_ms": 6864.8
+      },
+      "window": {
+        "n": 4800,
+        "p50_ms": 153.7,
+        "p90_ms": 223.0,
+        "p99_ms": 622.0,
+        "max_ms": 1150.2
+      },
+      "s3_gets": 397,
+      "s3_gib": 4.9,
+      "amplification": 3.14,
+      "hedged": 51,
+      "coalesced": 52,
+      "wall_seconds": 4.8
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "scale": 0.2,
+  "workload": {
+    "images": 64,
+    "readers": 192,
+    "windows_per_reader": 25,
+    "unique_windows": 1599,
+    "object_bytes": 5905580032
+  },
+  "runs": [
+    {
+      "extent_mib": 4,
+      "max_hedges": 2,
+      "s3_concurrency": 128,
+      "warmed_foundations": null,
+      "burst_seconds": 20.3,
+      "errors": 0,
+      "cold_start_storage_wait": {
+        "n": 192,
+        "p50_ms": 13058.3,
+        "p90_ms": 16119.5,
+        "p99_ms": 17293.8,
+        "max_ms": 17925.0
+      },
+      "window": {
+        "n": 4800,
+        "p50_ms": 502.5,
+        "p90_ms": 852.4,
+        "p99_ms": 1240.8,
+        "max_ms": 1676.4
+      },
+      "s3_gets": 1043,
+      "s3_gib": 3.79,
+      "amplification": 2.42,
+      "hedged": 105,
+      "coalesced": 417,
+      "wall_seconds": 4.3
+    },
+    {
+      "extent_mib": 4,
+      "max_hedges": 2,
+      "s3_concurrency": 32,
+      "warmed_foundations": null,
+      "burst_seconds": 21.2,
+      "errors": 0,
+      "cold_start_storage_wait": {
+        "n": 192,
+        "p50_ms": 13760.6,
+        "p90_ms": 16975.7,
+        "p99_ms": 17883.8,
+        "max_ms": 18079.5
+      },
+      "window": {
+        "n": 4800,
+        "p50_ms": 529.0,
+        "p90_ms": 890.0,
+        "p99_ms": 1284.3,
+        "max_ms": 1679.7
+      },
+      "s3_gets": 1044,
+      "s3_gib": 3.79,
+      "amplification": 2.43,
+      "hedged": 102,
+      "coalesced": 412,
+      "wall_seconds": 4.4
+    }
+  ]
+}

@@ -164,3 +164,35 @@ Same procedure, from the 0.8.0 release directory. Scripts are in
 - **Operations.** `hz.py` now reads its API key from `build/hetzner-prod/hetzner.env`.
   Every production step ran as one plain `scripts/hetzner_prod/gw '…'`, `gscp` or `hz.py`
   command, so the permission rules in `.claude/settings.local.json` apply.
+
+## 0.8.2 (2026-10-02)
+
+The environment backend's EAGAIN fix (worker side) plus the opt-in upstream mirror
+code (off). Scripts are in `/work/ucloud-sandboxes/release-0.8.2-20261002`.
+
+- **Build and gateway.** Wheel `c2cc213c…`. Bundles repacked from 0.8.1: sandbox
+  `4c879e83…`, builder `116a9889…`. `gateway_upgrade_082.py apply`.
+- **Snapshot `438728121`.** Built from `438710747`. The source passed the canary twice.
+- **Incident during the canary.** The first autoscaled canary create got a
+  non-retryable 409 `placement_command_rejected` ("placement command incarnation no
+  longer exists") after about 6 minutes:
+  - placement had chosen the just-deleted snapshot source (job `168386564`), whose
+    last heartbeat was still fresh;
+  - the create retried 190 times against it;
+  - provider-confirmed loss then recorded `node_lost` and deleted the route.
+
+  Two follow-ups:
+  1. **Procedure:** drain the source (`POST /v1/drain` on its node agent, with the
+     node-control token) before sanitizing it.
+  2. **Bug:** a create whose worker is lost before the create starts should be
+     re-placed, or fail as retryable, not end with a hard 409.
+
+  The rerun passed on a fresh CCX63: cold create 57.9 s, then exec, park and wake.
+- **Burst smoke (first live run of the `rollout` scenario).** 48 creates at once on
+  one warm CCX63, `--fleet-state warm-empty`, sleep mode, 2 turns:
+  - all 48 succeeded, with no EAGAIN;
+  - time to ready p50 9.1 s, p95 15.8 s; first command p50 10.2 s, p95 21.1 s;
+  - SWE-smith was slowest, up to 22.9 s;
+  - 25 of the 48 were recipe-family fallbacks to their prepared base (no task build).
+
+  The report is in `build/bench-smoke-20261002/rollout-48.json`.

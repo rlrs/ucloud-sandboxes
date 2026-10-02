@@ -185,7 +185,9 @@ UCLOUD_RELAY_WORKER_TOKEN=<gateway: /var/lib/ucloud-sandboxes/state/relay-worker
       - On a CPX32 (160 GB), point init at a copy of the deployment with
         `sandbox.docker_quota_image_gb` set to 64. Init checks the real disk.
         Workers grow the store to the configured size when they boot.
-   4. Canary a park/wake.
+   4. Canary a park/wake. Then drain the source before anything else
+      (`POST /v1/drain` on its node agent with the node-control token), so
+      placement stops choosing it before its heartbeat goes stale.
    5. Remove any older package directory under
       `/var/cache/ucloud-sandboxes/init-packages/`: the script accepts
       exactly one runtime.

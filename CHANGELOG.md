@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.8.2 - 2026-10-02
+
+Workers need the new node bundle (the environment backend fix). The upstream mirror is off unless `upstream_mirror` is configured. The benchmark changes are in `scripts/` and are not part of the wheel.
+
 - **Environment backend no longer refuses bursts with EAGAIN.** The node's artifact I/O backend served its Unix socket with socketserver's default backlog of 5. Its client sets a timeout, which makes the socket non-blocking, and a non-blocking AF_UNIX `connect` to a full accept queue fails at once with `BlockingIOError: [Errno 11] Resource temporarily unavailable` instead of waiting. So a create burst on one worker (one `ensure` per composition, plus `drop` and heartbeat `metrics` calls) failed creates whenever more than about 6 connections were pending. In a test, 59 of 64 concurrent calls failed. The server now listens with a backlog of 1,024 (capped by `net.core.somaxconn`), and the client retries EAGAIN on connect with backoff from 5 ms to 100 ms within the call's own timeout. Nodes pick this up with the next node bundle.
 - **`bench_rl_scale.py rollout --think-mode {sleep,relay,park}` (C9.2).** Measures density and park behaviour under a training-shaped load without LLM inference. Usage and the split between direct and inferred measurements: `docs/rl-scale-architecture-plan.md`, C9.2 think modes.
   - **`sleep`** (the default) keeps today's behaviour.

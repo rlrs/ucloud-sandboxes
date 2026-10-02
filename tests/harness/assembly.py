@@ -129,7 +129,7 @@ def assemble_node_agent(config: NodeAgentConfig, *, rootfs_store, fencer, sample
         fencer=fencer,
     )
     provisioner = DirectSandboxProvisioner(
-        registry=DirectSandboxRegistry(state_root / "direct-registry.sqlite"),
+        registry=DirectSandboxRegistry(state_root / "direct-registry.sqlite", owner=True),
         overlays=overlays,
         oci=DirectOciConfigBuilder(init_binary=Path(config.init_binary), network_mode="none"),
         warden=warden,

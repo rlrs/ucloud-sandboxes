@@ -42,6 +42,11 @@ from .storage_native_daemon import (
 
 _LOG = logging.getLogger(__name__)
 _MIB = 1024 * 1024
+_CREATED = frozenset({HibernationState.RUNNING, HibernationState.PARKED})
+# Quarantine retains an incarnation's ownership and storage until explicit
+# cleanup. It must remain visible without blocking startup for other
+# sandboxes or replaying its failed lifecycle transition.
+_OWNED_SETTLED = _CREATED | {HibernationState.RECOVERY_REQUIRED}
 
 
 class DirectSandboxProvisioner:
@@ -733,72 +738,46 @@ class DirectSandboxProvisioner:
                 )
         if registration.phase == "rootfs_ready":
             sandbox = registration.to_direct_sandbox()
-            with phase_timings.phase("guest_files"):
-                # The public SDK defaults to an unprivileged OCI user and a
-                # /workspace file API target. Establish that directory inside the
-                # quota-accounted overlay before the backend can start.
-                self.oci.prepare_workspace(
-                    sandbox.bundle / "rootfs",
-                    spec=registration.spec,
-                )
-                prepared_config = json.loads(
-                    (sandbox.bundle / "config.json").read_text(encoding="utf-8")
-                )
-                self.oci.prepare_working_directory(
-                    sandbox.bundle / "rootfs",
-                    directory=prepared_config["process"]["cwd"],
-                )
-                self.oci.prepare_network_files(
-                    sandbox.bundle / "rootfs",
-                    spec=registration.spec,
-                    relay_hosts=(
-                        self.network_manager.hosts_for_policy(
-                            registration.spec.network_policy
-                        )
-                        if self.network_manager is not None
-                        else {}
-                    ),
-                )
-            with phase_timings.phase("init_install"):
-                # Keep the init binary inside the quota-accounted rootfs. A bind
-                # mount here is not executable under gVisor on production nodes.
-                # This is deliberately replayed so startup repairs a crash between
-                # committing the rootfs and creating the runsc backend.
-                self.oci.install_init(
-                    sandbox.bundle / "rootfs",
-                    enabled=(
-                        registration.spec.security.init
-                        and not registration.spec.managed_process
-                    ),
-                )
-                self.oci.install_managed_init(
-                    sandbox.bundle / "rootfs",
-                    enabled=(
-                        registration.spec.managed_process
-                        or registration.spec.filesystem.management_helper == "static"
-                    ),
-                )
+            rootfs = sandbox.bundle / "rootfs"
             record = self.warden.inspect(sandbox)
             if record is None:
+                with phase_timings.phase("guest_files"):
+                    # The public SDK defaults to an unprivileged OCI user and a
+                    # /workspace file API target. Establish that directory inside
+                    # the quota-accounted overlay before the backend can start.
+                    self.oci.prepare_workspace(rootfs, spec=registration.spec)
+                    prepared_config = json.loads(
+                        (sandbox.bundle / "config.json").read_text(encoding="utf-8"))
+                    self.oci.prepare_working_directory(
+                        rootfs, directory=prepared_config["process"]["cwd"])
+                    self.oci.prepare_network_files(rootfs, spec=registration.spec, relay_hosts=(
+                        self.network_manager.hosts_for_policy(registration.spec.network_policy)
+                        if self.network_manager is not None else {}))
+                with phase_timings.phase("init_install"):
+                    # Keep the init binary inside the quota-accounted rootfs. A
+                    # bind mount here is not executable under gVisor on production
+                    # nodes. Replayed until the runtime create journals, so startup
+                    # repairs a crash between committing the rootfs and the backend.
+                    self.oci.install_init(rootfs, enabled=(
+                        registration.spec.security.init and not registration.spec.managed_process))
+                    self.oci.install_managed_init(rootfs, enabled=(
+                        registration.spec.managed_process
+                        or registration.spec.filesystem.management_helper == "static"))
                 # Covers a crash after runsc create but before journal commit.
                 self.warden.discard_unjournaled(sandbox)
                 with phase_timings.phase("runtime_create"):
-                    record = self.warden.create(
-                        sandbox,
-                        operation_id=registration.operation_id,
-                    )
-            elif record.state not in {
-                HibernationState.RUNNING,
-                HibernationState.PARKED,
-            }:
-                record = self.warden.reconcile(sandbox)
-            if record.state not in {
-                HibernationState.RUNNING,
-                HibernationState.PARKED,
-            }:
-                raise DirectWardenError(
-                    f"new direct sandbox settled in {record.state.value}"
-                )
+                    record = self.warden.create(sandbox, operation_id=registration.operation_id)
+                settled = _CREATED
+            else:
+                # The journal follows runsc start, which follows the guest files:
+                # never replay them into a created, maybe unmounted, rootfs.
+                # commit_owned is not fsynced, so this is also how an OS crash
+                # that lost it recovers: exactly as an owned registration.
+                settled = _OWNED_SETTLED
+                if record.state not in settled:
+                    record = self.warden.reconcile(sandbox)
+            if record.state not in settled:
+                raise DirectWardenError(f"new direct sandbox settled in {record.state.value}")
             with phase_timings.phase("registry_commit"):
                 registration = self.registry.commit_owned(
                     registration.sandbox_id,
@@ -808,20 +787,9 @@ class DirectSandboxProvisioner:
             record = self.warden.inspect(registration.to_direct_sandbox())
             if record is None:
                 raise DirectWardenError("owned direct sandbox has no lifecycle journal")
-            # Quarantine retains this incarnation's ownership and storage until
-            # explicit cleanup. It must remain visible without blocking startup
-            # for other sandboxes or replaying its failed lifecycle transition.
-            if record.state not in {
-                HibernationState.RUNNING,
-                HibernationState.PARKED,
-                HibernationState.RECOVERY_REQUIRED,
-            }:
+            if record.state not in _OWNED_SETTLED:
                 record = self.warden.reconcile(registration.to_direct_sandbox())
-            if record.state not in {
-                HibernationState.RUNNING,
-                HibernationState.PARKED,
-                HibernationState.RECOVERY_REQUIRED,
-            }:
+            if record.state not in _OWNED_SETTLED:
                 raise DirectWardenError(
                     f"direct sandbox requires operator action: {record.state.value}"
                 )

@@ -205,10 +205,12 @@ def build_direct_runtime_service(
         if checkpoint_registry_url
         else None
     )
+    # The node agent is the registry's only writer and owns its index.
     registry = DirectSandboxRegistry(
         state_root / "direct-registry.sqlite",
         hard_disk_capacity_mb=memory_backing_hard_capacity_bytes // (1024 * 1024)
         if split_memory_backing else 0,
+        owner=True,
     )
     if not reflink_memory_restore and registry.reflink_overlap_bytes():
         # A crash may leave a global reservation before the allocator writes

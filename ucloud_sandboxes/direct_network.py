@@ -68,8 +68,8 @@ class DirectNetworkError(RuntimeError):
     pass
 
 
-def _write_durably(path: Path, payload: object) -> None:
-    """Replace ``path`` with compact JSON; fsync the file, then its directory."""
+def _write_durably(path: Path, payload: object, *, sync_directory: bool = True) -> None:
+    """Replace ``path`` with compact JSON; fsync the file, then (by default) its directory."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
@@ -79,11 +79,12 @@ def _write_durably(path: Path, payload: object) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
-        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        if sync_directory:
+            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
     finally:
         try:
             os.unlink(temporary)
@@ -425,9 +426,9 @@ class DirectNetworkManager:
                 free = (item for item in range(1, MAX_NETWORK_SLOTS + 1) if item not in used)
                 if len(pool) == self.pool_size or (slot := next(free, None)) is None:
                     return False
-                # Durable before any kernel object exists, so none is orphaned.
+                # Written before any kernel object exists, so none is orphaned.
                 state["pool"] = sorted((*pool, slot))
-                self._store(state)
+                self._store(state, pool_only=True)
         if not trim:  # Recreated unless complete; configuration is idempotent.
             self._ensure_kernel_lease(self._pool_lease(slot))
             with self._pool_guard:
@@ -437,7 +438,7 @@ class DirectNetworkManager:
         with self._locked():
             state = self._load()
             state["pool"] = [item for item in state["pool"] if item != slot]
-            self._store(state)
+            self._store(state, pool_only=True)
         return True
 
     def release(self, sandbox_id: str, sandbox_generation: int) -> None:
@@ -1117,8 +1118,11 @@ class DirectNetworkManager:
         raw["pool"] = sorted(set(pool).difference(raw["leases"].values()))
         return raw
 
-    def _store(self, state: dict) -> None:
-        _write_durably(self.state_path, state)
+    def _store(self, state: dict, *, pool_only: bool = False) -> None:
+        # Pool-only writes skip the directory fsync: after an OS crash the name
+        # holds a complete later write or the last synced one, with the same
+        # leases and policies. Pooled pairs die with the kernel; start rechecks.
+        _write_durably(self.state_path, state, sync_directory=not pool_only)
 
     def _lease_locked(self, key: str):
         digest = hashlib.sha256(key.encode("utf-8")).hexdigest()

@@ -1,23 +1,27 @@
-"""Node create pipeline: three durable registry commits, and a crash at each step.
+"""Node create pipeline: three registry commits, and a crash at each step.
 
 The create writes ``planned``, then ``rootfs_ready`` with its quota, then
 ``owned``. A crash after any step must restart to one owned sandbox with one
 storage volume, one runsc create and one network pair, or delete cleanly.
+``owned`` is not fsynced: an OS crash that loses it recovers the same way.
 """
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Lock
+from types import SimpleNamespace
 import shutil
 import unittest
+from unittest.mock import patch
 
 from tests.test_direct_network_pool import FakeKernel, wait_for
 from tests.test_direct_provisioner import FakeImageStore, FakeOverlays, FakeStorage, FakeWarden
 from ucloud_sandboxes.direct_network import DirectNetworkManager
 from ucloud_sandboxes.direct_oci import DirectOciConfigBuilder
 from ucloud_sandboxes.direct_provisioner import DirectSandboxProvisioner
-from ucloud_sandboxes.direct_registry import DirectSandboxRegistry
+from ucloud_sandboxes.direct_registry import DirectRegistryConflictError, DirectSandboxRegistry
+from ucloud_sandboxes.hibernation import HibernationState
 from ucloud_sandboxes.sandbox import SandboxSecuritySpec, SandboxSpec
 
 
@@ -90,10 +94,13 @@ class CreatePipelineTests(unittest.TestCase):
         self.warden = Warden(self.root, self.storage)
         self.warden.rootfs_lifecycle = self.overlays
         self.networks: list[DirectNetworkManager] = []
+        self.registries: list[DirectSandboxRegistry] = []
 
     def tearDown(self) -> None:
         for network in self.networks:
             network.stop_pool()
+        for registry in self.registries:
+            registry.close()
         self._directory.cleanup()
 
     def node(self, *, pool_size: int = 0) -> SimpleNode:
@@ -104,7 +111,8 @@ class CreatePipelineTests(unittest.TestCase):
             pool_size=pool_size,
         ))
         self.networks.append(network)
-        registry = DirectSandboxRegistry(self.root / "registry.sqlite")
+        registry = DirectSandboxRegistry(self.root / "registry.sqlite", owner=True)
+        self.registries.append(registry)
         provisioner = DirectSandboxProvisioner(
             registry=registry,
             overlays=self.overlays,
@@ -142,6 +150,7 @@ class CreatePipelineTests(unittest.TestCase):
                 self.create(node)
         finally:
             delattr(target, method)
+        node.registry.close()  # Process death releases registry ownership.
 
     def assert_one_owned_sandbox(self, node, registration) -> None:
         self.assertEqual(registration.phase, "owned")
@@ -222,11 +231,94 @@ class CreatePipelineTests(unittest.TestCase):
         project_id, total_mb, path = node.provisioner._prepare_quota(planned)
         node.registry.commit_quota("sandbox", expected_revision=planned.revision,
                                    project_id=project_id, total_mb=total_mb, quota_path=path)
+        node.registry.close()
 
         results = self.node().provisioner.start()
 
         self.assertEqual(self.storage.prepares, 1)
         self.assert_one_owned_sandbox(node, results[0])
+
+    def test_only_the_owned_commit_skips_fsync(self) -> None:
+        node = self.node()
+        levels: list[tuple[str, int]] = []
+        write = node.registry._write
+
+        def recorded_write(connection, record, **kwargs):
+            levels.append((record.phase, connection.execute("PRAGMA synchronous").fetchone()[0]))
+            write(connection, record, **kwargs)
+
+        node.registry._write = recorded_write
+        self.create(node)
+        node.provisioner.delete("sandbox")
+        # 2 is FULL, 1 is NORMAL; deletion's own commits are FULL.
+        self.assertEqual(levels, [("planned", 2), ("rootfs_ready", 2), ("owned", 1), ("deleting", 2)])
+        connections = [node.registry._owner_entry, *node.registry._connections]
+        for entry in connections:
+            self.assertEqual(entry.connection.execute("PRAGMA synchronous").fetchone()[0], 2)
+        plain = DirectSandboxRegistry(self.root / "plain.sqlite")
+        planned = plain.plan(spec=self.spec(), sandbox_generation=7, operation_id="create:sandbox:7",
+                             runtime_compatibility_sha256="b" * 64)
+        with self.assertRaises(DirectRegistryConflictError):
+            plain.commit_owned("sandbox", expected_revision=planned.revision)  # Not rootfs_ready.
+        for entry in plain._connections:  # A failed NORMAL commit never pools its connection.
+            self.assertEqual(entry.connection.execute("PRAGMA synchronous").fetchone()[0], 2)
+
+    def test_restart_after_an_os_crash_lost_the_unsynced_owned_commit(self) -> None:
+        # The journal, fsynced before commit_owned, holds whatever followed it;
+        # a transition interrupted by the crash reconciles first, as when owned.
+        states = HibernationState
+        for state, settled in ((states.RUNNING, states.RUNNING), (states.PARKED, states.PARKED),
+                               (states.RECOVERY_REQUIRED, states.RECOVERY_REQUIRED),
+                               (states.HIBERNATING, states.PARKED)):
+            with self.subTest(state=state.value):
+                self.tearDown()
+                self.setUp()
+                node = self.node(pool_size=1)
+                node.provisioner.start()
+                synced: dict[str, bytes | None] = {}
+                commit_owned = node.registry.commit_owned
+
+                def sync_point_then_commit(*args, **kwargs):
+                    # The file as commit_rootfs, the last FULL commit, synced it.
+                    for suffix in ("", "-wal"):
+                        path = Path(f"{node.registry.path}{suffix}")
+                        synced[suffix] = path.read_bytes() if path.exists() else None
+                    return commit_owned(*args, **kwargs)
+
+                node.registry.commit_owned = sync_point_then_commit
+                owned = self.create(node)
+                self.warden.records[("sandbox", 7)] = SimpleNamespace(
+                    state=state, hibernation_generation=1)
+                # Power loss before any later sync: the agent dies and the disk
+                # holds the synced bytes. SQLite rebuilds its shared memory.
+                node.registry.close()
+                node.network.stop_pool()
+                for suffix, data in synced.items():
+                    path = Path(f"{node.registry.path}{suffix}")
+                    if data is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        path.write_bytes(data)
+                Path(f"{node.registry.path}-shm").unlink(missing_ok=True)
+                restarted = self.node(pool_size=1)
+                self.assertEqual(restarted.registry.get("sandbox").phase, "rootfs_ready")
+
+                reconciled = []
+
+                def reconcile(sandbox):
+                    reconciled.append(self.warden.records[self.warden.key(sandbox)].state)
+                    self.warden.records[self.warden.key(sandbox)].state = settled
+                    return self.warden.records[self.warden.key(sandbox)]
+
+                replay = AssertionError("guest files replayed into a created rootfs")
+                with patch.object(DirectOciConfigBuilder, "prepare_workspace", side_effect=replay), \
+                        patch.object(self.warden, "reconcile", side_effect=reconcile):
+                    results = restarted.provisioner.start()
+                self.assertEqual([item.phase for item in results], ["owned"])
+                self.assertEqual(results[0].revision, owned.revision)
+                self.assertEqual(self.warden.creates, 1)
+                self.assertEqual(reconciled, [] if state is settled else [state])
+                self.assertIs(self.warden.records[("sandbox", 7)].state, settled)
 
     def test_concurrent_creates_with_a_partly_empty_pool(self) -> None:
         node = self.node(pool_size=8)

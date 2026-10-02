@@ -500,6 +500,8 @@ class FleetNode:
                 pass
         self._connections.clear()
         server.server_close()
+        # Process exit would release registry ownership for the next agent.
+        self.service.provisioner.registry.close()
         self.service = None
 
     def crash(self) -> None:

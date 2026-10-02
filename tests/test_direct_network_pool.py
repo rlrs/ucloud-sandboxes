@@ -10,6 +10,7 @@ from unittest.mock import patch
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import unittest
@@ -194,9 +195,9 @@ class NetworkPoolTests(unittest.TestCase):
         stores: list[str] = []
         store = manager._store
 
-        def counted_store(state):
+        def counted_store(state, **kwargs):
             stores.append(current_thread().name)
-            store(state)
+            store(state, **kwargs)
 
         manager._store = counted_store
 
@@ -271,6 +272,39 @@ class NetworkPoolTests(unittest.TestCase):
             self.assert_pair_owned_by(manager, lease)
         commands = self.kernel.ip_by(current_thread().name)[before:]
         self.assertNotIn(("ip", "netns", "add"), [command[:3] for command in commands])
+
+    def test_pool_only_writes_skip_the_directory_fsync_and_survive_losing_it(self) -> None:
+        manager = self.manager(2)
+        synced: list[bool] = []  # True for a directory
+        fsync = os.fsync
+
+        def recorded(descriptor):
+            synced.append(stat.S_ISDIR(os.fstat(descriptor).st_mode))
+            fsync(descriptor)
+
+        with patch("ucloud_sandboxes.direct_network.os.fsync", recorded):
+            lease = manager.ensure("a", 1)
+            self.assertEqual(synced, [False, True])
+            durable = (self.root / "network-slots.json").read_bytes()
+            del synced[:]
+            manager.start_pool()
+            wait_for(lambda: len(manager._pool_ready) == 2)
+            manager.stop_pool()
+            self.assertEqual(synced, [False, False])  # Two pool-only writes.
+        # OS crash before any later directory sync: the name reverts to the
+        # synced write and every kernel pair is gone.
+        (self.root / "network-slots.json").write_bytes(durable)
+        shutil.rmtree(self.root / "netns")
+        self.kernel.links.clear()
+        self.kernel.configured.clear()
+        restarted = self.manager(2)
+        self.assertEqual(restarted.lease("a", 1), lease)
+        self.assertEqual(self.state()["leases"], json.loads(durable)["leases"])
+        restarted.start_pool()
+        wait_for(lambda: len(restarted._pool_ready) == 2)
+        self.assertEqual(self.state()["pool"], [2, 3])
+        self.assertEqual(restarted.ensure("a", 1), lease)
+        self.assert_pair_owned_by(restarted, lease)
 
     def test_release_of_interrupted_handoff_drops_the_pooled_name(self) -> None:
         manager = self.manager(1)

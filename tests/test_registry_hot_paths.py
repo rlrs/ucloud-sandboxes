@@ -7,6 +7,7 @@ one-second loops; neither may decode every registration's JSON.
 from contextlib import closing
 import sqlite3
 import unittest
+import unittest.mock
 from unittest.mock import patch
 
 from ucloud_sandboxes.direct_registry import DirectRegistryError, DirectSandboxRegistry
@@ -62,46 +63,63 @@ class RegistryHotPathTests(unittest.TestCase):
         with closing(sqlite3.connect(self.registry.path)) as conn:
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 9)
 
-    def test_snapshots_decode_only_changed_rows(self):
-        first = self.registry.snapshot()
+    def _owner(self):
+        owner = DirectSandboxRegistry(
+            self.registry.path, hard_disk_capacity_mb=self.registry.hard_disk_capacity_mb, owner=True
+        )
+        self.addCleanup(owner.close)
+        return owner
+
+    def test_owner_rebuilds_decode_only_changed_rows(self):
+        owner = self._owner()
+        first = owner.snapshot()
         decode = patch.object(
             DirectSandboxRegistry, "_decode", wraps=DirectSandboxRegistry._decode
         )
         with decode as calls:
-            self.assertEqual(self.registry.snapshot().records, first.records)
+            self.assertIs(owner.snapshot(), first)
             calls.assert_not_called()
+        # Foreign commits: the owner rereads every row and decodes only "two".
         self.assertTrue(self._release())  # bumps activity, not the record
         self._owned("two")
+        owner._index_checked_at = float("-inf")  # The recheck interval passed.
         with decode as calls:
-            second = self.registry.snapshot()
+            second = owner.snapshot()
         self.assertEqual(calls.call_count, 1)
         self.assertIn("two", second.by_sandbox_id)
         self.assertIs(second.get("one"), first.get("one"))
 
-    def test_point_reads_use_one_statement_and_see_external_commits(self):
-        first = self.registry.get("one")
+    def test_owner_reads_use_no_connection_and_see_external_commits(self):
+        owner = self._owner()
+        first = owner.get("one")
+        owner.disk_claims_mb()
+        idle = patch.multiple(
+            owner, _borrow=unittest.mock.DEFAULT, _owner_transaction=unittest.mock.DEFAULT,
+            _check_file=unittest.mock.DEFAULT,
+        )
+        owner._index_checked_at = float("inf")  # A slow host must not fall due for the recheck.
+        with idle as never:
+            for _ in range(3):
+                self.assertIs(owner.get("one"), first)
+                self.assertIsNone(owner.get("absent"))
+                self.assertEqual(owner.activity_revision(), self.registry.activity_revision())
+                self.assertEqual(owner.snapshot().records, self.registry.snapshot().records)
+                self.assertTrue(owner.references_image(first.image_id))
+                self.assertEqual(owner.disk_claims_mb(), self.registry.disk_claims_mb())
+        for mock in never.values():
+            mock.assert_not_called()
+        external = DirectSandboxRegistry(self.registry.path)
+        deleting = external.begin_delete("one", expected_revision=first.revision)
+        # The owner's next write proves its index against the file first.
         decode = patch.object(
             DirectSandboxRegistry, "_decode", wraps=DirectSandboxRegistry._decode
         )
-        traced = []
-        with self.registry._borrow() as entry:
-            entry.connection.set_trace_callback(traced.append)
-        try:
-            with decode as calls:
-                self.assertIs(self.registry.get("one"), first)
-                self.assertIsNone(self.registry.get("absent"))
-            calls.assert_not_called()
-        finally:
-            entry.connection.set_trace_callback(None)
-        # One top-level statement per read: no BEGIN, stamp or metadata query.
-        # Table-valued pragmas trace their own nested "--" statements.
-        self.assertEqual(len([sql for sql in traced if not sql.startswith("--")]), 2)
-        external = DirectSandboxRegistry(self.registry.path)
-        deleting = external.begin_delete("one", expected_revision=first.revision)
         with decode as calls:
-            self.assertEqual(self.registry.get("one"), deleting)
-            self.assertEqual(self.registry.activity_revision(), external.activity_revision())
+            owner.commit_deleted("one", sandbox_generation=1, expected_revision=deleting.revision)
         self.assertEqual(calls.call_count, 1)
+        self.assertIsNone(owner.get("one"))
+        self.assertEqual(owner.activity_revision(), external.activity_revision())
+        self.assertEqual(owner.disk_claims_mb(), external.disk_claims_mb())
 
     def test_changed_schema_or_metadata_falls_back_to_validation(self):
         self.registry.get("one")

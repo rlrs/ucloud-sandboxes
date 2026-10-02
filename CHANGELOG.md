@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Images that share a filesystem no longer collide on a worker.** The worker keys an immutable-environment composition (the mounted lower filesystem) by its component manifest. It then compared the whole signed root, including the image config, against the one already mounted. Two task images with identical components but different configs (for example Terminal-Lego images that differ only in `ENV`, `WORKDIR` or `CMD`) therefore failed with `environment config changed for an existing composition` for whichever attached second. That happened in every parallel run of the fscache spike. The worker now requires only the component manifests to match: such images share one mount, and each sandbox still gets its own image config. A different component list for the same composition fails as `environment components changed for an existing composition`.
 ## 0.8.2 - 2026-10-02
 
 Workers need the new node bundle (the environment backend fix). The upstream mirror is off unless `upstream_mirror` is configured. The benchmark changes are in `scripts/` and are not part of the wheel.

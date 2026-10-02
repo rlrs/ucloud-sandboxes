@@ -69,6 +69,33 @@ class EnvironmentRootfsTests(artifact_fixtures.EnvironmentArtifactTests):
         self.assertEqual(OverlayRootfsManager._decode_environment(metadata, fingerprint), manifest)
         self.assertTrue(store.collect_image(image_id, is_referenced=lambda _: False))
 
+    def test_images_sharing_a_filesystem_share_its_composition_but_keep_their_configs(self):
+        # Two task images can differ only in config (Env, Cmd, WORKDIR, USER):
+        # two signed roots over one component list.
+        manifest, refs, source = EnvironmentManifest(self.digest), {}, self.component.source_image
+        for name in ("a", "b"):
+            root = publish_environment(self.registry, source_image=source, environment=manifest,
+                image_config={"Cmd": [f"/bin/{name}"]}, signing_key=self.key, tag=f"root-{name}")
+            self.client.manifests[name] = canonical_bytes({"schemaVersion": 2, "mediaType": OCI_IMAGE,
+                "config": {"digest": source}, "layers": []})
+            refs[name] = "localhost:5000/environments:" + name + "@" + attach_environment_to_image(
+                self.registry, image_repository="environments", image_reference=name, environment_digest=root)
+        self.client.base_url = "http://localhost:5000"
+        mounts, mount_commands = set(), []
+        def run(command, **kwargs):
+            if command[0] == "mount":
+                mount_commands.append(command)
+                mounts.add(Path(command[-1]))
+            return SimpleNamespace(returncode=int(command[0] == "mountpoint" and Path(command[-1]) not in mounts),
+                                   stdout="", stderr="")
+        backend = SimpleNamespace(ensure=lambda digest: self.root / "components" / digest[7:], drop=lambda digest: True)
+        store = EnvironmentRootfsStore(self.root / "store", self.registry, backend,
+                                       runner=SimpleNamespace(run=run), referenced=lambda _: False)
+        with store.operation_lease(refs["a"]) as first, store.operation_lease(refs["b"]) as second:
+            self.assertEqual((first.image_id, first.rootfs), (second.image_id, second.rootfs))
+            self.assertEqual((first.image_config.command, second.image_config.command), (("/bin/a",), ("/bin/b",)))
+        self.assertEqual(len(mount_commands), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

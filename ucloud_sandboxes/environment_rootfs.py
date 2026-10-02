@@ -221,8 +221,9 @@ class EnvironmentRootfsStore:
                 rootfs = target / "rootfs"
                 if (target / "environment.json").exists() and self._mounted(rootfs):
                     existing, _ = self._load(image_id)
-                    if existing.to_dict() != environment.to_dict():
-                        raise ValueError("environment config changed for an existing composition")
+                    # A composition is a filesystem; config-only siblings share it.
+                    if existing.environment != environment.environment:
+                        raise ValueError("environment components changed for an existing composition")
                     self._mount(image_id, environment)
                     yield MaterializedRootfs(image_ref, image_id,
                         environment.environment.rootfs_fingerprint(HOST_EROFS_ABI), rootfs,

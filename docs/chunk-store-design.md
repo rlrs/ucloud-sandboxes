@@ -494,7 +494,31 @@ writing only to a `spike/` bucket prefix:
 1 MiB GET p99 ≤ 150 ms; index ≤ 45 GB with batch lookup ≤ 1 s. Otherwise M1
 starts with Phase B's store node.
 
-## Open decisions
+## Decisions (2026-10-02)
+
+1. **Storage:** S3 (Hetzner Object Storage) from day one, provided S12 passes its
+   performance gate. If it fails, M1 starts with Phase B's store node in front of
+   S3.
+2. **Worker access to S3:** presigned URLs from the index service. Workers hold no S3 key.
+3. **OCI copies of non-build-input images** are deleted when their wave is released.
+4. **Storage limit:** S3 is acceptable for the corpus, OpenSWE included. The
+   registry Volume must still shrink.
+5. **Index service** runs on the gateway until C2.6.
+6. **No calendar holds in the migration.** A wave is released as soon as all of
+   these hold:
+   - every image in it is verified (full-tree equal);
+   - its canaries pass;
+   - no live route or registration references an old root or component (the
+     existing retention references).
+
+   GC keeps its condemn → delete delay, which must outlive the longest build and
+   the presigned-URL lifetime. With 24 h URLs that is the 48 h in §6; shorter URLs
+   allow a shorter delay.
+7. **S12 also measures page-cache sharing.** It runs per-image RAFS mounts against
+   per-layer mounts stacked as today, on one node with many distinct images on few
+   foundations, so M1 can choose the mount granularity.
+
+## Open decisions (superseded by the decisions above)
 
 1. **S3 from day one** (recommended), or the registry Volume first and a second
    migration later.

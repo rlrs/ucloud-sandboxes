@@ -552,32 +552,71 @@ Added 2026-10-02 after `docs/reviews/prepared-image-cache-2026-10-02.md`. That
 review finds that the prepared cache leaves 63,926 of 66,786 training images
 (49% of task rows) to a live, unpinned build at first use.
 
-**C2.13 Content-addressed chunks instead of layer-chain identity.**
-- **Change:** publish components with chunk-aligned file data in a content-addressed
-  chunk store, using EROFS chunk-based files over external blob devices (the Nydus
-  RAFS v6 layout). Identical file chunks then dedupe across images, whatever their
-  layer history.
+**C2.13 Adopt the Nydus RAFS v6 format, keep our serving and trust.**
+- **Change:** builders convert each built OCI image with `nydus-image` / `nydusify`
+  (v2.4.5) into a RAFS v6 bootstrap plus data blobs. The chunk dictionary covers
+  every image already converted, so identical file chunks are stored once
+  regardless of layer history.
+- **Workers:**
+  - mount the bootstrap with kernel EROFS, with each referenced blob as an extra
+    device, over our NBD backend. Today's kernel has no fscache on-demand
+    support, so no fscache.
+  - The registry stores chunks compressed; the backend decompresses them into the
+    uncompressed blob address space that the kernel reads.
+  - Our signed root covers the bootstrap and blob digests. Prefetch hints and
+    traces keep working at chunk granularity.
+- **Fallback:** if the multi-device mount fails under our stack, use `nydusd`
+  (FUSE or userfaultfd block mode), which also covers C2.1.
 - **Why:** today a component is keyed by its parent ChainID and diff IDs. Two
   ScaleSWE images with 98.55% identical bytes shared nothing, and foundations,
-  anchors and flat deltas exist only to manufacture identical prefixes.
-- **First step:** a spike that republishes 200 OpenSWE, 100 ScaleSWE and 100 TMax
-  images both ways and compares stored bytes, chunk-cache bytes per burst and
-  attach latency.
-- **Deletes, once C2.14 lands:** the flat and layered delta pipeline, anchors, alias
-  writes into `images.sqlite`, the offline recipe-index rewrite and most per-work-dir
-  state (with C2.10).
+  anchors and flat deltas exist only to manufacture identical layer prefixes.
+- **Reuse:**
+  - existing prepared images in our registry are the conversion input, so there
+    are no new upstream pulls;
+  - foundations stay as build bases, in OCI form only;
+  - BuildKit and the build cache stay unchanged.
+- **Storage rule:** a converted image keeps only its Nydus metadata and new chunks.
+  Its EROFS components, and its OCI copy unless it is a build input, are released
+  after verification. The registry must shrink, or stay flat while coverage grows.
+- **Deletes:**
+  - our EROFS build path (squash, `mkfs.erofs`, layer-group components);
+  - the flat and layered delta pipeline;
+  - anchors;
+  - alias writes into `images.sqlite`;
+  - the offline recipe-index rewrite (with C2.10).
 
-**C2.14 Precompute and freeze the whole training split.**
-- **Change:** build every training image once, before training, with the layout-2
-  writer on. Give training images a protected retention owner, so they are never
-  evicted or rebuilt implicitly.
-- **Cost:** about 1,200–1,300 build-slot hours at the measured p50 of about 70 s.
-- **Option:** run each task's remaining steps in a sandbox started from its
-  foundation and publish them with C3.1 commit, which parallelizes across the
-  worker fleet. Pilot it on TMax and Terminal-Lego.
+**C2.14 Build the training corpus once, ahead of training, and freeze it.**
+- **Why ahead of time:** a run touches 500 tasks × 100–1,000 steps, so 50,000–500,000
+  task uses against 130,253 rows. Long runs touch nearly every one of the 63,926
+  images that still need a build. Building just ahead of the sampler would need
+  about 70 concurrent builds; precomputing needs 16–32 for 1.5–3 days (about
+  1,200–1,300 build-slot hours at the measured p50 of about 70 s).
+- **Change:**
+  1. A campaign builds each remaining training image from its foundation, converts
+     it (C2.13) and registers it under a protected training-corpus owner. Training
+     images are never evicted or rebuilt implicitly.
+  2. Each build records its resolved packages and commits as a lockfile beside the
+     image.
+  3. Tasks added later go through the C2.7 hydration API, ahead of the trainer.
+- **Layout:** the layout-2 writer is on from the first build, so the corpus is built
+  once.
+- **Option:** run the remaining steps in a sandbox started from the foundation and
+  publish them with C3.1 commit, which parallelizes over the worker fleet. Pilot it
+  on TMax and Terminal-Lego.
+- **Budget:** the campaign stops at a registry growth budget, measured in unique
+  new chunk bytes.
 - **Gate:**
   - a create for any training task makes no build request;
-  - the same task always gets the same root digest.
+  - the same task always gets the same root digest;
+  - registry usage stays within budget.
+
+**C2.15 A pull-through mirror for upstream registries.**
+- **Change:** builders and imports pull `docker.io` and other upstreams through a
+  registry in pull-through cache mode on the gateway, with an authenticated
+  account. Each upstream blob is fetched once.
+- **Why:** this replaces the campaign-only staging (`stage_source_image.py`) and
+  its cooldown files, which never covered request-time imports. It ends Docker
+  Hub 429s on builds.
 
 ### W3 — State primitives for RL
 
@@ -988,8 +1027,8 @@ merge conflicts.
 (130,253 task rows, 66,786 images). The starting point is a fair corpus, not
 today's:
 1. C9.1 registry read limit;
-2. the C2.13 spike;
-3. the layout-2 writer;
+2. the C2.13 spike (conversion, dedupe and mount);
+3. C2.13 and C2.15, with the existing corpus migrated;
 4. C2.14 precompute;
 5. C9.2 runs;
 6. C9.3 cache seeding.

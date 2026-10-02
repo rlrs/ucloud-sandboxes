@@ -157,3 +157,22 @@ precomputing everything is affordable.
   tasks and failures will raise it, and some recipes will fail and need fixes.
 - **The sandbox-build option** depends on how many recipes run correctly under
   gVisor and translate cleanly from Dockerfile form.
+
+## Addendum: decisions (same day)
+
+- **Use Nydus, not our own chunk store.** RAFS v6 is EROFS, so it mounts with the
+  kernel driver over our NBD path. Its chunk dictionary gives cross-image dedupe,
+  and `nydusify` converts our existing OCI images. Our signed roots, chunk cache and
+  prefetch stay. The chunk dictionary dedupes only against the chunks it lists
+  (Nydus's own tests: 10–55% on image versions), so ours must cover every image
+  already converted.
+- **Precompute, after all.** A training run touches 500 tasks × 100–1,000 steps.
+  Long runs therefore use nearly every image, and building ahead of the sampler
+  would need about 70 concurrent builds. The corpus is built once, with lockfiles,
+  and frozen. Build-ahead covers only tasks added later.
+- **Constraints:**
+  - reuse the existing prepared images as the conversion input;
+  - no new Docker Hub pulls (C2.15 pull-through mirror);
+  - the registry must not grow by many TB: converted images release their EROFS
+    copies, and task images release their OCI copies.
+- **Plan items:** C2.13–C2.15 in `docs/rl-scale-architecture-plan.md`.

@@ -199,8 +199,9 @@ code (off). Scripts are in `/work/ucloud-sandboxes/release-0.8.2-20261002`.
 
 ## 0.8.5: admission order and the pause tier
 
-Status: deployed on 2026-10-03, steps 1–6 (execution log below); step 7 waits for
-the first training run. Before it, production ran 0.8.4: gateway
+Status: deployed on 2026-10-03, steps 1–6 (execution log below). Step 7 is
+deferred: no training runs until more RL-scale milestones land, so canaries are the
+production signal. Before it, production ran 0.8.4: gateway
 `77.42.92.27`, worker snapshot `438866767`, bundles in
 `/work/ucloud-sandboxes/release-0.8.4-20261002`, `swap_gb` 0, pause tier off. The
 contents and default states are in `CHANGELOG.md` under 0.8.5. One rollout ships the
@@ -282,7 +283,8 @@ only path.
 
 ### Execution log (2026-10-03)
 
-Steps 1–6 ran on 2026-10-03. Step 7 (watch the first training run) has not.
+Steps 1–6 ran on 2026-10-03. Step 7 is deferred until training starts, after further
+RL-scale milestones.
 
 - **Preflight.** Idle fleet: 0 sandbox nodes, no routes, builds or relay work. No relay
   PostgreSQL backup: relay PostgreSQL is not a container on the gateway, so

@@ -1,4 +1,5 @@
 import errno
+import json
 from pathlib import Path
 import socket
 import os
@@ -144,6 +145,35 @@ class EnvironmentBackendTests(artifact_fixtures.EnvironmentArtifactTests):
         busy.clear()
         self.assertTrue(replacement.drop(self.digest))
         self.assertTrue(devices[0].closed)
+
+    def test_the_opt_in_timing_log_records_each_attach_phase(self):
+        # A measurement aid (attach cost spike): off unless the variable names a file.
+        mounts = set()
+
+        class Device:
+            def __init__(self, path, *args, **kwargs):
+                self.path = path
+
+            def close(self):
+                pass
+        log = self.root / "timing.jsonl"
+
+        def backend(name):
+            built = EnvironmentBackend(self.root / name, self.registry, devices=[Path("/dev/nbd-test")],
+                                       device_factory=Device, mount=lambda device, target: mounts.add(target),
+                                       unmount=mounts.discard, mounted=lambda path: path in mounts,
+                                       referenced=lambda _: False)
+            self.addCleanup(built.close)
+            return built
+        backend("quiet").ensure(self.digest)
+        self.assertFalse(log.exists())
+        with patch.dict(os.environ, UCLOUD_ENVIRONMENT_TIMING_LOG=str(log)):
+            backend("timed").ensure(self.digest)
+        records = [json.loads(line) for line in log.read_text().splitlines()]
+        attach = next(record for record in records if record["event"] == "attach")
+        self.assertEqual(attach["component"], self.digest)
+        for phase in ("slot_wait_ms", "load_ms", "receipt_ms", "bind_ms", "prefetch_start_ms", "mount_ms", "total_ms"):
+            self.assertGreaterEqual(attach[phase], 0, phase)
 
     def test_a_create_burst_is_queued_not_refused_with_eagain(self):
         # The server is not accepting yet: every call must wait in its backlog.

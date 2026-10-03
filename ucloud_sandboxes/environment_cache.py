@@ -48,6 +48,7 @@ class PrefetchJob:
         self.queue.reverse()  # pop() from the end yields the requested order.
         self.max_bytes, self.max_chunks = max_bytes, max_chunks
         self.started = time.monotonic()
+        self.first_dispatch = None  # Queueing behind other jobs ends here.
         self.deadline = self.started + deadline_seconds
         self.cancelled, self.done = Event(), Event()
         self.inflight = self.scheduled_bytes = self.scheduled_chunks = 0
@@ -78,6 +79,7 @@ class _Recording:
 
 
 class VerifiedEnvironmentCache:
+    timing = None  # Diagnostic sink for per-job timings (EnvironmentBackend sets it).
     def __init__(self, root: Path, registry, *, max_bytes=1024 ** 3, concurrent_misses=8,
                  fetch_timeout_seconds=30.0, prefetch_slots=None):
         if not root.is_absolute() or max_bytes < CHUNK_BYTES or concurrent_misses < 1:
@@ -470,6 +472,12 @@ class VerifiedEnvironmentCache:
         self._metrics[prefix + "seconds"] += job.seconds
         if job.outcome in ("budget", "deadline"):
             self._metrics[prefix + "truncated"] += 1
+        if self.timing is not None:  # Diagnostic: see EnvironmentBackend._timing.
+            self.timing({"event": "prefetch_job", "kind": job.kind, "outcome": job.outcome,
+                         "queue_ms": None if job.first_dispatch is None
+                         else round((job.first_dispatch - job.started) * 1000, 1),
+                         "total_ms": round(job.seconds * 1000, 1), "chunks": job.fetched_chunks,
+                         "bytes": job.fetched_bytes, "jobs_queued": len(self._jobs)})
         job.done.set()
 
     def _budget(self, job, chunk):
@@ -578,6 +586,8 @@ class VerifiedEnvironmentCache:
                 self._metrics["trace_chunks_recorded"] += len(recording.chunks)
 
     def _dispatch(self, job, run):
+        if job.first_dispatch is None:
+            job.first_dispatch = time.monotonic()
         futures = {}
         for _index, chunk in run:
             futures[chunk.digest] = self._prefetching[chunk.digest] = Future()

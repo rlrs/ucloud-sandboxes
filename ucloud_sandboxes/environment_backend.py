@@ -144,6 +144,12 @@ class EnvironmentBackend:
         if type(attach_concurrency) is not int or attach_concurrency < 1:
             raise ValueError("attach concurrency must be a positive integer")
         self._attach_slots = BoundedSemaphore(attach_concurrency)
+        # Diagnostic, off by default: UCLOUD_ENVIRONMENT_TIMING_LOG names a file
+        # that gets one JSON line per attach, metadata wait and prefetch job.
+        self._timing_path = os.environ.get("UCLOUD_ENVIRONMENT_TIMING_LOG") or None
+        self._timing_guard = Lock()
+        if self._timing_path:
+            self.cache.timing = self._timing
         self._reserved = set()  # Devices being bound outside the guard.
         self._released = Condition(self._guard)
         self._active = {}
@@ -184,9 +190,25 @@ class EnvironmentBackend:
         remaining = ready_by - time.monotonic()
         # Outside the guard: the threaded RPC server lets other components'
         # attach, liveness checks and drops proceed meanwhile.
-        if job is not None and remaining > 0 and not job.wait(remaining):
-            self._count("metadata_prefetch_wait_timeouts")
+        if job is not None and remaining > 0:
+            waited = time.monotonic()
+            timed_out = not job.wait(remaining)
+            if timed_out:
+                self._count("metadata_prefetch_wait_timeouts")
+            self._timing({"event": "metadata_wait", "component": digest, "timed_out": timed_out,
+                          "wait_ms": round((time.monotonic() - waited) * 1000, 1)})
         return target
+
+    def _timing(self, record):
+        """Append one diagnostic JSON line, if UCLOUD_ENVIRONMENT_TIMING_LOG is set."""
+        if not self._timing_path:
+            return
+        line = json.dumps({"at": time.time(), **record}, sort_keys=True) + "\n"
+        try:
+            with self._timing_guard, open(self._timing_path, "a") as stream:
+                stream.write(line)
+        except OSError:
+            pass
 
     def _start_prefetch(self, digest, component):
         """Schedule hint and trace prefetch; returns the metadata job, if any."""
@@ -232,9 +254,15 @@ class EnvironmentBackend:
                 pending = self._attaching[digest] = Future()
         if not owner:
             return pending.result()
+        timings, queued = {}, time.monotonic()
+        with self._guard:
+            attaching = len(self._attaching)
         try:
             with self._attach_slots:
-                target = self._attach_owned(digest)
+                timings["slot_wait_ms"] = round((time.monotonic() - queued) * 1000, 1)
+                target = self._attach_owned(digest, timings)
+                self._timing({"event": "attach", "component": digest, "attaching": attaching,
+                              "total_ms": round((time.monotonic() - queued) * 1000, 1), **timings})
         except BaseException as exc:
             with self._guard:
                 self._attaching.pop(digest, None)
@@ -245,13 +273,23 @@ class EnvironmentBackend:
         pending.set_result(target)
         return target
 
-    def _attach_owned(self, digest):
+    def _attach_owned(self, digest, timings=None):
+        timings = {} if timings is None else timings
+        phase = time.monotonic()
+
+        def lap(name):
+            nonlocal phase
+            now = time.monotonic()
+            timings[name] = round((now - phase) * 1000, 1)
+            phase = now
         component = self.registry.load(digest)  # Signature before any privileged operation.
+        lap("load_ms")
         if isinstance(component, RafsEnvironmentComponent):
             if self._rafs is None:
                 raise RuntimeError("chunk-store environments need a chunk index on this worker")
             # Bootstrap and chunk map verified against the signed digests.
             component = self._rafs(digest, component)
+            lap("rafs_ms")
         target = self.mounts / digest[7:]
         _private_directory(target)
         # Durable physical ownership marker, deliberately no image reference
@@ -266,11 +304,13 @@ class EnvironmentBackend:
             os.fsync(directory_fd)
         finally:
             os.close(directory_fd)
+        lap("receipt_ms")
         try:
             selected = self._bind(component)
         except BaseException:
             getattr(component, "close", lambda: None)()
             raise
+        lap("bind_ms")
         with self._guard:
             # Record ownership before invoking mount: an interrupted command
             # can have mounted successfully even if no acknowledgment arrived.
@@ -287,6 +327,7 @@ class EnvironmentBackend:
             except Exception:
                 self._count("prefetch_start_failures")
                 _LOG.warning("environment prefetch for %s did not start", digest, exc_info=True)
+        lap("prefetch_start_ms")
         try:
             self._mount(selected.path, target)
         except BaseException:
@@ -300,6 +341,7 @@ class EnvironmentBackend:
             except Exception:
                 pass
             raise
+        lap("mount_ms")
         if metadata is not None:
             with self._guard:
                 self._warming[digest] = (metadata, time.monotonic() + self.prefetch.metadata_wait_seconds)

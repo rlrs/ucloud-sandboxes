@@ -52,8 +52,9 @@ import unittest
 # +63 M2 readers: SandboxSpec.environment_root, dispatched roots, capabilities,
 # +171 the gateway's image_roots table, dispatch and retention, +207 chunk-migrate
 # inventory and retention's dispatched view (design §8 allows the migration tool
-# 250). Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 111_459
+# 250), +52 the attach-timing diagnostic (remove after the attach spike or fold
+# into heartbeat metrics). Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 111_511
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

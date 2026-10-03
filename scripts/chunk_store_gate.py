@@ -84,6 +84,8 @@ STORED_BYTES_TARGET, STORED_BYTES_TOLERANCE = 17.5e9, 0.05
 SAMPLE_SIZE = 181
 # Source-config disk overrides for a canary smaller than the CCX63 the live
 # config is sized for (docs/rollout-0.8.0.md, snapshot 438664008).
+# environment_config.NYDUSD_INSTALL_PATH (this driver runs without the package).
+BUNDLED_NYDUSD = "/usr/local/libexec/ucloud-sandboxes/nydusd"
 WORKER_OVERRIDES = {"sandbox.docker_quota_image_gb": 64, "sandbox.direct_disk_headroom_mb": 24576,
                     "immutable_environments.cache_bytes": 8 * 1024 ** 3}
 # Approximate hel1 list prices, EUR per started hour; verify before quoting.
@@ -763,8 +765,7 @@ class Gate:
 
     def bundled_nydusd(self):
         """The block names the bundle's install path: VM init installs and pins it."""
-        from ucloud_sandboxes.environment_config import NYDUSD_INSTALL_PATH
-        return (self.nydusd() or {}).get("path") == NYDUSD_INSTALL_PATH
+        return (self.nydusd() or {}).get("path") == BUNDLED_NYDUSD
 
     def install_nydusd(self, role):
         """The pinned binary from the gateway onto a canary, before VM init starts its backend."""

@@ -230,6 +230,7 @@ class ResumeAndTeardownTests(GateTest):
             call for call in calls if "deployment-canary.json" in call and "derive-config" in call))
         # The bundle's own nydusd: VM init installs and pins it, the gate copies nothing.
         from ucloud_sandboxes.environment_config import NYDUSD_INSTALL_PATH
+        self.assertEqual(gate.BUNDLED_NYDUSD, NYDUSD_INSTALL_PATH)
         (self.root / "block.json").write_text(json.dumps({**BLOCK, "nydusd": {**pinned, "path": NYDUSD_INSTALL_PATH}}))
         state = self.root / "state" / "20261002t1800" / "state.json"
         recorded = json.loads(state.read_text())

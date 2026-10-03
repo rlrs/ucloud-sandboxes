@@ -86,7 +86,9 @@ def server(name, server_type, image, *, private_ip, firewall_ids, primary_ipv4=N
         "firewalls": [{"firewall": item} for item in firewall_ids],
         "public_net": {"enable_ipv4": bool(primary_ipv4 or public_ipv4), "enable_ipv6": False,
                        **({"ipv4": primary_ipv4} if primary_ipv4 else {})},
-        "labels": LABELS, "start_after_create": True,
+        # A private-only server has no interface until the network attach below,
+        # and Hetzner refuses to start it: it starts after the attach instead.
+        "labels": LABELS, "start_after_create": bool(primary_ipv4 or public_ipv4),
     }
     if user_data:
         body["user_data"] = user_data
@@ -98,6 +100,8 @@ def server(name, server_type, image, *, private_ip, firewall_ids, primary_ipv4=N
     attach = call("POST", f"/servers/{created['id']}/actions/attach_to_network",
                   {"network": 12539764, "ip": private_ip})
     wait_action(attach["action"]["id"])
+    if not body["start_after_create"]:
+        wait_action(call("POST", f"/servers/{created['id']}/actions/poweron")["action"]["id"])
     current = call("GET", f"/servers/{created['id']}")["server"]
     print(json.dumps({
         "id": current["id"], "name": name, "status": current["status"],

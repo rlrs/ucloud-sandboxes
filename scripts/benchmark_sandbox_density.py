@@ -583,6 +583,8 @@ def relay_summary(evidence):
         "create": summary([row["ms"] for row in creates]),
         "create_waited_for_admission": sum(1 for row in creates if row["admission_retries"]),
         "cycles_ok": len(cycles),
+        "rollouts_finished": len(evidence.get("finished", {})),
+        "makespan_s": max(evidence.get("finished", {}).values(), default=None),
         "deaths": len(evidence["deaths"]),
         "park_outcome": count("park_outcome"),
         "state_before_wake": count("state_before_wake"),
@@ -607,6 +609,7 @@ def run_relay(args, api, *, persist=None, sample=host_sample, clock=time.monoton
             "disk_mb", "cpu_ms", "image", "model_seconds", "model_jitter", "seed", "compressible")},
         "workload_sha256": hashlib.sha256(WORKLOAD.encode()).hexdigest(),
         "created": [], "creates": {}, "create_errors": {}, "cycles": [], "deaths": {}, "timeline": [],
+        "finished": {},
         "snapshots": {}, "errors": [], "cleanup_errors": [],
     }
     records, states, lock, stop = {}, {}, threading.Lock(), threading.Event()
@@ -622,7 +625,11 @@ def run_relay(args, api, *, persist=None, sample=host_sample, clock=time.monoton
                 persist(evidence)
 
     def sampler():
+        saved = clock()
         while not stop.is_set():
+            if persist is not None and clock() - saved >= 60:  # Partial evidence survives a kill.
+                save()
+                saved = clock()
             row = {"t": round(clock() - started, 1), **sample()}
             try:
                 metrics = api.call("/v1/heartbeat", timeout=10)["heartbeat"].get("runtime_metrics") or {}
@@ -668,8 +675,16 @@ def run_relay(args, api, *, persist=None, sample=host_sample, clock=time.monoton
                 check_identity(states[sandbox_id], state, advanced=True)
                 states[sandbox_id] = state
                 if cycle == args.cycles:
+                    # A finished rollout ends: its sandbox goes, and queued
+                    # creates may take its place, as in a training run.
+                    begin = clock()
+                    api.call(f"/v1/sandboxes/{sandbox_id}", method="DELETE", headers={
+                        "X-UCloud-Sandbox-Generation": str(generation),
+                        "X-UCloud-Sandbox-Operation-Id": "delete-" + sandbox_id})
+                    row["delete_ms"] = round((clock() - begin) * 1000, 1)
                     with lock:
                         evidence["cycles"].append(row)
+                        evidence["finished"][sandbox_id] = round(clock() - started, 1)
                     return
                 relay_id = uuid4().hex
                 begin = clock()

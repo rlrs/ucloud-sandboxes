@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from tests.chunk_store_support import IndexFixture, ObjectServer
 from ucloud_sandboxes.chunk_index import (BUSY, CHUNK_RESERVE_SECONDS, KNOWN, RESERVED, ChunkIndexClient,
-                                          MissingChunks, S3Presigner, http_range, redact)
+                                          MissingChunks, S3Presigner, http_range, redact, retried)
 from ucloud_sandboxes.chunk_store import RAW, PackWriter, chunk_map_key, pack_key
 from ucloud_sandboxes.managed_registry import RegistryRequestError
 
@@ -50,6 +50,25 @@ class PresignerTests(unittest.TestCase):
         for expires in (0, 8 * 86400):
             with self.assertRaises(ValueError):
                 presigner.url("k", expires=expires)
+
+
+class RetryTests(unittest.TestCase):
+    def test_presigned_reads_retry_transport_errors_and_5xx_only(self):
+        waits, failures = [], [OSError("read timeout"), RegistryRequestError(503, "GET", "u", "slow down")]
+
+        def read(url):
+            if failures:
+                raise failures.pop(0)
+            return url
+        self.assertEqual(retried(read, sleep=waits.append)("ok"), "ok")
+        self.assertEqual(waits, [0.5, 1.0])  # M1 gate run 4: one S3 read timeout failed a commit.
+        missing = retried(lambda: (_ for _ in ()).throw(RegistryRequestError(404, "GET", "u", "")), sleep=waits.append)
+        with self.assertRaises(RegistryRequestError):
+            missing()
+        self.assertEqual(len(waits), 2)  # A 404 is an answer, not a fault.
+        with self.assertRaises(OSError):
+            retried(lambda: (_ for _ in ()).throw(OSError("down")), sleep=waits.append)()
+        self.assertEqual(waits[2:], [0.5, 1.0, 2.0])
 
 
 class IndexTests(unittest.TestCase):

@@ -159,6 +159,22 @@ def http_range(url, start, length, *, timeout=30.0, headers=None):
     return payload
 
 
+def retried(read, attempts=4, delay=0.5, sleep=time.sleep):
+    """``read`` again after a transport error or an object-store 5xx, backing
+    off 0.5, 1, 2 s: boto3 retries the index's other S3 calls, but presigned
+    reads did not, and one S3 read timeout failed a whole conversion's commit
+    (M1 gate run 4)."""
+    def call(*args, **kwargs):
+        for attempt in range(attempts):
+            try:
+                return read(*args, **kwargs)
+            except (OSError, RegistryRequestError) as exc:
+                if attempt == attempts - 1 or (isinstance(exc, RegistryRequestError) and exc.status_code < 500):
+                    raise
+                sleep(delay * 2 ** attempt)
+    return call
+
+
 # --- Object store: S3 writes with credentials, reads through presigned URLs ---
 
 class ChunkObjectStore:
@@ -166,8 +182,8 @@ class ChunkObjectStore:
 
     def __init__(self, client, presigner, prefix, *, url_seconds=86400, reader=http_range, getter=None):
         self.client, self.presigner, self.prefix = client, presigner, prefix.strip("/")
-        self.url_seconds, self.reader = url_seconds, reader
-        self.getter = getter or (lambda url, limit: http_request("GET", url, max_bytes=limit)[2])
+        self.url_seconds, self.reader = url_seconds, retried(reader)
+        self.getter = retried(getter or (lambda url, limit: http_request("GET", url, max_bytes=limit)[2]))
 
     def url(self, key):
         return self.presigner.url(key, expires=self.url_seconds)

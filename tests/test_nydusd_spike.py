@@ -90,6 +90,19 @@ class VirtualBlobTests(unittest.TestCase):
             self.get(component, "0" * 64, 0, 10)
 
 
+class NydusdDeviceTests(unittest.TestCase):
+    def test_a_refused_device_raises_its_own_error(self):
+        """Attach skips leased devices on EBUSY: a refusal must keep its type."""
+        from types import SimpleNamespace
+        from ucloud_sandboxes.environment_nydusd import NydusdDevice
+        with TemporaryDirectory() as directory:
+            path = Path(directory, "not-a-device")
+            path.write_bytes(b"")
+            image = SimpleNamespace(authenticate=lambda keys: None, bootstrap=SimpleNamespace(path=path))
+            with self.assertRaisesRegex(ValueError, "real Linux NBD device"):
+                NydusdDevice(path, image, None, trusted_keys={})
+
+
 @unittest.skipUnless(NYDUS or shutil.which("nydus-image"), "needs nydus-image v2.4.5 (UCLOUD_TEST_NYDUS_IMAGE)")
 class RealVirtualBlobTests(VirtualBlobTests):
     """Real tails (chunk info, digests, TOC) and real cross-layer chunk bytes."""

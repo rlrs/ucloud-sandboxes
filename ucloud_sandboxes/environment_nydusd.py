@@ -50,9 +50,8 @@ class NydusdDevice:
         component.authenticate(trusted_keys)
         if not device.is_absolute() or component.bootstrap.path is None:
             raise ValueError("nydusd needs an absolute NBD device and a bootstrap file")
-        self.path, self.process = device, None
+        self.path, self.process, self._work, self._sysfs = device, None, None, None
         self._fd = os.open(device, os.O_RDONLY | os.O_NOFOLLOW)
-        self._work = None
         try:
             info = os.fstat(self._fd)
             if not stat.S_ISBLK(info.st_mode) or os.major(info.st_rdev) != 43:
@@ -91,6 +90,8 @@ class NydusdDevice:
             raise
 
     def _owner(self):
+        if self._sysfs is None:
+            return ""
         try:
             return (self._sysfs / "pid").read_text().strip()
         except FileNotFoundError:

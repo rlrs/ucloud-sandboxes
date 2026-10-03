@@ -264,6 +264,16 @@ class StoreNodeAdapterTests(unittest.TestCase):
 
 
 class RemoteHelperTests(unittest.TestCase):
+    def test_bench_creates_carry_the_operation_a_node_agent_accepts(self):
+        from ucloud_sandboxes.sandbox import SandboxOperation, SandboxSpec
+        package = Path(sys.modules["ucloud_sandboxes"].__file__).parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            cli = Path(directory) / "ucloud-sandboxes"
+            cli.write_text(f"#!/bin/sh\nexec env PYTHONPATH={package} /usr/bin/python3 -m ucloud_sandboxes.cli\n")
+            spec = {"id": "m1-run-0-imp-d", "image": "registry:5000/a:b", "network": "bridge", "command": ["sleep", "1"]}
+            operation = SandboxOperation.from_dict(remote.create_operation(spec, cli=cli))
+        operation.validate_spec(SandboxSpec.from_dict(spec))
+
     def test_derive_config_writes_only_a_copy_under_the_run_prefix(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

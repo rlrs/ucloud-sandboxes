@@ -525,6 +525,21 @@ def cmd_rollback(args):
 
 # --- Canary workers: the node agent's own API, standard library only ---
 
+AGENT_CLI = "/work/ucloud-sandboxes/bin/ucloud-sandboxes"
+
+
+def create_operation(spec, cli=AGENT_CLI):
+    """The ``_ucloud_operation`` a node agent requires on create, as the
+    gateway sends it; the spec hash comes from the node's own package, whose
+    site-packages its CLI wrapper names (the bench runs on system Python)."""
+    match = re.search(r"PYTHONPATH=(\S+)", Path(cli).read_text())
+    if match and match.group(1) not in sys.path:
+        sys.path.insert(0, match.group(1))
+    from ucloud_sandboxes.sandbox import SandboxSpec, sandbox_spec_fingerprint
+    return {"operation_id": "m1-gate-" + spec["id"], "generation": 1, "kind": "create",
+            "spec_hash": sandbox_spec_fingerprint(SandboxSpec.from_dict(spec))}
+
+
 class Node:
     """The worker's node agent on its local address, with its control token."""
 
@@ -558,9 +573,11 @@ class Node:
         return {key: value for key, value in found.items() if isinstance(value, (int, float))}
 
     def create(self, sandbox_id, image):
+        # The gateway always sizes a create; an unsized one is refused as a zero request.
+        spec = {"id": sandbox_id, "image": image, "network": "bridge", "command": ["sleep", "infinity"],
+                "cpus": 2, "memory_mb": 4096, "disk_mb": 8192}
         started = time.monotonic()
-        self.call("POST", "/v1/sandboxes", {"id": sandbox_id, "image": image, "network": "bridge",
-                                            "command": ["sleep", "infinity"]})
+        self.call("POST", "/v1/sandboxes", {**spec, "_ucloud_operation": create_operation(spec)})
         return time.monotonic() - started
 
     def run(self, sandbox_id, command, timeout=300):

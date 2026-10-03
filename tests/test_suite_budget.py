@@ -33,8 +33,8 @@ from tests.test_package_budget import package_lines
 # +17 path-ordered layers, +52 the convert race and the gate bench's node API
 # (operation, unmount; test_chunk_store_gate: no scenario covers an operator script),
 # +22 exact rollback symlinks (real mkfs.erofs images), +43 the gate's baseline worker,
-# +53 M2 readers (dispatched roots, spec fingerprints, the RAFS flag).
-SUITE_LINE_BUDGET = 95_858
+# +53 M2 readers (dispatched roots, spec fingerprints, the RAFS flag), +113 the gateway side.
+SUITE_LINE_BUDGET = 95_971
 SUITE = Path(__file__).resolve().parent
 
 

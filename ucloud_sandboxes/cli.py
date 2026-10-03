@@ -1091,6 +1091,8 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         registry_worker_url=config.registry_worker_url,
         registry_usage_file=config.registry_usage_file(),
         environment_registry=environment_registry_from_args(args) or environment_registry_from_deployment(config),
+        dispatch_environment_roots=bool(config.immutable_environments is not None
+                                        and config.immutable_environments.dispatch_roots),
         import_external_images=bool(
             config.immutable_environments is not None
             and config.immutable_environments.worker_enabled
@@ -2124,6 +2126,9 @@ def _run_reference_retention(
         environment_repository = repositories[ENVIRONMENT_REASON]
         excluded = set(repositories.values())
         index = ImageEnvironmentIndex(client)
+        # Chunk store M2: converted and dispatched roots stay live on their
+        # image_roots rows alone (plan §3.3); old roots keep their annotations.
+        from .gateway.image_roots import live_roots_for
         if repository_prefix:
             decision = skip(
                 ENVIRONMENT_REASON, "a repository prefix limits the managed image scan",
@@ -2137,7 +2142,7 @@ def _run_reference_retention(
                         record
                         for record in remaining_images
                         if record.repository not in excluded
-                    ),
+                    ) | live_roots_for(config.image_file()),
                 )
                 decision = decide(ENVIRONMENT_REASON, live)
                 if decision.delete:
@@ -2164,7 +2169,7 @@ def _run_reference_retention(
                     for repository in client.catalog()
                     if repository not in excluded
                     for record in list_repository_tags(client, repository)
-                ),
+                ) | live_roots_for(config.image_file()),
             )
             deleted_environments = execute_reference_prune(
                 client, decision, usage_store=usage_store,

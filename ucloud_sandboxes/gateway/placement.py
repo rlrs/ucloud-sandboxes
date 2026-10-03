@@ -12,8 +12,9 @@ from typing import Any, Callable
 
 from ..admission import FairRLock
 from ..capabilities import (
-    DISK_QUOTA_CAPABILITY, ENVIRONMENT_CONTRACT_CAPABILITY, HIBERNATE_LOCAL_CAPABILITY,
-    MANAGED_PRIMARY_CAPABILITY, STATIC_FILE_MANAGEMENT_CAPABILITY, has_capability,
+    DISK_QUOTA_CAPABILITY, ENVIRONMENT_CONTRACT_CAPABILITY, ENVIRONMENT_RAFS_CAPABILITY,
+    ENVIRONMENT_ROOT_CAPABILITY, HIBERNATE_LOCAL_CAPABILITY, MANAGED_PRIMARY_CAPABILITY,
+    STATIC_FILE_MANAGEMENT_CAPABILITY, has_capability,
 )
 from ..control_state import detached_heartbeat
 from ..deployment import agent_version_is_schedulable
@@ -474,6 +475,10 @@ def _sandbox_required_capabilities(spec: dict[str, Any]) -> tuple[str, ...]:
         capabilities.append(ENVIRONMENT_CONTRACT_CAPABILITY)
     if filesystem.get("management_helper") == "static":
         capabilities.append(STATIC_FILE_MANAGEMENT_CAPABILITY)
+    if spec.get("environment_root"):
+        # Chunk store M2: dispatched roots go to workers that honour them and
+        # read RAFS, also for retries and moves, which re-read the route's spec.
+        capabilities.extend((ENVIRONMENT_ROOT_CAPABILITY, ENVIRONMENT_RAFS_CAPABILITY))
     return tuple(capabilities)
 
 

@@ -269,6 +269,10 @@ class EnvironmentDeploymentConfig:
     # Concurrent component attaches per worker backend. 1 keeps attach serial,
     # as before 0.8.3: a 48-way burst ran first commands 7x slower in parallel.
     attach_concurrency: int = 1
+    # Chunk store M2: the gateway sets each create's environment root (from
+    # image-roots.sqlite3, else the annotation). Only once every worker runs
+    # 0.9.0 with a chunk store: a dispatched root needs both capabilities.
+    dispatch_roots: bool = False
     # Chunk-store (RAFS) images, off by default (C2.13, design §9 M1).
     chunk_store: ChunkStoreConfig | None = None
 
@@ -292,7 +296,7 @@ class EnvironmentDeploymentConfig:
         import re
         if not isinstance(result.repository, str) or not re.fullmatch(r"[a-z0-9]+(?:[._/-][a-z0-9]+)*", result.repository):
             raise ValueError("invalid immutable environment repository")
-        for name in ("worker_enabled", "builder_enabled", "preserve_mtimes", "prefetch_enabled"):
+        for name in ("worker_enabled", "builder_enabled", "preserve_mtimes", "prefetch_enabled", "dispatch_roots"):
             if not isinstance(getattr(result, name), bool):
                 raise ValueError(f"immutable environment {name} must be boolean")
         if type(result.attach_concurrency) is not int or not 1 <= result.attach_concurrency <= 256:

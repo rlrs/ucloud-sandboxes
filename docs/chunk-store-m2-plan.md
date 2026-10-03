@@ -159,13 +159,14 @@ journal.
 - **No advertisement today.** No heartbeat or placement field says a worker can
   read RAFS (`capabilities.py`, `gateway/placement.py`), and a worker without
   a chunk index refuses RAFS components (`environment_backend.py:249-254`).
-- **Change.** Heartbeats advertise `environment_roots` (accepts the spec field)
-  and `rafs_environments` (env-io has a chunk index and a store node). The
-  gateway dispatches a RAFS root only to a node advertising both.
-  - Before an image is released, any other node gets its old root, a safe
-    fallback during the fleet rollout.
-  - After release, a node without the capability cannot take that image, so
-    the whole fleet must advertise both before wave 1's release.
+- **Change (built).** Heartbeats advertise `environment-root-dispatch-v1` (the
+  worker honours the spec field) and `environment-rafs-v1` (env-io has a store
+  node, `--environment-rafs`). A spec with `environment_root` requires both.
+  - The rule is derived from the spec alone, so retries and moves, which
+    re-read the route's spec, enforce it too.
+  - So `dispatch_roots` is turned on only once every worker runs 0.9.0 with
+    the chunk store; with it on, a create no worker can take is a retryable
+    `no_ready_node`.
 
 ## 4. Infrastructure
 
@@ -212,8 +213,14 @@ journal.
    - **Sandbox spec.** `environment_root` in the spec, validated as described in
      §3.1.
    - **Heartbeats** advertise the two capabilities.
-   - **Gateway.** `image_roots.sqlite3` with its readers and retention changes,
-     behind `immutable_environments.dispatch_roots` (default off).
+   - **Gateway.** `image_roots.sqlite3` with its journal, the resolver's
+     dispatched root, root assignment at create (clients may not set one; a
+     retry keeps its route's root) and retention, behind
+     `immutable_environments.dispatch_roots` (default off).
+   - **Before the first release, not in 0.9.0:** release-aware resolution
+     (`ImageResolution.resolve` and `enrich_records` answering a released
+     digest from `image_roots`), and the commit build reading a parent's root
+     from it.
    - **Workers** get the `chunk_store` block, so env-io runs with the chunk
      index and the store node. With dispatch off they still mount today's EROFS
      roots.

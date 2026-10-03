@@ -457,6 +457,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     wake_consolidation_next_at: float = 0.0
     server_version = "ucloud-sandboxes-control-plane/0.1"
     routing_write_process = None
+    dispatch_environment_roots = False
 
     @traced_http_request
     def do_GET(self) -> None:
@@ -2466,6 +2467,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             if not isinstance(raw, dict):
                 raise ValueError("sandbox payload must be a JSON object")
             spec = SandboxSpec.from_dict(raw)
+            if spec.environment_root is not None:
+                raise ValueError("environment_root is set by the gateway, not by clients")
             spec.validate()
             requested = spec.requested_resources()
             if not requested.fits_within(self.max_sandbox_resources):
@@ -2542,6 +2545,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 if imported_image != spec.image:
                     spec = replace(spec, image=imported_image)
                     root.set_attribute("imported_image", imported_image)
+                if self.dispatch_environment_roots and spec.environment_root is None:
+                    # Chunk store M2: pin the root for the sandbox's life (plan §3.1).
+                    dispatched = self.services.registry_refs.dependency_resolver.root(spec.image)
+                    if dispatched is not None:
+                        spec = replace(spec, environment_root=dispatched)
+                        root.set_attribute("environment_root", dispatched)
 
             with self.telemetry.span(
                 "gateway.sandbox_existing_route_check",
@@ -2549,6 +2558,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 existing = self.routing_store.get_sandbox_readonly(spec.id)
                 span.set_attribute("existing_route", existing is not None)
                 if existing is not None:
+                    if existing.spec and spec.environment_root != existing.spec.get("environment_root"):
+                        # A retry keeps the root its route pinned, even across a switch.
+                        spec = replace(spec, environment_root=existing.spec.get("environment_root"))
                     requested_hash = sandbox_spec_fingerprint(spec)
                     existing_spec_matches = True
                     if existing.spec:
@@ -5553,6 +5565,7 @@ def build_server(
     registry_worker_url: str | None = None,
     registry_usage_file: Path | None = None,
     environment_registry: object | None = None,
+    dispatch_environment_roots: bool = False,
     import_external_images: bool = False,
     registry_disk_monitor: RegistryDiskMonitor | None = None,
     max_concurrent_sandbox_creates: int = DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
@@ -5694,7 +5707,10 @@ def build_server(
     dependency_resolver = None
     if environment_registry is not None:
         from .environment_dependencies import EnvironmentDependencyResolver
-        dependency_resolver = EnvironmentDependencyResolver(environment_registry)
+        from .gateway.image_roots import ImageRootsStore, roots_path
+        dependency_resolver = EnvironmentDependencyResolver(
+            environment_registry, image_roots=ImageRootsStore(roots_path(image_file)))
+    BoundHandler.dispatch_environment_roots = bool(dispatch_environment_roots and dependency_resolver is not None)
     BoundHandler.services = build_services(
         store=store, routing_store=routing_store, metrics_store=metrics_store,
         telemetry=resolved_telemetry, heartbeat_ttl_seconds=heartbeat_ttl_seconds,

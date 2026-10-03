@@ -1,0 +1,2518 @@
+{
+  "cleanup": {
+    "attempted": 8,
+    "deleted": 8,
+    "errors": [],
+    "failed": 0,
+    "relay_registrations": {
+      "registered": 8,
+      "remaining": []
+    },
+    "remaining_owned_ids": []
+  },
+  "cleanup_errors": [],
+  "conditions": {
+    "driver": {
+      "host": "sandboxes-gateway",
+      "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+      "python": "3.14.4"
+    },
+    "first_command": "per family: conditions.rollout.commands.first",
+    "gateway": "https://77.42.92.27",
+    "gateway_health": {
+      "ok": true,
+      "service": "control-plane",
+      "version": "0.8.4"
+    },
+    "gateway_version": "0.8.4",
+    "harness_sha256": "c59ab924c7b3939b5c37ddcbf5655fcacb506638ff4f35accb4fbd00f318daeb",
+    "image_kind": "registry",
+    "images": [
+      "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+      "10.42.0.2:5000/ucloud-managed/foundation-tmax-e92c631646c7c6e91d2b8aa1-6d33fc8fb2f0:latest@sha256:03250523581c59383f92f1768ee7d4c605df7f12eae17ae28e5950382c53df92",
+      "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-1df61e054cd9254e0-0330d4aa6b7e:latest@sha256:d760b44e8182c2905315128ec627c8c0860f3d79f9669a0e0989a05984fcf26c",
+      "10.42.0.2:5000/ucloud-managed/precomputed-1307a6c4cdcc5af9def451c16595-fd016e62fca8:latest@sha256:527b116fb90c281af90bd94e4da7f9b48230330b17300e6b40c5b3ba6e3c8fa0",
+      "aweaiteam/scaleswe:google_flatbuffers_pr3493"
+    ],
+    "preexisting_sandboxes": 0,
+    "profile": "container",
+    "rollout": {
+      "commands": {
+        "first": {
+          "OpenSWE": [
+            "sh",
+            "-c",
+            "WD=; REPO=0\nfor d in \"$PWD\" /testbed /testbed /workspace /repo /app /src /home/* /root; do\n  [ \"$d\" = / ] && continue\n  if [ -d \"$d/.git\" ]; then WD=$d; REPO=1; break; fi\ndone\nif [ -z \"$WD\" ]; then\n  for d in \"$PWD\" /testbed; do [ \"$d\" != / ] && [ -d \"$d\" ] && { WD=$d; break; }; done\nfi\nWD=${WD:-/}; cd \"$WD\" || exit 90\nSCAN=.; [ \"$WD\" = / ] && SCAN=/etc\nPY=$(command -v python || command -v python3 || true)\nTO=; command -v timeout >/dev/null 2>&1 && TO=\"timeout 115\"\necho \"ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}\"\nif [ \"$REPO\" = 1 ]; then git status --porcelain >/tmp/.ucloud-bench-status || exit 91; echo \"ucloud-bench git_status_lines=$(wc -l </tmp/.ucloud-bench-status) tracked=$(git ls-files | wc -l)\"; fi\nif [ -n \"$PY\" ]; then \"$PY\" -c 'import os, sys\nmods = []\nfor name in (\"json\", \"sqlite3\", \"ssl\", \"unittest\", \"pytest\"):\n    try:\n        __import__(name)\n        mods.append(name)\n    except Exception:\n        pass\nentries = 0\nfor path in sys.path:\n    if path and os.path.isdir(path):\n        entries += len(os.listdir(path))\nprint(\"ucloud-bench python=%d.%d imported=%s syspath_entries=%d\" % (\n    sys.version_info[0], sys.version_info[1], \",\".join(mods), entries))\n' || exit 92; fi\n"
+          ],
+          "SWE-smith": [
+            "sh",
+            "-c",
+            "WD=; REPO=0\nfor d in \"$PWD\" /testbed /testbed /workspace /repo /app /src /home/* /root; do\n  [ \"$d\" = / ] && continue\n  if [ -d \"$d/.git\" ]; then WD=$d; REPO=1; break; fi\ndone\nif [ -z \"$WD\" ]; then\n  for d in \"$PWD\" /testbed; do [ \"$d\" != / ] && [ -d \"$d\" ] && { WD=$d; break; }; done\nfi\nWD=${WD:-/}; cd \"$WD\" || exit 90\nSCAN=.; [ \"$WD\" = / ] && SCAN=/etc\nPY=$(command -v python || command -v python3 || true)\nTO=; command -v timeout >/dev/null 2>&1 && TO=\"timeout 115\"\necho \"ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}\"\nif [ \"$REPO\" = 1 ]; then git status --porcelain >/tmp/.ucloud-bench-status || exit 91; echo \"ucloud-bench git_status_lines=$(wc -l </tmp/.ucloud-bench-status) tracked=$(git ls-files | wc -l)\"; fi\nif [ -n \"$PY\" ]; then \"$PY\" -c 'import os, sys\nmods = []\nfor name in (\"json\", \"sqlite3\", \"ssl\", \"unittest\", \"pytest\"):\n    try:\n        __import__(name)\n        mods.append(name)\n    except Exception:\n        pass\nentries = 0\nfor path in sys.path:\n    if path and os.path.isdir(path):\n        entries += len(os.listdir(path))\nprint(\"ucloud-bench python=%d.%d imported=%s syspath_entries=%d\" % (\n    sys.version_info[0], sys.version_info[1], \",\".join(mods), entries))\n' || exit 92; fi\n"
+          ],
+          "ScaleSWE": [
+            "sh",
+            "-c",
+            "WD=; REPO=0\nfor d in \"$PWD\" /testbed /testbed /workspace /repo /app /src /home/* /root; do\n  [ \"$d\" = / ] && continue\n  if [ -d \"$d/.git\" ]; then WD=$d; REPO=1; break; fi\ndone\nif [ -z \"$WD\" ]; then\n  for d in \"$PWD\" /testbed; do [ \"$d\" != / ] && [ -d \"$d\" ] && { WD=$d; break; }; done\nfi\nWD=${WD:-/}; cd \"$WD\" || exit 90\nSCAN=.; [ \"$WD\" = / ] && SCAN=/etc\nPY=$(command -v python || command -v python3 || true)\nTO=; command -v timeout >/dev/null 2>&1 && TO=\"timeout 115\"\necho \"ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}\"\nif [ \"$REPO\" = 1 ]; then git status --porcelain >/tmp/.ucloud-bench-status || exit 91; echo \"ucloud-bench git_status_lines=$(wc -l </tmp/.ucloud-bench-status) tracked=$(git ls-files | wc -l)\"; fi\nif [ -n \"$PY\" ]; then \"$PY\" -c 'import os, sys\nmods = []\nfor name in (\"json\", \"sqlite3\", \"ssl\", \"unittest\", \"pytest\"):\n    try:\n        __import__(name)\n        mods.append(name)\n    except Exception:\n        pass\nentries = 0\nfor path in sys.path:\n    if path and os.path.isdir(path):\n        entries += len(os.listdir(path))\nprint(\"ucloud-bench python=%d.%d imported=%s syspath_entries=%d\" % (\n    sys.version_info[0], sys.version_info[1], \",\".join(mods), entries))\n' || exit 92; fi\n"
+          ],
+          "TMax": [
+            "sh",
+            "-c",
+            "WD=; REPO=0\nfor d in \"$PWD\" /app /testbed /workspace /repo /app /src /home/* /root; do\n  [ \"$d\" = / ] && continue\n  if [ -d \"$d/.git\" ]; then WD=$d; REPO=1; break; fi\ndone\nif [ -z \"$WD\" ]; then\n  for d in \"$PWD\" /app; do [ \"$d\" != / ] && [ -d \"$d\" ] && { WD=$d; break; }; done\nfi\nWD=${WD:-/}; cd \"$WD\" || exit 90\nSCAN=.; [ \"$WD\" = / ] && SCAN=/etc\nPY=$(command -v python || command -v python3 || true)\nTO=; command -v timeout >/dev/null 2>&1 && TO=\"timeout 115\"\necho \"ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}\"\necho \"ucloud-bench workdir_entries=$(ls -A | wc -l) tree_entries=$(find \"$SCAN\" -maxdepth 3 2>/dev/null | head -n 5000 | wc -l)\"\nif [ -n \"$PY\" ]; then \"$PY\" -c 'import os, sys\nmods = []\nfor name in (\"json\", \"sqlite3\", \"ssl\", \"unittest\", \"pytest\"):\n    try:\n        __import__(name)\n        mods.append(name)\n    except Exception:\n        pass\nentries = 0\nfor path in sys.path:\n    if path and os.path.isdir(path):\n        entries += len(os.listdir(path))\nprint(\"ucloud-bench python=%d.%d imported=%s syspath_entries=%d\" % (\n    sys.version_info[0], sys.version_info[1], \",\".join(mods), entries))\n' || exit 92; fi\n"
+          ]
+        },
+        "turns": {
+          "edit": [
+            "sh",
+            "-c",
+            "WD=; REPO=0\nfor d in \"$PWD\"  /testbed /workspace /repo /app /src /home/* /root; do\n  [ \"$d\" = / ] && continue\n  if [ -d \"$d/.git\" ]; then WD=$d; REPO=1; break; fi\ndone\nif [ -z \"$WD\" ]; then\n  for d in \"$PWD\" ; do [ \"$d\" != / ] && [ -d \"$d\" ] && { WD=$d; break; }; done\nfi\nWD=${WD:-/}; cd \"$WD\" || exit 90\nSCAN=.; [ \"$WD\" = / ] && SCAN=/etc\nPY=$(command -v python || command -v python3 || true)\nTO=; command -v timeout >/dev/null 2>&1 && TO=\"timeout 115\"\necho \"ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}\"\nf=; [ \"$REPO\" = 1 ] && f=$(git ls-files 2>/dev/null | grep -E \"[.](py|js|ts|go|rs|java|c|cc|cpp|h|php|rb|md|txt)$\" | head -n 1)\nif [ -n \"$f\" ]; then printf \"\\n# ucloud-bench edit\\n\" >>\"$f\" || exit 93\n  echo \"ucloud-bench edit=$f diff_bytes=$(git diff | wc -c)\"\nelse printf \"ucloud-bench edit\\n\" >>ucloud-bench-edit.txt 2>/dev/null || printf \"x\\n\" >>/tmp/ucloud-bench-edit.txt || exit 93\n  echo \"ucloud-bench edit=file\"; fi\n"
+          ],
+          "grep": [
+            "sh",
+            "-c",
+            "WD=; REPO=0\nfor d in \"$PWD\"  /testbed /workspace /repo /app /src /home/* /root; do\n  [ \"$d\" = / ] && continue\n  if [ -d \"$d/.git\" ]; then WD=$d; REPO=1; break; fi\ndone\nif [ -z \"$WD\" ]; then\n  for d in \"$PWD\" ; do [ \"$d\" != / ] && [ -d \"$d\" ] && { WD=$d; break; }; done\nfi\nWD=${WD:-/}; cd \"$WD\" || exit 90\nSCAN=.; [ \"$WD\" = / ] && SCAN=/etc\nPY=$(command -v python || command -v python3 || true)\nTO=; command -v timeout >/dev/null 2>&1 && TO=\"timeout 115\"\necho \"ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}\"\nP=\"def |class |func |function \"\nif [ \"$REPO\" = 1 ]; then n=$(git grep -n -I -E \"$P\" 2>/dev/null | head -n 20000 | wc -l)\nelse n=$(grep -rIn -E \"$P\" \"$SCAN\" 2>/dev/null | head -n 20000 | wc -l); fi\necho \"ucloud-bench grep_lines=$n\"\n"
+          ],
+          "test": [
+            "sh",
+            "-c",
+            "WD=; REPO=0\nfor d in \"$PWD\"  /testbed /workspace /repo /app /src /home/* /root; do\n  [ \"$d\" = / ] && continue\n  if [ -d \"$d/.git\" ]; then WD=$d; REPO=1; break; fi\ndone\nif [ -z \"$WD\" ]; then\n  for d in \"$PWD\" ; do [ \"$d\" != / ] && [ -d \"$d\" ] && { WD=$d; break; }; done\nfi\nWD=${WD:-/}; cd \"$WD\" || exit 90\nSCAN=.; [ \"$WD\" = / ] && SCAN=/etc\nPY=$(command -v python || command -v python3 || true)\nTO=; command -v timeout >/dev/null 2>&1 && TO=\"timeout 115\"\necho \"ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}\"\nf=; [ \"$REPO\" = 1 ] && f=$(git ls-files 2>/dev/null | grep -E \"(^|/)test_[^/]*[.]py$|_test[.]py$\" | head -n 1)\nif [ -n \"$f\" ] && [ -n \"$PY\" ]; then $TO \"$PY\" -m pytest -q -x -p no:cacheprovider \"$f\" >/dev/null 2>&1; echo \"ucloud-bench test=$f rc=$?\"\nelif [ -n \"$PY\" ] && [ \"$SCAN\" = . ]; then $TO \"$PY\" -m compileall -q . >/dev/null 2>&1; echo \"ucloud-bench test=compileall rc=$?\"\nelse echo \"ucloud-bench test=none\"; fi\n"
+          ]
+        }
+      },
+      "family_profiles": {
+        "OpenSWE": {
+          "dirs": "/testbed",
+          "kind": "swe"
+        },
+        "SWE-smith": {
+          "dirs": "/testbed",
+          "kind": "swe"
+        },
+        "ScaleSWE": {
+          "dirs": "/testbed",
+          "kind": "swe"
+        },
+        "TMax": {
+          "dirs": "/app",
+          "kind": "terminal"
+        }
+      },
+      "fleet_state": {
+        "before": {
+          "cached_bytes_fresh": 0,
+          "fresh_seconds": 120.0,
+          "nodes": [],
+          "observed_at": "2026-10-03T14:48:07.984418+00:00",
+          "sandbox_nodes_fresh": 0,
+          "sandbox_nodes_stored": 0
+        },
+        "declared": "zero",
+        "verified": true
+      },
+      "image_source": "auto",
+      "overrides": {
+        "family_command": [],
+        "turn_command": []
+      },
+      "resolution_gap": {
+        "detail": "the training integration builds this task from its recipe (Dockerfile and task context from its image_recipe_db); the gateway matches the recipe to this prepared foundation or source and runs the remaining build work on a builder. The selection carries no recipe, so the sandbox runs the prepared reference itself: the task delta and its live build are not exercised",
+        "families": [
+          "OpenSWE",
+          "TMax"
+        ]
+      },
+      "resolutions": {
+        "import_alias": 1,
+        "prepared_reference": 1,
+        "prepared_reference_fallback": 6
+      },
+      "sampling": {
+        "families": [],
+        "sampled_per_family": {
+          "OpenSWE": 4,
+          "SWE-smith": 1,
+          "ScaleSWE": 1,
+          "TMax": 2
+        },
+        "seed": 1,
+        "tasks": 8,
+        "weighting": "rows"
+      },
+      "selection": {
+        "entries": 66786,
+        "environment_revision": "c7ea0d7fe3379f0e6ffb0a68c82c80c184601f92",
+        "format": "selectors",
+        "member": "all-cached-training-tasks/all-image-selectors.json",
+        "observed_at_utc": "2026-10-01T13:03:49Z",
+        "path": "all-cached-training-tasks-with-terminal-lego-2026-10-01.zip",
+        "schema": 1,
+        "scope": "training only; preserve the existing split before filtering",
+        "sha256": "bd407f1f4b453bc5e0054e26f4c4b55abc963f007b4206af6476f313683f59da",
+        "upstream_rows": 130253,
+        "verifiers_revision": "7856cc1"
+      },
+      "think": {
+        "definition": "the managed agent ends each turn with a blocking chat-completions call through its relay capability URL; the fake worker polls it, holds it for the think time (renewing the lease), and commits a fixed completion. call_seconds and returned_unix are measured in the sandbox (its clock); received/answered on the driver. relay_call_overhead = call_seconds - think_seconds. answer_to_resume = guest returned_unix - driver answered_unix (cross-clock: node vs driver NTP). model_wait_accepted is relay request state (accepted_notified_at, read by a lease renewal just before the answer): the gateway accepted the park request for this wait, which the node may keep resident, pause or hibernate. park is not timed; wake = answer_to_resume of calls where the status inventory showed the sandbox parked",
+        "mode": "relay",
+        "relay": {
+          "lease_seconds": 120.0,
+          "renew_seconds": 40.0,
+          "sandbox_call": "POST <sandbox relay>/tunnels/<rollout>/_relay/<registration token>/chat/completions from the managed agent (http_tunnel_url)",
+          "sandbox_relay": "https://77.42.92.27/relay",
+          "sandbox_shape": "container profile, parkable, managed_process, user 0:0",
+          "worker_client": "ucloud_sandboxes_sdk.RelayWorkerClient (sync worker protocol)",
+          "worker_relay": "https://77.42.92.27/relay"
+        }
+      },
+      "turn_mix": [
+        "grep",
+        "test",
+        "edit"
+      ]
+    },
+    "scenario_arguments": {
+      "allow_occupied_fleet": false,
+      "api_token_file": "/var/lib/ucloud-sandboxes/state/sandbox-api-token",
+      "cleanup_timeout_seconds": 300.0,
+      "cpus": 1.0,
+      "create_timeout_seconds": 900.0,
+      "disk_mb": 2048,
+      "exec_timeout_seconds": 120.0,
+      "family": [],
+      "family_command": [],
+      "first_command": null,
+      "fleet_state": "zero",
+      "gateway_url": "https://77.42.92.27",
+      "heartbeat_settle_seconds": 20.0,
+      "image_kind": "registry",
+      "image_source": "auto",
+      "images": [
+        "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+        "10.42.0.2:5000/ucloud-managed/foundation-tmax-e92c631646c7c6e91d2b8aa1-6d33fc8fb2f0:latest@sha256:03250523581c59383f92f1768ee7d4c605df7f12eae17ae28e5950382c53df92",
+        "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-1df61e054cd9254e0-0330d4aa6b7e:latest@sha256:d760b44e8182c2905315128ec627c8c0860f3d79f9669a0e0989a05984fcf26c",
+        "10.42.0.2:5000/ucloud-managed/precomputed-1307a6c4cdcc5af9def451c16595-fd016e62fca8:latest@sha256:527b116fb90c281af90bd94e4da7f9b48230330b17300e6b40c5b3ba6e3c8fa0",
+        "aweaiteam/scaleswe:google_flatbuffers_pr3493"
+      ],
+      "label": [],
+      "labels": {},
+      "memory_mb": 1024,
+      "network": "bridge",
+      "node_fresh_seconds": 120.0,
+      "node_poll_seconds": 15.0,
+      "operator_token_file": "/var/lib/ucloud-sandboxes/state/gateway-token",
+      "output": "relay-smoke-8.json",
+      "overwrite": false,
+      "parkable": true,
+      "profile": "container",
+      "ramp_seconds": 0.0,
+      "relay_url": "https://77.42.92.27/relay",
+      "relay_worker_token_file": "/var/lib/ucloud-sandboxes/state/relay-worker-token",
+      "request_timeout_seconds": 120.0,
+      "run_id": null,
+      "sampling": "rows",
+      "sandbox_command": null,
+      "sandbox_command_argv": [],
+      "sandbox_relay_url": "https://77.42.92.27/relay",
+      "scenario": "rollout",
+      "seed": 1,
+      "selection": "all-cached-training-tasks-with-terminal-lego-2026-10-01.zip",
+      "status_poll_seconds": 2.0,
+      "tasks": 8,
+      "think_mode": "relay",
+      "think_seconds": [
+        1.0,
+        3.0
+      ],
+      "ttl_seconds": 1800,
+      "turn_command": [],
+      "turn_mix": "grep,test,edit",
+      "turns": 2
+    },
+    "sdk": {
+      "client_sha256": null,
+      "module": "/work/ucloud-sandboxes/c92-baseline-20261003/ucloud_sandboxes_sdk-0.4.34-py3-none-any.whl/ucloud_sandboxes_sdk/__init__.py",
+      "version": "0.4.34"
+    },
+    "shape": {
+      "cpus": 1.0,
+      "disk_mb": 2048,
+      "memory_mb": 1024,
+      "network": "bridge",
+      "sandbox_command": [],
+      "ttl_seconds": 1800
+    }
+  },
+  "errors": [],
+  "finished_at": "2026-10-03T14:49:50.278449+00:00",
+  "metrics": {
+    "burst_completion": {
+      "status": "not_run"
+    },
+    "bytes_fetched_share": {
+      "source": "node-side chunk-cache hit/miss byte counters (plan C0.4, not yet implemented); not observable through the SDK",
+      "status": "external",
+      "unit": "fraction of image bytes",
+      "value": null
+    },
+    "cold_time_to_first_command": {
+      "status": "not_run"
+    },
+    "creation_rate": {
+      "status": "not_run"
+    },
+    "density_at_latency": {
+      "status": "not_run"
+    },
+    "fork": {
+      "reason": "fork from a template (plan C3.3) is not implemented",
+      "status": "unsupported",
+      "value": null
+    },
+    "idle_pss_uss": {
+      "source": "runtime/gvisor/spike_rl_scale.py --probe s2 (Sentry /proc/<pid>/smaps_rollup PSS and USS per sandbox)",
+      "status": "external",
+      "unit": "bytes",
+      "value": null
+    },
+    "page_sharing_ratio": {
+      "source": "runtime/gvisor/spike_rl_scale.py --probe s2 (plan C0.3)",
+      "status": "external",
+      "unit": "ratio",
+      "value": null
+    },
+    "pause_resume": {
+      "status": "not_run"
+    },
+    "rollout": {
+      "arrival": {
+        "client_concurrency": 8,
+        "max_concurrent_creates": 8,
+        "parkable": true,
+        "profile": "container",
+        "ramp_seconds": 0.0,
+        "think_mode": "relay",
+        "think_seconds": [
+          1.0,
+          3.0
+        ],
+        "turn_mix": [
+          "grep",
+          "test",
+          "edit"
+        ],
+        "turns": 2,
+        "wall_seconds": 82.281661
+      },
+      "create_phases_ms": {
+        "n_with_phases": 7,
+        "phases": {
+          "active_capacity_ms": {
+            "max": 4.0,
+            "mean": 1.857143,
+            "min": 0.0,
+            "n": 7,
+            "p50": 1.0,
+            "p95": 4.0,
+            "p99": 4.0
+          },
+          "guest_files_ms": {
+            "max": 11.0,
+            "mean": 4.571429,
+            "min": 2.0,
+            "n": 7,
+            "p50": 4.0,
+            "p95": 11.0,
+            "p99": 11.0
+          },
+          "image_resolve_ms": {
+            "max": 35.0,
+            "mean": 19.285714,
+            "min": 2.0,
+            "n": 7,
+            "p50": 22.0,
+            "p95": 35.0,
+            "p99": 35.0
+          },
+          "init_install_ms": {
+            "max": 18.0,
+            "mean": 8.0,
+            "min": 3.0,
+            "n": 7,
+            "p50": 6.0,
+            "p95": 18.0,
+            "p99": 18.0
+          },
+          "journal_commit_ms": {
+            "max": 12.0,
+            "mean": 4.714286,
+            "min": 2.0,
+            "n": 7,
+            "p50": 3.0,
+            "p95": 12.0,
+            "p99": 12.0
+          },
+          "manager_create_ms": {
+            "max": 663.0,
+            "mean": 565.0,
+            "min": 468.0,
+            "n": 7,
+            "p50": 593.0,
+            "p95": 663.0,
+            "p99": 663.0
+          },
+          "network_ensure_ms": {
+            "max": 17.0,
+            "mean": 12.857143,
+            "min": 9.0,
+            "n": 7,
+            "p50": 13.0,
+            "p95": 17.0,
+            "p99": 17.0
+          },
+          "network_host_rules_ms": {
+            "max": 8.0,
+            "mean": 6.0,
+            "min": 4.0,
+            "n": 6,
+            "p50": 5.0,
+            "p95": 8.0,
+            "p99": 8.0
+          },
+          "oci_build_ms": {
+            "max": 2.0,
+            "mean": 0.857143,
+            "min": 0.0,
+            "n": 7,
+            "p50": 1.0,
+            "p95": 2.0,
+            "p99": 2.0
+          },
+          "parse_spec_ms": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 7,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "read_request_ms": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 7,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "registry_commit_ms": {
+            "max": 18.0,
+            "mean": 11.0,
+            "min": 5.0,
+            "n": 7,
+            "p50": 12.0,
+            "p95": 18.0,
+            "p99": 18.0
+          },
+          "request_lock_ms": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 7,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "rootfs_prepare_ms": {
+            "max": 23.0,
+            "mean": 15.571429,
+            "min": 11.0,
+            "n": 7,
+            "p50": 15.0,
+            "p95": 23.0,
+            "p99": 23.0
+          },
+          "runsc_create_ms": {
+            "max": 129.0,
+            "mean": 106.714286,
+            "min": 73.0,
+            "n": 7,
+            "p50": 108.0,
+            "p95": 129.0,
+            "p99": 129.0
+          },
+          "runsc_start_ms": {
+            "max": 50.0,
+            "mean": 38.428571,
+            "min": 18.0,
+            "n": 7,
+            "p50": 40.0,
+            "p95": 50.0,
+            "p99": 50.0
+          },
+          "runsc_state_ms": {
+            "max": 28.0,
+            "mean": 19.714286,
+            "min": 15.0,
+            "n": 7,
+            "p50": 19.0,
+            "p95": 28.0,
+            "p99": 28.0
+          },
+          "runtime_create_ms": {
+            "max": 191.0,
+            "mean": 174.142857,
+            "min": 145.0,
+            "n": 7,
+            "p50": 186.0,
+            "p95": 191.0,
+            "p99": 191.0
+          },
+          "startup_admission_ms": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 7,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "storage_prepare_ms": {
+            "max": 374.0,
+            "mean": 291.285714,
+            "min": 217.0,
+            "n": 7,
+            "p50": 291.0,
+            "p95": 374.0,
+            "p99": 374.0
+          },
+          "validate_spec_ms": {
+            "max": 5.0,
+            "mean": 1.714286,
+            "min": 0.0,
+            "n": 7,
+            "p50": 2.0,
+            "p95": 5.0,
+            "p99": 5.0
+          }
+        },
+        "source": "create response timings.phases and timings.manager.phases (plan C0.2)"
+      },
+      "definition": "Every sandbox's create is issued at its arrival offset (all at once unless --ramp-seconds), then its family's first command and M turns with think time; it is deleted when its turns end. time_to_ready: create request start to create returned; time_to_first_command: create request start to first command exit. Each summary counts the samples that completed that step. Turn seconds are driver-timed execs, except in think mode relay, where the managed agent runs and times each turn inside the sandbox. failures_by_phase: create, first_command, turn (including relay setup), think (sleep, park/wake or the relay model call).",
+      "density": {
+        "at_peak": {
+          "other": 0,
+          "parked": 0,
+          "parked_share": 0.0,
+          "paused": 0,
+          "paused_share": 0.0,
+          "running": 6
+        },
+        "definition": "timeline every --node-poll-seconds: this run's sandboxes per node from GET /v1/sandboxes?view=status (running, parked = parked/parking/waking/detaching/detached, other), heartbeat memory_mb (available, total, used from runtime_metrics; committed and capacity from used/total_resources), paused and resident_waits gauges and resident_wait counter deltas since the previous sample. paused counts every paused sandbox on fresh nodes, not only this run's",
+        "peak_live_sandboxes": {
+          "driver": 8,
+          "inventory": 6,
+          "offset_seconds": 75.039
+        },
+        "peak_per_node": {
+          "node_id": "10.42.0.3",
+          "offset_seconds": 75.039,
+          "sandboxes": 6
+        },
+        "resident_wait_deltas": {
+          "cache_reclaim_attempts": 0,
+          "cache_reclaimed_bytes": 0,
+          "cache_refault_backoffs": 0,
+          "checkpoints_completed": 0,
+          "pause_escalations": 0,
+          "pause_reclaim_cancellations": 0,
+          "pause_reclaim_ms_total": 0,
+          "pause_reclaim_stalls": 0,
+          "pause_reclaimed_bytes": 0,
+          "pause_reclaims": 0,
+          "pauses": 0,
+          "thaw_ms_total": 0,
+          "thaw_prefetch_ms_total": 0,
+          "thaw_prefetched_bytes": 0,
+          "thaw_prefetches": 0,
+          "thaws": 0
+        },
+        "samples": 5,
+        "status": "measured",
+        "status_poll_errors": [],
+        "timeline": [
+          {
+            "live": 0,
+            "nodes": [],
+            "offset_seconds": 15.003,
+            "other": 0,
+            "parked": 0,
+            "paused": null,
+            "resident_wait_deltas": {},
+            "running": 0,
+            "sandbox_nodes_fresh": 0
+          },
+          {
+            "live": 0,
+            "nodes": [],
+            "offset_seconds": 30.014,
+            "other": 0,
+            "parked": 0,
+            "paused": null,
+            "resident_wait_deltas": {},
+            "running": 0,
+            "sandbox_nodes_fresh": 0
+          },
+          {
+            "live": 0,
+            "nodes": [],
+            "offset_seconds": 45.023,
+            "other": 0,
+            "parked": 0,
+            "paused": null,
+            "resident_wait_deltas": {},
+            "running": 0,
+            "sandbox_nodes_fresh": 0
+          },
+          {
+            "live": 0,
+            "nodes": [],
+            "offset_seconds": 60.031,
+            "other": 0,
+            "parked": 0,
+            "paused": null,
+            "resident_wait_deltas": {},
+            "running": 0,
+            "sandbox_nodes_fresh": 0
+          },
+          {
+            "live": 6,
+            "nodes": [
+              {
+                "active_sandboxes": 0,
+                "fresh": true,
+                "job_id": "168535555",
+                "memory_mb": {
+                  "available": 181990,
+                  "capacity": 196608,
+                  "committed": 0,
+                  "total": 188669,
+                  "used": 6679
+                },
+                "node_id": "10.42.0.3",
+                "other": 0,
+                "parked": 0,
+                "paused": 0,
+                "resident_wait_deltas": {
+                  "cache_reclaim_attempts": 0,
+                  "cache_reclaimed_bytes": 0,
+                  "cache_refault_backoffs": 0,
+                  "checkpoints_completed": 0,
+                  "pause_escalations": 0,
+                  "pause_reclaim_cancellations": 0,
+                  "pause_reclaim_ms_total": 0,
+                  "pause_reclaim_stalls": 0,
+                  "pause_reclaimed_bytes": 0,
+                  "pause_reclaims": 0,
+                  "pauses": 0,
+                  "thaw_ms_total": 0,
+                  "thaw_prefetch_ms_total": 0,
+                  "thaw_prefetched_bytes": 0,
+                  "thaw_prefetches": 0,
+                  "thaws": 0
+                },
+                "resident_waits": 0,
+                "running": 6
+              }
+            ],
+            "offset_seconds": 75.039,
+            "other": 0,
+            "parked": 0,
+            "paused": 0,
+            "resident_wait_deltas": {
+              "cache_reclaim_attempts": 0,
+              "cache_reclaimed_bytes": 0,
+              "cache_refault_backoffs": 0,
+              "checkpoints_completed": 0,
+              "pause_escalations": 0,
+              "pause_reclaim_cancellations": 0,
+              "pause_reclaim_ms_total": 0,
+              "pause_reclaim_stalls": 0,
+              "pause_reclaimed_bytes": 0,
+              "pause_reclaims": 0,
+              "pauses": 0,
+              "thaw_ms_total": 0,
+              "thaw_prefetch_ms_total": 0,
+              "thaw_prefetched_bytes": 0,
+              "thaw_prefetches": 0,
+              "thaws": 0
+            },
+            "running": 6,
+            "sandbox_nodes_fresh": 1
+          }
+        ]
+      },
+      "failures_by_error_code": {},
+      "failures_by_phase": {},
+      "first_command": {
+        "max": 6.367423,
+        "mean": 3.695262,
+        "min": 2.578425,
+        "n": 8,
+        "p50": 2.646474,
+        "p95": 6.367423,
+        "p99": 6.367423
+      },
+      "fleet_state": "zero",
+      "images": {
+        "by_resolution": {
+          "import_alias": 1,
+          "prepared_reference": 1,
+          "prepared_reference_fallback": 6
+        },
+        "distinct_references": 5,
+        "erofs_bytes_distinct": 6441213952
+      },
+      "n_failed": 0,
+      "n_not_started": 0,
+      "n_started": 8,
+      "n_succeeded": 8,
+      "node_io": {
+        "after": {
+          "cached_bytes_fresh": 273670144,
+          "fresh_seconds": 120.0,
+          "nodes": [
+            {
+              "active_sandboxes": 0,
+              "age_seconds": 19.467,
+              "environment_io": {
+                "active_components": 0,
+                "cached_bytes": 273670144,
+                "corruptions": 0,
+                "downloaded_bytes": 273670144,
+                "fetch_retries": 0,
+                "hits": 4779,
+                "metadata_hint_absent": 19,
+                "metadata_hint_present": 0,
+                "metadata_hint_unsupported": 0,
+                "metadata_prefetch_bytes": 0,
+                "metadata_prefetch_chunks": 0,
+                "metadata_prefetch_failed_chunks": 0,
+                "metadata_prefetch_jobs": 0,
+                "metadata_prefetch_seconds": 0.0,
+                "metadata_prefetch_skipped_chunks": 0,
+                "metadata_prefetch_truncated": 0,
+                "metadata_prefetch_wait_timeouts": 0,
+                "misses": 1048,
+                "pending_misses": 0,
+                "prefetch_enabled": true,
+                "prefetch_jobs_active": 0,
+                "prefetch_joined_reads": 0,
+                "prefetch_ranges_inflight": 0,
+                "prefetch_start_failures": 0,
+                "trace_chunks_recorded": 1058,
+                "trace_hint_absent": 19,
+                "trace_hint_invalid": 0,
+                "trace_hint_present": 0,
+                "trace_prefetch_bytes": 0,
+                "trace_prefetch_chunks": 0,
+                "trace_prefetch_failed_chunks": 0,
+                "trace_prefetch_jobs": 0,
+                "trace_prefetch_seconds": 0.0,
+                "trace_prefetch_skipped_chunks": 0,
+                "trace_prefetch_truncated": 0,
+                "trace_recordings_started": 19,
+                "traces_recorded": 19
+              },
+              "fresh": true,
+              "job_id": "168535555",
+              "memory_mb": {
+                "available": 181151,
+                "capacity": 196608,
+                "committed": 0,
+                "total": 188669,
+                "used": 7518
+              },
+              "node_epoch": "fdb0aff3531c43688a89329b25ceab9a",
+              "node_id": "10.42.0.3",
+              "resident_wait": {
+                "admitted_demand_bytes": 0,
+                "admitted_ram_backing_bytes": 0,
+                "cache_reclaim_attempts": 0,
+                "cache_reclaim_inflight": 0,
+                "cache_reclaimed_bytes": 0,
+                "cache_refault_backoffs": 0,
+                "checkpoint_inflight": 0,
+                "checkpoints_completed": 0,
+                "pause_escalations": 0,
+                "pause_reclaim_cancellations": 0,
+                "pause_reclaim_ms_total": 0,
+                "pause_reclaim_stalls": 0,
+                "pause_reclaimed_bytes": 0,
+                "pause_reclaims": 0,
+                "paused_sandboxes": 0,
+                "pauses": 0,
+                "pending_demand_bytes": 0,
+                "pending_ram_backing_bytes": 0,
+                "projected_reclaim_bytes": 0,
+                "reason": "resident_headroom",
+                "reclaim_target_bytes": 0,
+                "resident_waits": 0,
+                "thaw_ms_max": 0,
+                "thaw_ms_total": 0,
+                "thaw_prefetch_ms_total": 0,
+                "thaw_prefetched_bytes": 0,
+                "thaw_prefetches": 0,
+                "thaws": 0,
+                "unknown_transition_memory_costs": 0
+              }
+            }
+          ],
+          "observed_at": "2026-10-03T14:49:50.272140+00:00",
+          "sandbox_nodes_fresh": 1,
+          "sandbox_nodes_stored": 1
+        },
+        "bytes_fetched_share_estimate": {
+          "definition": "chunk bytes downloaded by all nodes during the run / EROFS bytes of the distinct references started (selection erofs_bytes)",
+          "value": 0.0424874
+        },
+        "environment_io": {
+          "hit_ratio": 0.820148,
+          "per_node": {
+            "10.42.0.3": {
+              "counted_from_zero": true,
+              "deltas": {
+                "corruptions": 0,
+                "downloaded_bytes": 273670144,
+                "fetch_retries": 0,
+                "hits": 4779,
+                "metadata_hint_absent": 19,
+                "metadata_hint_present": 0,
+                "metadata_hint_unsupported": 0,
+                "metadata_prefetch_bytes": 0,
+                "metadata_prefetch_chunks": 0,
+                "metadata_prefetch_failed_chunks": 0,
+                "metadata_prefetch_jobs": 0,
+                "metadata_prefetch_seconds": 0.0,
+                "metadata_prefetch_skipped_chunks": 0,
+                "metadata_prefetch_truncated": 0,
+                "metadata_prefetch_wait_timeouts": 0,
+                "misses": 1048,
+                "prefetch_joined_reads": 0,
+                "prefetch_start_failures": 0,
+                "trace_chunks_recorded": 1058,
+                "trace_hint_absent": 19,
+                "trace_hint_invalid": 0,
+                "trace_hint_present": 0,
+                "trace_prefetch_bytes": 0,
+                "trace_prefetch_chunks": 0,
+                "trace_prefetch_failed_chunks": 0,
+                "trace_prefetch_jobs": 0,
+                "trace_prefetch_seconds": 0.0,
+                "trace_prefetch_skipped_chunks": 0,
+                "trace_prefetch_truncated": 0,
+                "trace_recordings_started": 19,
+                "traces_recorded": 19
+              },
+              "gauges": {
+                "active_components": {
+                  "after": 0,
+                  "before": null
+                },
+                "cached_bytes": {
+                  "after": 273670144,
+                  "before": null
+                },
+                "pending_misses": {
+                  "after": 0,
+                  "before": null
+                },
+                "prefetch_enabled": {
+                  "after": true,
+                  "before": null
+                },
+                "prefetch_jobs_active": {
+                  "after": 0,
+                  "before": null
+                },
+                "prefetch_ranges_inflight": {
+                  "after": 0,
+                  "before": null
+                }
+              }
+            }
+          },
+          "totals": {
+            "corruptions": 0,
+            "downloaded_bytes": 273670144,
+            "fetch_retries": 0,
+            "hits": 4779,
+            "metadata_hint_absent": 19,
+            "metadata_hint_present": 0,
+            "metadata_hint_unsupported": 0,
+            "metadata_prefetch_bytes": 0,
+            "metadata_prefetch_chunks": 0,
+            "metadata_prefetch_failed_chunks": 0,
+            "metadata_prefetch_jobs": 0,
+            "metadata_prefetch_seconds": 0.0,
+            "metadata_prefetch_skipped_chunks": 0,
+            "metadata_prefetch_truncated": 0,
+            "metadata_prefetch_wait_timeouts": 0,
+            "misses": 1048,
+            "prefetch_joined_reads": 0,
+            "prefetch_start_failures": 0,
+            "trace_chunks_recorded": 1058,
+            "trace_hint_absent": 19,
+            "trace_hint_invalid": 0,
+            "trace_hint_present": 0,
+            "trace_prefetch_bytes": 0,
+            "trace_prefetch_chunks": 0,
+            "trace_prefetch_failed_chunks": 0,
+            "trace_prefetch_jobs": 0,
+            "trace_prefetch_seconds": 0.0,
+            "trace_prefetch_skipped_chunks": 0,
+            "trace_prefetch_truncated": 0,
+            "trace_recordings_started": 19,
+            "traces_recorded": 19
+          }
+        },
+        "first_fresh_node_offset_seconds": 75.039,
+        "node_count_timeline": [
+          {
+            "offset_seconds": 15.003,
+            "sandbox_nodes_fresh": 0
+          },
+          {
+            "offset_seconds": 30.014,
+            "sandbox_nodes_fresh": 0
+          },
+          {
+            "offset_seconds": 45.023,
+            "sandbox_nodes_fresh": 0
+          },
+          {
+            "offset_seconds": 60.031,
+            "sandbox_nodes_fresh": 0
+          },
+          {
+            "offset_seconds": 75.039,
+            "sandbox_nodes_fresh": 1
+          }
+        ],
+        "resident_wait": {
+          "hit_ratio": null,
+          "per_node": {
+            "10.42.0.3": {
+              "counted_from_zero": true,
+              "deltas": {
+                "cache_reclaim_attempts": 0,
+                "cache_reclaimed_bytes": 0,
+                "cache_refault_backoffs": 0,
+                "checkpoints_completed": 0,
+                "pause_escalations": 0,
+                "pause_reclaim_cancellations": 0,
+                "pause_reclaim_ms_total": 0,
+                "pause_reclaim_stalls": 0,
+                "pause_reclaimed_bytes": 0,
+                "pause_reclaims": 0,
+                "pauses": 0,
+                "thaw_ms_total": 0,
+                "thaw_prefetch_ms_total": 0,
+                "thaw_prefetched_bytes": 0,
+                "thaw_prefetches": 0,
+                "thaws": 0
+              },
+              "gauges": {
+                "admitted_demand_bytes": {
+                  "after": 0,
+                  "before": null
+                },
+                "admitted_ram_backing_bytes": {
+                  "after": 0,
+                  "before": null
+                },
+                "cache_reclaim_inflight": {
+                  "after": 0,
+                  "before": null
+                },
+                "checkpoint_inflight": {
+                  "after": 0,
+                  "before": null
+                },
+                "paused_sandboxes": {
+                  "after": 0,
+                  "before": null
+                },
+                "pending_demand_bytes": {
+                  "after": 0,
+                  "before": null
+                },
+                "pending_ram_backing_bytes": {
+                  "after": 0,
+                  "before": null
+                },
+                "projected_reclaim_bytes": {
+                  "after": 0,
+                  "before": null
+                },
+                "reclaim_target_bytes": {
+                  "after": 0,
+                  "before": null
+                },
+                "resident_waits": {
+                  "after": 0,
+                  "before": null
+                },
+                "thaw_ms_max": {
+                  "after": 0,
+                  "before": null
+                },
+                "unknown_transition_memory_costs": {
+                  "after": 0,
+                  "before": null
+                }
+              }
+            }
+          },
+          "totals": {
+            "cache_reclaim_attempts": 0,
+            "cache_reclaimed_bytes": 0,
+            "cache_refault_backoffs": 0,
+            "checkpoints_completed": 0,
+            "pause_escalations": 0,
+            "pause_reclaim_cancellations": 0,
+            "pause_reclaim_ms_total": 0,
+            "pause_reclaim_stalls": 0,
+            "pause_reclaimed_bytes": 0,
+            "pause_reclaims": 0,
+            "pauses": 0,
+            "thaw_ms_total": 0,
+            "thaw_prefetch_ms_total": 0,
+            "thaw_prefetched_bytes": 0,
+            "thaw_prefetches": 0,
+            "thaws": 0
+          }
+        },
+        "sandbox_nodes_fresh": {
+          "after": 1,
+          "before": 0
+        },
+        "status": "measured"
+      },
+      "overall": {
+        "n": 8,
+        "n_failed": 0,
+        "time_to_first_command": {
+          "max": 73.882636,
+          "mean": 68.716548,
+          "min": 67.067385,
+          "n": 8,
+          "p50": 67.071442,
+          "p95": 73.882636,
+          "p99": 73.882636
+        },
+        "time_to_ready": {
+          "max": 67.51518,
+          "mean": 65.021238,
+          "min": 64.424915,
+          "n": 8,
+          "p50": 64.488917,
+          "p95": 67.51518,
+          "p99": 67.51518
+        }
+      },
+      "per_family": {
+        "OpenSWE": {
+          "n": 4,
+          "n_failed": 0,
+          "time_to_first_command": {
+            "max": 67.071442,
+            "mean": 67.069211,
+            "min": 67.067385,
+            "n": 4,
+            "p50": 67.068331,
+            "p95": 67.071442,
+            "p99": 67.071442
+          },
+          "time_to_ready": {
+            "max": 64.488917,
+            "mean": 64.453313,
+            "min": 64.424915,
+            "n": 4,
+            "p50": 64.433728,
+            "p95": 64.488917,
+            "p99": 64.488917
+          }
+        },
+        "SWE-smith": {
+          "n": 1,
+          "n_failed": 0,
+          "time_to_first_command": {
+            "max": 68.770568,
+            "mean": 68.770568,
+            "min": 68.770568,
+            "n": 1,
+            "p50": 68.770568,
+            "p95": 68.770568,
+            "p99": 68.770568
+          },
+          "time_to_ready": {
+            "max": 65.613718,
+            "mean": 65.613718,
+            "min": 65.613718,
+            "n": 1,
+            "p50": 65.613718,
+            "p95": 65.613718,
+            "p99": 65.613718
+          }
+        },
+        "ScaleSWE": {
+          "n": 1,
+          "n_failed": 0,
+          "time_to_first_command": {
+            "max": 73.882636,
+            "mean": 73.882636,
+            "min": 73.882636,
+            "n": 1,
+            "p50": 73.882636,
+            "p95": 73.882636,
+            "p99": 73.882636
+          },
+          "time_to_ready": {
+            "max": 67.51518,
+            "mean": 67.51518,
+            "min": 67.51518,
+            "n": 1,
+            "p50": 67.51518,
+            "p95": 67.51518,
+            "p99": 67.51518
+          }
+        },
+        "TMax": {
+          "n": 2,
+          "n_failed": 0,
+          "time_to_first_command": {
+            "max": 69.577402,
+            "mean": 69.401166,
+            "min": 69.224929,
+            "n": 2,
+            "p50": 69.224929,
+            "p95": 69.577402,
+            "p99": 69.577402
+          },
+          "time_to_ready": {
+            "max": 64.715433,
+            "mean": 64.613876,
+            "min": 64.512318,
+            "n": 2,
+            "p50": 64.512318,
+            "p95": 64.715433,
+            "p99": 64.715433
+          }
+        }
+      },
+      "samples": [
+        {
+          "agent_job_id": "job-7eb7ed9f6ab34bbd929f0bdb51e68d0b",
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "foundation",
+          "create_phases_ms": {
+            "active_capacity_ms": 1.0,
+            "guest_files_ms": 11.0,
+            "image_resolve_ms": 24.0,
+            "init_install_ms": 11.0,
+            "journal_commit_ms": 2.0,
+            "manager_create_ms": 593.0,
+            "network_ensure_ms": 15.0,
+            "network_host_rules_ms": 8.0,
+            "oci_build_ms": 2.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 18.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 11.0,
+            "runsc_create_ms": 104.0,
+            "runsc_start_ms": 38.0,
+            "runsc_state_ms": 19.0,
+            "runtime_create_ms": 171.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 291.0,
+            "validate_spec_ms": 5.0
+          },
+          "erofs_bytes": 1198120960,
+          "family": "OpenSWE",
+          "finished_offset_seconds": 74.59601163503248,
+          "first_command_markers": {
+            "imported": "json,sqlite3,ssl,unittest",
+            "interpreter": "/opt/conda/envs/testbed/bin/python",
+            "python": "3.12",
+            "repo": "0",
+            "syspath_entries": "292",
+            "workdir": "/"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 2.646474028006196,
+          "image": "openswe/mahaloz.decomp2dbg-39:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00000",
+          "start_offset_seconds": 0.00010016898158937693,
+          "task_name": null,
+          "thinks": [
+            {
+              "accepted_notified_unix": 1791038956.204538,
+              "answer_to_resume_seconds": 0.020061492919921875,
+              "answered_unix": 1791038958.6537457,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 2.5811636620000002,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038958.6738071,
+              "issue_to_receive_seconds": 0.09674763679504395,
+              "issued_unix": 1791038956.0926445,
+              "kind": "grep",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 0.1292139042998266,
+              "parked_observed": false,
+              "received_unix": 1791038956.189392,
+              "relay_created_unix": 1791038956.168528,
+              "request_id": "e3f382cef19e46b4813817f964032855",
+              "returned_unix": 1791038958.6738071,
+              "started_unix": 1791038956.189392,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 2.4519497577001736,
+              "turn": 0
+            },
+            {
+              "accepted_notified_unix": 1791038958.877208,
+              "answer_to_resume_seconds": 1.187119960784912,
+              "answered_unix": 1791038960.7149992,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 3.057424472,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038961.9021192,
+              "issue_to_receive_seconds": 0.0200045108795166,
+              "issued_unix": 1791038958.8446953,
+              "kind": "test",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 1.217890006492432,
+              "parked_observed": false,
+              "received_unix": 1791038958.8646998,
+              "relay_created_unix": 1791038958.858706,
+              "request_id": "e5dfa3c2ad6746f38ac108cef3aafcb2",
+              "returned_unix": 1791038961.9021192,
+              "started_unix": 1791038958.8646998,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 1.839534465507568,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 67.07144205603981,
+          "time_to_ready_seconds": 64.42491525399964,
+          "turns": [
+            {
+              "kind": "grep",
+              "markers": {
+                "grep_lines": "3",
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "repo": "0",
+                "workdir": "/workspace"
+              },
+              "offset_seconds": 68.10743951797485,
+              "ok": true,
+              "seconds": 0.131284897,
+              "turn": 0
+            },
+            {
+              "kind": "test",
+              "markers": {
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "rc": "0",
+                "repo": "0",
+                "test": "compileall",
+                "workdir": "/workspace"
+              },
+              "offset_seconds": 70.85949039459229,
+              "ok": true,
+              "seconds": 0.17065945900000035,
+              "turn": 1
+            }
+          ]
+        },
+        {
+          "agent_job_id": "job-b9aee711b0e4496eaefe525ab1d12626",
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "foundation",
+          "create_phases_ms": {
+            "active_capacity_ms": 4.0,
+            "guest_files_ms": 5.0,
+            "image_resolve_ms": 22.0,
+            "init_install_ms": 8.0,
+            "journal_commit_ms": 3.0,
+            "manager_create_ms": 663.0,
+            "network_ensure_ms": 11.0,
+            "network_host_rules_ms": 5.0,
+            "oci_build_ms": 0.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 16.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 11.0,
+            "runsc_create_ms": 120.0,
+            "runsc_start_ms": 40.0,
+            "runsc_state_ms": 18.0,
+            "runtime_create_ms": 186.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 374.0,
+            "validate_spec_ms": 3.0
+          },
+          "erofs_bytes": 1198120960,
+          "family": "OpenSWE",
+          "finished_offset_seconds": 75.24414975801483,
+          "first_command_markers": {
+            "imported": "json,sqlite3,ssl,unittest",
+            "interpreter": "/opt/conda/envs/testbed/bin/python",
+            "python": "3.12",
+            "repo": "0",
+            "syspath_entries": "292",
+            "workdir": "/"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 2.578424545994494,
+          "image": "openswe/jpadilla.pyjwt-1005:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00001",
+          "start_offset_seconds": 0.0004362119943834841,
+          "task_name": null,
+          "thinks": [
+            {
+              "accepted_notified_unix": 1791038956.321635,
+              "answer_to_resume_seconds": 0.022484540939331055,
+              "answered_unix": 1791038959.221544,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 3.013056057,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038959.2440286,
+              "issue_to_receive_seconds": 0.07719802856445312,
+              "issued_unix": 1791038956.2309735,
+              "kind": "test",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 0.11201174059392205,
+              "parked_observed": false,
+              "received_unix": 1791038956.3081715,
+              "relay_created_unix": 1791038956.301411,
+              "request_id": "b45a20fb9af74d85a2d112ed5db52bd0",
+              "returned_unix": 1791038959.2440286,
+              "started_unix": 1791038956.3081715,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 2.901044316406078,
+              "turn": 0
+            },
+            {
+              "accepted_notified_unix": 1791038959.290826,
+              "answer_to_resume_seconds": 1.2728300094604492,
+              "answered_unix": 1791038961.360624,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 3.370988006,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038962.633454,
+              "issue_to_receive_seconds": 0.018138647079467773,
+              "issued_unix": 1791038959.2624671,
+              "kind": "edit",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 1.3019785145352785,
+              "parked_observed": false,
+              "received_unix": 1791038959.2806058,
+              "relay_created_unix": 1791038959.275338,
+              "request_id": "7f82492d07124c6f96c9e59b5a93b8e0",
+              "returned_unix": 1791038962.633454,
+              "started_unix": 1791038959.2806058,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 2.0690094914647217,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 67.06738542800304,
+          "time_to_ready_seconds": 64.48891731299227,
+          "turns": [
+            {
+              "kind": "test",
+              "markers": {
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "rc": "0",
+                "repo": "0",
+                "test": "compileall",
+                "workdir": "/workspace"
+              },
+              "offset_seconds": 68.24576902389526,
+              "ok": true,
+              "seconds": 0.27310433399999967,
+              "turn": 0
+            },
+            {
+              "kind": "edit",
+              "markers": {
+                "edit": "file",
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "repo": "0",
+                "workdir": "/workspace"
+              },
+              "offset_seconds": 71.2772626876831,
+              "ok": true,
+              "seconds": 0.018173735000000413,
+              "turn": 1
+            }
+          ]
+        },
+        {
+          "agent_job_id": "job-866f00b80b9e4dc996b5276d84808e83",
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "foundation",
+          "create_phases_ms": {
+            "active_capacity_ms": 0.0,
+            "guest_files_ms": 2.0,
+            "image_resolve_ms": 5.0,
+            "init_install_ms": 3.0,
+            "journal_commit_ms": 3.0,
+            "manager_create_ms": 468.0,
+            "network_ensure_ms": 9.0,
+            "network_host_rules_ms": 4.0,
+            "oci_build_ms": 1.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 7.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 18.0,
+            "runsc_create_ms": 123.0,
+            "runsc_start_ms": 42.0,
+            "runsc_state_ms": 15.0,
+            "runtime_create_ms": 186.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 222.0,
+            "validate_spec_ms": 0.0
+          },
+          "erofs_bytes": 362840064,
+          "family": "TMax",
+          "finished_offset_seconds": 75.9049131339998,
+          "first_command_markers": {
+            "imported": "json,sqlite3,ssl,unittest,pytest",
+            "interpreter": "/usr/bin/python3",
+            "python": "3.10",
+            "repo": "0",
+            "syspath_entries": "276",
+            "tree_entries": "556",
+            "workdir": "/",
+            "workdir_entries": "24"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 4.509458350017667,
+          "image": "prime/primeintellect/tmax:task_001740_02f119aa",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-1df61e054cd9254e0-0330d4aa6b7e:latest@sha256:d760b44e8182c2905315128ec627c8c0860f3d79f9669a0e0989a05984fcf26c",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00002",
+          "start_offset_seconds": 0.0006493459804914892,
+          "task_name": "task_001740_02f119aa",
+          "thinks": [
+            {
+              "accepted_notified_unix": 1791038957.83241,
+              "answer_to_resume_seconds": 0.03442072868347168,
+              "answered_unix": 1791038959.1811366,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 1.4818336749999999,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038959.2155573,
+              "issue_to_receive_seconds": 0.08446645736694336,
+              "issued_unix": 1791038957.733725,
+              "kind": "grep",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 0.12915726498313407,
+              "parked_observed": false,
+              "received_unix": 1791038957.8181915,
+              "relay_created_unix": 1791038957.811664,
+              "request_id": "d65a6996e1bc45229f8e31758a80c8b8",
+              "returned_unix": 1791038959.2155573,
+              "started_unix": 1791038957.8181915,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 1.3526764100168658,
+              "turn": 0
+            },
+            {
+              "accepted_notified_unix": 1791038959.432446,
+              "answer_to_resume_seconds": 1.189779281616211,
+              "answered_unix": 1791038961.9460204,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 3.7523293150000008,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038963.1357996,
+              "issue_to_receive_seconds": 0.03924059867858887,
+              "issued_unix": 1791038959.383472,
+              "kind": "test",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 1.239101661133681,
+              "parked_observed": false,
+              "received_unix": 1791038959.4227126,
+              "relay_created_unix": 1791038959.417175,
+              "request_id": "58a0d24ea19441609840e080b51c2cae",
+              "returned_unix": 1791038963.1357996,
+              "started_unix": 1791038959.4227126,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 2.51322765386632,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 69.22492923401296,
+          "time_to_ready_seconds": 64.71543272101553,
+          "turns": [
+            {
+              "kind": "grep",
+              "markers": {
+                "grep_lines": "3",
+                "interpreter": "/usr/bin/python3",
+                "repo": "0",
+                "workdir": "/workspace"
+              },
+              "offset_seconds": 69.7485203742981,
+              "ok": true,
+              "seconds": 0.10092041099999971,
+              "turn": 0
+            },
+            {
+              "kind": "test",
+              "markers": {
+                "interpreter": "/usr/bin/python3",
+                "rc": "0",
+                "repo": "0",
+                "test": "compileall",
+                "workdir": "/workspace"
+              },
+              "offset_seconds": 71.39826726913452,
+              "ok": true,
+              "seconds": 0.16768179900000035,
+              "turn": 1
+            }
+          ]
+        },
+        {
+          "agent_job_id": "job-f765f0342ee049d98f40e9be5191b579",
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "source",
+          "create_phases_ms": null,
+          "erofs_bytes": 886300672,
+          "family": "ScaleSWE",
+          "finished_offset_seconds": 82.28141414403217,
+          "first_command_markers": {
+            "git_status_lines": "1",
+            "imported": "json,sqlite3,ssl,unittest,pytest",
+            "interpreter": "/usr/local/bin/python",
+            "python": "3.11",
+            "repo": "1",
+            "syspath_entries": "338",
+            "tracked": "1097",
+            "workdir": "/workspace/flatbuffers"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 6.3674231939949095,
+          "image": "aweaiteam/scaleswe:google_flatbuffers_pr3493",
+          "image_resolution": "import_alias",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "aweaiteam/scaleswe:google_flatbuffers_pr3493",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00003",
+          "start_offset_seconds": 0.0008199210278689861,
+          "task_name": null,
+          "thinks": [
+            {
+              "accepted_notified_unix": 1791038963.814178,
+              "answer_to_resume_seconds": 0.021054983139038086,
+              "answered_unix": 1791038966.4612546,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 2.838325984999999,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038966.4823096,
+              "issue_to_receive_seconds": 0.16164278984069824,
+              "issued_unix": 1791038963.643985,
+              "kind": "test",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 0.19341698004218433,
+              "parked_observed": false,
+              "received_unix": 1791038963.8056278,
+              "relay_created_unix": 1791038963.80064,
+              "request_id": "12de2f36fef24829bc8257cd009fb90a",
+              "returned_unix": 1791038966.4823096,
+              "started_unix": 1791038963.8056278,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 2.644909004957815,
+              "turn": 0
+            },
+            {
+              "accepted_notified_unix": 1791038966.579587,
+              "answer_to_resume_seconds": 1.138378381729126,
+              "answered_unix": 1791038968.274758,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 2.911614881,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038969.4131365,
+              "issue_to_receive_seconds": 0.06835770606994629,
+              "issued_unix": 1791038966.5015228,
+              "kind": "edit",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 1.2210118567491077,
+              "parked_observed": false,
+              "received_unix": 1791038966.5698805,
+              "relay_created_unix": 1791038966.565111,
+              "request_id": "eabece984d8245e2bb173fc094237e29",
+              "returned_unix": 1791038969.4131365,
+              "started_unix": 1791038966.5698805,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 1.6906030242508925,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 73.88263572799042,
+          "time_to_ready_seconds": 67.51518021000084,
+          "turns": [
+            {
+              "kind": "test",
+              "markers": {
+                "interpreter": "/usr/local/bin/python",
+                "rc": "1",
+                "repo": "0",
+                "test": "compileall",
+                "workdir": "/workspace"
+              },
+              "offset_seconds": 75.65878033638,
+              "ok": true,
+              "seconds": 1.324056635999999,
+              "turn": 0
+            },
+            {
+              "kind": "edit",
+              "markers": {
+                "edit": "file",
+                "interpreter": "/usr/local/bin/python",
+                "repo": "0",
+                "workdir": "/workspace"
+              },
+              "offset_seconds": 78.51631808280945,
+              "ok": true,
+              "seconds": 0.01896929699999994,
+              "turn": 1
+            }
+          ]
+        },
+        {
+          "agent_job_id": "job-fa24255d722542dc9743f8813e0c85b8",
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "complete_recipe",
+          "create_phases_ms": {
+            "active_capacity_ms": 1.0,
+            "guest_files_ms": 5.0,
+            "image_resolve_ms": 35.0,
+            "init_install_ms": 6.0,
+            "journal_commit_ms": 3.0,
+            "manager_create_ms": 513.0,
+            "network_ensure_ms": 12.0,
+            "network_host_rules_ms": 7.0,
+            "oci_build_ms": 1.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 5.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 18.0,
+            "runsc_create_ms": 129.0,
+            "runsc_start_ms": 35.0,
+            "runsc_state_ms": 20.0,
+            "runtime_create_ms": 191.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 217.0,
+            "validate_spec_ms": 0.0
+          },
+          "erofs_bytes": 2008616960,
+          "family": "SWE-smith",
+          "finished_offset_seconds": 77.23250945901964,
+          "first_command_markers": {
+            "git_status_lines": "0",
+            "imported": "json,sqlite3,ssl,unittest",
+            "interpreter": "/opt/miniconda3/bin/python",
+            "python": "3.12",
+            "repo": "1",
+            "syspath_entries": "361",
+            "tracked": "161",
+            "workdir": "/testbed"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 3.1567679349682294,
+          "image": "swebench/swesmith.x86_64.pyasn1_1776_pyasn1.0f07d724",
+          "image_resolution": "prepared_reference",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "10.42.0.2:5000/ucloud-managed/precomputed-1307a6c4cdcc5af9def451c16595-fd016e62fca8:latest@sha256:527b116fb90c281af90bd94e4da7f9b48230330b17300e6b40c5b3ba6e3c8fa0",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00004",
+          "start_offset_seconds": 0.001003755023702979,
+          "task_name": null,
+          "thinks": [
+            {
+              "accepted_notified_unix": 1791038957.975771,
+              "answer_to_resume_seconds": 0.023639202117919922,
+              "answered_unix": 1791038960.4100084,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 2.623890042,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038960.4336476,
+              "issue_to_receive_seconds": 0.1557753086090088,
+              "issued_unix": 1791038957.8097594,
+              "kind": "test",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 0.19119358835949551,
+              "parked_observed": false,
+              "received_unix": 1791038957.9655347,
+              "relay_created_unix": 1791038957.959537,
+              "request_id": "dc28a2660bd444b6805d362a2e290f59",
+              "returned_unix": 1791038960.4336476,
+              "started_unix": 1791038957.9655347,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 2.4326964536405047,
+              "turn": 0
+            },
+            {
+              "accepted_notified_unix": 1791038960.564645,
+              "answer_to_resume_seconds": 1.224848985671997,
+              "answered_unix": 1791038963.1640575,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 3.8541548929999996,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038964.3889065,
+              "issue_to_receive_seconds": 0.01972055435180664,
+              "issued_unix": 1791038960.5347528,
+              "kind": "edit",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 1.2549677976968376,
+              "parked_observed": false,
+              "received_unix": 1791038960.5544734,
+              "relay_created_unix": 1791038960.549719,
+              "request_id": "370b21b9813243579935f7944a212b17",
+              "returned_unix": 1791038964.3889065,
+              "started_unix": 1791038960.5544734,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 2.599187095303162,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 68.7705680920044,
+          "time_to_ready_seconds": 65.61371808301192,
+          "turns": [
+            {
+              "kind": "test",
+              "markers": {
+                "interpreter": "/opt/miniconda3/bin/python",
+                "rc": "1",
+                "repo": "1",
+                "test": "tests/codec/ber/test_decoder.py",
+                "workdir": "/testbed"
+              },
+              "offset_seconds": 69.82455468177795,
+              "ok": true,
+              "seconds": 0.19880933800000022,
+              "turn": 0
+            },
+            {
+              "kind": "edit",
+              "markers": {
+                "diff_bytes": "255",
+                "edit": "README.md",
+                "interpreter": "/opt/miniconda3/bin/python",
+                "repo": "1",
+                "workdir": "/testbed"
+              },
+              "offset_seconds": 72.54954814910889,
+              "ok": true,
+              "seconds": 0.0998519490000005,
+              "turn": 1
+            }
+          ]
+        },
+        {
+          "agent_job_id": "job-b3aeecc7811e49fe88a0512c72dffc7d",
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "foundation",
+          "create_phases_ms": {
+            "active_capacity_ms": 4.0,
+            "guest_files_ms": 4.0,
+            "image_resolve_ms": 26.0,
+            "init_install_ms": 18.0,
+            "journal_commit_ms": 4.0,
+            "manager_create_ms": 610.0,
+            "network_ensure_ms": 13.0,
+            "network_host_rules_ms": 5.0,
+            "oci_build_ms": 0.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 12.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 15.0,
+            "runsc_create_ms": 73.0,
+            "runsc_start_ms": 46.0,
+            "runsc_state_ms": 23.0,
+            "runtime_create_ms": 151.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 341.0,
+            "validate_spec_ms": 2.0
+          },
+          "erofs_bytes": 1198120960,
+          "family": "OpenSWE",
+          "finished_offset_seconds": 75.75021200499032,
+          "first_command_markers": {
+            "imported": "json,sqlite3,ssl,unittest",
+            "interpreter": "/opt/conda/envs/testbed/bin/python",
+            "python": "3.12",
+            "repo": "0",
+            "syspath_entries": "292",
+            "workdir": "/"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 2.6359143380541354,
+          "image": "openswe/tuxemon.tuxemon-2231:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00005",
+          "start_offset_seconds": 0.0011750920093618333,
+          "task_name": null,
+          "thinks": [
+            {
+              "accepted_notified_unix": 1791038956.211013,
+              "answer_to_resume_seconds": 0.021168947219848633,
+              "answered_unix": 1791038958.9394956,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 2.868619887,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038958.9606645,
+              "issue_to_receive_seconds": 0.10146212577819824,
+              "issued_unix": 1791038956.0920453,
+              "kind": "grep",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 0.1324714443002244,
+              "parked_observed": false,
+              "received_unix": 1791038956.1935074,
+              "relay_created_unix": 1791038956.168226,
+              "request_id": "f356fe7b202e4190b0f21bedb9d484ec",
+              "returned_unix": 1791038958.9606645,
+              "started_unix": 1791038956.1935074,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 2.7361484426997755,
+              "turn": 0
+            },
+            {
+              "accepted_notified_unix": 1791038959.161618,
+              "answer_to_resume_seconds": 1.1725585460662842,
+              "answered_unix": 1791038961.7263036,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 3.766184217,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038962.8988621,
+              "issue_to_receive_seconds": 0.019663333892822266,
+              "issued_unix": 1791038959.1326795,
+              "kind": "test",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 1.2053877335063534,
+              "parked_observed": false,
+              "received_unix": 1791038959.1523428,
+              "relay_created_unix": 1791038959.146948,
+              "request_id": "0b35239d02aa4ba19be80574d62f8379",
+              "returned_unix": 1791038962.8988621,
+              "started_unix": 1791038959.1523428,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 2.5607964834936467,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 67.06968753499677,
+          "time_to_ready_seconds": 64.43372805498075,
+          "turns": [
+            {
+              "kind": "grep",
+              "markers": {
+                "grep_lines": "3",
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "repo": "0",
+                "workdir": "/workspace"
+              },
+              "offset_seconds": 68.10684061050415,
+              "ok": true,
+              "seconds": 0.13253027399999961,
+              "turn": 0
+            },
+            {
+              "kind": "test",
+              "markers": {
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "rc": "0",
+                "repo": "0",
+                "test": "compileall",
+                "workdir": "/workspace"
+              },
+              "offset_seconds": 71.14747476577759,
+              "ok": true,
+              "seconds": 0.17180747300000032,
+              "turn": 1
+            }
+          ]
+        },
+        {
+          "agent_job_id": "job-07acf58df659458c8ae5ca4f0e288fa8",
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "foundation",
+          "create_phases_ms": {
+            "active_capacity_ms": 1.0,
+            "guest_files_ms": 3.0,
+            "image_resolve_ms": 2.0,
+            "init_install_ms": 5.0,
+            "journal_commit_ms": 6.0,
+            "manager_create_ms": 468.0,
+            "network_ensure_ms": 13.0,
+            "network_host_rules_ms": 7.0,
+            "oci_build_ms": 2.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 5.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 23.0,
+            "runsc_create_ms": 90.0,
+            "runsc_start_ms": 18.0,
+            "runsc_state_ms": 28.0,
+            "runtime_create_ms": 145.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 242.0,
+            "validate_spec_ms": 0.0
+          },
+          "erofs_bytes": 1985335296,
+          "family": "TMax",
+          "finished_offset_seconds": 74.26227783202194,
+          "first_command_markers": {
+            "imported": "json,sqlite3,ssl,unittest,pytest",
+            "interpreter": "/usr/bin/python3",
+            "python": "3.10",
+            "repo": "0",
+            "syspath_entries": "420",
+            "tree_entries": "1042",
+            "workdir": "/",
+            "workdir_entries": "25"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 5.065030827012379,
+          "image": "prime/primeintellect/tmax:task_004879_b6bff03a",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-e92c631646c7c6e91d2b8aa1-6d33fc8fb2f0:latest@sha256:03250523581c59383f92f1768ee7d4c605df7f12eae17ae28e5950382c53df92",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00006",
+          "start_offset_seconds": 0.0013668070314452052,
+          "task_name": "task_004879_b6bff03a",
+          "thinks": [
+            {
+              "accepted_notified_unix": 1791038958.119123,
+              "answer_to_resume_seconds": 0.0232086181640625,
+              "answered_unix": 1791038959.3172414,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 1.3396409380000005,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038959.34045,
+              "issue_to_receive_seconds": 0.10887479782104492,
+              "issued_unix": 1791038958.0008097,
+              "kind": "edit",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 0.14326046645667767,
+              "parked_observed": false,
+              "received_unix": 1791038958.1096845,
+              "relay_created_unix": 1791038958.103525,
+              "request_id": "ab3279e69a2a4a42b8d81c6063a00cb1",
+              "returned_unix": 1791038959.34045,
+              "started_unix": 1791038958.1096845,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 1.1963804715433228,
+              "turn": 0
+            },
+            {
+              "accepted_notified_unix": 1791038959.469058,
+              "answer_to_resume_seconds": 1.09781813621521,
+              "answered_unix": 1791038960.7968132,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 2.456586456000001,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038961.8946314,
+              "issue_to_receive_seconds": 0.022662878036499023,
+              "issued_unix": 1791038959.438046,
+              "kind": "grep",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 1.1304327104798177,
+              "parked_observed": false,
+              "received_unix": 1791038959.4607089,
+              "relay_created_unix": 1791038959.455833,
+              "request_id": "1ecff7f9a3df4429acb096ce1d1396c8",
+              "returned_unix": 1791038961.8946314,
+              "started_unix": 1791038959.4607089,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 1.3261537455201833,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 69.57740180398105,
+          "time_to_ready_seconds": 64.51231840398395,
+          "turns": [
+            {
+              "kind": "edit",
+              "markers": {
+                "edit": "file",
+                "interpreter": "/usr/bin/python3",
+                "repo": "0",
+                "workdir": "/workspace"
+              },
+              "offset_seconds": 70.01560497283936,
+              "ok": true,
+              "seconds": 0.016851518000000176,
+              "turn": 0
+            },
+            {
+              "kind": "grep",
+              "markers": {
+                "grep_lines": "3",
+                "interpreter": "/usr/bin/python3",
+                "repo": "0",
+                "workdir": "/workspace"
+              },
+              "offset_seconds": 71.45284128189087,
+              "ok": true,
+              "seconds": 0.09739191099999989,
+              "turn": 1
+            }
+          ]
+        },
+        {
+          "agent_job_id": "job-bc3d76946dec401a98f3293666bb8074",
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "foundation",
+          "create_phases_ms": {
+            "active_capacity_ms": 2.0,
+            "guest_files_ms": 2.0,
+            "image_resolve_ms": 21.0,
+            "init_install_ms": 5.0,
+            "journal_commit_ms": 12.0,
+            "manager_create_ms": 640.0,
+            "network_ensure_ms": 17.0,
+            "oci_build_ms": 0.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 14.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 13.0,
+            "runsc_create_ms": 108.0,
+            "runsc_start_ms": 50.0,
+            "runsc_state_ms": 15.0,
+            "runtime_create_ms": 189.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 352.0,
+            "validate_spec_ms": 2.0
+          },
+          "erofs_bytes": 1198120960,
+          "family": "OpenSWE",
+          "finished_offset_seconds": 75.5928988920059,
+          "first_command_markers": {
+            "imported": "json,sqlite3,ssl,unittest",
+            "interpreter": "/opt/conda/envs/testbed/bin/python",
+            "python": "3.12",
+            "repo": "0",
+            "syspath_entries": "292",
+            "workdir": "/"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 2.60260002798168,
+          "image": "openswe/django-import-export.django-import-export-1826:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00007",
+          "start_offset_seconds": 0.0015149509999901056,
+          "task_name": null,
+          "thinks": [
+            {
+              "accepted_notified_unix": 1791038956.209286,
+              "answer_to_resume_seconds": 0.018265724182128906,
+              "answered_unix": 1791038958.7105496,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 2.744147011,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038958.7288153,
+              "issue_to_receive_seconds": 0.2070293426513672,
+              "issued_unix": 1791038955.9846692,
+              "kind": "edit",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 0.23867517372031655,
+              "parked_observed": false,
+              "received_unix": 1791038956.1916986,
+              "relay_created_unix": 1791038956.168521,
+              "request_id": "0799261ef9a2426890e2b1edc4992fc7",
+              "returned_unix": 1791038958.7288153,
+              "started_unix": 1791038956.1916986,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 2.5054718372796834,
+              "turn": 0
+            },
+            {
+              "accepted_notified_unix": 1791038958.87934,
+              "answer_to_resume_seconds": 1.1919779777526855,
+              "answered_unix": 1791038961.7068076,
+              "attempts": 1,
+              "call_error": null,
+              "call_seconds": 4.050910722999999,
+              "delivery_count": 1,
+              "delivery_status": "pending",
+              "ended_unix": 1791038962.8987856,
+              "issue_to_receive_seconds": 0.020302534103393555,
+              "issued_unix": 1791038958.8478758,
+              "kind": "grep",
+              "model_wait_accepted": true,
+              "ok": true,
+              "overhead_seconds": 1.2229493491677288,
+              "parked_observed": false,
+              "received_unix": 1791038958.8681784,
+              "relay_created_unix": 1791038958.861029,
+              "request_id": "3ac42e73a5104ee8933a98c56b0028b8",
+              "returned_unix": 1791038962.8987856,
+              "started_unix": 1791038958.8681784,
+              "states_observed": [
+                "running"
+              ],
+              "status": 200,
+              "think_seconds": 2.8279613738322706,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 67.06833054200979,
+          "time_to_ready_seconds": 64.46569303498836,
+          "turns": [
+            {
+              "kind": "edit",
+              "markers": {
+                "edit": "file",
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "repo": "0",
+                "workdir": "/workspace"
+              },
+              "offset_seconds": 67.99946475028992,
+              "ok": true,
+              "seconds": 0.02369414499999989,
+              "turn": 0
+            },
+            {
+              "kind": "grep",
+              "markers": {
+                "grep_lines": "3",
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "repo": "0",
+                "workdir": "/workspace"
+              },
+              "offset_seconds": 70.86267137527466,
+              "ok": true,
+              "seconds": 0.11883601799999965,
+              "turn": 1
+            }
+          ]
+        }
+      ],
+      "slowest": [
+        {
+          "family": "ScaleSWE",
+          "image": "aweaiteam/scaleswe:google_flatbuffers_pr3493",
+          "image_resolution": "import_alias",
+          "node": null,
+          "reference": "aweaiteam/scaleswe:google_flatbuffers_pr3493",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00003",
+          "time_to_first_command_seconds": 73.88263572799042,
+          "time_to_ready_seconds": 67.51518021000084
+        },
+        {
+          "family": "TMax",
+          "image": "prime/primeintellect/tmax:task_004879_b6bff03a",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-e92c631646c7c6e91d2b8aa1-6d33fc8fb2f0:latest@sha256:03250523581c59383f92f1768ee7d4c605df7f12eae17ae28e5950382c53df92",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00006",
+          "time_to_first_command_seconds": 69.57740180398105,
+          "time_to_ready_seconds": 64.51231840398395
+        },
+        {
+          "family": "TMax",
+          "image": "prime/primeintellect/tmax:task_001740_02f119aa",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-1df61e054cd9254e0-0330d4aa6b7e:latest@sha256:d760b44e8182c2905315128ec627c8c0860f3d79f9669a0e0989a05984fcf26c",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00002",
+          "time_to_first_command_seconds": 69.22492923401296,
+          "time_to_ready_seconds": 64.71543272101553
+        },
+        {
+          "family": "SWE-smith",
+          "image": "swebench/swesmith.x86_64.pyasn1_1776_pyasn1.0f07d724",
+          "image_resolution": "prepared_reference",
+          "node": null,
+          "reference": "10.42.0.2:5000/ucloud-managed/precomputed-1307a6c4cdcc5af9def451c16595-fd016e62fca8:latest@sha256:527b116fb90c281af90bd94e4da7f9b48230330b17300e6b40c5b3ba6e3c8fa0",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00004",
+          "time_to_first_command_seconds": 68.7705680920044,
+          "time_to_ready_seconds": 65.61371808301192
+        },
+        {
+          "family": "OpenSWE",
+          "image": "openswe/mahaloz.decomp2dbg-39:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00000",
+          "time_to_first_command_seconds": 67.07144205603981,
+          "time_to_ready_seconds": 64.42491525399964
+        },
+        {
+          "family": "OpenSWE",
+          "image": "openswe/tuxemon.tuxemon-2231:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00005",
+          "time_to_first_command_seconds": 67.06968753499677,
+          "time_to_ready_seconds": 64.43372805498075
+        },
+        {
+          "family": "OpenSWE",
+          "image": "openswe/django-import-export.django-import-export-1826:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00007",
+          "time_to_first_command_seconds": 67.06833054200979,
+          "time_to_ready_seconds": 64.46569303498836
+        },
+        {
+          "family": "OpenSWE",
+          "image": "openswe/jpadilla.pyjwt-1005:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-6bf81b2d0338-rollout-00001",
+          "time_to_first_command_seconds": 67.06738542800304,
+          "time_to_ready_seconds": 64.48891731299227
+        }
+      ],
+      "status": "measured",
+      "tasks": 8,
+      "think": {
+        "answer_to_resume": {
+          "max": 1.27283,
+          "mean": 0.603726,
+          "min": 0.018266,
+          "n": 16,
+          "p50": 0.034421,
+          "p95": 1.27283,
+          "p99": 1.27283
+        },
+        "definition": "the managed agent ends each turn with a blocking chat-completions call through its relay capability URL; the fake worker polls it, holds it for the think time (renewing the lease), and commits a fixed completion. call_seconds and returned_unix are measured in the sandbox (its clock); received/answered on the driver. relay_call_overhead = call_seconds - think_seconds. answer_to_resume = guest returned_unix - driver answered_unix (cross-clock: node vs driver NTP). model_wait_accepted is relay request state (accepted_notified_at, read by a lease renewal just before the answer): the gateway accepted the park request for this wait, which the node may keep resident, pause or hibernate. park is not timed; wake = answer_to_resume of calls where the status inventory showed the sandbox parked",
+        "delivery_status": {
+          "pending": 16
+        },
+        "issue_to_receive": {
+          "max": 0.207029,
+          "mean": 0.07633,
+          "min": 0.018139,
+          "n": 16,
+          "p50": 0.068358,
+          "p95": 0.207029,
+          "p99": 0.207029
+        },
+        "mode": "relay",
+        "model_wait_accepted": 16,
+        "n": 16,
+        "n_observed": 16,
+        "n_ok": 16,
+        "n_parked_observed": 0,
+        "park": {
+          "max": null,
+          "mean": null,
+          "min": null,
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "p99": null
+        },
+        "park_observation": "status inventory sampled every 2 s; a park shorter than the interval can be missed, and a pause keeps the route running (per node only: density resident_wait)",
+        "relay_call_overhead": {
+          "max": 1.301979,
+          "mean": 0.691445,
+          "min": 0.112012,
+          "n": 16,
+          "p50": 0.238675,
+          "p95": 1.301979,
+          "p99": 1.301979
+        },
+        "relay_call_overhead_by_wait": {
+          "parked_observed": {
+            "max": null,
+            "mean": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "resident": {
+            "max": 1.301979,
+            "mean": 0.691445,
+            "min": 0.112012,
+            "n": 16,
+            "p50": 0.238675,
+            "p95": 1.301979,
+            "p99": 1.301979
+          }
+        },
+        "retries": 0,
+        "retry_codes": {},
+        "status_read": {
+          "max": null,
+          "mean": null,
+          "min": null,
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "p99": null
+        },
+        "think": {
+          "max": 2.901044,
+          "mean": 2.227984,
+          "min": 1.19638,
+          "n": 16,
+          "p50": 2.45195,
+          "p95": 2.901044,
+          "p99": 2.901044
+        },
+        "wake": {
+          "max": null,
+          "mean": null,
+          "min": null,
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "p99": null
+        }
+      },
+      "turns": {
+        "by_kind": {
+          "edit": {
+            "all": {
+              "max": 0.099852,
+              "mean": 0.035508,
+              "min": 0.016852,
+              "n": 5,
+              "p50": 0.018969,
+              "p95": 0.099852,
+              "p99": 0.099852
+            },
+            "first": {
+              "max": 0.099852,
+              "mean": 0.035508,
+              "min": 0.016852,
+              "n": 5,
+              "p50": 0.018969,
+              "p95": 0.099852,
+              "p99": 0.099852
+            },
+            "later": {
+              "max": null,
+              "mean": null,
+              "min": null,
+              "n": 0,
+              "p50": null,
+              "p95": null,
+              "p99": null
+            },
+            "n_failed": 0
+          },
+          "grep": {
+            "all": {
+              "max": 0.13253,
+              "mean": 0.116193,
+              "min": 0.097392,
+              "n": 5,
+              "p50": 0.118836,
+              "p95": 0.13253,
+              "p99": 0.13253
+            },
+            "first": {
+              "max": 0.13253,
+              "mean": 0.116193,
+              "min": 0.097392,
+              "n": 5,
+              "p50": 0.118836,
+              "p95": 0.13253,
+              "p99": 0.13253
+            },
+            "later": {
+              "max": null,
+              "mean": null,
+              "min": null,
+              "n": 0,
+              "p50": null,
+              "p95": null,
+              "p99": null
+            },
+            "n_failed": 0
+          },
+          "test": {
+            "all": {
+              "max": 1.324057,
+              "mean": 0.384353,
+              "min": 0.167682,
+              "n": 6,
+              "p50": 0.171807,
+              "p95": 1.324057,
+              "p99": 1.324057
+            },
+            "first": {
+              "max": 1.324057,
+              "mean": 0.384353,
+              "min": 0.167682,
+              "n": 6,
+              "p50": 0.171807,
+              "p95": 1.324057,
+              "p99": 1.324057
+            },
+            "later": {
+              "max": null,
+              "mean": null,
+              "min": null,
+              "n": 0,
+              "p50": null,
+              "p95": null,
+              "p99": null
+            },
+            "n_failed": 0
+          }
+        },
+        "n": 16,
+        "n_failed": 0
+      },
+      "unit": "seconds"
+    },
+    "warm_time_to_first_command": {
+      "status": "not_run"
+    }
+  },
+  "ok": true,
+  "run_id": "rlbench-6bf81b2d0338",
+  "scenario": "rollout",
+  "schema": "ucloud-rl-scale-bench/v1",
+  "started_at": "2026-10-03T14:48:07.961300+00:00",
+  "status": "ok",
+  "summary_definition": "Percentiles are nearest-rank over successful samples only; failures are counted separately and never improve a percentile. Times are seconds measured on the driver with time.perf_counter()."
+}

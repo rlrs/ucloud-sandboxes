@@ -1,0 +1,138 @@
+{
+ "A": {
+  "windowed": true,
+  "zswap_off": false,
+  "park": "running",
+  "writes": 4,
+  "reason": "not_shrinking",
+  "seconds": 0.92,
+  "freed_mb": 31.2,
+  "swap_mb": 62.7,
+  "zswapped_mb": 61.0,
+  "zswap_pool_mb": 34.9,
+  "rate_mb_s": 33.9,
+  "wake_ms": 144.9,
+  "act_after_ms": 2608.5,
+  "first_act_ms": 2140.8,
+  "before": {
+   "current": 1684484096,
+   "swap": 0,
+   "zswap": 0,
+   "zswapped": 0,
+   "shmem": 1625255936,
+   "anon": 20074496,
+   "file": 1647411200
+  },
+  "after": {
+   "current": 1651789824,
+   "swap": 65732608,
+   "zswap": 36603533,
+   "zswapped": 63918080,
+   "shmem": 1579216896,
+   "anon": 323584,
+   "file": 1598468096
+  }
+ },
+ "B": {
+  "windowed": false,
+  "zswap_off": false,
+  "park": "running",
+  "writes": 1,
+  "reason": "eagain",
+  "seconds": 12.4,
+  "freed_mb": 31.8,
+  "swap_mb": 1567.6,
+  "zswapped_mb": 1563.5,
+  "zswap_pool_mb": 1540.4,
+  "rate_mb_s": 2.6,
+  "wake_ms": 271.7,
+  "act_after_ms": 3109.7,
+  "first_act_ms": 2180.7,
+  "before": {
+   "current": 1664184320,
+   "swap": 0,
+   "zswap": 0,
+   "zswapped": 0,
+   "shmem": 1623650304,
+   "anon": 20221952,
+   "file": 1627611136
+  },
+  "after": {
+   "current": 1630887936,
+   "swap": 1643761664,
+   "zswap": 1615247143,
+   "zswapped": 1639489536,
+   "shmem": 0,
+   "anon": 176128,
+   "file": 69632
+  }
+ },
+ "C": {
+  "windowed": false,
+  "zswap_off": true,
+  "park": "running",
+  "writes": 1,
+  "reason": "eagain",
+  "seconds": 8.37,
+  "freed_mb": 1573.3,
+  "swap_mb": 1569.0,
+  "zswapped_mb": 0.0,
+  "zswap_pool_mb": 0.0,
+  "rate_mb_s": 188.0,
+  "wake_ms": 1623.6,
+  "act_after_ms": 10072.1,
+  "first_act_ms": 2079.7,
+  "before": {
+   "current": 1665642496,
+   "swap": 0,
+   "zswap": 0,
+   "zswapped": 0,
+   "shmem": 1627631616,
+   "anon": 18907136,
+   "file": 1631592448
+  },
+  "after": {
+   "current": 15937536,
+   "swap": 1645199360,
+   "zswap": 0,
+   "zswapped": 0,
+   "shmem": 0,
+   "anon": 8192,
+   "file": 0
+  }
+ },
+ "E": {
+  "windowed": true,
+  "zswap_off": true,
+  "park": "running",
+  "writes": 99,
+  "reason": "not_shrinking",
+  "seconds": 15.06,
+  "freed_mb": 1574.3,
+  "swap_mb": 1568.7,
+  "zswapped_mb": 0.0,
+  "zswap_pool_mb": 0.0,
+  "rate_mb_s": 104.6,
+  "wake_ms": 1618.0,
+  "act_after_ms": 9809.5,
+  "first_act_ms": 2154.7,
+  "before": {
+   "current": 1665716224,
+   "swap": 0,
+   "zswap": 0,
+   "zswapped": 0,
+   "shmem": 1625329664,
+   "anon": 19656704,
+   "file": 1629290496
+  },
+  "after": {
+   "current": 14983168,
+   "swap": 1644904448,
+   "zswap": 0,
+   "zswapped": 0,
+   "shmem": 0,
+   "anon": 8192,
+   "file": 0
+  }
+ }
+}

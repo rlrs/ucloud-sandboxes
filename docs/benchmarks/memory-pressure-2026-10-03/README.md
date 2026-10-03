@@ -116,12 +116,21 @@ restore cost hardly shows; the wait for headroom dominates.
 3. **The pause tier does not deliver its middle tier:**
    - Reclaim freed 13 MB per paused sandbox, against about 1.6 GB resident.
    - Swap stayed nearly empty, and 225 waits escalated to hibernation.
-   - Two likely causes, to verify next:
-     1. Admission counts bounds, not resident bytes, so reclaim cannot create
-        admission headroom. Only escalation can.
-     2. The guest's memory lives on the shared application-memory tmpfs. If
-        those pages are not charged to the sandbox's cgroup, `memory.reclaim`
-        on it cannot evict them.
+   - **Cause, from the code** (being verified in
+     [pause-reclaim-2026-10-03](../pause-reclaim-2026-10-03/README.md)). The
+     charging is right: the guest's tmpfs pages are charged to the sandbox's
+     own cgroup, and thaw prefetches found them in swap. The reclaim loop
+     gives up:
+     1. It writes 16 MiB windows and stops once a window frees less than
+        1 MiB (`resident_memory.py:289-292`). With zswap on and a random,
+        recently touched heap, that happens after about one window.
+     2. A reclaim that frees less than 16 MiB is then marked stalled for good
+        (`pause_tier.py:158-162`) and escalated to hibernation. The run had
+        234 stalls and 225 escalations.
+   - **Admission compounds it.** Wake debt ignores swapped bytes
+     (`direct_service.py:1733-1749`), and RAM-backing headroom is tmpfs
+     `f_bavail`, which swapping does not change. So even a real reclaim buys
+     no headroom for wakes.
    - Without a working reclaim, the pause tier is today's policy plus pause
      and thaw overhead.
 4. **Today's 1 s idle parking is invisible to relay agents,** because managed
@@ -135,11 +144,11 @@ restore cost hardly shows; the wait for headroom dominates.
    expected remaining wait is long, which is the Aries rule with relay
    `resource_phase` hints.
 2. **Make pause reclaim work:**
-   - Find where guest tmpfs pages are charged.
-   - Reclaim against that cgroup, or move the memory file's charge to the
-     sandbox.
-   - Let admission count reclaimed and paused bytes as swap-backed, so a
-     paused rollout frees admission headroom without a checkpoint.
+   - Reclaim to a target instead of stopping at the first small window.
+   - Drop the permanent stall rule.
+   - Decide zswap per cgroup by compressibility.
+   - Let admission count swap-backed bytes, so a paused rollout frees
+     headroom without a checkpoint.
 3. **Re-run this harness** with wakes retried as the relay does, and add a
    resident-wait arm with no create pressure as the floor.
 4. **Then make model waits node-local,** as

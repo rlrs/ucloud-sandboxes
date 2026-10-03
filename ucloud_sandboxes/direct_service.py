@@ -1746,7 +1746,15 @@ class DirectSandboxService:
             return remaining, remaining
         ceiling = min(bound, sample.peak_bytes)
         shared = min(sample.current_bytes, sample.shared_memory_bytes)
-        return max(0, ceiling - sample.current_bytes), max(0, ceiling - shared)
+        # Pages a pause reclaimed come back as DSec's thaw brings them: a
+        # bounded prefetch now, demand faults as the guest touches the rest
+        # (which pressure may in turn reclaim from other paused waits). So a
+        # swapped continuation owes physical headroom for its prefetch, not
+        # its whole swapped footprint, and its swapped tmpfs blocks are still
+        # allocated: RAM backing owes nothing for them.
+        swapped = min(sample.swap_bytes, max(0, ceiling - sample.current_bytes))
+        physical = max(0, ceiling - sample.current_bytes - swapped) + min(swapped, pause_tier.PREFETCH_MAX_BYTES)
+        return physical, max(0, ceiling - shared - swapped)
 
     def _transition_memory_cost(self, kind, owner, memory_bytes, *, ram_backing_bytes=None, **kwargs):
         ram_mode = self.warden.application_memory_mode(*owner) == "ram"
@@ -2764,10 +2772,7 @@ class DirectSandboxService:
                     self._refresh_growth_forecasts_locked()
                     if transition_cost_provider is not None:
                         self._transitions.refresh_wait_cost(transition_owner, transition_cost)
-                    projected = self._transitions.projected_memory_bytes(
-                        transition_owner, transition_cost,
-                        restore_capacity=self._restore_slots.capacity,
-                    )
+                    projected = self._transitions.projected_memory_bytes(transition_owner, transition_cost)
                     if metrics.memory_total_mb <= 0 or projected > headroom:
                         pressure_error = "node memory headroom is reserved by in-flight transitions"
                         projected_error = True
@@ -2776,10 +2781,7 @@ class DirectSandboxService:
                     # promised to RAM-backed owners above. The independent RAM
                     # projection preserves their complete unswappable guarantee.
                     projected_ram = self._transitions.projected_memory_bytes(
-                        transition_owner, transition_cost,
-                        restore_capacity=self._restore_slots.capacity,
-                        resource="ram_backing_bytes",
-                    )
+                        transition_owner, transition_cost, resource="ram_backing_bytes")
                     backing = metrics.memory_backing
                     configured_ram = getattr(self.warden.config, "application_memory_root", None) is not None
                     ram_available = (backing.available_bytes or 0) if backing is not None else (

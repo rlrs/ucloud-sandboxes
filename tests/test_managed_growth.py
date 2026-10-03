@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from tests import test_direct_provisioner as fixtures
+from ucloud_sandboxes import pause_tier
 from ucloud_sandboxes.direct_registry import DirectSandboxRegistry, DirectRegistryConflictError
 from ucloud_sandboxes.direct_service import DirectSandboxService
 from ucloud_sandboxes.managed_process import ManagedProcessStart
@@ -283,12 +284,29 @@ class ManagedGrowthTests(unittest.TestCase):
         self.service._resident_memory._samples[('one', 8)] = sample
         self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
 
-    def sample(self, *, current, peak=0, shared=None, age=0.0):
+    def sample(self, *, current, peak=0, shared=None, age=0.0, swap=0):
         return ResidentMemorySample(current_bytes=current, anonymous_bytes=0, file_bytes=current,
             dirty_bytes=0, writeback_bytes=0, refault_file_pages=0, cgroup_path='/owned',
             cgroup_device=1, cgroup_inode=2, sentry_pid=10, sentry_start_time_ticks=20,
             sampled_at=time.monotonic() - age,
-            shared_memory_bytes=current if shared is None else shared, peak_bytes=peak)
+            shared_memory_bytes=current if shared is None else shared, peak_bytes=peak, swap_bytes=swap)
+
+    def test_a_swapped_continuation_owes_its_prefetch_not_its_whole_swap(self):
+        with patch.object(self.service.warden, 'application_memory_mode', return_value='ram'):
+            self.service.start_managed_process('one', self.spec)
+            self.service.observe_managed_wait('one', 7, 'wait-1')
+            self.service.admit_managed_continuation('one', 7, 'wait-1')
+            # A 3.5 GiB peak, 3 GiB of it reclaimed to swap by a pause.
+            self.service._resident_memory._samples[('one', 7)] = self.sample(
+                current=1 << 29, peak=7 << 29, swap=3 << 30)
+            demand = self.service.warm_park_demand()
+            # The thaw's bounded prefetch now; faults bring the rest back.
+            self.assertEqual(demand.physical_bytes, pause_tier.PREFETCH_MAX_BYTES)
+            # Swapped tmpfs blocks stay allocated: no RAM-backing debt.
+            self.assertEqual(demand.ram_backing_bytes, 0)
+            # Without swap the same runtime owes its way back to the peak.
+            self.service._resident_memory._samples[('one', 7)] = self.sample(current=1 << 29, peak=7 << 29)
+            self.assertEqual(self.service.warm_park_demand().physical_bytes, 3 << 30)
 
     def test_continuation_forecasts_physical_growth_to_its_demonstrated_peak(self):
         self.available = 8192  # room for the second launch's whole bound

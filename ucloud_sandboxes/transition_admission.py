@@ -117,20 +117,23 @@ class TransitionLedger:
     def known_memory_bytes(self):
         return sum(self._memory_by_owner().values())
 
-    def projected_memory_bytes(self, owner, cost, *, restore_capacity=0, resource="memory_bytes"):
+    def projected_memory_bytes(self, owner, cost, *, resource="memory_bytes"):
         owners = self._memory_by_owner(resource)
         value = getattr(cost, resource)
         if value is not None:
             owners[owner] = max(owners.get(owner, 0), value)
         if cost.kind == TransitionKind.STARTUP:
-            # Do not spend the headroom a queued continuation needs merely to
-            # start another empty sandbox/primary. This reserves no execution
-            # slot: both may proceed immediately when their combined cost fits.
-            pending = self._next_pending(TransitionKind.RESTORE, restore_capacity)
-            if pending is not None and getattr(pending.cost, resource) is not None:
-                owners[pending.owner] = max(
-                    owners.get(pending.owner, 0), getattr(pending.cost, resource)
-                )
+            # Rollouts already running come first (DSec): a new sandbox may
+            # spend only the headroom that every queued continuation and
+            # restore leaves, not just the head one's. Otherwise launches
+            # slip in while later waking owners wait, and a timed-out wake
+            # re-queues behind them. This reserves no execution slot: all may
+            # proceed at once when their combined cost fits.
+            for pending in self._pending(TransitionKind.RESTORE):
+                if getattr(pending.cost, resource) is not None:
+                    owners[pending.owner] = max(
+                        owners.get(pending.owner, 0), getattr(pending.cost, resource)
+                    )
         return sum(owners.values())
 
     def _pending(self, kind):

@@ -57,9 +57,10 @@ import unittest
 # spike (C2.1 candidate: blob-toc conversion, the store node's virtual blobs,
 # the opt-in nydusd device; keep or delete with the spike's verdict), +75 the
 # C1.1 second pass (zswap bounded per paused cgroup, stall backoff, eviction by
-# expected idle, reclaim stop counters; benchmarks/pause-reclaim-2026-10-03).
-# Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 112_039
+# expected idle, reclaim stop counters; benchmarks/pause-reclaim-2026-10-03),
+# +5 admission puts running rollouts first (every queued wake reserved; a
+# swapped wake owes its prefetch). Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 112_046
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

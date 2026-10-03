@@ -57,28 +57,22 @@ class TransitionLedgerTests(unittest.TestCase):
         self.assertEqual(snapshot["unknown_transition_memory_costs"], 0)
         ledger.release(active)
 
-    def test_restore_head_protection_shares_owner_and_releases_on_cancel(self):
+    def test_launches_leave_headroom_for_every_queued_wake(self):
         ledger = TransitionLedger()
         restore = TransitionCost(TransitionKind.RESTORE, 4096)
         start = TransitionCost(TransitionKind.STARTUP, 2048)
         head = ledger.wait(("wake", 1), restore)
         ledger.wait(("wake", 2), restore)
         ledger.set_growth_forecasts({("wake", 1): TransitionCost(TransitionKind.RESTORE, 1024)})
-        self.assertEqual(ledger.projected_memory_bytes(
-            ("new", 1), start, restore_capacity=8,
-        ), 6144)
+        # Running rollouts first: a launch fits only beside both queued wakes.
+        self.assertEqual(ledger.projected_memory_bytes(("new", 1), start), 4096 + 4096 + 2048)
         # The actual wake spends the same owner reservation, not both stages.
         self.assertEqual(ledger.projected_memory_bytes(("wake", 1), restore), 4096)
         ledger.unwait(head)
-        self.assertEqual(ledger.projected_memory_bytes(
-            ("new", 1), start, restore_capacity=8,
-        ), 7168)
-        # All active restore slots are already charged; a later queued owner
-        # cannot cause speculative reclaim before a slot is available.
+        self.assertEqual(ledger.projected_memory_bytes(("new", 1), start), 1024 + 4096 + 2048)
+        # Full restore slots do not let a launch take a queued wake's headroom.
         claim = ledger.claim(("wake", 3), restore)
-        self.assertEqual(ledger.projected_memory_bytes(
-            ("new", 1), start, restore_capacity=1,
-        ), 7168)
+        self.assertEqual(ledger.projected_memory_bytes(("new", 1), start), 1024 + 4096 + 4096 + 2048)
         ledger.release(claim)
 
     def test_unknown_cost_and_exact_token_lifetime(self):

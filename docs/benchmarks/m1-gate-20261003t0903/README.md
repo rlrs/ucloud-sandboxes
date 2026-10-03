@@ -82,10 +82,12 @@ with the fixes since:
 - **Cold commands pass:** 20/20, with image 72's `pip` reported as not in the
   image.
 - **Stored bytes still fail, at 20.05 GB.**
-  - Run 1 stored 22.89 GB. Live chunks are about 16.6 GB, within 5% of
-    17.5 GB.
-  - Dead bytes fell from 5.1 GB to about 3.4 GB, about 2.3 GB of it from the
-    12-way convert pass.
+  - Run 1 stored 22.89 GB. The total is live packs (about 16.6 GB), dead pack
+    bytes, and about 0.85 GB of bootstraps and chunk maps.
+  - **Dead pack bytes fell from 5.1 GB to about 2.3 GB.** Without them, the
+    total would be about 17.5 GB.
+  - The target is S12's pack-only 17.53 GB, while the gate also counts the
+    metadata, so the comparison is about 0.85 GB strict.
   - Per-pack commits narrowed the window to one pack's fill and upload. With
     12 converters starting together on images that share files, that still
     leaves duplicates.

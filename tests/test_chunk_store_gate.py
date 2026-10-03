@@ -228,6 +228,16 @@ class ResumeAndTeardownTests(GateTest):
                                      if "scp -q" in call and "/nydusd root@" in call))  # The directory comes first.
         self.assertIn("immutable_environments.attach_concurrency=8", next(
             call for call in calls if "deployment-canary.json" in call and "derive-config" in call))
+        # The bundle's own nydusd: VM init installs and pins it, the gate copies nothing.
+        from ucloud_sandboxes.environment_config import NYDUSD_INSTALL_PATH
+        (self.root / "block.json").write_text(json.dumps({**BLOCK, "nydusd": {**pinned, "path": NYDUSD_INSTALL_PATH}}))
+        state = self.root / "state" / "20261002t1800" / "state.json"
+        recorded = json.loads(state.read_text())
+        recorded["phases"].pop("workers")
+        state.write_text(json.dumps(recorded))
+        runner = FakeRunner()
+        self.assertEqual(self.run_gate("workers", runner, "--accept-canary-placement"), 0)
+        self.assertFalse(any("install -D -m 0755 /opt/m1-gate/nydusd" in " ".join(argv) for argv in runner.calls))
 
     def test_workers_refuse_without_the_placement_acknowledgement(self):
         for phase in ("provision", "configure", "convert"):

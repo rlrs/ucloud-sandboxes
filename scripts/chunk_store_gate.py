@@ -654,7 +654,7 @@ class Gate:
         if not args.bundle:
             raise GateError("workers needs --bundle (the release's sandbox node bundle on the gateway)")
         roles = [role for role in self.worker_roles() if role != "b1"]
-        if self.nydusd() and not args.nydusd:
+        if self.nydusd() and not self.bundled_nydusd() and not args.nydusd:
             raise GateError("the block names chunk_store.nydusd: pass --nydusd, the built binary on the gateway")
         alias = f"ucloud-sandbox-registry:{args.gate_registry_port}"
         sample = json.loads((REPO / args.sample).read_text())
@@ -722,7 +722,7 @@ class Gate:
             self.step("workers", f"known-hosts-{role}", lambda role=role: (self.gw(
                 forget_host(self.ip(role)) + "; true"), True)[1])
             self.step("workers", f"ssh-{role}", lambda role=role: self.wait_ssh(role))
-            if role != "b1" and self.nydusd():
+            if role != "b1" and self.nydusd() and not self.bundled_nydusd():
                 self.step("workers", f"nydusd-{role}", lambda role=role: self.install_nydusd(role))
             self.step("workers", f"init-{role}", lambda role=role: self.init_worker(role))
             self.step("workers", f"health-{role}", lambda role=role: (self.on(
@@ -760,6 +760,11 @@ class Gate:
         if not self.args.chunk_store_block:
             return None
         return json.loads(Path(self.args.chunk_store_block).read_text()).get("nydusd")
+
+    def bundled_nydusd(self):
+        """The block names the bundle's install path: VM init installs and pins it."""
+        from ucloud_sandboxes.environment_config import NYDUSD_INSTALL_PATH
+        return (self.nydusd() or {}).get("path") == NYDUSD_INSTALL_PATH
 
     def install_nydusd(self, role):
         """The pinned binary from the gateway onto a canary, before VM init starts its backend."""

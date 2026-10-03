@@ -1590,6 +1590,86 @@ verified.
   budget, escalation), C3.1 commit (worker and builder), and C4.4 node
   heartbeat sender.
 
+### 2026-10-02 to 10-03: production 0.8.x, the chunk store, M2 readers
+
+**In production (Hetzner).** Each release went gateway first, then a new
+worker snapshot, then an autoscaled canary
+([rollout-0.8.0.md](rollout-0.8.0.md)).
+- **0.8.0.** The first to fourth tranches above:
+  - shipped on: C4.1 signed exec sessions, C0.2 phase timings, C2.2/C2.3
+    prefetch, C4.4 heartbeats, C5.2 create pipeline;
+  - shipped off: C1.1 pause tier, the layout-2 writer;
+  - shipped unreachable: C3.1 commit.
+- **0.8.1.** Node-failure semantics, and the startup trace saved when a
+  component detaches.
+- **0.8.2.** The environment backend's EAGAIN fix, and the C2.15 upstream mirror
+  code (off).
+- **0.8.3.** Parallel component attach. It regressed a 48-sandbox burst: first
+  commands ran about 7× slower (median 17.1 s against 2.5 s).
+- **0.8.4.** `attach_concurrency` 1 by default, which restores serial attach. It
+  has run in production since 2026-10-02.
+
+**C2.13 chunk store** ([chunk-store-design.md](chunk-store-design.md)).
+- **Spikes:**
+  - S10: Nydus RAFS v6;
+  - S11: fscache, rejected;
+  - S12: S3 fails demand reads, so a store node fronts it;
+  - S13: fanotify deferred to C2.1; per-image mounts.
+- **Built:** the M1 core and the C2.6 store node (asyncio, 4 MiB extents,
+  hedging).
+- **Gate run 1** (`benchmarks/m1-gate-2026-10-03`):
+  - 181/181 full tree, and crash injection passed;
+  - stored bytes failed (convert race), the burst failed (creates dominate),
+    and rollback was 8/10;
+  - it found a nydus whiteout bug, fixed by path-ordered layers.
+- **Fixed since run 1:** per-pack commits, and byte-exact rollback.
+- **Gate run 2:** in progress, with a baseline worker on today's path.
+
+**M2 migration** ([chunk-store-m2-plan.md](chunk-store-m2-plan.md)).
+- **Decided:** the plan.
+- **Built (readers first, not deployed):**
+  - `SandboxSpec.environment_root`, with its capabilities;
+  - `image_roots` and gateway dispatch;
+  - retention;
+  - `chunk-migrate inventory`.
+- **Inventory:** 7,932 images, 1.89 TB of EROFS (the release target) and
+  1.17 TB of OCI.
+
+**W9.** C9.2 rollout scenario with think modes and a density timeline. Runs:
+- the 48-sandbox smoke (0.8.2);
+- an 8-sandbox smoke from zero (ready in about 61 s, all worker provisioning);
+- the 512-sandbox "before" baseline from zero, on 0.8.4 (2026-10-03,
+  [benchmarks/rl-scale-rollout-2026-10-03](benchmarks/rl-scale-rollout-2026-10-03/README.md)):
+  - 511/512 ready, p50 120 s, p95 147 s, max 151 s;
+  - 60–105 s of that is three CCX63 provisioning from zero;
+  - the rest is per-node queueing, with a worker-side create of 0.38 s;
+  - bytes fetched 3.2%, and about 17 GB of memory per 183 sandboxes.
+
+  So the create path and the node cap bound the burst, not image bytes or
+  memory.
+
+**Alignment check (2026-10-03).** Against the nine moves in §1.
+- **On target.** The image plane matches §4's store tier: content-addressed
+  chunks on NVMe, S3 as durable truth, the shared tier off the gateway. C8 tests
+  are green and hermetic. C5.2 shipped.
+- **Drifted:**
+  - W0's survey table was never produced, so the "before" was not measured
+    (now being taken);
+  - the RL primitives (W3: group create, fork; commit has no gateway route)
+    and the control-plane moves (route tokens, C4.3 wiring, dropping the
+    capacity transaction) stalled behind C2.13;
+  - Python is still on the image data path (C2.1 not started);
+  - pause is still off by default;
+  - the package grew from 102.9k to about 111.5k lines, against the ≤ 78k
+    target.
+- **Realigned order:**
+  1. the C9.2 "before" baseline (relay and park modes too);
+  2. M1 gate → M2 waves, which release the 1.89 TB of EROFS;
+  3. pause on by default after its gates, then C3.2 group create and C4.3
+     placement wiring, the levers for a 500-rollout burst;
+  4. a deletion schedule tied to M2 waves and C1.3, so the package budget
+     falls instead of only being raised.
+
 ## Appendix: evidence index
 
 - Image path:

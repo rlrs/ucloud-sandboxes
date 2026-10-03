@@ -1,0 +1,1653 @@
+{
+  "cleanup": {
+    "attempted": 8,
+    "deleted": 8,
+    "errors": [],
+    "failed": 0,
+    "relay_registrations": {
+      "registered": 0,
+      "remaining": []
+    },
+    "remaining_owned_ids": []
+  },
+  "cleanup_errors": [],
+  "conditions": {
+    "driver": {
+      "host": "rasmus-dev",
+      "platform": "Linux-5.15.0-190-generic-x86_64-with-glibc2.35",
+      "python": "3.10.13"
+    },
+    "first_command": "per family: conditions.rollout.commands.first",
+    "gateway": "https://77.42.92.27",
+    "gateway_health": {
+      "ok": true,
+      "service": "control-plane",
+      "version": "0.8.4"
+    },
+    "gateway_version": "0.8.4",
+    "harness_sha256": "c59ab924c7b3939b5c37ddcbf5655fcacb506638ff4f35accb4fbd00f318daeb",
+    "image_kind": "registry",
+    "images": [
+      "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+      "10.42.0.2:5000/ucloud-managed/foundation-tmax-e92c631646c7c6e91d2b8aa1-6d33fc8fb2f0:latest@sha256:03250523581c59383f92f1768ee7d4c605df7f12eae17ae28e5950382c53df92",
+      "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-1df61e054cd9254e0-0330d4aa6b7e:latest@sha256:d760b44e8182c2905315128ec627c8c0860f3d79f9669a0e0989a05984fcf26c",
+      "10.42.0.2:5000/ucloud-managed/precomputed-1307a6c4cdcc5af9def451c16595-fd016e62fca8:latest@sha256:527b116fb90c281af90bd94e4da7f9b48230330b17300e6b40c5b3ba6e3c8fa0",
+      "aweaiteam/scaleswe:google_flatbuffers_pr3493"
+    ],
+    "preexisting_sandboxes": 0,
+    "profile": "linux_host",
+    "rollout": {
+      "commands": {
+        "first": {
+          "OpenSWE": [
+            "sh",
+            "-c",
+            "WD=; REPO=0\nfor d in \"$PWD\" /testbed /testbed /workspace /repo /app /src /home/* /root; do\n  [ \"$d\" = / ] && continue\n  if [ -d \"$d/.git\" ]; then WD=$d; REPO=1; break; fi\ndone\nif [ -z \"$WD\" ]; then\n  for d in \"$PWD\" /testbed; do [ \"$d\" != / ] && [ -d \"$d\" ] && { WD=$d; break; }; done\nfi\nWD=${WD:-/}; cd \"$WD\" || exit 90\nSCAN=.; [ \"$WD\" = / ] && SCAN=/etc\nPY=$(command -v python || command -v python3 || true)\nTO=; command -v timeout >/dev/null 2>&1 && TO=\"timeout 115\"\necho \"ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}\"\nif [ \"$REPO\" = 1 ]; then git status --porcelain >/tmp/.ucloud-bench-status || exit 91; echo \"ucloud-bench git_status_lines=$(wc -l </tmp/.ucloud-bench-status) tracked=$(git ls-files | wc -l)\"; fi\nif [ -n \"$PY\" ]; then \"$PY\" -c 'import os, sys\nmods = []\nfor name in (\"json\", \"sqlite3\", \"ssl\", \"unittest\", \"pytest\"):\n    try:\n        __import__(name)\n        mods.append(name)\n    except Exception:\n        pass\nentries = 0\nfor path in sys.path:\n    if path and os.path.isdir(path):\n        entries += len(os.listdir(path))\nprint(\"ucloud-bench python=%d.%d imported=%s syspath_entries=%d\" % (\n    sys.version_info[0], sys.version_info[1], \",\".join(mods), entries))\n' || exit 92; fi\n"
+          ],
+          "SWE-smith": [
+            "sh",
+            "-c",
+            "WD=; REPO=0\nfor d in \"$PWD\" /testbed /testbed /workspace /repo /app /src /home/* /root; do\n  [ \"$d\" = / ] && continue\n  if [ -d \"$d/.git\" ]; then WD=$d; REPO=1; break; fi\ndone\nif [ -z \"$WD\" ]; then\n  for d in \"$PWD\" /testbed; do [ \"$d\" != / ] && [ -d \"$d\" ] && { WD=$d; break; }; done\nfi\nWD=${WD:-/}; cd \"$WD\" || exit 90\nSCAN=.; [ \"$WD\" = / ] && SCAN=/etc\nPY=$(command -v python || command -v python3 || true)\nTO=; command -v timeout >/dev/null 2>&1 && TO=\"timeout 115\"\necho \"ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}\"\nif [ \"$REPO\" = 1 ]; then git status --porcelain >/tmp/.ucloud-bench-status || exit 91; echo \"ucloud-bench git_status_lines=$(wc -l </tmp/.ucloud-bench-status) tracked=$(git ls-files | wc -l)\"; fi\nif [ -n \"$PY\" ]; then \"$PY\" -c 'import os, sys\nmods = []\nfor name in (\"json\", \"sqlite3\", \"ssl\", \"unittest\", \"pytest\"):\n    try:\n        __import__(name)\n        mods.append(name)\n    except Exception:\n        pass\nentries = 0\nfor path in sys.path:\n    if path and os.path.isdir(path):\n        entries += len(os.listdir(path))\nprint(\"ucloud-bench python=%d.%d imported=%s syspath_entries=%d\" % (\n    sys.version_info[0], sys.version_info[1], \",\".join(mods), entries))\n' || exit 92; fi\n"
+          ],
+          "ScaleSWE": [
+            "sh",
+            "-c",
+            "WD=; REPO=0\nfor d in \"$PWD\" /testbed /testbed /workspace /repo /app /src /home/* /root; do\n  [ \"$d\" = / ] && continue\n  if [ -d \"$d/.git\" ]; then WD=$d; REPO=1; break; fi\ndone\nif [ -z \"$WD\" ]; then\n  for d in \"$PWD\" /testbed; do [ \"$d\" != / ] && [ -d \"$d\" ] && { WD=$d; break; }; done\nfi\nWD=${WD:-/}; cd \"$WD\" || exit 90\nSCAN=.; [ \"$WD\" = / ] && SCAN=/etc\nPY=$(command -v python || command -v python3 || true)\nTO=; command -v timeout >/dev/null 2>&1 && TO=\"timeout 115\"\necho \"ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}\"\nif [ \"$REPO\" = 1 ]; then git status --porcelain >/tmp/.ucloud-bench-status || exit 91; echo \"ucloud-bench git_status_lines=$(wc -l </tmp/.ucloud-bench-status) tracked=$(git ls-files | wc -l)\"; fi\nif [ -n \"$PY\" ]; then \"$PY\" -c 'import os, sys\nmods = []\nfor name in (\"json\", \"sqlite3\", \"ssl\", \"unittest\", \"pytest\"):\n    try:\n        __import__(name)\n        mods.append(name)\n    except Exception:\n        pass\nentries = 0\nfor path in sys.path:\n    if path and os.path.isdir(path):\n        entries += len(os.listdir(path))\nprint(\"ucloud-bench python=%d.%d imported=%s syspath_entries=%d\" % (\n    sys.version_info[0], sys.version_info[1], \",\".join(mods), entries))\n' || exit 92; fi\n"
+          ],
+          "TMax": [
+            "sh",
+            "-c",
+            "WD=; REPO=0\nfor d in \"$PWD\" /app /testbed /workspace /repo /app /src /home/* /root; do\n  [ \"$d\" = / ] && continue\n  if [ -d \"$d/.git\" ]; then WD=$d; REPO=1; break; fi\ndone\nif [ -z \"$WD\" ]; then\n  for d in \"$PWD\" /app; do [ \"$d\" != / ] && [ -d \"$d\" ] && { WD=$d; break; }; done\nfi\nWD=${WD:-/}; cd \"$WD\" || exit 90\nSCAN=.; [ \"$WD\" = / ] && SCAN=/etc\nPY=$(command -v python || command -v python3 || true)\nTO=; command -v timeout >/dev/null 2>&1 && TO=\"timeout 115\"\necho \"ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}\"\necho \"ucloud-bench workdir_entries=$(ls -A | wc -l) tree_entries=$(find \"$SCAN\" -maxdepth 3 2>/dev/null | head -n 5000 | wc -l)\"\nif [ -n \"$PY\" ]; then \"$PY\" -c 'import os, sys\nmods = []\nfor name in (\"json\", \"sqlite3\", \"ssl\", \"unittest\", \"pytest\"):\n    try:\n        __import__(name)\n        mods.append(name)\n    except Exception:\n        pass\nentries = 0\nfor path in sys.path:\n    if path and os.path.isdir(path):\n        entries += len(os.listdir(path))\nprint(\"ucloud-bench python=%d.%d imported=%s syspath_entries=%d\" % (\n    sys.version_info[0], sys.version_info[1], \",\".join(mods), entries))\n' || exit 92; fi\n"
+          ]
+        },
+        "turns": {
+          "edit": [
+            "sh",
+            "-c",
+            "WD=; REPO=0\nfor d in \"$PWD\"  /testbed /workspace /repo /app /src /home/* /root; do\n  [ \"$d\" = / ] && continue\n  if [ -d \"$d/.git\" ]; then WD=$d; REPO=1; break; fi\ndone\nif [ -z \"$WD\" ]; then\n  for d in \"$PWD\" ; do [ \"$d\" != / ] && [ -d \"$d\" ] && { WD=$d; break; }; done\nfi\nWD=${WD:-/}; cd \"$WD\" || exit 90\nSCAN=.; [ \"$WD\" = / ] && SCAN=/etc\nPY=$(command -v python || command -v python3 || true)\nTO=; command -v timeout >/dev/null 2>&1 && TO=\"timeout 115\"\necho \"ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}\"\nf=; [ \"$REPO\" = 1 ] && f=$(git ls-files 2>/dev/null | grep -E \"[.](py|js|ts|go|rs|java|c|cc|cpp|h|php|rb|md|txt)$\" | head -n 1)\nif [ -n \"$f\" ]; then printf \"\\n# ucloud-bench edit\\n\" >>\"$f\" || exit 93\n  echo \"ucloud-bench edit=$f diff_bytes=$(git diff | wc -c)\"\nelse printf \"ucloud-bench edit\\n\" >>ucloud-bench-edit.txt 2>/dev/null || printf \"x\\n\" >>/tmp/ucloud-bench-edit.txt || exit 93\n  echo \"ucloud-bench edit=file\"; fi\n"
+          ],
+          "grep": [
+            "sh",
+            "-c",
+            "WD=; REPO=0\nfor d in \"$PWD\"  /testbed /workspace /repo /app /src /home/* /root; do\n  [ \"$d\" = / ] && continue\n  if [ -d \"$d/.git\" ]; then WD=$d; REPO=1; break; fi\ndone\nif [ -z \"$WD\" ]; then\n  for d in \"$PWD\" ; do [ \"$d\" != / ] && [ -d \"$d\" ] && { WD=$d; break; }; done\nfi\nWD=${WD:-/}; cd \"$WD\" || exit 90\nSCAN=.; [ \"$WD\" = / ] && SCAN=/etc\nPY=$(command -v python || command -v python3 || true)\nTO=; command -v timeout >/dev/null 2>&1 && TO=\"timeout 115\"\necho \"ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}\"\nP=\"def |class |func |function \"\nif [ \"$REPO\" = 1 ]; then n=$(git grep -n -I -E \"$P\" 2>/dev/null | head -n 20000 | wc -l)\nelse n=$(grep -rIn -E \"$P\" \"$SCAN\" 2>/dev/null | head -n 20000 | wc -l); fi\necho \"ucloud-bench grep_lines=$n\"\n"
+          ],
+          "test": [
+            "sh",
+            "-c",
+            "WD=; REPO=0\nfor d in \"$PWD\"  /testbed /workspace /repo /app /src /home/* /root; do\n  [ \"$d\" = / ] && continue\n  if [ -d \"$d/.git\" ]; then WD=$d; REPO=1; break; fi\ndone\nif [ -z \"$WD\" ]; then\n  for d in \"$PWD\" ; do [ \"$d\" != / ] && [ -d \"$d\" ] && { WD=$d; break; }; done\nfi\nWD=${WD:-/}; cd \"$WD\" || exit 90\nSCAN=.; [ \"$WD\" = / ] && SCAN=/etc\nPY=$(command -v python || command -v python3 || true)\nTO=; command -v timeout >/dev/null 2>&1 && TO=\"timeout 115\"\necho \"ucloud-bench workdir=$WD repo=$REPO interpreter=${PY:-none}\"\nf=; [ \"$REPO\" = 1 ] && f=$(git ls-files 2>/dev/null | grep -E \"(^|/)test_[^/]*[.]py$|_test[.]py$\" | head -n 1)\nif [ -n \"$f\" ] && [ -n \"$PY\" ]; then $TO \"$PY\" -m pytest -q -x -p no:cacheprovider \"$f\" >/dev/null 2>&1; echo \"ucloud-bench test=$f rc=$?\"\nelif [ -n \"$PY\" ] && [ \"$SCAN\" = . ]; then $TO \"$PY\" -m compileall -q . >/dev/null 2>&1; echo \"ucloud-bench test=compileall rc=$?\"\nelse echo \"ucloud-bench test=none\"; fi\n"
+          ]
+        }
+      },
+      "family_profiles": {
+        "OpenSWE": {
+          "dirs": "/testbed",
+          "kind": "swe"
+        },
+        "SWE-smith": {
+          "dirs": "/testbed",
+          "kind": "swe"
+        },
+        "ScaleSWE": {
+          "dirs": "/testbed",
+          "kind": "swe"
+        },
+        "TMax": {
+          "dirs": "/app",
+          "kind": "terminal"
+        }
+      },
+      "fleet_state": {
+        "before": null,
+        "declared": "zero",
+        "note": "declared only: no --operator-token-file to read node heartbeats",
+        "verified": null
+      },
+      "image_source": "auto",
+      "overrides": {
+        "family_command": [],
+        "turn_command": []
+      },
+      "resolution_gap": {
+        "detail": "the training integration builds this task from its recipe (Dockerfile and task context from its image_recipe_db); the gateway matches the recipe to this prepared foundation or source and runs the remaining build work on a builder. The selection carries no recipe, so the sandbox runs the prepared reference itself: the task delta and its live build are not exercised",
+        "families": [
+          "OpenSWE",
+          "TMax"
+        ]
+      },
+      "resolutions": {
+        "import_alias": 1,
+        "prepared_reference": 1,
+        "prepared_reference_fallback": 6
+      },
+      "sampling": {
+        "families": [],
+        "sampled_per_family": {
+          "OpenSWE": 4,
+          "SWE-smith": 1,
+          "ScaleSWE": 1,
+          "TMax": 2
+        },
+        "seed": 1,
+        "tasks": 8,
+        "weighting": "rows"
+      },
+      "selection": {
+        "entries": 66786,
+        "environment_revision": "c7ea0d7fe3379f0e6ffb0a68c82c80c184601f92",
+        "format": "selectors",
+        "member": "all-cached-training-tasks/all-image-selectors.json",
+        "observed_at_utc": "2026-10-01T13:03:49Z",
+        "path": "/home/alex-admin/all-cached-training-tasks-with-terminal-lego-2026-10-01.zip",
+        "schema": 1,
+        "scope": "training only; preserve the existing split before filtering",
+        "sha256": "bd407f1f4b453bc5e0054e26f4c4b55abc963f007b4206af6476f313683f59da",
+        "upstream_rows": 130253,
+        "verifiers_revision": "7856cc1"
+      },
+      "think": {
+        "definition": "the driver waits the sampled think time; nothing parks the sandbox but the gateway's own idle policy",
+        "mode": "sleep"
+      },
+      "turn_mix": [
+        "grep",
+        "test",
+        "edit"
+      ]
+    },
+    "scenario_arguments": {
+      "allow_occupied_fleet": false,
+      "api_token_file": "build/hetzner-prod/sandbox-api-token",
+      "cleanup_timeout_seconds": 300.0,
+      "cpus": 1.0,
+      "create_timeout_seconds": 900.0,
+      "disk_mb": 2048,
+      "exec_timeout_seconds": 120.0,
+      "family": [],
+      "family_command": [],
+      "first_command": null,
+      "fleet_state": "zero",
+      "gateway_url": "https://77.42.92.27",
+      "heartbeat_settle_seconds": 20.0,
+      "image_kind": "registry",
+      "image_source": "auto",
+      "images": [
+        "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+        "10.42.0.2:5000/ucloud-managed/foundation-tmax-e92c631646c7c6e91d2b8aa1-6d33fc8fb2f0:latest@sha256:03250523581c59383f92f1768ee7d4c605df7f12eae17ae28e5950382c53df92",
+        "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-1df61e054cd9254e0-0330d4aa6b7e:latest@sha256:d760b44e8182c2905315128ec627c8c0860f3d79f9669a0e0989a05984fcf26c",
+        "10.42.0.2:5000/ucloud-managed/precomputed-1307a6c4cdcc5af9def451c16595-fd016e62fca8:latest@sha256:527b116fb90c281af90bd94e4da7f9b48230330b17300e6b40c5b3ba6e3c8fa0",
+        "aweaiteam/scaleswe:google_flatbuffers_pr3493"
+      ],
+      "label": [],
+      "labels": {},
+      "memory_mb": 1024,
+      "network": "bridge",
+      "node_fresh_seconds": 120.0,
+      "node_poll_seconds": 15.0,
+      "operator_token_file": null,
+      "output": "/tmp/claude-1000/-home-alex-admin-ucloud-sandboxes/8ad63fc6-3499-4ac4-b966-a79034589424/scratchpad/c92-smoke/smoke-8.json",
+      "overwrite": false,
+      "parkable": false,
+      "profile": "linux_host",
+      "ramp_seconds": 0.0,
+      "relay_url": null,
+      "relay_worker_token_file": null,
+      "request_timeout_seconds": 120.0,
+      "run_id": null,
+      "sampling": "rows",
+      "sandbox_command": null,
+      "sandbox_command_argv": [],
+      "sandbox_relay_url": null,
+      "scenario": "rollout",
+      "seed": 1,
+      "selection": "/home/alex-admin/all-cached-training-tasks-with-terminal-lego-2026-10-01.zip",
+      "status_poll_seconds": 2.0,
+      "tasks": 8,
+      "think_mode": "sleep",
+      "think_seconds": [
+        1.0,
+        3.0
+      ],
+      "ttl_seconds": 1800,
+      "turn_command": [],
+      "turn_mix": "grep,test,edit",
+      "turns": 2
+    },
+    "sdk": {
+      "client_sha256": "f167d1d676e77bff46421286be63afebefa6e93eb898137698f3946360796cc3",
+      "module": "/home/alex-admin/.cache/uv/archive-v0/ybwnkwEhh6dNO-dnpsjHN/lib/python3.10/site-packages/ucloud_sandboxes_sdk/__init__.py",
+      "version": "0.4.34"
+    },
+    "shape": {
+      "cpus": 1.0,
+      "disk_mb": 2048,
+      "memory_mb": 1024,
+      "network": "bridge",
+      "sandbox_command": [],
+      "ttl_seconds": 1800
+    }
+  },
+  "errors": [],
+  "finished_at": "2026-10-03T10:16:15.685130+00:00",
+  "metrics": {
+    "burst_completion": {
+      "status": "not_run"
+    },
+    "bytes_fetched_share": {
+      "source": "node-side chunk-cache hit/miss byte counters (plan C0.4, not yet implemented); not observable through the SDK",
+      "status": "external",
+      "unit": "fraction of image bytes",
+      "value": null
+    },
+    "cold_time_to_first_command": {
+      "status": "not_run"
+    },
+    "creation_rate": {
+      "status": "not_run"
+    },
+    "density_at_latency": {
+      "status": "not_run"
+    },
+    "fork": {
+      "reason": "fork from a template (plan C3.3) is not implemented",
+      "status": "unsupported",
+      "value": null
+    },
+    "idle_pss_uss": {
+      "source": "runtime/gvisor/spike_rl_scale.py --probe s2 (Sentry /proc/<pid>/smaps_rollup PSS and USS per sandbox)",
+      "status": "external",
+      "unit": "bytes",
+      "value": null
+    },
+    "page_sharing_ratio": {
+      "source": "runtime/gvisor/spike_rl_scale.py --probe s2 (plan C0.3)",
+      "status": "external",
+      "unit": "ratio",
+      "value": null
+    },
+    "pause_resume": {
+      "status": "not_run"
+    },
+    "rollout": {
+      "arrival": {
+        "client_concurrency": 8,
+        "max_concurrent_creates": 8,
+        "parkable": false,
+        "profile": "linux_host",
+        "ramp_seconds": 0.0,
+        "think_mode": "sleep",
+        "think_seconds": [
+          1.0,
+          3.0
+        ],
+        "turn_mix": [
+          "grep",
+          "test",
+          "edit"
+        ],
+        "turns": 2,
+        "wall_seconds": 76.127488
+      },
+      "create_phases_ms": {
+        "n_with_phases": 8,
+        "phases": {
+          "active_capacity_ms": {
+            "max": 4.0,
+            "mean": 1.5,
+            "min": 0.0,
+            "n": 8,
+            "p50": 1.0,
+            "p95": 4.0,
+            "p99": 4.0
+          },
+          "guest_files_ms": {
+            "max": 14.0,
+            "mean": 6.0,
+            "min": 2.0,
+            "n": 8,
+            "p50": 5.0,
+            "p95": 14.0,
+            "p99": 14.0
+          },
+          "image_resolve_ms": {
+            "max": 18.0,
+            "mean": 11.125,
+            "min": 2.0,
+            "n": 8,
+            "p50": 9.0,
+            "p95": 18.0,
+            "p99": 18.0
+          },
+          "init_install_ms": {
+            "max": 7.0,
+            "mean": 3.625,
+            "min": 1.0,
+            "n": 8,
+            "p50": 3.0,
+            "p95": 7.0,
+            "p99": 7.0
+          },
+          "journal_commit_ms": {
+            "max": 4.0,
+            "mean": 2.75,
+            "min": 2.0,
+            "n": 8,
+            "p50": 2.0,
+            "p95": 4.0,
+            "p99": 4.0
+          },
+          "manager_create_ms": {
+            "max": 576.0,
+            "mean": 509.0,
+            "min": 443.0,
+            "n": 8,
+            "p50": 492.0,
+            "p95": 576.0,
+            "p99": 576.0
+          },
+          "network_ensure_ms": {
+            "max": 33.0,
+            "mean": 15.625,
+            "min": 8.0,
+            "n": 8,
+            "p50": 14.0,
+            "p95": 33.0,
+            "p99": 33.0
+          },
+          "network_host_rules_ms": {
+            "max": 11.0,
+            "mean": 7.75,
+            "min": 4.0,
+            "n": 8,
+            "p50": 8.0,
+            "p95": 11.0,
+            "p99": 11.0
+          },
+          "oci_build_ms": {
+            "max": 8.0,
+            "mean": 2.25,
+            "min": 0.0,
+            "n": 8,
+            "p50": 1.0,
+            "p95": 8.0,
+            "p99": 8.0
+          },
+          "parse_spec_ms": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 8,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "read_request_ms": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 8,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "registry_commit_ms": {
+            "max": 18.0,
+            "mean": 9.125,
+            "min": 4.0,
+            "n": 8,
+            "p50": 7.0,
+            "p95": 18.0,
+            "p99": 18.0
+          },
+          "request_lock_ms": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 8,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "rootfs_prepare_ms": {
+            "max": 30.0,
+            "mean": 16.875,
+            "min": 9.0,
+            "n": 8,
+            "p50": 16.0,
+            "p95": 30.0,
+            "p99": 30.0
+          },
+          "runsc_create_ms": {
+            "max": 151.0,
+            "mean": 113.5,
+            "min": 72.0,
+            "n": 8,
+            "p50": 114.0,
+            "p95": 151.0,
+            "p99": 151.0
+          },
+          "runsc_start_ms": {
+            "max": 90.0,
+            "mean": 45.0,
+            "min": 31.0,
+            "n": 8,
+            "p50": 37.0,
+            "p95": 90.0,
+            "p99": 90.0
+          },
+          "runsc_state_ms": {
+            "max": 61.0,
+            "mean": 26.875,
+            "min": 12.0,
+            "n": 8,
+            "p50": 20.0,
+            "p95": 61.0,
+            "p99": 61.0
+          },
+          "runtime_create_ms": {
+            "max": 238.0,
+            "mean": 192.25,
+            "min": 162.0,
+            "n": 8,
+            "p50": 186.0,
+            "p95": 238.0,
+            "p99": 238.0
+          },
+          "startup_admission_ms": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 8,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "storage_prepare_ms": {
+            "max": 278.0,
+            "mean": 227.625,
+            "min": 185.0,
+            "n": 8,
+            "p50": 215.0,
+            "p95": 278.0,
+            "p99": 278.0
+          },
+          "validate_spec_ms": {
+            "max": 0.0,
+            "mean": 0.0,
+            "min": 0.0,
+            "n": 8,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          }
+        },
+        "source": "create response timings.phases and timings.manager.phases (plan C0.2)"
+      },
+      "definition": "Every sandbox's create is issued at its arrival offset (all at once unless --ramp-seconds), then its family's first command and M turns with think time; it is deleted when its turns end. time_to_ready: create request start to create returned; time_to_first_command: create request start to first command exit. Each summary counts the samples that completed that step. Turn seconds are driver-timed execs, except in think mode relay, where the managed agent runs and times each turn inside the sandbox. failures_by_phase: create, first_command, turn (including relay setup), think (sleep, park/wake or the relay model call).",
+      "density": {
+        "definition": "timeline every --node-poll-seconds: this run's sandboxes per node from GET /v1/sandboxes?view=status (running, parked = parked/parking/waking/detaching/detached, other), heartbeat memory_mb (available, total, used from runtime_metrics; committed and capacity from used/total_resources), paused and resident_waits gauges and resident_wait counter deltas since the previous sample. paused counts every paused sandbox on fresh nodes, not only this run's",
+        "peak_live_sandboxes": {
+          "driver": 8,
+          "inventory": null
+        },
+        "reason": "no --operator-token-file: inventory and heartbeats need it",
+        "samples": 0,
+        "status": "not_measured",
+        "status_poll_errors": [],
+        "timeline": []
+      },
+      "failures_by_error_code": {},
+      "failures_by_phase": {},
+      "first_command": {
+        "max": 6.39536,
+        "mean": 3.675387,
+        "min": 2.526754,
+        "n": 8,
+        "p50": 2.633522,
+        "p95": 6.39536,
+        "p99": 6.39536
+      },
+      "fleet_state": "zero",
+      "images": {
+        "by_resolution": {
+          "import_alias": 1,
+          "prepared_reference": 1,
+          "prepared_reference_fallback": 6
+        },
+        "distinct_references": 5,
+        "erofs_bytes_distinct": 6441213952
+      },
+      "n_failed": 0,
+      "n_not_started": 0,
+      "n_started": 8,
+      "n_succeeded": 8,
+      "node_io": {
+        "reason": "no --operator-token-file: node heartbeats need the gateway control token",
+        "status": "not_measured"
+      },
+      "overall": {
+        "n": 8,
+        "n_failed": 0,
+        "time_to_first_command": {
+          "max": 67.841597,
+          "mean": 64.818409,
+          "min": 63.604097,
+          "n": 8,
+          "p50": 63.609368,
+          "p95": 67.841597,
+          "p99": 67.841597
+        },
+        "time_to_ready": {
+          "max": 61.685551,
+          "mean": 61.142981,
+          "min": 60.572232,
+          "n": 8,
+          "p50": 61.035916,
+          "p95": 61.685551,
+          "p99": 61.685551
+        }
+      },
+      "per_family": {
+        "OpenSWE": {
+          "n": 4,
+          "n_failed": 0,
+          "time_to_first_command": {
+            "max": 63.609368,
+            "mean": 63.605783,
+            "min": 63.604097,
+            "n": 4,
+            "p50": 63.604243,
+            "p95": 63.609368,
+            "p99": 63.609368
+          },
+          "time_to_ready": {
+            "max": 61.078636,
+            "mean": 61.028151,
+            "min": 60.9758,
+            "n": 4,
+            "p50": 61.022251,
+            "p95": 61.078636,
+            "p99": 61.078636
+          }
+        },
+        "SWE-smith": {
+          "n": 1,
+          "n_failed": 0,
+          "time_to_first_command": {
+            "max": 64.009964,
+            "mean": 64.009964,
+            "min": 64.009964,
+            "n": 1,
+            "p50": 64.009964,
+            "p95": 64.009964,
+            "p99": 64.009964
+          },
+          "time_to_ready": {
+            "max": 60.572232,
+            "mean": 60.572232,
+            "min": 60.572232,
+            "n": 1,
+            "p50": 60.572232,
+            "p95": 60.572232,
+            "p99": 60.572232
+          }
+        },
+        "ScaleSWE": {
+          "n": 1,
+          "n_failed": 0,
+          "time_to_first_command": {
+            "max": 67.841597,
+            "mean": 67.841597,
+            "min": 67.841597,
+            "n": 1,
+            "p50": 67.841597,
+            "p95": 67.841597,
+            "p99": 67.841597
+          },
+          "time_to_ready": {
+            "max": 61.446193,
+            "mean": 61.446193,
+            "min": 61.446193,
+            "n": 1,
+            "p50": 61.446193,
+            "p95": 61.446193,
+            "p99": 61.446193
+          }
+        },
+        "TMax": {
+          "n": 2,
+          "n_failed": 0,
+          "time_to_first_command": {
+            "max": 66.21106,
+            "mean": 66.136288,
+            "min": 66.061516,
+            "n": 2,
+            "p50": 66.061516,
+            "p95": 66.21106,
+            "p99": 66.21106
+          },
+          "time_to_ready": {
+            "max": 61.685551,
+            "mean": 61.506411,
+            "min": 61.327271,
+            "n": 2,
+            "p50": 61.327271,
+            "p95": 61.685551,
+            "p99": 61.685551
+          }
+        }
+      },
+      "samples": [
+        {
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "complete_recipe",
+          "create_phases_ms": {
+            "active_capacity_ms": 1.0,
+            "guest_files_ms": 7.0,
+            "image_resolve_ms": 6.0,
+            "init_install_ms": 3.0,
+            "journal_commit_ms": 3.0,
+            "manager_create_ms": 545.0,
+            "network_ensure_ms": 14.0,
+            "network_host_rules_ms": 8.0,
+            "oci_build_ms": 8.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 6.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 16.0,
+            "runsc_create_ms": 151.0,
+            "runsc_start_ms": 37.0,
+            "runsc_state_ms": 20.0,
+            "runtime_create_ms": 213.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 248.0,
+            "validate_spec_ms": 0.0
+          },
+          "erofs_bytes": 2008616960,
+          "family": "SWE-smith",
+          "finished_offset_seconds": 69.81814889609814,
+          "first_command_markers": {
+            "git_status_lines": "0",
+            "imported": "json,sqlite3,ssl,unittest",
+            "interpreter": "/opt/miniconda3/bin/python",
+            "python": "3.12",
+            "repo": "1",
+            "syspath_entries": "361",
+            "tracked": "161",
+            "workdir": "/testbed"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 3.4376882170327008,
+          "image": "swebench/swesmith.x86_64.pyasn1_1776_pyasn1.0f07d724",
+          "image_resolution": "prepared_reference",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "10.42.0.2:5000/ucloud-managed/precomputed-1307a6c4cdcc5af9def451c16595-fd016e62fca8:latest@sha256:527b116fb90c281af90bd94e4da7f9b48230330b17300e6b40c5b3ba6e3c8fa0",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00000",
+          "start_offset_seconds": 0.0001745307818055153,
+          "task_name": null,
+          "thinks": [
+            {
+              "ended_unix": 1791022565.969833,
+              "ok": true,
+              "started_unix": 1791022563.5369549,
+              "think_seconds": 2.4326964536405047,
+              "turn": 0
+            },
+            {
+              "ended_unix": 1791022568.8000362,
+              "ok": true,
+              "started_unix": 1791022566.2007434,
+              "think_seconds": 2.599187095303162,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 64.00996447121724,
+          "time_to_ready_seconds": 60.57223161542788,
+          "turns": [
+            {
+              "kind": "test",
+              "markers": {
+                "interpreter": "/opt/miniconda3/bin/python",
+                "rc": "1",
+                "repo": "1",
+                "test": "tests/codec/ber/test_decoder.py",
+                "workdir": "/testbed"
+              },
+              "offset_seconds": 66.67394975293428,
+              "ok": true,
+              "seconds": 0.23087370116263628,
+              "turn": 0
+            },
+            {
+              "kind": "edit",
+              "markers": {
+                "diff_bytes": "255",
+                "edit": "README.md",
+                "interpreter": "/opt/miniconda3/bin/python",
+                "repo": "1",
+                "workdir": "/testbed"
+              },
+              "offset_seconds": 69.44250748679042,
+              "ok": true,
+              "seconds": 0.16923426883295178,
+              "turn": 1
+            }
+          ]
+        },
+        {
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "foundation",
+          "create_phases_ms": {
+            "active_capacity_ms": 4.0,
+            "guest_files_ms": 2.0,
+            "image_resolve_ms": 7.0,
+            "init_install_ms": 1.0,
+            "journal_commit_ms": 2.0,
+            "manager_create_ms": 492.0,
+            "network_ensure_ms": 8.0,
+            "network_host_rules_ms": 4.0,
+            "oci_build_ms": 3.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 6.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 13.0,
+            "runsc_create_ms": 115.0,
+            "runsc_start_ms": 47.0,
+            "runsc_state_ms": 23.0,
+            "runtime_create_ms": 189.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 240.0,
+            "validate_spec_ms": 0.0
+          },
+          "erofs_bytes": 1985335296,
+          "family": "TMax",
+          "finished_offset_seconds": 69.3865135437809,
+          "first_command_markers": {
+            "imported": "json,sqlite3,ssl,unittest,pytest",
+            "interpreter": "/usr/bin/python3",
+            "python": "3.10",
+            "repo": "0",
+            "syspath_entries": "420",
+            "tree_entries": "1043",
+            "workdir": "/",
+            "workdir_entries": "24"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 4.88374328892678,
+          "image": "prime/primeintellect/tmax:task_004879_b6bff03a",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-e92c631646c7c6e91d2b8aa1-6d33fc8fb2f0:latest@sha256:03250523581c59383f92f1768ee7d4c605df7f12eae17ae28e5950382c53df92",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00001",
+          "start_offset_seconds": 0.0005731168203055859,
+          "task_name": "task_004879_b6bff03a",
+          "thinks": [
+            {
+              "ended_unix": 1791022566.9352136,
+              "ok": true,
+              "started_unix": 1791022565.7384489,
+              "think_seconds": 1.1963804715433228,
+              "turn": 0
+            },
+            {
+              "ended_unix": 1791022568.3298652,
+              "ok": true,
+              "started_unix": 1791022567.003553,
+              "think_seconds": 1.3261537455201833,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 66.21106030419469,
+          "time_to_ready_seconds": 61.32727097533643,
+          "turns": [
+            {
+              "kind": "edit",
+              "markers": {
+                "edit": "file",
+                "interpreter": "/usr/bin/python3",
+                "repo": "0",
+                "workdir": "/"
+              },
+              "offset_seconds": 67.47675984213129,
+              "ok": true,
+              "seconds": 0.06830570008605719,
+              "turn": 0
+            },
+            {
+              "kind": "grep",
+              "markers": {
+                "grep_lines": "20",
+                "interpreter": "/usr/bin/python3",
+                "repo": "0",
+                "workdir": "/"
+              },
+              "offset_seconds": 69.1116579240188,
+              "ok": true,
+              "seconds": 0.30855010030791163,
+              "turn": 1
+            }
+          ]
+        },
+        {
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "foundation",
+          "create_phases_ms": {
+            "active_capacity_ms": 0.0,
+            "guest_files_ms": 3.0,
+            "image_resolve_ms": 15.0,
+            "init_install_ms": 3.0,
+            "journal_commit_ms": 2.0,
+            "manager_create_ms": 576.0,
+            "network_ensure_ms": 33.0,
+            "network_host_rules_ms": 11.0,
+            "oci_build_ms": 1.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 18.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 17.0,
+            "runsc_create_ms": 130.0,
+            "runsc_start_ms": 31.0,
+            "runsc_state_ms": 18.0,
+            "runtime_create_ms": 184.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 278.0,
+            "validate_spec_ms": 0.0
+          },
+          "erofs_bytes": 1198120960,
+          "family": "OpenSWE",
+          "finished_offset_seconds": 69.55901727918535,
+          "first_command_markers": {
+            "imported": "json,sqlite3,ssl,unittest",
+            "interpreter": "/opt/conda/envs/testbed/bin/python",
+            "python": "3.12",
+            "repo": "0",
+            "syspath_entries": "292",
+            "workdir": "/"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 2.5267535499297082,
+          "image": "openswe/django-import-export.django-import-export-1826:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00002",
+          "start_offset_seconds": 0.0010044560767710209,
+          "task_name": null,
+          "thinks": [
+            {
+              "ended_unix": 1791022565.6390407,
+              "ok": true,
+              "started_unix": 1791022563.1332264,
+              "think_seconds": 2.5054718372796834,
+              "turn": 0
+            },
+            {
+              "ended_unix": 1791022568.5331974,
+              "ok": true,
+              "started_unix": 1791022565.7046216,
+              "think_seconds": 2.8279613738322706,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 63.605424968060106,
+          "time_to_ready_seconds": 61.07863638177514,
+          "turns": [
+            {
+              "kind": "edit",
+              "markers": {
+                "edit": "file",
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "repo": "0",
+                "workdir": "/"
+              },
+              "offset_seconds": 66.17782881017774,
+              "ok": true,
+              "seconds": 0.06554570375010371,
+              "turn": 0
+            },
+            {
+              "kind": "grep",
+              "markers": {
+                "grep_lines": "8",
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "repo": "0",
+                "workdir": "/"
+              },
+              "offset_seconds": 69.25192537810653,
+              "ok": true,
+              "seconds": 0.24548491882160306,
+              "turn": 1
+            }
+          ]
+        },
+        {
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "foundation",
+          "create_phases_ms": {
+            "active_capacity_ms": 3.0,
+            "guest_files_ms": 10.0,
+            "image_resolve_ms": 18.0,
+            "init_install_ms": 6.0,
+            "journal_commit_ms": 2.0,
+            "manager_create_ms": 526.0,
+            "network_ensure_ms": 16.0,
+            "network_host_rules_ms": 8.0,
+            "oci_build_ms": 1.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 10.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 30.0,
+            "runsc_create_ms": 108.0,
+            "runsc_start_ms": 37.0,
+            "runsc_state_ms": 12.0,
+            "runtime_create_ms": 162.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 250.0,
+            "validate_spec_ms": 0.0
+          },
+          "erofs_bytes": 1198120960,
+          "family": "OpenSWE",
+          "finished_offset_seconds": 69.3758797980845,
+          "first_command_markers": {
+            "imported": "json,sqlite3,ssl,unittest",
+            "interpreter": "/opt/conda/envs/testbed/bin/python",
+            "python": "3.12",
+            "repo": "0",
+            "syspath_entries": "292",
+            "workdir": "/"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 2.581946021877229,
+          "image": "openswe/tuxemon.tuxemon-2231:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00003",
+          "start_offset_seconds": 0.0012129987590014935,
+          "task_name": null,
+          "thinks": [
+            {
+              "ended_unix": 1791022565.8686013,
+              "ok": true,
+              "started_unix": 1791022563.132276,
+              "think_seconds": 2.7361484426997755,
+              "turn": 0
+            },
+            {
+              "ended_unix": 1791022568.655421,
+              "ok": true,
+              "started_unix": 1791022566.094442,
+              "think_seconds": 2.5607964834936467,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 63.604243205394596,
+          "time_to_ready_seconds": 61.02225070307031,
+          "turns": [
+            {
+              "kind": "grep",
+              "markers": {
+                "grep_lines": "8",
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "repo": "0",
+                "workdir": "/"
+              },
+              "offset_seconds": 66.567651133053,
+              "ok": true,
+              "seconds": 0.2258118879981339,
+              "turn": 0
+            },
+            {
+              "kind": "test",
+              "markers": {
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "repo": "0",
+                "test": "none",
+                "workdir": "/"
+              },
+              "offset_seconds": 69.19810921093449,
+              "ok": true,
+              "seconds": 0.0694466270506382,
+              "turn": 1
+            }
+          ]
+        },
+        {
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "foundation",
+          "create_phases_ms": {
+            "active_capacity_ms": 0.0,
+            "guest_files_ms": 2.0,
+            "image_resolve_ms": 9.0,
+            "init_install_ms": 2.0,
+            "journal_commit_ms": 3.0,
+            "manager_create_ms": 472.0,
+            "network_ensure_ms": 15.0,
+            "network_host_rules_ms": 8.0,
+            "oci_build_ms": 2.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 4.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 18.0,
+            "runsc_create_ms": 114.0,
+            "runsc_start_ms": 38.0,
+            "runsc_state_ms": 37.0,
+            "runtime_create_ms": 194.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 203.0,
+            "validate_spec_ms": 0.0
+          },
+          "erofs_bytes": 362840064,
+          "family": "TMax",
+          "finished_offset_seconds": 70.4717992497608,
+          "first_command_markers": {
+            "imported": "json,sqlite3,ssl,unittest,pytest",
+            "interpreter": "/usr/bin/python3",
+            "python": "3.10",
+            "repo": "0",
+            "syspath_entries": "276",
+            "tree_entries": "556",
+            "workdir": "/",
+            "workdir_entries": "23"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 4.375919881276786,
+          "image": "prime/primeintellect/tmax:task_001740_02f119aa",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-1df61e054cd9254e0-0330d4aa6b7e:latest@sha256:d760b44e8182c2905315128ec627c8c0860f3d79f9669a0e0989a05984fcf26c",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00004",
+          "start_offset_seconds": 0.0014264509081840515,
+          "task_name": "task_001740_02f119aa",
+          "thinks": [
+            {
+              "ended_unix": 1791022566.9426298,
+              "ok": true,
+              "started_unix": 1791022565.5897582,
+              "think_seconds": 1.3526764100168658,
+              "turn": 0
+            },
+            {
+              "ended_unix": 1791022569.6880941,
+              "ok": true,
+              "started_unix": 1791022567.1747322,
+              "think_seconds": 2.51322765386632,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 66.06151591287926,
+          "time_to_ready_seconds": 61.685551390983164,
+          "turns": [
+            {
+              "kind": "grep",
+              "markers": {
+                "grep_lines": "9",
+                "interpreter": "/usr/bin/python3",
+                "repo": "0",
+                "workdir": "/"
+              },
+              "offset_seconds": 67.64793786313385,
+              "ok": true,
+              "seconds": 0.23206540709361434,
+              "turn": 0
+            },
+            {
+              "kind": "test",
+              "markers": {
+                "interpreter": "/usr/bin/python3",
+                "repo": "0",
+                "test": "none",
+                "workdir": "/"
+              },
+              "offset_seconds": 70.22935790615156,
+              "ok": true,
+              "seconds": 0.0680221919901669,
+              "turn": 1
+            }
+          ]
+        },
+        {
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "foundation",
+          "create_phases_ms": {
+            "active_capacity_ms": 3.0,
+            "guest_files_ms": 5.0,
+            "image_resolve_ms": 16.0,
+            "init_install_ms": 5.0,
+            "journal_commit_ms": 4.0,
+            "manager_create_ms": 479.0,
+            "network_ensure_ms": 13.0,
+            "network_host_rules_ms": 7.0,
+            "oci_build_ms": 0.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 7.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 18.0,
+            "runsc_create_ms": 79.0,
+            "runsc_start_ms": 46.0,
+            "runsc_state_ms": 26.0,
+            "runtime_create_ms": 172.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 215.0,
+            "validate_spec_ms": 0.0
+          },
+          "erofs_bytes": 1198120960,
+          "family": "OpenSWE",
+          "finished_offset_seconds": 68.41297667380422,
+          "first_command_markers": {
+            "imported": "json,sqlite3,ssl,unittest",
+            "interpreter": "/opt/conda/envs/testbed/bin/python",
+            "python": "3.12",
+            "repo": "0",
+            "syspath_entries": "292",
+            "workdir": "/"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 2.6335218511521816,
+          "image": "openswe/mahaloz.decomp2dbg-39:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00005",
+          "start_offset_seconds": 0.0017457851208746433,
+          "task_name": null,
+          "thinks": [
+            {
+              "ended_unix": 1791022565.5900373,
+              "ok": true,
+              "started_unix": 1791022563.1379294,
+              "think_seconds": 2.4519497577001736,
+              "turn": 0
+            },
+            {
+              "ended_unix": 1791022567.7126687,
+              "ok": true,
+              "started_unix": 1791022565.8729239,
+              "think_seconds": 1.839534465507568,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 63.60936771705747,
+          "time_to_ready_seconds": 60.97580046579242,
+          "turns": [
+            {
+              "kind": "grep",
+              "markers": {
+                "grep_lines": "8",
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "repo": "0",
+                "workdir": "/"
+              },
+              "offset_seconds": 66.34612986398861,
+              "ok": true,
+              "seconds": 0.2828484163619578,
+              "turn": 0
+            },
+            {
+              "kind": "test",
+              "markers": {
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "repo": "0",
+                "test": "none",
+                "workdir": "/"
+              },
+              "offset_seconds": 68.24621392320842,
+              "ok": true,
+              "seconds": 0.06030422216281295,
+              "turn": 1
+            }
+          ]
+        },
+        {
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "foundation",
+          "create_phases_ms": {
+            "active_capacity_ms": 1.0,
+            "guest_files_ms": 5.0,
+            "image_resolve_ms": 16.0,
+            "init_install_ms": 7.0,
+            "journal_commit_ms": 2.0,
+            "manager_create_ms": 539.0,
+            "network_ensure_ms": 15.0,
+            "network_host_rules_ms": 9.0,
+            "oci_build_ms": 2.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 13.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 14.0,
+            "runsc_create_ms": 139.0,
+            "runsc_start_ms": 34.0,
+            "runsc_state_ms": 61.0,
+            "runtime_create_ms": 238.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 202.0,
+            "validate_spec_ms": 0.0
+          },
+          "erofs_bytes": 1198120960,
+          "family": "OpenSWE",
+          "finished_offset_seconds": 68.88518212782219,
+          "first_command_markers": {
+            "imported": "json,sqlite3,ssl,unittest",
+            "interpreter": "/opt/conda/envs/testbed/bin/python",
+            "python": "3.12",
+            "repo": "0",
+            "syspath_entries": "292",
+            "workdir": "/"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 2.5681590191088617,
+          "image": "openswe/jpadilla.pyjwt-1005:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00006",
+          "start_offset_seconds": 0.0021586050279438496,
+          "task_name": null,
+          "thinks": [
+            {
+              "ended_unix": 1791022566.034249,
+              "ok": true,
+              "started_unix": 1791022563.1330523,
+              "think_seconds": 2.901044316406078,
+              "turn": 0
+            },
+            {
+              "ended_unix": 1791022568.1717331,
+              "ok": true,
+              "started_unix": 1791022566.102532,
+              "think_seconds": 2.0690094914647217,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 63.60409730905667,
+          "time_to_ready_seconds": 61.035916215740144,
+          "turns": [
+            {
+              "kind": "test",
+              "markers": {
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "repo": "0",
+                "test": "none",
+                "workdir": "/"
+              },
+              "offset_seconds": 66.57574586616829,
+              "ok": true,
+              "seconds": 0.06826246436685324,
+              "turn": 0
+            },
+            {
+              "kind": "edit",
+              "markers": {
+                "edit": "file",
+                "interpreter": "/opt/conda/envs/testbed/bin/python",
+                "repo": "0",
+                "workdir": "/"
+              },
+              "offset_seconds": 68.71238557901233,
+              "ok": true,
+              "seconds": 0.06741043226793408,
+              "turn": 1
+            }
+          ]
+        },
+        {
+          "arrival_offset_seconds": 0.0,
+          "cached_kind": "source",
+          "create_phases_ms": {
+            "active_capacity_ms": 0.0,
+            "guest_files_ms": 14.0,
+            "image_resolve_ms": 2.0,
+            "init_install_ms": 2.0,
+            "journal_commit_ms": 4.0,
+            "manager_create_ms": 443.0,
+            "network_ensure_ms": 11.0,
+            "network_host_rules_ms": 7.0,
+            "oci_build_ms": 1.0,
+            "parse_spec_ms": 0.0,
+            "read_request_ms": 0.0,
+            "registry_commit_ms": 9.0,
+            "request_lock_ms": 0.0,
+            "rootfs_prepare_ms": 9.0,
+            "runsc_create_ms": 72.0,
+            "runsc_start_ms": 90.0,
+            "runsc_state_ms": 18.0,
+            "runtime_create_ms": 186.0,
+            "startup_admission_ms": 0.0,
+            "storage_prepare_ms": 185.0,
+            "validate_spec_ms": 0.0
+          },
+          "erofs_bytes": 886300672,
+          "family": "ScaleSWE",
+          "finished_offset_seconds": 76.12725528888404,
+          "first_command_markers": {
+            "git_status_lines": "1",
+            "imported": "json,sqlite3,ssl,unittest,pytest",
+            "interpreter": "/usr/local/bin/python",
+            "python": "3.11",
+            "repo": "1",
+            "syspath_entries": "338",
+            "tracked": "1097",
+            "workdir": "/workspace/flatbuffers"
+          },
+          "first_command_ok": true,
+          "first_command_seconds": 6.395360358990729,
+          "image": "aweaiteam/scaleswe:google_flatbuffers_pr3493",
+          "image_resolution": "import_alias",
+          "node": null,
+          "ok": true,
+          "phase": "done",
+          "reference": "aweaiteam/scaleswe:google_flatbuffers_pr3493",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00007",
+          "start_offset_seconds": 0.002417605835944414,
+          "task_name": null,
+          "thinks": [
+            {
+              "ended_unix": 1791022570.0160594,
+              "ok": true,
+              "started_unix": 1791022567.3708313,
+              "think_seconds": 2.644909004957815,
+              "turn": 0
+            },
+            {
+              "ended_unix": 1791022574.9815197,
+              "ok": true,
+              "started_unix": 1791022573.2904654,
+              "think_seconds": 1.6906030242508925,
+              "turn": 1
+            }
+          ],
+          "time_to_first_command_seconds": 67.84159736894071,
+          "time_to_ready_seconds": 61.446193173062056,
+          "turns": [
+            {
+              "kind": "test",
+              "markers": {
+                "interpreter": "/usr/local/bin/python",
+                "rc": "0",
+                "repo": "1",
+                "test": "tests/py_flexbuffers_test.py",
+                "workdir": "/workspace/flatbuffers"
+              },
+              "offset_seconds": 73.7636708128266,
+              "ok": true,
+              "seconds": 3.2743685841560364,
+              "turn": 0
+            },
+            {
+              "kind": "edit",
+              "markers": {
+                "diff_bytes": "630",
+                "edit": ".eslintrc.js",
+                "interpreter": "/usr/local/bin/python",
+                "repo": "1",
+                "workdir": "/workspace/flatbuffers"
+              },
+              "offset_seconds": 75.8342654388398,
+              "ok": true,
+              "seconds": 0.37950222799554467,
+              "turn": 1
+            }
+          ]
+        }
+      ],
+      "slowest": [
+        {
+          "family": "ScaleSWE",
+          "image": "aweaiteam/scaleswe:google_flatbuffers_pr3493",
+          "image_resolution": "import_alias",
+          "node": null,
+          "reference": "aweaiteam/scaleswe:google_flatbuffers_pr3493",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00007",
+          "time_to_first_command_seconds": 67.84159736894071,
+          "time_to_ready_seconds": 61.446193173062056
+        },
+        {
+          "family": "TMax",
+          "image": "prime/primeintellect/tmax:task_004879_b6bff03a",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-e92c631646c7c6e91d2b8aa1-6d33fc8fb2f0:latest@sha256:03250523581c59383f92f1768ee7d4c605df7f12eae17ae28e5950382c53df92",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00001",
+          "time_to_first_command_seconds": 66.21106030419469,
+          "time_to_ready_seconds": 61.32727097533643
+        },
+        {
+          "family": "TMax",
+          "image": "prime/primeintellect/tmax:task_001740_02f119aa",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-tmax-inline-1df61e054cd9254e0-0330d4aa6b7e:latest@sha256:d760b44e8182c2905315128ec627c8c0860f3d79f9669a0e0989a05984fcf26c",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00004",
+          "time_to_first_command_seconds": 66.06151591287926,
+          "time_to_ready_seconds": 61.685551390983164
+        },
+        {
+          "family": "SWE-smith",
+          "image": "swebench/swesmith.x86_64.pyasn1_1776_pyasn1.0f07d724",
+          "image_resolution": "prepared_reference",
+          "node": null,
+          "reference": "10.42.0.2:5000/ucloud-managed/precomputed-1307a6c4cdcc5af9def451c16595-fd016e62fca8:latest@sha256:527b116fb90c281af90bd94e4da7f9b48230330b17300e6b40c5b3ba6e3c8fa0",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00000",
+          "time_to_first_command_seconds": 64.00996447121724,
+          "time_to_ready_seconds": 60.57223161542788
+        },
+        {
+          "family": "OpenSWE",
+          "image": "openswe/mahaloz.decomp2dbg-39:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00005",
+          "time_to_first_command_seconds": 63.60936771705747,
+          "time_to_ready_seconds": 60.97580046579242
+        },
+        {
+          "family": "OpenSWE",
+          "image": "openswe/django-import-export.django-import-export-1826:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00002",
+          "time_to_first_command_seconds": 63.605424968060106,
+          "time_to_ready_seconds": 61.07863638177514
+        },
+        {
+          "family": "OpenSWE",
+          "image": "openswe/tuxemon.tuxemon-2231:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00003",
+          "time_to_first_command_seconds": 63.604243205394596,
+          "time_to_ready_seconds": 61.02225070307031
+        },
+        {
+          "family": "OpenSWE",
+          "image": "openswe/jpadilla.pyjwt-1005:latest",
+          "image_resolution": "prepared_reference_fallback",
+          "node": null,
+          "reference": "10.42.0.2:5000/ucloud-managed/foundation-openswe-ede7449b01be2dba1a3ed-048859e7d12e:latest@sha256:b655f50ff054853ed7488ab3044d95deb0eb04302aa851f54e0b105fa4c5b03c",
+          "sandbox_id": "rlbench-a295b8c64785-rollout-00006",
+          "time_to_first_command_seconds": 63.60409730905667,
+          "time_to_ready_seconds": 61.035916215740144
+        }
+      ],
+      "status": "measured",
+      "tasks": 8,
+      "think": {
+        "definition": "the driver waits the sampled think time; nothing parks the sandbox but the gateway's own idle policy",
+        "mode": "sleep",
+        "n": 16,
+        "n_observed": 0,
+        "n_ok": 16,
+        "n_parked_observed": 0,
+        "park": {
+          "max": null,
+          "mean": null,
+          "min": null,
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "p99": null
+        },
+        "park_observation": "not observed: needs --operator-token-file and --status-poll-seconds > 0",
+        "retries": 0,
+        "retry_codes": {},
+        "status_read": {
+          "max": null,
+          "mean": null,
+          "min": null,
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "p99": null
+        },
+        "think": {
+          "max": 2.901044,
+          "mean": 2.227984,
+          "min": 1.19638,
+          "n": 16,
+          "p50": 2.45195,
+          "p95": 2.901044,
+          "p99": 2.901044
+        },
+        "wake": {
+          "max": null,
+          "mean": null,
+          "min": null,
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "p99": null
+        }
+      },
+      "turns": {
+        "by_kind": {
+          "edit": {
+            "all": {
+              "max": 0.379502,
+              "mean": 0.15,
+              "min": 0.065546,
+              "n": 5,
+              "p50": 0.068306,
+              "p95": 0.379502,
+              "p99": 0.379502
+            },
+            "first": {
+              "max": 0.379502,
+              "mean": 0.15,
+              "min": 0.065546,
+              "n": 5,
+              "p50": 0.068306,
+              "p95": 0.379502,
+              "p99": 0.379502
+            },
+            "later": {
+              "max": null,
+              "mean": null,
+              "min": null,
+              "n": 0,
+              "p50": null,
+              "p95": null,
+              "p99": null
+            },
+            "n_failed": 0
+          },
+          "grep": {
+            "all": {
+              "max": 0.30855,
+              "mean": 0.258952,
+              "min": 0.225812,
+              "n": 5,
+              "p50": 0.245485,
+              "p95": 0.30855,
+              "p99": 0.30855
+            },
+            "first": {
+              "max": 0.30855,
+              "mean": 0.258952,
+              "min": 0.225812,
+              "n": 5,
+              "p50": 0.245485,
+              "p95": 0.30855,
+              "p99": 0.30855
+            },
+            "later": {
+              "max": null,
+              "mean": null,
+              "min": null,
+              "n": 0,
+              "p50": null,
+              "p95": null,
+              "p99": null
+            },
+            "n_failed": 0
+          },
+          "test": {
+            "all": {
+              "max": 3.274369,
+              "mean": 0.628546,
+              "min": 0.060304,
+              "n": 6,
+              "p50": 0.068262,
+              "p95": 3.274369,
+              "p99": 3.274369
+            },
+            "first": {
+              "max": 3.274369,
+              "mean": 0.628546,
+              "min": 0.060304,
+              "n": 6,
+              "p50": 0.068262,
+              "p95": 3.274369,
+              "p99": 3.274369
+            },
+            "later": {
+              "max": null,
+              "mean": null,
+              "min": null,
+              "n": 0,
+              "p50": null,
+              "p95": null,
+              "p99": null
+            },
+            "n_failed": 0
+          }
+        },
+        "n": 16,
+        "n_failed": 0
+      },
+      "unit": "seconds"
+    },
+    "warm_time_to_first_command": {
+      "status": "not_run"
+    }
+  },
+  "ok": true,
+  "run_id": "rlbench-a295b8c64785",
+  "scenario": "rollout",
+  "schema": "ucloud-rl-scale-bench/v1",
+  "started_at": "2026-10-03T10:14:59.403636+00:00",
+  "status": "ok",
+  "summary_definition": "Percentiles are nearest-rank over successful samples only; failures are counted separately and never improve a percentile. Times are seconds measured on the driver with time.perf_counter()."
+}

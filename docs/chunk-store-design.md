@@ -444,6 +444,10 @@ emergency, and `image_evicted` / `rebuild_required` cannot hit training images.
 
 ## 7. Migration of the existing corpus
 
+> The executable plan, with the code changes the survey of 2026-10-03 found and measured
+> production numbers (2.8 TB used on the Volume, not 3.81 TB), is
+> [chunk-store-m2-plan.md](chunk-store-m2-plan.md).
+
 **Inventory** (from the registry and the prepared catalogs; sizes from S10's
 extrapolation):
 

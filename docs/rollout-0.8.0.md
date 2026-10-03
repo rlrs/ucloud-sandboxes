@@ -339,3 +339,61 @@ RL-scale milestones.
   unregistered 140-rollout runs validated them
   (`docs/benchmarks/admission-priority-2026-10-03`). The first training run is their
   production test.
+
+## 0.8.6: node-local model waits
+
+Status: prepared on 2026-10-03, not deployed. Production runs 0.8.5 (snapshot
+`439222185`, bundles in `/work/ucloud-sandboxes/release-0.8.5-20261003`, the pause tier on).
+No training runs yet: canaries are the production signal. Contents are in `CHANGELOG.md`
+under 0.8.6. The design is in `docs/node-local-model-waits.md`.
+
+### Steps
+
+1. **Preflight, read-only.** The fleet must be idle: 0 sandbox nodes, no routes, no
+   relay work.
+2. **Build** the 0.8.6 wheel and stage `/work/ucloud-sandboxes/release-0.8.6-<date>/`:
+   - `package_086.py` repacks the 0.8.5 bundles with it;
+   - `gateway_upgrade_086.py`, `set_snapshot_086.py` and `set_local_waits_086.py`.
+3. **Gateway first** (`gateway_upgrade_086.py check`, then `apply`).
+   - After installing the wheel, and before any service starts, apply runs
+     `python -m ucloud_sandboxes.shared_control migrate` as the services' user. It adds
+     `relay_requests.local_wait`, a metadata-only `ADD COLUMN ... DEFAULT false`.
+   - 0.8.6's relay writes that column on every enqueue, so it must exist first.
+   - **Rollback** restores the 0.8.5 venv and config. The column stays: 0.8.5 neither
+     reads nor writes it.
+4. **New worker snapshot** from `439222185`, as for 0.8.5: CPX32 source, VM init as
+   `ucloud`, the lifecycle canary, drain, sanitize.
+5. **Point workers at it, then turn the switch on.**
+   - `set_snapshot_086.py`.
+   - `set_local_waits_086.py` sets `sandbox.direct_local_model_waits` true and restarts
+     the relay and the autoscaler. The relay reads the switch at start; workers read it
+     at VM init.
+6. **Canary through the autoscaler**, one fresh CCX63:
+   - **On the worker:**
+     - the node agent runs `--local-model-waits`;
+     - `nft list table inet ucloud_local_wait` logs `10.42.0.2:8092` in both
+       directions.
+   - The lifecycle canary passes.
+   - **Relay benchmark on the private plaintext path:**
+     `bench_rl_scale.py rollout --think-mode relay --tasks 64 --sandbox-relay-url http://10.42.0.2:8092`.
+     Gates:
+     - pauses at least one per model wait;
+     - no lost agent, other than the images without Python;
+     - relay overhead at most the 0.8.5 canary's (p95 0.229 s on turns 0–6);
+     - no `relay_lifecycle` park rows for these requests;
+     - every wake row closed without a dispatch.
+   - **Hibernation fallback.** During a second, long-think run (`--think-seconds 20:25`),
+     explicitly park (hibernate) a few of its sandboxes mid-call. Gates:
+     - each parked rollout still finishes, its agent's retry reattaching to the stored
+       answer;
+     - one dispatched wake per hibernation, and no duplicate model sample.
+
+   **If the canary fails,** put back `deployment.before-local-waits.json` and replace
+   the worker. The relay and nodes then take today's path, with 0.8.6 code.
+
+### Rollback
+
+- **Switch only:** put back `deployment.before-local-waits.json`, restart the relay
+  and the autoscaler, and replace the workers.
+- **Workers:** also put back `deployment.before-snapshot.json`.
+- **Gateway:** `gateway_upgrade_086.py rollback`.

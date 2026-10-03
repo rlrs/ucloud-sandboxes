@@ -573,14 +573,23 @@ class Node:
         self.base = f"http://{'127.0.0.1' if host in ('', '0.0.0.0') else host}:{unquote(values['UCLOUD_NODE_AGENT_PORT'])}"
         self.state = unquote(values["UCLOUD_STATE_DIR"])
 
-    def call(self, method, path, body=None, timeout=600, headers=None):
+    def call(self, method, path, body=None, timeout=600, headers=None, retry_seconds=120.0):
+        """A 503 (an agent still starting after a reset, deferred admission) is
+        retried; creates carry a fixed operation id, so a retry is the same create."""
         request = urllib.request.Request(self.base + path, method=method,
                                          data=None if body is None else json.dumps(body).encode(),
                                          headers={"Authorization": "Bearer " + self.token,
                                                   "Content-Type": "application/json", **(headers or {})})
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            payload = response.read()
-        return json.loads(payload) if payload else {}
+        deadline = time.monotonic() + retry_seconds
+        while True:
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    payload = response.read()
+                return json.loads(payload) if payload else {}
+            except urllib.error.HTTPError as error:
+                if error.code != 503 or time.monotonic() >= deadline:
+                    raise
+            time.sleep(2)
 
     def environment_io(self):
         try:

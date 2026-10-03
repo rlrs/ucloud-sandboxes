@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import threading
 import unittest
+from unittest import mock
 from tempfile import TemporaryDirectory
 
 import shutil
@@ -72,6 +73,13 @@ class VirtualBlobTests(unittest.TestCase):
                 self.assertEqual(self.get(component, blob, 0, len(expected)), expected)
                 for start, length in ((1, 7), (len(expected) // 3, len(expected) // 2), (len(expected) - 50, 50)):
                     self.assertEqual(self.get(component, blob, start, length), expected[start:start + length])
+
+    def test_head_sizes_a_blob_larger_than_one_response(self):
+        component, blob = max(self.blobs_kept(), key=lambda item: (self.kept / item[1]).stat().st_size)
+        with mock.patch("ucloud_sandboxes.chunk_store_node.MAX_RESPONSE_BYTES", 4096):
+            status, headers, _ = http_request("HEAD", f"{self.url}/v2/virtual/{component}/blobs/sha256:{blob}",
+                                              headers={"Authorization": "Bearer " + READ}, max_bytes=0)
+        self.assertEqual((status, int(headers["Content-Length"])), (200, (self.kept / blob).stat().st_size))
 
     def test_virtual_blobs_need_the_read_token_and_a_known_blob(self):
         component, blob = self.blobs_kept()[0]

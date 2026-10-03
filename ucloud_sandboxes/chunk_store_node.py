@@ -941,7 +941,10 @@ class ChunkStoreServer:
         """One object, or with ``relative`` = (component, blob id) one virtual blob."""
         try:
             first, last, suffix = parse_range(spec)
-            if isinstance(relative, tuple):  # A layout needs the index: always off the loop.
+            if isinstance(relative, tuple) and head:  # A blob's size: no bytes, whatever its size.
+                size = (await self._loop.run_in_executor(self._reads, self.blobs.layout, relative[1]))[0]
+                found = (size, 0, size, [])
+            elif isinstance(relative, tuple):  # A layout needs the index: always off the loop.
                 found = await self._loop.run_in_executor(self._reads, self.blobs.read, *relative, first, last, suffix)
             else:
                 found = self.node.read(relative, first, last, suffix, cached_only=True)

@@ -6,6 +6,9 @@
   kill  a nydusd burst that kill -9s some daemons mid-read, then records what
         their sandboxes saw, whether other sandboxes were untouched, and what
         a new create of a killed image does
+  split fetch vs gVisor's filesystem path: a cold run, warm runs in the
+        sandbox, warm runs natively (chroot into the same host rootfs), and
+        the sentry's directfs evidence
 
 Needs /opt/m1-gate/chunk_store_gate_remote.py (staged by the gate) and, for
 nydusd, /opt/m1-gate/nydusd (v2.4.5 built with --features block-nbd).
@@ -239,13 +242,105 @@ def cmd_kill(args):
     return 0
 
 
+SPLIT_ENV = "PYTHONDONTWRITEBYTECODE=1"  # No run writes .pyc that a later run would read.
+
+
+def timed(command):
+    """A shell command that prints its own wall time in ns (T=...)."""
+    return ["sh", "-c", f's=$(date +%s%N); {SPLIT_ENV} {command} >/dev/null 2>&1; e=$(date +%s%N); '
+                        'echo "T=$((e-s)) rc=$?"']
+
+
+SPLIT_COMMANDS = {"true": "true",
+                  "import_sys": "python3 -c 'import sys'",
+                  "pip_version": "python3 -m pip --version"}
+
+
+def parse_t(output):
+    found = re.search(r"T=(\d+)", output)
+    return round(int(found.group(1)) / 1e9, 4) if found else None
+
+
+def runsc_view(sandbox_id):
+    """The sandbox's rootfs, its runsc flags and the sentry's host file fds
+    (with directfs the sentry opens rootfs files itself; without it, it holds
+    gofer sockets)."""
+    found = {}
+    for proc in Path("/proc").iterdir():
+        if not proc.name.isdigit():
+            continue
+        try:
+            argv = (proc / "cmdline").read_bytes().decode(errors="replace").split("\0")
+        except OSError:
+            continue
+        bundle = next((arg.split("=", 1)[1] if "=" in arg else argv[position + 1]
+                       for position, arg in enumerate(argv) if arg.startswith("--bundle")), "")
+        if argv[0] in ("runsc-gofer", "runsc-sandbox") and f"/{sandbox_id}." in bundle:
+            found[argv[0]] = (int(proc.name), argv, bundle)
+    if "runsc-sandbox" not in found:
+        return {}
+    pid, argv, bundle = found["runsc-sandbox"]
+    config = json.loads((Path(bundle) / "config.json").read_text())
+    rootfs = str(Path(bundle) / config["root"]["path"])
+    kinds = {"file": 0, "socket": 0, "other": 0}
+    for fd in Path(f"/proc/{pid}/fd").iterdir():
+        try:
+            target = os.readlink(fd)
+        except OSError:
+            continue
+        kind = ("socket" if target.startswith("socket:") else
+                "file" if target.startswith("/") and not target.startswith(("/dev/", "/memfd", "/proc/")) else "other")
+        kinds[kind] += 1
+    flags = [arg for arg in argv if arg.startswith("--") and any(
+        word in arg for word in ("directfs", "overlay", "gofer-mount", "file-access", "host-uds", "platform"))]
+    return {"rootfs": rootfs, "sentry_pid": pid, "flags": flags, "sentry_fds": kinds,
+            "gofer_flags": [arg for arg in found.get("runsc-gofer", (0, [], ""))[1] if "mount" in arg]}
+
+
+def cmd_split(args):
+    """Fetch vs gVisor filesystem path: cold, then warm in the sandbox, then
+    warm natively (chroot into the same host rootfs), per image."""
+    set_mode("python")
+    node, images = gate.Node(), json.loads(Path(args.images).read_text())
+    node.reset(clear_traces=True)
+    result = {}
+    for index, image in list(images.items())[:args.n]:
+        name = f"m1-{args.run}-x{index}"
+        node.create(name, image)
+        row = {"view": runsc_view(name), "sandbox": {}, "native": {}}
+        for key, command in SPLIT_COMMANDS.items():
+            samples = []
+            for _ in range(1 + args.warm):  # The first run is cold.
+                rc, output, wall = run_output(node, name, timed(command))
+                samples.append({"t": parse_t(output), "exec_wall": wall})
+            row["sandbox"][key] = {"cold": samples[0], "warm": samples[1:]}
+        rootfs = row["view"].get("rootfs")
+        if rootfs and Path(rootfs).is_dir():
+            for key, command in SPLIT_COMMANDS.items():
+                times = []
+                for _ in range(1 + args.warm):
+                    started = time.monotonic()
+                    done = subprocess.run(["chroot", rootfs, "/bin/sh", "-c", f"{SPLIT_ENV} {command}"],
+                                          capture_output=True, env={"PATH": "/usr/local/bin:/usr/bin:/bin"})
+                    times.append({"t": round(time.monotonic() - started, 4), "rc": done.returncode})
+                row["native"][key] = {"first": times[0], "warm": times[1:]}
+        node.delete(name)
+        result[index] = row
+        Path(args.out).write_text(json.dumps(result, indent=1))
+        print(json.dumps({index: {key: [sample["t"] for sample in value["warm"]]
+                                  for key, value in row["sandbox"].items()}}), flush=True)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
     arm = commands.add_parser("arm")
     arm.add_argument("--mode", choices=("python", "nydusd"), required=True)
     kill = commands.add_parser("kill")
-    for command in (arm, kill):
+    split = commands.add_parser("split")
+    split.add_argument("--warm", type=int, default=3)
+    for command in (arm, kill, split):
         command.add_argument("--images", required=True)
         command.add_argument("--n", type=int, required=True)
         command.add_argument("--run", required=True)
@@ -257,7 +352,7 @@ def main():
     kill.add_argument("--recreate", type=int, default=64)
     kill.add_argument("--seed", type=int, default=1)
     args = parser.parse_args()
-    return cmd_arm(args) if args.command == "arm" else cmd_kill(args)
+    return {"arm": cmd_arm, "kill": cmd_kill, "split": cmd_split}[args.command](args)
 
 
 if __name__ == "__main__":

@@ -79,8 +79,10 @@ import unittest
 # cache_bytes (LRU detach of idle components). +245 chunk-migrate convert, record,
 # switch, revert and status (M2 plan §5 steps 2-3; the plan sized the tool at
 # ~400 with release). +16 the index's presigned S3 reads retry transport errors
-# and 5xx (one read timeout failed a gate conversion). Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 113_071
+# and 5xx (one read timeout failed a gate conversion), +8 registration range-reads
+# only each tail's chunk table and the client waits 600 s for it. Lower it on
+# deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 113_079
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

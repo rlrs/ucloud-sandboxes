@@ -21,8 +21,8 @@ import threading
 import time
 from urllib.parse import parse_qs, quote, urlsplit
 
-from .chunk_store import (MAX_BOOTSTRAP_BYTES, MAX_MAP_ENTRIES, MAX_PACK_BYTES, ChunkMap, Locator, PACK_TRAILER,
-                          blob_layout_key, bootstrap_key, chunk_map_key, decode_tail_table, locator_key, pack_key,
+from .chunk_store import (MAX_BOOTSTRAP_BYTES, MAX_MAP_ENTRIES, MAX_PACK_BYTES, TAIL_ENTRY, TAIL_HEADER, ChunkMap,
+                          Locator, PACK_TRAILER, blob_layout_key, bootstrap_key, chunk_map_key, decode_tail_table, locator_key, pack_key,
                           parse_bootstrap, parse_pack_tail, require_hex, tail_key, zstd_content_size,
                           zstd_decompress)
 from .environment_artifact import RAFS_MAX_CHUNK_MAP_BYTES, content_digest, require_digest
@@ -35,6 +35,7 @@ LAYER_CLAIM_SECONDS = 30 * 60
 CHUNK_RESERVE_SECONDS = 10 * 60
 RESERVED, KNOWN, BUSY = 0, 1, 2  # reserve() states, one byte per id on the wire.
 MAX_TAIL_BYTES = 256 * 1024 ** 2  # A blob's tail object (chunk_store.encode_tail).
+REGISTER_TIMEOUT = 600.0
 _MAX_JSON = 1024 ** 2
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS chunks (id BLOB PRIMARY KEY, pack INTEGER, off INTEGER, clen INTEGER,
@@ -495,7 +496,12 @@ class ChunkIndexService:
             if size is not None:  # The table plus nydus's own blob metadata.
                 if size > MAX_TAIL_BYTES:
                     raise ValueError("nydus blob tail exceeds its bound")
-                tails.append((device[0], [entry[2] for entry in decode_tail_table(self.store.get(key, size))[0]]))
+                # Only the chunk table at the front, not nydus's metadata after it:
+                # whole tails of large layers outlasted S3 reads (M1 gate run 4).
+                url = self.store.url(key)
+                count = TAIL_HEADER.unpack(self.store.reader(url, 0, min(size, TAIL_HEADER.size)))[1]
+                table = self.store.reader(url, 0, min(size, TAIL_HEADER.size + count * TAIL_ENTRY.size))
+                tails.append((device[0], [entry[2] for entry in decode_tail_table(table)[0]]))
         return tails
 
     def _worker_url(self, key):
@@ -658,13 +664,13 @@ class ChunkIndexClient:
         self.base_url, self.timeout, self._request = base_url.rstrip("/"), timeout, request
         self._headers = {"Authorization": "Bearer " + token}
 
-    def _call(self, method, path, body=None, *, binary=False, max_bytes=_MAX_JSON):
+    def _call(self, method, path, body=None, *, binary=False, max_bytes=_MAX_JSON, timeout=None):
         headers = dict(self._headers)
         if body is not None and not binary:
             body = json.dumps(body, sort_keys=True).encode()
         headers["Content-Type"] = "application/octet-stream" if binary else "application/json"
         _, _, payload = self._request(method, self.base_url + path, headers=headers, body=body,
-                                      timeout=self.timeout, max_bytes=max_bytes)
+                                      timeout=timeout or self.timeout, max_bytes=max_bytes)
         return payload
 
     def locate(self, ids):
@@ -686,8 +692,10 @@ class ChunkIndexClient:
         return json.loads(self._call("POST", "/v1/chunks/commit", {"packs": packs, "layer": layer}))
 
     def register(self, component, bootstrap, chunk_map):
+        # The index reads each blob's tail table and writes layouts and the
+        # locator to the store: S3 work in proportion to the image.
         return json.loads(self._call("POST", "/v1/roots/register", {
-            "component": component, "bootstrap": bootstrap, "chunk_map": chunk_map}))
+            "component": component, "bootstrap": bootstrap, "chunk_map": chunk_map}, timeout=REGISTER_TIMEOUT))
 
     def locator(self, component):
         return Locator.decode(self._call("GET", f"/v1/roots/{require_digest(component)}/locator",

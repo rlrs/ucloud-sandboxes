@@ -197,9 +197,10 @@ code (off). Scripts are in `/work/ucloud-sandboxes/release-0.8.2-20261002`.
 
   The report is in `build/bench-smoke-20261002/rollout-48.json`.
 
-## 0.8.5: admission order and the pause tier (plan, not executed)
+## 0.8.5: admission order and the pause tier
 
-Status: prepared on 2026-10-03, not deployed. Production runs 0.8.4: gateway
+Status: deployed on 2026-10-03, steps 1–6 (execution log below); step 7 waits for
+the first training run. Before it, production ran 0.8.4: gateway
 `77.42.92.27`, worker snapshot `438866767`, bundles in
 `/work/ucloud-sandboxes/release-0.8.4-20261002`, `swap_gb` 0, pause tier off. The
 contents and default states are in `CHANGELOG.md` under 0.8.5. One rollout ships the
@@ -250,7 +251,8 @@ Unregistered CCX63 workers ran the relay pressure harness: 140 managed agents,
    - VM init shows `swapon` 64G, zswap N, and a swappable application-memory tmpfs.
    - The 0.8.4 lifecycle canary passes: create, exec, files, park, wake, delete.
    - `bench_rl_scale.py rollout --think-mode relay --tasks 64` passes with:
-     - `pauses` and `thaws` counting one per model wait;
+     - `pauses` and `thaws` counting one per model wait, plus one pair per SDK
+       status or log poll made during a pause;
      - relay overhead per call within 1.5× of
        `docs/benchmarks/rl-scale-relay-2026-10-03` at p95 (0.16 s on turns 0–6);
      - `pause_escalations` and `pause_reclaim_errors` at 0;
@@ -277,3 +279,61 @@ Unregistered CCX63 workers ran the relay pressure harness: 140 managed agents,
 `docs/benchmarks/rl-scale-relay-2026-10-03`). zswap stays off until the fleet's real
 compression ratio is measured. `warm_park.py` can be deleted once the pause tier is the
 only path.
+
+### Execution log (2026-10-03)
+
+Steps 1–6 ran on 2026-10-03. Step 7 (watch the first training run) has not.
+
+- **Preflight.** Idle fleet: 0 sandbox nodes, no routes, builds or relay work. No relay
+  PostgreSQL backup: relay PostgreSQL is not a container on the gateway, so
+  `scripts/backup_relay_postgres.py` does not apply. 0.8.5 ships no schema change.
+- **Build.** Wheel `a0c1dc76…` from `f9e1fa9` (later commits touch docs only). Bundles in
+  `/work/ucloud-sandboxes/release-0.8.5-20261003`: sandbox `ee7ea273…`, builder
+  `2079c46b…`. Only the agent wheel changed.
+- **Gateway.** `gateway_upgrade_085.py apply` at 18:36:54Z. `/healthz` reports 0.8.5;
+  the gateway, relay and autoscaler are active.
+- **Snapshot `439222185`** (`ucloud-sandboxes-sandbox-0.8.5-ubuntu-26.04-7.0.0-30`),
+  built from `438866767` on a CPX32. It used the 0.8.4 source-only overrides, with the
+  pause tier off (the live config still had `swap_gb` 0).
+  - VM init ran as `ucloud`, and the agent reported 0.8.5.
+  - The lifecycle canary passed twice: park 0.20–0.23 s, wake 0.23–0.26 s.
+  - The source was drained, sanitized and snapshotted, then deleted.
+- **Config.** `set_snapshot_085.py`, then `set_pause_tier_085.py`: `sandbox_image`
+  `439222185`, `direct_pause_tier` true, `swap_gb` 64, `direct_pause_tier_zswap` false.
+  Backups: `deployment.before-snapshot.json`, `deployment.before-pause-tier.json`.
+- **Canary through the autoscaler.** A fresh CCX63 (job `168561613`).
+  - VM init: a 64G swap file, zswap N, the application-memory tmpfs without `noswap`,
+    and the node agent running with `--pause-tier`.
+  - Lifecycle canary: create 61.0 s (cold boot), first exec 0.10 s, park 0.29 s, wake
+    0.42 s.
+- **Relay rollout:** `bench_rl_scale.py rollout --think-mode relay --tasks 64 --seed 1`,
+  the same harness (`c59ab924…`) and selection as the 0.8.4 baseline.
+  - Raw report:
+    `docs/benchmarks/rl-scale-relay-2026-10-03/raw/relay-64-085.json`.
+  - **Rollouts.** 57 of 64 succeeded. The 7 failures are the same images without
+    Python 3 as in the baseline (exit 97, a harness limit). No agent was lost.
+  - **Pause counters** (heartbeat deltas): `pauses` 641, `thaws` 638,
+    `checkpoints_completed` 0, `pause_escalations` 0, `pause_reclaim_errors` 0,
+    `pause_reclaims` 0. At peak, 26 of 63 sandboxes were paused and none parked.
+  - **The pause gate, read correctly.** Pauses outnumber the 456 model waits because a
+    read-only managed-process control exchange (an SDK job status or log poll) during
+    a pause thaws for that exchange and pauses again (`direct_service.py`
+    `keep_paused`). So there was one pause per wait, plus 185 poll re-pauses. Thaws
+    take 17 ms on average (`thaw_ms_total` 10,819), with no prefetch and no reclaim:
+    one node at 64 rollouts has no memory pressure.
+
+  | per call, s | 0.8.4 baseline | 0.8.5, pause tier |
+  | --- | ---: | ---: |
+  | relay overhead, turns 0–6: p50 / p95 / max | 0.053 / 0.16 / 0.50 | 0.073 / **0.229** / 0.47 |
+  | answer → agent resumes, turns 0–6: p50 / p95 | 0.018 / 0.025 | 0.038 / 0.046 |
+  | relay overhead, turn 7: p50 / p95 / max | 1.31 / 1.56 / 2.54 | 1.40 / 2.57 / 3.76 |
+
+  - **Overhead gate:** p95 0.229 s against the 0.24 s gate (1.5× of 0.16 s). It passes,
+    narrowly. The ~20 ms added per call is the thaw on the answer path.
+  - **The final-turn hold is longer:** turn 7 p95 is 2.57 s against 1.56 s. The cause
+    of that hold was not pinned before 0.8.5 (`rl-scale-relay-2026-10-03`), and one
+    run per version cannot tell a regression from noise. Watch it in step 7.
+- **Not exercised here:** reclaim to swap and admission under pressure. The
+  unregistered 140-rollout runs validated them
+  (`docs/benchmarks/admission-priority-2026-10-03`). The first training run is their
+  production test.

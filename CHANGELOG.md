@@ -2,12 +2,12 @@
 
 ## Unreleased
 
-## 0.8.5 (prepared 2026-10-03, not deployed)
+## 0.8.5 - 2026-10-03
 
-Gateway first, then workers on a new node bundle. The pause tier stays off until its own config step (`docs/rollout-0.8.0.md`, "0.8.5"). Everything below except the admission change is inert by default.
+Deployed with the pause tier on for new workers: snapshot `439222185`, `swap_gb` 64, zswap off (`docs/rollout-0.8.0.md`, "0.8.5"). Everything below except the admission change and the pause tier is inert by default.
 
 - **Admission puts running rollouts first (on by default).** A new sandbox may only spend the headroom that every queued continuation and restore leaves; before, only the head one's was protected, so launches slipped in while later wakes waited. A relay wake whose pages a pause reclaimed owes its thaw prefetch (1 GiB) instead of its whole swapped footprint; without swap nothing changes. In a 140-rollout memory-pressure run on one CCX63 (today's path), 137 waits were hibernated instead of 160 and the slowest wake fell from 57 s to 32 s (`docs/benchmarks/admission-priority-2026-10-03/`).
-- **Pause tier (C1.1) second pass, still off (`sandbox.direct_pause_tier`).** Reclaim now actually frees a paused sandbox's memory. Validated under the same pressure (`docs/benchmarks/pause-reclaim-2026-10-03/`): every model wait came back as a resume (wake p95 0.13 s against 14.2 s on today's path) and nothing was hibernated.
+- **Pause tier (C1.1) second pass, on in production (`sandbox.direct_pause_tier`; default off).** Reclaim now actually frees a paused sandbox's memory. Validated under the same pressure (`docs/benchmarks/pause-reclaim-2026-10-03/`): every model wait came back as a resume (wake p95 0.13 s against 14.2 s on today's path) and nothing was hibernated.
   - **zswap bounded per sandbox:** with zswap on, a paused cgroup may hold at most 25% of its memory bound there (`memory.zswap.max`, set at pause); the rest goes to swap. Incompressible guest memory filled a zswap pool charged to the same cgroup, so reclaims freed 13 MB each.
   - **128 MiB reclaim windows** (16 MiB halved the rate).
   - **No permanent stall:** a reclaim freeing under 16 MiB backs off (doubling from 10 s); only two in a row escalate to hibernate.

@@ -70,9 +70,10 @@ import unittest
 # acknowledged delivery and delayed wake). When every trainer uses the private
 # relay, the relay-driven park, the gateway's per-wait park and warm_park.py's
 # relay role go. +35: a pause landing on an answered call is undone (retried,
-# logged), and an answered call is never escalated to hibernate.
+# logged), and an answered call is never escalated to hibernate. +4 tunnel
+# calls (the relay benchmark's agents) take the local path too.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 112_684
+PACKAGE_LINE_BUDGET = 112_688
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

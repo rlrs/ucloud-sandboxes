@@ -47,8 +47,9 @@ from tests.test_package_budget import package_lines
 # +322 node-local model waits (packet and netlink parsing, the scheduler on a
 # fake clock, runtime glue, the relay's no-park and acknowledged delivery),
 # +27 the gate's parallel converters as distinct owners, +43 an answered call
-# re-paused by a status read is thawed, retried, and kept from escalation.
-SUITE_LINE_BUDGET = 96_884
+# re-paused by a status read is thawed, retried, and kept from escalation,
+# +35 a direct caller's tunnel answer needs no park or wake.
+SUITE_LINE_BUDGET = 96_919
 SUITE = Path(__file__).resolve().parent
 
 

@@ -365,6 +365,39 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response_headers["x-upstream"], "worker")
         self.assertNotEqual(response_headers.get("connection"), "close")
 
+    async def test_a_direct_callers_tunnel_answer_needs_no_park_or_wake(self) -> None:
+        # Node-local model waits: a sandbox on the private plaintext path is
+        # answered at once and its acknowledgment cancels the wake.
+        from unittest.mock import AsyncMock
+        from ucloud_sandboxes import model_relay
+        park, wake = AsyncMock(return_value="epoch"), AsyncMock(return_value="epoch")
+        with patch.object(model_relay, "_direct_caller", lambda _request: True):
+            async with relay_app(sandbox_bearer_token="sandbox-token", worker_bearer_token="worker-token",
+                                 request_timeout_seconds=5, worker_poll_timeout_seconds=1,
+                                 accepted_notifier=park, result_notifier=wake,
+                                 local_model_waits=True) as relay:
+                worker_headers = {"Authorization": "Bearer worker-token"}
+                _status, registered = await relay.request(
+                    "POST", "/v1/relay/rollouts", expected=201, headers=worker_headers,
+                    json={"rollout_id": "local-1", "metadata": {
+                        "sandbox_id": "s1", "sandbox_generation": 1,
+                        model_relay.AGENT_LIFECYCLE_METADATA_KEY: model_relay.MANAGED_AGENT_LIFECYCLE}})
+                token = registered["rollout"]["registration_token"]
+                client_task = asyncio.create_task(relay.request_bytes(
+                    "POST", f"/tunnels/local-1/_relay/{token}/chat/completions",
+                    headers={"Content-Type": "application/json"}, data=b'{"turn": 1}'))
+                _status, polled = await relay.request(
+                    "GET", "/worker/poll", expected=200, headers=worker_headers,
+                    params={"rollout_id": "local-1", "registration_token": token})
+                await relay.respond_bytes(polled["requests"][0], token, b'{"answer": 1}', status=200,
+                                          auth_headers=worker_headers,
+                                          headers={"Content-Type": "application/json"})
+                status, body, _headers = await client_task
+                await asyncio.sleep(0.3)  # Any dispatch would happen now, not after the 5 s grace.
+        self.assertEqual((status, body), (200, b'{"answer": 1}'))
+        park.assert_not_awaited()
+        wake.assert_not_awaited()
+
     async def test_general_tunnel_exposes_json_and_rejects_invalid_base64_response(
         self,
     ) -> None:

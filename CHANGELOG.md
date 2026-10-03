@@ -2,9 +2,13 @@
 
 ## Unreleased
 
-## 0.8.6 (prepared 2026-10-03, not deployed)
+## 0.8.7 (prepared 2026-10-03, gateway only)
 
-Gateway first: the relay needs its additive `relay_requests.local_wait` column, applied by `shared_control migrate` before the relay restarts. Then workers on a new snapshot, then the switch. Everything below except the switch is inert by default.
+- **Node-local model waits cover the relay's HTTP tunnel too.** 0.8.6 enqueued only OpenAI-route calls (`/rollouts/<id>/v1/chat/completions`) as local waits. Agents using `http_tunnel_url`, such as the relay benchmark's, still got the relay-driven park and wake: correct, but no saving. The canary found it: 456 of 456 calls had `local_wait` false. Gateway only: the relay runs there, and workers keep the 0.8.6 bundle.
+
+## 0.8.6 - 2026-10-03
+
+Deployed 2026-10-03 (gateway 20:44Z, snapshot `439244700`, switch on). Gateway first: the relay needs its additive `relay_requests.local_wait` column, applied by `shared_control migrate` before the relay restarts. Then workers on a new snapshot, then the switch. Everything below except the switch is inert by default.
 
 - **Node-local model waits, off by default (`sandbox.direct_local_model_waits`, needs the pause tier).** For agents that call the relay over plaintext on the private network (`http://10.42.0.2:8092`), the node pauses a sandbox while its call is outstanding and thaws it on the answer's first packet. It sees only TCP headers, through nftables NFLOG. The relay sends no park and delivers at once; it wakes through the gateway only an answer the guest never acknowledged, which means a sandbox hibernated mid-call. Per wait: no `/park` or `/wake`, no gateway statements, and about 10 ms from answer to agent. New relay column `relay_requests.local_wait` (additive). Design and gates: `docs/node-local-model-waits.md`. Spike: `docs/benchmarks/node-local-wake-2026-10-03/`. Verified on an unregistered worker: 400 of 400 calls paused, answer to agent 17 ms; a stall when a status read re-paused an answered call is fixed.
 - **Chunk-store converters reserve chunks before packing** (`POST /v1/chunks/reserve`, which replaces `/v1/chunks/lookup`). Builders converting at once pack each shared chunk once: per-pack commits alone left 2.3 GB of duplicate chunks in the M1 gate's 20 GB. A dead builder's hold lapses after 10 minutes. Builders and the index must be upgraded together (no chunk store is deployed).

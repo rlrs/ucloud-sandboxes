@@ -397,3 +397,28 @@ under 0.8.6. The design is in `docs/node-local-model-waits.md`.
   and the autoscaler, and replace the workers.
 - **Workers:** also put back `deployment.before-snapshot.json`.
 - **Gateway:** `gateway_upgrade_086.py rollback`.
+
+### Execution log (2026-10-03)
+
+- **Preflight:** idle; gateway 0.8.5.
+- **Build:** wheel `690bdf1c…`. Bundles: sandbox `0c456903…`, builder `427f6fda…`, with
+  only the agent wheel changed.
+- **Gateway:** `gateway_upgrade_086.py apply` at 20:44:40Z. The relay migration ran
+  (`migrated: true` on `ucloud_shared_prod`). `/healthz` reports 0.8.6, and the four
+  services are active.
+- **Snapshot `439244700`** from `439222185`. Its source config had swap and the pause
+  tier off. The lifecycle canary passed twice.
+- **Config:** `set_snapshot_086.py`, then `set_local_waits_086.py`. The switch is on,
+  and the relay and autoscaler were restarted.
+- **Autoscaler canary**, CCX63 `10.42.0.3`:
+  - `--pause-tier --local-model-waits`, NFLOG on `10.42.0.2:8092` in both directions,
+    64G of swap, zswap N.
+  - The lifecycle canary passed.
+  - **Relay benchmark** (`--sandbox-relay-url http://10.42.0.2:8092`):
+    - 57/64 (the same 7 images without Python);
+    - overhead on turns 0–6 p50 0.056 s, p95 0.165 s;
+    - 688 pauses for 456 waits, no escalations;
+    - **but all 456 requests had `local_wait` false,** with dispatched park and wake
+      rows. The benchmark's agents use the relay's HTTP tunnel, which 0.8.6 did not
+      mark local. **Fixed in 0.8.7, a gateway-only upgrade.**
+

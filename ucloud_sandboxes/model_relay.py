@@ -716,12 +716,15 @@ async def tunnel_http_proxy(request: web.Request) -> web.Response:
         ),
         defer_idempotency_until_disconnect=explicit_request_id is None,
         expected_registration_token=registration_token,
+        local_wait=_direct_caller(request),
     )
     response = await _wait_for_worker_response(
         request,
         relay_request,
         openai_errors=False,
     )
+    if relay_request.local_wait:
+        return await _deliver_local_wait(request, relay_request, *_generic_parts(request, response))
     return _generic_http_response(request, response)
 
 
@@ -777,7 +780,9 @@ async def _openai_proxy(request: web.Request, *, endpoint: str) -> web.Response:
     else:
         response_body = response.body
     if relay_request.local_wait:
-        return await _deliver_local_wait(request, relay_request, response_body, response)
+        payload = json.dumps(response_body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        headers = {**_safe_response_headers(response.headers), "Content-Type": "application/json"}
+        return await _deliver_local_wait(request, relay_request, response.status, headers, payload)
     return web.json_response(
         response_body,
         status=response.status,
@@ -793,7 +798,7 @@ def _direct_caller(request: web.Request) -> bool:
         return False
 
 
-async def _deliver_local_wait(request, relay_request, body, response) -> web.StreamResponse:
+async def _deliver_local_wait(request, relay_request, status, headers, payload) -> web.StreamResponse:
     """Answer a node-local wait, then wait for the guest's TCP acknowledgment.
 
     A paused guest is thawed by the answer's first packet and acknowledges it
@@ -803,9 +808,7 @@ async def _deliver_local_wait(request, relay_request, body, response) -> web.Str
     gets this answer instead of a second sample.
     """
     from .shared_control.relay import LOCAL_WAKE_GRACE
-    payload = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    stream = web.StreamResponse(status=response.status, headers=_safe_response_headers(response.headers))
-    stream.content_type = "application/json"
+    stream = web.StreamResponse(status=status, headers=headers)
     stream.content_length = len(payload)
     await stream.prepare(request)
     await stream.write(payload)
@@ -1106,6 +1109,11 @@ def _generic_http_response(
     request: web.Request,
     response: RelayWorkerResponse,
 ) -> web.Response:
+    status, headers, body = _generic_parts(request, response)
+    return web.Response(body=body, status=status, headers=headers)
+
+
+def _generic_parts(request: web.Request, response: RelayWorkerResponse) -> tuple[int, dict, bytes]:
     headers = _safe_response_headers(
         response.headers,
         preserve_content_type=True,
@@ -1122,11 +1130,7 @@ def _generic_http_response(
         ).encode("utf-8")
         if not any(key.lower() == "content-type" for key in headers):
             headers["Content-Type"] = "application/json"
-    return web.Response(
-        body=b"" if request.method == "HEAD" else body,
-        status=response.status,
-        headers=headers,
-    )
+    return response.status, headers, b"" if request.method == "HEAD" else body
 
 
 def validate_idempotency_key(value: str) -> None:

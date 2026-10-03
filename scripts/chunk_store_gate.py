@@ -94,6 +94,13 @@ DISTRIBUTION_URL = "https://github.com/distribution/distribution/releases/downlo
 _SECRET = re.compile(r"(X-Amz-Signature=|X-Amz-Credential=|Bearer |SECRET[A-Z_]*=|ACCESS_KEY[A-Z_]*=|API_KEY=)\S+")
 
 
+def forget_host(ip):
+    """Drop a gate address's host key for root (the driver's SSH) and for
+    ucloud (VM init's SSH): addresses recur across runs with new keys."""
+    return (f"ssh-keygen -q -f /root/.ssh/known_hosts -R {ip} >/dev/null 2>&1; "
+            f"runuser -u ucloud -- ssh-keygen -q -f /var/lib/ucloud-sandboxes/.ssh/known_hosts -R {ip} >/dev/null 2>&1")
+
+
 class GateError(RuntimeError):
     pass
 
@@ -471,7 +478,7 @@ class Gate:
             ips = list(plan["ips"].values())
             self.state["resources"]["known_hosts"] = sorted(set(self.state["resources"]["known_hosts"]) | set(ips))
             self.save()
-            self.gw("; ".join(f"ssh-keygen -q -f /root/.ssh/known_hosts -R {ip} >/dev/null 2>&1" for ip in ips)
+            self.gw("; ".join(forget_host(ip) for ip in ips)
                     + "; true")
             return ips
         self.step("provision", "known-hosts", known_hosts)
@@ -706,7 +713,7 @@ class Gate:
         for role in roles:
             self.step("workers", f"server-{role}", lambda role=role: self.create_server(role, args.worker_type, False))
             self.step("workers", f"known-hosts-{role}", lambda role=role: (self.gw(
-                f"ssh-keygen -q -f /root/.ssh/known_hosts -R {self.ip(role)} >/dev/null 2>&1; true"), True)[1])
+                forget_host(self.ip(role)) + "; true"), True)[1])
             self.step("workers", f"ssh-{role}", lambda role=role: self.wait_ssh(role))
             self.step("workers", f"init-{role}", lambda role=role: self.init_worker(role))
             self.step("workers", f"health-{role}", lambda role=role: (self.on(
@@ -846,7 +853,7 @@ class Gate:
             resources["staging"] = None
             self.save()
         if resources.get("known_hosts"):
-            self.gw("; ".join(f"ssh-keygen -q -f /root/.ssh/known_hosts -R {ip} >/dev/null 2>&1"
+            self.gw("; ".join(forget_host(ip)
                               for ip in resources["known_hosts"]) + "; true")
             resources["known_hosts"] = []
             self.save()

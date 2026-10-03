@@ -321,6 +321,8 @@ def build_parser() -> argparse.ArgumentParser:
                                 help="share startup traces through the managed registry (plan C2.7)")
     environment_io.add_argument("--chunk-store-url", default="",
                                 help="read RAFS images only from this store node, with the index read token")
+    environment_io.add_argument("--nydusd", default="", help="serve RAFS images with this nydusd (C2.1)")
+    environment_io.add_argument("--nydusd-sha256", default="", help="the nydusd binary's pinned sha256")
     add_environment_registry_args(environment_io)
     environment_io.set_defaults(func=cmd_serve_environment_io)
     from .chunk_convert import add_commands as add_chunk_store_commands
@@ -1034,12 +1036,15 @@ def cmd_serve_environment_io(args: argparse.Namespace) -> int:
     if bool(args.chunk_index_url) != bool(args.chunk_index_token_file) or (args.chunk_store_url
                                                                          and not args.chunk_index_url):
         raise ValueError("--chunk-index-url and --chunk-index-token-file go together; --chunk-store-url needs them")
+    if bool(args.nydusd) != bool(args.nydusd_sha256) or (args.nydusd and not args.chunk_store_url):
+        raise ValueError("--nydusd and --nydusd-sha256 go together and need --chunk-store-url")
     chunk_index = (args.chunk_index_url, read_token(args.chunk_index_token_file).decode()) \
         if args.chunk_index_url else None
     serve_backend(environment_registry_from_args(args), root=args.root, socket_path=args.socket,
                   cache_bytes=args.cache_bytes, prefetch=not args.disable_prefetch, chunk_index=chunk_index,
                   concurrent_misses=args.chunk_concurrent_misses, chunk_store_url=args.chunk_store_url or None,
-                  attach_concurrency=args.attach_concurrency, shared_traces=args.shared_traces)
+                  attach_concurrency=args.attach_concurrency, shared_traces=args.shared_traces,
+                  nydusd=(args.nydusd, args.nydusd_sha256) if args.nydusd else None)
     return 0
 
 
@@ -6921,6 +6926,9 @@ def vm_init_options_for_job(
             environment_options["environment_chunk_concurrent_misses"] = chunk_store.concurrent_misses
             if chunk_store.store_node is not None:
                 environment_options["environment_chunk_store_url"] = chunk_store.store_node.url
+            if chunk_store.nydusd is not None:
+                environment_options["environment_chunk_nydusd"] = chunk_store.nydusd.path
+                environment_options["environment_chunk_nydusd_sha256"] = chunk_store.nydusd.sha256
         if role == "builder":
             # Only the owned builder receives private material; workers get public trust alone.
             descriptor = os.open(selected_environment.signing_key_file, os.O_RDONLY | os.O_NOFOLLOW)

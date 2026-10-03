@@ -51,6 +51,9 @@ $SUDO chown root:root {KEY_FILE}
                        + f" --chunk-concurrent-misses {int(options.environment_chunk_concurrent_misses)}")
         if options.environment_chunk_store_url:  # C2.6: the store node is the only source.
             chunk_flags += " --chunk-store-url " + shlex.quote(options.environment_chunk_store_url)
+        if options.environment_chunk_nydusd:  # C2.1: nydusd serves RAFS images.
+            chunk_flags += (" --nydusd " + shlex.quote(options.environment_chunk_nydusd)
+                            + " --nydusd-sha256 " + options.environment_chunk_nydusd_sha256)
     setup += f'''# Never replace the adapter beneath existing sandboxes.
 if [ -e "$UCLOUD_STATE_DIR/direct-runtime/direct-registry.sqlite" ] && [ ! -e "$UCLOUD_STATE_DIR/environment-adapter" ]; then
   echo 'immutable environments require a fresh worker; retire the old adapter first' >&2; exit 1
@@ -95,7 +98,7 @@ def validate(options):
         if any((options.environment_repository, options.environment_trusted_keys_json,
                 options.environment_signing_key_pem, options.environment_allow_paths,
                 options.environment_preserve_mtimes, options.environment_chunk_index_url,
-                options.environment_chunk_store_url)):
+                options.environment_chunk_store_url, options.environment_chunk_nydusd)):
             raise ValueError("immutable environment bootstrap requires registry URL and producer trust")
         return
     from .environment_config import EnvironmentDeploymentConfig
@@ -125,6 +128,12 @@ def validate(options):
     if store_url and (not chunk_url or not store_url.startswith(("http://", "https://"))
                       or any(c in store_url for c in "\0\r\n '\"")):
         raise ValueError("invalid immutable environment chunk store node bootstrap")
+    if options.environment_chunk_nydusd or options.environment_chunk_nydusd_sha256:
+        from .environment_config import NydusdConfig
+        NydusdConfig.from_dict({"path": options.environment_chunk_nydusd,
+                                "sha256": options.environment_chunk_nydusd_sha256})
+        if not store_url:
+            raise ValueError("nydusd needs the chunk store node")
     if options.role == "sandbox":
         if options.environment_signing_key_pem:
             raise ValueError("sandbox workers must never receive environment signing keys")

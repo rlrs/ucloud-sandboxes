@@ -242,6 +242,14 @@ class EnvironmentBootstrapTests(unittest.TestCase):
             # The node agent advertises RAFS (M2 dispatch) only with a store node behind it.
             self.assertIn(" --environment-backend-socket /run/ucloud-environment/io.sock --environment-rafs", node)
             self.assertNotIn("--environment-rafs", reader)
+            nydusd = {"environment_chunk_nydusd": "/usr/local/libexec/nydusd", "environment_chunk_nydusd_sha256": "9" * 64}
+            self.assertIn("--chunk-store-url http://10.42.0.200:5091 --nydusd /usr/local/libexec/nydusd --nydusd-sha256 "
+                          + "9" * 64, render_vm_init_script(vm_fixtures.VmInitTests._options(
+                              **common, **chunk, **nydusd, environment_chunk_store_url="http://10.42.0.200:5091")))
+            self.assertNotIn("--nydusd", node)
+            for invalid in (nydusd, {**nydusd, "environment_chunk_nydusd_sha256": "x"}):
+                with self.subTest(nydusd=invalid), self.assertRaises(ValueError):  # Pinned, and only with a store node.
+                    render_vm_init_script(vm_fixtures.VmInitTests._options(**common, **chunk, **invalid))
             # Shared startup traces (C2.7) are opt-in.
             self.assertNotIn("--shared-traces", reader)
             self.assertIn(" --shared-traces", render_vm_init_script(vm_fixtures.VmInitTests._options(

@@ -250,6 +250,9 @@ class VmInitOptions:
     environment_chunk_concurrent_misses: int = 32
     # chunk_store.store_node: workers read only from the store node.
     environment_chunk_store_url: str = ""
+    # chunk_store.nydusd: nydusd serves RAFS images from the store node (C2.1).
+    environment_chunk_nydusd: str = ""
+    environment_chunk_nydusd_sha256: str = ""
     # The store role only: the chunk_store block (JSON), both index tokens and
     # the S3 key the node fills from (chunk_store_node.store_init_script).
     chunk_store_config_json: str = ""

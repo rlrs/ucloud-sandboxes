@@ -1,6 +1,7 @@
 """The nydusd spike's store side: blob-toc conversions keep nydus's chunk bytes
 and blob tails, and the store node rebuilds every blob exactly from packs
 (docs/benchmarks/nydusd-spike-2026-10-03)."""
+import hashlib
 import os
 from pathlib import Path
 import threading
@@ -105,7 +106,12 @@ class NydusdDeviceTests(unittest.TestCase):
     def test_a_shared_cache_keeps_a_blob_until_its_last_image_detaches(self):
         from ucloud_sandboxes.environment_nydusd import NydusdFactory
         with TemporaryDirectory() as directory:
-            factory = NydusdFactory("nydusd", "http://store", "token", Path(directory, "nydusd"), shared_cache=True)
+            binary = Path(directory, "nydusd-bin")
+            binary.write_bytes(b"pinned")
+            with self.assertRaisesRegex(ValueError, "pinned sha256"):
+                NydusdFactory(str(binary), "0" * 64, "http://store", "token", Path(directory, "nydusd"))
+            factory = NydusdFactory(str(binary), hashlib.sha256(b"pinned").hexdigest(), "http://store", "token",
+                                    Path(directory, "nydusd"))
             base, top = "a" * 64, "b" * 64
             for blob in (base, top):
                 for suffix in (".blob.data", ".blob.meta"):

@@ -130,6 +130,27 @@ class StoreNodeConfig:
 
 
 @dataclass(frozen=True)
+class NydusdConfig:
+    """``chunk_store.nydusd`` (C2.1, docs/benchmarks/nydusd-spike-2026-10-03):
+    workers serve RAFS images with stock nydusd v2.4.5 (built with
+    ``block-nbd``) from the store node's virtual blobs. The backend refuses a
+    binary whose sha256 differs."""
+    path: str
+    sha256: str
+
+    @classmethod
+    def from_dict(cls, raw):
+        if not isinstance(raw, dict) or set(raw) != {"path", "sha256"}:
+            raise ValueError("immutable_environments.chunk_store.nydusd fields do not match schema")
+        result = cls(**raw)
+        if (not isinstance(result.path, str) or not Path(result.path).is_absolute()
+                or any(c in result.path for c in "\0\r\n '\"")
+                or not isinstance(result.sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", result.sha256)):
+            raise ValueError("immutable_environments.chunk_store.nydusd needs an absolute path and a sha256")
+        return result
+
+
+@dataclass(frozen=True)
 class ChunkStoreConfig:
     """``immutable_environments.chunk_store`` (docs/chunk-store-design.md).
 
@@ -155,15 +176,20 @@ class ChunkStoreConfig:
     nydus_image: str
     concurrent_misses: int
     store_node: StoreNodeConfig | None = None  # Phase B (C2.6); off when absent.
+    nydusd: NydusdConfig | None = None  # C2.1: needs the store node's virtual blobs; off when absent.
 
     @classmethod
     def from_dict(cls, raw):
         from dataclasses import fields
-        names = {field.name for field in fields(cls)} - {"store_node"}
-        if not isinstance(raw, dict) or set(raw) - {"store_node"} != names:
+        optional = {"store_node", "nydusd"}
+        names = {field.name for field in fields(cls)} - optional
+        if not isinstance(raw, dict) or set(raw) - optional != names:
             raise ValueError("immutable_environments.chunk_store fields do not match schema")
-        node = raw.get("store_node")
-        result = cls(**{**raw, "store_node": None if node is None else StoreNodeConfig.from_dict(node)})
+        node, nydusd = raw.get("store_node"), raw.get("nydusd")
+        result = cls(**{**raw, "store_node": None if node is None else StoreNodeConfig.from_dict(node),
+                        "nydusd": None if nydusd is None else NydusdConfig.from_dict(nydusd)})
+        if result.nydusd is not None and result.store_node is None:
+            raise ValueError("immutable_environments.chunk_store.nydusd needs store_node")
         for name in names - {"force_path_style", "url_ttl_seconds", "concurrent_misses"}:
             value = getattr(result, name)
             if not isinstance(value, str) or not value or any(c in value for c in "\0\r\n "):
@@ -203,8 +229,9 @@ class ChunkStoreConfig:
 
     def to_dict(self):
         raw = asdict(self)
-        if self.store_node is None:
-            del raw["store_node"]  # Older releases reject unknown fields.
+        for name in ("store_node", "nydusd"):
+            if raw[name] is None:
+                del raw[name]  # Older releases reject unknown fields.
         return raw
 
     def credentials(self, environ=None):

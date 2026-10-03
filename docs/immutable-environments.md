@@ -224,6 +224,16 @@ installed but disabled.
   move there too (`serve_index`). Workers fail closed: no S3 fallback. See
   [chunk-store-design.md](chunk-store-design.md#c26-store-node-as-built) and
   [hetzner.md](hetzner.md#chunk-store-node-c26).
+* **nydusd (C2.1)** (`environment_nydusd.py`): with `chunk_store.nydusd`
+  (`{"path", "sha256"}`, needs `store_node`), each RAFS image is served by one
+  stock `nydusd nbd` (v2.4.5 built with `block-nbd`) on its device, reading the
+  store node's virtual blobs with the read token. Every chunk is checked against
+  the digests that the signed bootstrap's TOC pins. One filecache serves every
+  daemon on the node. The backend refuses a binary that does not match its
+  sha256. EROFS components keep the Python export, and our cache, prefetch and
+  traces do not see nydusd's reads. Images must be converted with
+  `--nydusd-blobs`. See
+  [benchmarks/nydusd-spike-2026-10-03](benchmarks/nydusd-spike-2026-10-03/README.md).
 
 M1 does not include GC (M3), the `image_roots` dispatch (M2) or builder
 automation: conversion is an explicit command.

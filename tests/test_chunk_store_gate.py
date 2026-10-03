@@ -204,6 +204,26 @@ class ResumeAndTeardownTests(GateTest):
                             for ref in images.values()))
         self.assertIn("sandboxes-m1-20261002t1800-b1", self.state()["resources"]["servers"])
 
+    def test_a_nydusd_block_installs_the_pinned_binary_on_canaries_only(self):
+        pinned = {"path": "/usr/local/libexec/ucloud-nydusd", "sha256": "9" * 64}
+        (self.root / "block.json").write_text(json.dumps({**BLOCK, "nydusd": pinned}))
+        for phase in ("provision", "configure"):
+            self.run_gate(phase, FakeRunner())
+        runner = FakeRunner()
+        self.assertEqual(self.run_gate("convert", runner), 0)
+        self.assertTrue(any("--nydusd-blobs" in " ".join(argv) for argv in runner.calls))
+        self.assertEqual(self.run_gate("workers", FakeRunner(), "--accept-canary-placement"), 1)  # No --nydusd.
+        runner = FakeRunner()
+        self.assertEqual(self.run_gate("workers", runner, "--accept-canary-placement", "--nydusd", "/work/nydusd"), 0)
+        calls = [" ".join(argv) for argv in runner.calls]
+        installs = [call for call in calls if "install -D -m 0755 /opt/m1-gate/nydusd" in call]
+        self.assertEqual(len(installs), 2)  # w1 and w2, each before its VM init; b1 stays on today's path.
+        self.assertIn("9" * 64 + "  /usr/local/libexec/ucloud-nydusd", installs[0])
+        init = next(index for index, call in enumerate(calls) if "init-vm" in call and "deployment-canary" in call)
+        self.assertLess(calls.index(installs[0]), init)
+        self.assertIn("immutable_environments.attach_concurrency=8", next(
+            call for call in calls if "deployment-canary.json" in call and "derive-config" in call))
+
     def test_workers_refuse_without_the_placement_acknowledgement(self):
         for phase in ("provision", "configure", "convert"):
             self.run_gate(phase, FakeRunner())

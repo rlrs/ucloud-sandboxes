@@ -308,6 +308,14 @@ class StoreNodeConfigTests(unittest.TestCase):
             ChunkStoreConfig.from_dict({**self.raw(), "index_url": "http://10.42.0.2:5090"})
         self.assertIsNotNone(ChunkStoreConfig.from_dict({**self.raw(serve_index=False),
                                                          "index_url": "http://10.42.0.2:5090"}).store_node)
+        # C2.1: nydusd is pinned, and reads only the store node's virtual blobs.
+        nydusd = {"path": "/usr/local/libexec/nydusd", "sha256": "9" * 64}
+        self.assertEqual(ChunkStoreConfig.from_dict(store.to_dict() | {"nydusd": nydusd}).to_dict()["nydusd"], nydusd)
+        for bad in ({**nydusd, "sha256": "short"}, {**nydusd, "path": "nydusd"}, {"path": nydusd["path"]}):
+            with self.subTest(nydusd=bad), self.assertRaises(ValueError):
+                ChunkStoreConfig.from_dict({**self.raw(), "nydusd": bad})
+        with self.assertRaisesRegex(ValueError, "needs store_node"):
+            ChunkStoreConfig.from_dict({**ChunkStoreConfigTests.RAW, "nydusd": nydusd})
 
     def test_the_store_role_renders_a_node_without_fleet_services(self):
         from tests import test_vm_init as vm_fixtures

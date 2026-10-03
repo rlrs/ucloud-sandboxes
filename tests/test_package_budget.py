@@ -61,8 +61,11 @@ import unittest
 # +5 admission puts running rollouts first (every queued wake reserved; a
 # swapped wake owes its prefetch), +7 net: chunk reservations close the convert
 # race (+66), paid for by deleting the attach-timing diagnostic and the
-# superseded chunk lookup (-59). Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 112_053
+# superseded chunk lookup (-59), +50 nydusd as config (chunk_store.nydusd, pinned
+# by sha256; the spike's environment switches deleted). The Python RAFS reader,
+# its cache and trace prefetch go once nydusd is the only RAFS path (M2).
+# Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 112_103
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

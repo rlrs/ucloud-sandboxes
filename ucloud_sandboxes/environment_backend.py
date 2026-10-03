@@ -479,9 +479,11 @@ class EnvironmentBackendClient:
 
 
 def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetch=True, chunk_index=None,
-                  concurrent_misses=32, chunk_store_url=None, attach_concurrency=1, shared_traces=False):
+                  concurrent_misses=32, chunk_store_url=None, attach_concurrency=1, shared_traces=False,
+                  nydusd=None):
     """``chunk_index`` is (URL, read token) when chunk-store images are enabled;
-    ``chunk_store_url`` makes the store node, with that token, the only source."""
+    ``chunk_store_url`` makes the store node, with that token, the only source;
+    ``nydusd`` (path, sha256) serves RAFS images from its virtual blobs (C2.1)."""
     if os.geteuid() != 0 or registry is None:
         raise ValueError("the artifact I/O backend requires root and registry trust")
     rafs, cache_options, factory = None, None, {}
@@ -500,15 +502,15 @@ def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetc
                                                          **access)
         # S3 demand misses wait 30-100 ms, not the registry's 3 ms.
         cache_options = {"concurrent_misses": concurrent_misses}
-        # Spike (docs/benchmarks/nydusd-spike-2026-10-03): nydusd serves RAFS
+        # C2.1 (docs/benchmarks/nydusd-spike-2026-10-03): nydusd serves RAFS
         # images from the store node's virtual blobs; our cache, prefetch and
         # traces never see their reads.
-        nydusd = os.environ.get("UCLOUD_ENVIRONMENT_NYDUSD")
-        if nydusd and chunk_store_url:
+        if nydusd is not None:
+            if not chunk_store_url:
+                raise ValueError("nydusd reads only from the chunk store node")
             from .environment_nydusd import NydusdFactory
-            factory = {"device_factory": NydusdFactory(
-                nydusd, chunk_store_url, chunk_index[1], Path(root) / "nydusd",
-                shared_cache=bool(os.environ.get("UCLOUD_ENVIRONMENT_NYDUSD_SHARED_CACHE")))}
+            factory = {"device_factory": NydusdFactory(*nydusd, chunk_store_url, chunk_index[1],
+                                                       Path(root) / "nydusd")}
             prefetch = False
     traces = None
     if shared_traces:

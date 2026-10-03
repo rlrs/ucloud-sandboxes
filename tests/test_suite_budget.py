@@ -41,8 +41,9 @@ from tests.test_package_budget import package_lines
 # second pass (zswap cap, stall backoff, eviction order, stop counters), +13
 # running rollouts first in admission (test_managed_growth, transition ledger),
 # +22 net chunk reservations (a waiting converter, a dead builder's lapse),
-# less the deleted attach-timing test.
-SUITE_LINE_BUDGET = 96_420
+# less the deleted attach-timing test, +46 nydusd as config (schema, unit flags,
+# the sha256 pin, the gate installing it on canaries only).
+SUITE_LINE_BUDGET = 96_466
 SUITE = Path(__file__).resolve().parent
 
 

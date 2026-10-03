@@ -629,7 +629,7 @@ class Gate:
         self.step("convert", "convert", lambda: self.job("converter", "convert", [
             "convert", *common, "--results", f"{OUT}/convert.jsonl", "--exclude", f"{OUT}/holdout.json",
             "--parallel", self.args.parallel, "--devices-per-slot", self.args.devices_per_slot,
-            *(["--nydusd-blobs"] if self.args.nydusd_blobs else [])], timeout_hours=12))
+            *(["--nydusd-blobs"] if self.args.nydusd_blobs or self.nydusd() else [])], timeout_hours=12))
         self.state["results"]["convert"] = self.step("convert", "results",
                                                      lambda: self.fetch("converter", f"{OUT}/convert.jsonl"))
         self.state["results"]["tally_convert"] = self.step("convert", "tally", lambda: self.tally("convert"))
@@ -654,6 +654,8 @@ class Gate:
         if not args.bundle:
             raise GateError("workers needs --bundle (the release's sandbox node bundle on the gateway)")
         roles = [role for role in self.worker_roles() if role != "b1"]
+        if self.nydusd() and not args.nydusd:
+            raise GateError("the block names chunk_store.nydusd: pass --nydusd, the built binary on the gateway")
         alias = f"ucloud-sandbox-registry:{args.gate_registry_port}"
         sample = json.loads((REPO / args.sample).read_text())
 
@@ -697,7 +699,9 @@ class Gate:
             # Canaries pull from the gate's registry and build nothing: no build cache there.
             **self.worker_overrides(), "registry_private_ip": self.ip("store"), "builder.buildx_cache_ref": "",
             "immutable_environments.trusted_keys_file": f"{self.staging}/canary-producers.json",
-            "immutable_environments.worker_enabled": True}.items()]
+            "immutable_environments.worker_enabled": True,
+            # nydusd's attach is fast enough to overlap (the nydusd spike: 10.6 s against 17.4 s serial).
+            **({"immutable_environments.attach_concurrency": 8} if self.nydusd() else {})}.items()]
         self.step("workers", "canary-config", lambda: (self.gw(
             f"python3 {self.staging}/chunk_store_gate_remote.py derive-config --source {shlex.quote(args.live_config)} "
             f"--block {self.staging}/block-canary.json --out {self.staging}/deployment-canary.json --owner ucloud "
@@ -718,6 +722,8 @@ class Gate:
             self.step("workers", f"known-hosts-{role}", lambda role=role: (self.gw(
                 forget_host(self.ip(role)) + "; true"), True)[1])
             self.step("workers", f"ssh-{role}", lambda role=role: self.wait_ssh(role))
+            if role != "b1" and self.nydusd():
+                self.step("workers", f"nydusd-{role}", lambda role=role: self.install_nydusd(role))
             self.step("workers", f"init-{role}", lambda role=role: self.init_worker(role))
             self.step("workers", f"health-{role}", lambda role=role: (self.on(
                 role, "systemctl is-active ucloud-environment-io.service ucloud-sandbox-node.service"), True)[1])
@@ -748,6 +754,22 @@ class Gate:
         for role in roles:
             self.step("workers", f"drain-{role}", lambda role=role: self.drain(role))
         self.save()
+
+    def nydusd(self):
+        """The block's chunk_store.nydusd: canaries serve RAFS images with it (C2.1)."""
+        if not self.args.chunk_store_block:
+            return None
+        return json.loads(Path(self.args.chunk_store_block).read_text()).get("nydusd")
+
+    def install_nydusd(self, role):
+        """The pinned binary from the gateway onto a canary, before VM init starts its backend."""
+        pinned = self.nydusd()
+        self.gw(f"install -m 0755 {shlex.quote(self.args.nydusd)} {self.staging}/nydusd && echo "
+                f"'{pinned['sha256']}  {self.staging}/nydusd' | sha256sum -c --quiet -")
+        self.to_host(role, ["nydusd"])
+        self.on(role, f"install -D -m 0755 {HOST}/nydusd {shlex.quote(pinned['path'])} && "
+                      f"echo '{pinned['sha256']}  {pinned['path']}' | sha256sum -c --quiet -")
+        return True
 
     def burst_images(self):
         if self.args.burst_images:
@@ -1075,6 +1097,8 @@ def parse_args(argv=None):
     parser.add_argument("--burst-images", default="", help="sample indices for the burst (default: S12's 20)")
     parser.add_argument("--holdout-count", type=int, default=2 * len(STEPS), help="images kept for crash injection")
     parser.add_argument("--nydusd-blobs", action="store_true", help="convert for nydusd (the nydusd spike)")
+    parser.add_argument("--nydusd", default="", help="the built nydusd on the gateway, when the block names "
+                        "chunk_store.nydusd (implies --nydusd-blobs)")
     parser.add_argument("--skip-bench", action="store_true", help="workers: set up only, run no bench or drain")
     parser.add_argument("--production-registry", default="http://10.42.0.2:5000", help="read only")
     parser.add_argument("--mirror-rate-mb", type=float, default=100.0)

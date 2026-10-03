@@ -1068,7 +1068,7 @@ def serve_chunk_store(args):
     tokens = [read_token(path) for path in (store.read_token_file, store.write_token_file)]
     node = build_node(store)
     blobs = None
-    if os.environ.get("UCLOUD_CHUNK_STORE_VIRTUAL_BLOBS"):  # Spike: nydusd reads blobs rebuilt from packs.
+    if store.nydusd is not None:  # C2.1: workers' nydusd reads blobs rebuilt from packs.
         from .chunk_index import ChunkIndexClient
         blobs = VirtualBlobs(node, ChunkIndexClient(store.index_url, tokens[1].decode()))
     host, port = store.store_node.listen.rsplit(":", 1)

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.9.1 - 2026-10-03 (store node and converters only)
+
+- **Chunk-index registration survives S3's tail.**
+  - The index now range-reads only each blob tail's chunk table, not the whole tail object with nydus's metadata.
+  - Its presigned S3 reads retry transport errors and 5xx at 0.5, 1 and 2 s.
+  - The index client waits up to 600 s for a registration.
+  - Why: M1 gate run 4 lost 2 of 157 conversions and production wave 1 lost 4 of 53, to one 30 s S3 read timeout each on the register or commit path.
+- **Deployment.** Workers and the gateway stay on 0.9.0: neither runs the index.
+
 ## 0.9.0 - 2026-10-03
 
 The production chunk store's release (docs/rollout-0.8.0.md, "0.9.0"). It changes no image path. Every sandbox still mounts its EROFS root until a wave is switched, and `dispatch_roots` stays off.

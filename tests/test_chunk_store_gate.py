@@ -187,6 +187,23 @@ class ResumeAndTeardownTests(GateTest):
         self.assertEqual(resources["staging"], "/var/tmp/m1-gate-20261002t1800")
         self.assertEqual(resources["servers"], {})
 
+    def test_a_baseline_worker_runs_the_burst_on_todays_path(self):
+        for phase in ("provision", "configure", "convert"):
+            self.run_gate(phase, FakeRunner())
+        runner = FakeRunner()
+        self.assertEqual(self.run_gate("workers", runner, "--accept-canary-placement"), 0)
+        calls = [" ".join(argv) for argv in runner.calls]
+        derive = next(call for call in calls if "deployment-baseline.json" in call and "derive-config" in call)
+        self.assertNotIn("--block", derive)  # The live config, no chunk store.
+        self.assertNotIn("registry_private_ip", derive)  # The live registry.
+        self.assertTrue(any("deployment-baseline.json --role sandbox" in call for call in calls))
+        self.assertTrue(any("10.42.0.52" in call and "bench --kind burst --images /opt/m1-gate/bench-burst-base.json"
+                            in call for call in calls))
+        images = json.loads((self.root / "state" / "20261002t1800" / "stage" / "bench-burst-base.json").read_text())
+        self.assertTrue(all(ref.startswith("ucloud-sandbox-registry:5000/ucloud-managed/") and "@sha256:" in ref
+                            for ref in images.values()))
+        self.assertIn("sandboxes-m1-20261002t1800-b1", self.state()["resources"]["servers"])
+
     def test_workers_refuse_without_the_placement_acknowledgement(self):
         for phase in ("provision", "configure", "convert"):
             self.run_gate(phase, FakeRunner())
@@ -210,6 +227,20 @@ def passing_results():
 class ReportTests(unittest.TestCase):
     def status(self, results):
         return {item["name"]: item["status"] for item in gate.evaluate(results)["criteria"]}
+
+    def test_a_command_missing_from_the_image_is_not_timed_and_bursts_are_compared(self):
+        results = passing_results()
+        results["bench_seq"]["72:pip_version"] = {"traced": {"wall": 0.17, "rc": 127}}
+        rows = [{"create": 1.0 + n, "import_sys": {"wall": 0.2}, "pip_version": {"wall": 1.0}} for n in range(3)]
+        results["bench_burst_base"] = {"traced": {"wall": 4.0, "n": 3, "rows": rows}}
+        verdict = gate.evaluate(results)
+        cold = next(item for item in verdict["criteria"] if item["name"] == "cold_commands")
+        self.assertEqual(cold["status"], "pass")
+        self.assertEqual([row["note"] for row in cold["measured"] if row.get("note")], ["not in image"])
+        self.assertEqual(verdict["burst_comparison"]["today"]["traced"]["create_p50"], 2.0)
+        self.assertIn("20-way burst against today's path", gate.render_readme(
+            {**verdict, "run_id": "r", "prefix": "p", "resources": {"vm_hours": 0, "eur_estimate": 0, "servers": []}},
+            "2026-10-03"))
 
     def test_all_criteria_pass(self):
         verdict = gate.evaluate(passing_results())
@@ -290,6 +321,17 @@ class RemoteHelperTests(unittest.TestCase):
             spec = {"id": "m1-run-0-imp-d", "image": "registry:5000/a:b", "network": "bridge", "command": ["sleep", "1"]}
             operation = SandboxOperation.from_dict(remote.create_operation(spec, 1791013358000, cli=cli))
         operation.validate_spec(SandboxSpec.from_dict(spec))
+
+    def test_derive_config_without_a_block_keeps_the_live_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "live.json").write_text(json.dumps({"immutable_environments": {"repository": "environments"}}))
+            argv = ["derive-config", "--source", str(root / "live.json"), "--out", str(root / "base.json"),
+                    "--set", 'sandbox.docker_quota_image_gb=64']
+            self.assertEqual(remote.main(argv), 0)
+            copy = json.loads((root / "base.json").read_text())
+            self.assertNotIn("chunk_store", copy["immutable_environments"])
+            self.assertEqual(copy["sandbox"]["docker_quota_image_gb"], 64)
 
     def test_derive_config_writes_only_a_copy_under_the_run_prefix(self):
         with tempfile.TemporaryDirectory() as directory:

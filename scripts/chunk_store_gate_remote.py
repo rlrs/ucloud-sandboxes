@@ -115,12 +115,15 @@ def cmd_derive_config(args):
     Only the copy is written; the source is opened read-only and never changed.
     """
     raw = json.loads(Path(args.source).read_text())
-    block = json.loads(Path(args.block).read_text())
-    if not str(block.get("prefix", "")).startswith(RUN_PREFIX):
-        raise SystemExit(f"chunk_store.prefix must stay under {RUN_PREFIX}")
     if raw.get("immutable_environments") is None:
         raise SystemExit("the source deployment has no immutable_environments block")
-    raw["immutable_environments"]["chunk_store"] = block
+    if args.block:
+        block = json.loads(Path(args.block).read_text())
+        if not str(block.get("prefix", "")).startswith(RUN_PREFIX):
+            raise SystemExit(f"chunk_store.prefix must stay under {RUN_PREFIX}")
+        raw["immutable_environments"]["chunk_store"] = block
+    elif raw["immutable_environments"].get("chunk_store") is not None:
+        raise SystemExit("the baseline copy must not carry a chunk_store block")
     for item in args.set:
         dotted, _, value = item.partition("=")
         set_dotted(raw, dotted, json.loads(value))
@@ -758,8 +761,8 @@ def parser():
     def add(name, function, *options):
         command = commands.add_parser(name)
         for option in options:
-            command.add_argument(f"--{option}", required=option not in ("owner", "exclude", "protect"),
-                                 default="" if option in ("owner", "exclude", "protect") else None)
+            optional = option in ("owner", "exclude", "protect", "block")
+            command.add_argument(f"--{option}", required=not optional, default="" if optional else None)
         command.set_defaults(func=function)
         return command
 

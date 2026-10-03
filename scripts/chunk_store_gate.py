@@ -343,10 +343,14 @@ class Gate:
     def on(self, role, command, **options):
         return self.gw(on_host(self.ip(role), command, self.key), **options)
 
+    def worker_roles(self):
+        """Chunk-store canaries, then the baseline worker on today's path (no chunk store)."""
+        return [*(f"w{n + 1}" for n in range(self.args.workers)), *(["b1"] if self.args.baseline else [])]
+
     def ip(self, role):
         ips = self.state["plan"]["ips"]
         if role not in ips and self.dry:  # A dry run of a later phase prints illustrative addresses.
-            roles = ["store", "converter", *(f"w{n + 1}" for n in range(self.args.workers))]
+            roles = ["store", "converter", *self.worker_roles()]
             ips.update(zip(roles, allocate_ips(self.args.ip_range, len(roles))))
         if role not in ips:
             raise GateError(f"no address planned for {role}; run provision first")
@@ -451,7 +455,7 @@ class Gate:
         def addresses():
             used = [entry["private_ip"] for entry in json.loads(LEDGER.read_text()).get("servers", {}).values()
                     if entry.get("private_ip")] if LEDGER.exists() else []
-            roles = ["store", "converter", *(f"w{n + 1}" for n in range(args.workers))]
+            roles = ["store", "converter", *self.worker_roles()]
             plan["ips"] = dict(zip(roles, allocate_ips(args.ip_range, len(roles), used)))
             return plan["ips"]
         self.step("provision", "addresses", addresses)
@@ -641,7 +645,7 @@ class Gate:
                             "on one would read the gate registry; pass --accept-canary-placement to run them")
         if not args.bundle:
             raise GateError("workers needs --bundle (the release's sandbox node bundle on the gateway)")
-        roles = [f"w{n + 1}" for n in range(args.workers)]
+        roles = [role for role in self.worker_roles() if role != "b1"]
         alias = f"ucloud-sandbox-registry:{args.gate_registry_port}"
         sample = json.loads((REPO / args.sample).read_text())
 
@@ -649,13 +653,20 @@ class Gate:
             name = sample[index]["prepared_reference"].split("@")[0]
             return f"{alias}/{name.split('/', 1)[1].rsplit(':', 1)[0]}:{ATTACH_TAG}"
 
+        def production_image(index):
+            """The same image as production workers see it: the live registry, by digest."""
+            return "ucloud-sandbox-registry:5000/" + sample[index]["prepared_reference"].split("/", 1)[1]
+
         def gateway_runtime():
             stage = self.root / "stage"
             stage.mkdir(parents=True, exist_ok=True)
             (stage / "bench-seq.json").write_text(json.dumps({str(i): image(i) for i in S10_BASELINES}, indent=1))
             (stage / "bench-burst.json").write_text(json.dumps({str(i): image(i) for i in BURST_IMAGES}, indent=1))
+            (stage / "bench-burst-base.json").write_text(json.dumps({str(i): production_image(i)
+                                                                     for i in BURST_IMAGES}, indent=1))
             (stage / "overrides.json").write_text(json.dumps(self.worker_overrides(), indent=1, sort_keys=True))
-            self.push(stage / "bench-seq.json", stage / "bench-burst.json", stage / "overrides.json")
+            self.push(stage / "bench-seq.json", stage / "bench-burst.json", stage / "bench-burst-base.json",
+                      stage / "overrides.json")
             # init-vm must be this release's: the live gateway's rejects chunk_store.
             self.gw(f"sudo -u ucloud test -r {shlex.quote(args.bundle)} && rm -rf {self.staging}/agent "
                     f"{self.staging}/bundle && mkdir -p {self.staging}/bundle {self.staging}/agent && "
@@ -681,6 +692,15 @@ class Gate:
             + " ".join(sets)), self.gw(f"sudo -u ucloud env PYTHONPATH=\"$(cat {self.staging}/site-packages.path)\" "
                                        f"python3 {self.staging}/chunk_store_gate_remote.py validate-config --config "
                                        f"{self.staging}/deployment-canary.json"), True)[2])
+        if args.baseline:
+            # Today's path on the same worker type: the live config, the same disk and cache sizes.
+            base_sets = " ".join(f"--set {shlex.quote(f'{key}={json.dumps(value)}')}"
+                                 for key, value in self.worker_overrides().items())
+            self.step("workers", "baseline-config", lambda: (self.gw(
+                f"python3 {self.staging}/chunk_store_gate_remote.py derive-config --source "
+                f"{shlex.quote(args.live_config)} --out {self.staging}/deployment-baseline.json --owner ucloud "
+                + base_sets), True)[1])
+            roles = [*roles, "b1"]
         for role in roles:
             self.step("workers", f"server-{role}", lambda role=role: self.create_server(role, args.worker_type, False))
             self.step("workers", f"known-hosts-{role}", lambda role=role: (self.gw(
@@ -691,18 +711,23 @@ class Gate:
                 role, "systemctl is-active ucloud-environment-io.service ucloud-sandbox-node.service"), True)[1])
             self.step("workers", f"stage-{role}", lambda role=role: (
                 self.on(role, f"install -d -m 0700 {HOST} {OUT}"),
-                self.to_host(role, ["chunk_store_gate_remote.py", "bench-seq.json", "bench-burst.json"]), True)[2])
+                self.to_host(role, ["chunk_store_gate_remote.py", "bench-seq.json", "bench-burst.json",
+                                    "bench-burst-base.json"]), True)[2])
         # Two workers run the sequential cycles and the burst at once; one runs them in turn.
-        plan = [("seq", roles[0]), ("burst", roles[-1])]
-        bench = {kind: ["bench", "--kind", kind, "--images", f"{HOST}/bench-{kind}.json", "--run", args.run_id,
-                        "--n", len(BURST_IMAGES)] for kind, _ in plan}
+        # The baseline worker runs the same burst on today's path alongside.
+        canaries = [role for role in roles if role != "b1"]
+        plan = [("seq", canaries[0]), ("burst", canaries[-1]), *([("burst-base", "b1")] if args.baseline else [])]
+        bench = {kind: ["bench", "--kind", kind.split("-")[0], "--images", f"{HOST}/bench-{kind}.json",
+                        "--run", args.run_id, "--n", len(BURST_IMAGES)] for kind, _ in plan}
         python = "/usr/bin/python3"  # The bench needs only the standard library.
         for position, (kind, role) in enumerate(plan):
             self.step("workers", f"start-bench-{kind}", lambda role=role, kind=kind: (
                 self.start_job(role, f"bench-{kind}", bench[kind], python=python), True)[1])
-            if len(roles) == 1 or position == len(plan) - 1:
+            if len(canaries) == 1 and kind == "seq" or position == len(plan) - 1:
                 for waited, waited_role in plan[:position + 1]:
-                    self.state["results"][f"bench_{waited}"] = self.step(
+                    if f"bench_{waited.replace('-', '_')}" in self.state["results"]:
+                        continue
+                    self.state["results"][f"bench_{waited.replace('-', '_')}"] = self.step(
                         "workers", f"bench-{waited}", lambda role=waited_role, kind=waited: self.wait_job(
                             role, f"bench-{kind}", bench[kind], timeout_hours=4, python=python))
         for role in roles:
@@ -718,13 +743,15 @@ class Gate:
         """VM init from the gateway as the ``ucloud`` user (it owns the trust
         files), with this release's CLI and the canary config copy."""
         server = self.state["resources"]["servers"][self.server_name(role)]
+        bundle = (self.args.baseline_bundle or self.args.bundle) if role == "b1" else self.args.bundle
         server["registered"] = True  # From here it may heartbeat: teardown drains it.
         self.save()
         self.gw(f"set -a; . /etc/ucloud-sandboxes/hetzner.env; set +a; cd /work/ucloud-sandboxes && "
                 f"runuser -u ucloud -- env PYTHONPATH=\"$(cat {self.staging}/site-packages.path)\" python3 -c "
                 "'import sys; from ucloud_sandboxes.cli import main; sys.exit(main(sys.argv[1:]))' "
-                f"init-vm {server['id']} --config {self.staging}/deployment-canary.json --role sandbox "
-                f"--package-spec {shlex.quote(self.args.bundle)} --ssh-private-key-file "
+                f"init-vm {server['id']} --config {self.staging}/deployment-"
+                f"{'baseline' if role == 'b1' else 'canary'}.json --role sandbox "
+                f"--package-spec {shlex.quote(bundle)} --ssh-private-key-file "
                 f"/var/lib/ucloud-sandboxes/state/ssh/gateway-init --execute --output json "
                 f"> {self.staging}/out/init-{role}.json 2>&1", timeout=2400)
         return True
@@ -886,6 +913,11 @@ def evaluate(results):
             for command, baseline in baselines.items():
                 cycle = (seq.get(f"{index}:{command}") or {}).get("traced") or {}
                 wall, limit = cycle.get("wall"), COLD_RATIO * baseline if baseline else PIP_LIMIT_SECONDS
+                if baseline is None and cycle.get("rc") == 127:
+                    # Not in the image (image 72 has no pip): no S10 baseline, nothing to time.
+                    rows.append({"index": index, "command": command, "wall": wall, "limit": None, "ok": None,
+                                 "ratio": None, "note": "not in image"})
+                    continue
                 ok = wall is not None and cycle.get("rc") == 0 and wall <= limit
                 passed &= ok
                 rows.append({"index": index, "command": command, "wall": wall, "limit": round(limit, 3), "ok": ok,
@@ -904,12 +936,31 @@ def evaluate(results):
         failed = [step for step in STEPS if not by_step.get(step, {}).get("ok")]
         criteria.append(criterion("crash_injection", not failed, {"failed_steps": failed, "steps": len(STEPS)},
                                   "every write-path step: killed, no visible partial image, rerun converges"))
+    comparison = {name: burst_summary(results.get(key)) for name, key in (
+        ("chunk_store", "bench_burst"), ("today", "bench_burst_base")) if results.get(key)}
     rollback = results.get("rollback")
     criteria.append(criterion("rollback_10", None if rollback is None else len(
         [row for row in rollback if row.get("ok")]) == len(ROLLBACK_IMAGES),
         None if rollback is None else f"{len([row for row in rollback if row.get('ok')])}/{len(ROLLBACK_IMAGES)}",
         "10 images unpacked, tree-equal and rebuilt by today's builder"))
-    return {"criteria": criteria, "pass": all(item["status"] == "pass" for item in criteria)}
+    return {"criteria": criteria, "pass": all(item["status"] == "pass" for item in criteria),
+            "burst_comparison": comparison}
+
+
+def burst_summary(bench):
+    """Per mode: wall, and create and first-command medians and maxima (seconds)."""
+    summary = {}
+    for mode, run in bench.items():
+        rows = run.get("rows") or []
+        if not rows:
+            continue
+        series = {"create": [row["create"] for row in rows],
+                  "import_sys": [row["import_sys"]["wall"] for row in rows],
+                  "pip_version": [row["pip_version"]["wall"] for row in rows]}
+        summary[mode] = {"wall": run["wall"], "n": run["n"], **{
+            f"{name}_{stat}": round(sorted(values)[len(values) // 2] if stat == "p50" else max(values), 3)
+            for name, values in series.items() for stat in ("p50", "max")}}
+    return summary
 
 
 def vm_hours(state, now):
@@ -935,9 +986,11 @@ def render_readme(verdict, date):
     for item in verdict["criteria"]:
         measured = item["measured"]
         if isinstance(measured, list):
-            failed = [f"{row['index']}:{row['command']}" for row in measured if not row["ok"]]
-            measured = f"{len(measured) - len(failed)}/{len(measured)} within limit" + (
-                f" (over: {', '.join(failed)})" if failed else "")
+            timed = [row for row in measured if row["ok"] is not None]
+            failed = [f"{row['index']}:{row['command']}" for row in timed if not row["ok"]]
+            measured = f"{len(timed) - len(failed)}/{len(timed)} within limit" + (
+                f" (over: {', '.join(failed)})" if failed else "") + (
+                f", {len(measured) - len(timed)} not in the image" if len(timed) < len(measured) else "")
         elif isinstance(measured, dict):
             measured = json.dumps(measured, sort_keys=True)
         lines.append(f"| {item['name']} | {item['status']} | {measured if measured is not None else '-'} | "
@@ -952,8 +1005,17 @@ def render_readme(verdict, date):
     if cold and isinstance(cold["measured"], list):
         lines += ["", "## Cold first commands (traced)", "", "| Image | Command | Wall s | Limit s | Ratio |",
                   "| ---: | --- | ---: | ---: | ---: |"]
-        lines += [f"| {row['index']} | {row['command']} | {row['wall']} | {row['limit']} | {row['ratio'] or '-'} |"
-                  for row in cold["measured"]]
+        lines += [f"| {row['index']} | {row['command']} | {row['wall']} | {row['limit'] or '-'} | "
+                  f"{row.get('note') or row['ratio'] or '-'} |" for row in cold["measured"]]
+    comparison = verdict.get("burst_comparison") or {}
+    if comparison:
+        lines += ["", "## 20-way burst against today's path", "",
+                  "The same bench, images and worker type: the chunk store against the live path (no chunk store).",
+                  "", "| Path | Mode | Wall s | Create p50 / max | import sys p50 / max | pip p50 / max |",
+                  "| --- | --- | ---: | ---: | ---: | ---: |"]
+        lines += [f"| {path} | {mode} | {row['wall']} | {row['create_p50']} / {row['create_max']} | "
+                  f"{row['import_sys_p50']} / {row['import_sys_max']} | {row['pip_version_p50']} / "
+                  f"{row['pip_version_max']} |" for path, modes in comparison.items() for mode, row in modes.items()]
     lines += ["", "Raw results: `summary.json` here, and `build/m1-gate/<run>/raw/` on the operator machine.", ""]
     return "\n".join(lines)
 
@@ -970,6 +1032,10 @@ def parse_args(argv=None):
     parser.add_argument("--converter-type", default="ccx63")
     parser.add_argument("--worker-type", default="ccx43")
     parser.add_argument("--workers", type=int, choices=(1, 2), default=2)
+    parser.add_argument("--no-baseline", dest="baseline", action="store_false",
+                        help="skip the baseline worker (today's path, same burst) beside the canaries")
+    parser.add_argument("--baseline-bundle", default="", help="the live release's node bundle for the baseline "
+                        "worker (default: --bundle)")
     parser.add_argument("--ip-range", default="10.42.0.48-10.42.0.63", help="private addresses; never .40-.47")
     store = parser.add_argument_group("store node (its service's config interface)")
     store.add_argument("--chunk-store-block", help="JSON file: immutable_environments.chunk_store for the run")

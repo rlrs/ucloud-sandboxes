@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **M2 waves (C2.13):** `chunk-migrate convert` converts a wave's images with full-tree verification, one process per image. Rerunning it resumes. `record`, `switch`, `revert` and `status` run on the gateway, and a switch re-points the image's durable owners to the new closure. Retention keeps a reverted root. Release is not built yet ([chunk-store-m2-plan.md §5.1](docs/chunk-store-m2-plan.md)).
+
 ## 0.8.8 - 2026-10-03 (gateway only)
 
 - **The relay reads a local wait's acknowledgment from a duplicated socket.** A guest that was not paused reads its answer and closes at once. The relay then found its own copy of the socket closed and counted the answer unacknowledged: it dispatched a needless wake through the gateway and marked the request reattachable. The 0.8.7 fallback canary showed it after every restore, when the next call is not paused. A reset still counts as unacknowledged.

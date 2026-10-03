@@ -9,12 +9,14 @@ import unittest
 from tests import test_environment_artifact as artifact_fixtures
 from tests.harness import LocalFleet
 from ucloud_sandboxes.capabilities import ENVIRONMENT_RAFS_CAPABILITY, ENVIRONMENT_ROOT_CAPABILITY
-from ucloud_sandboxes.chunk_migrate import inventory
+from ucloud_sandboxes.chunk_migrate import (convert_wave, inventory, read_jsonl, record_results, revert_wave,
+                                            switch_wave, wave_of)
 from ucloud_sandboxes.environment_artifact import OCI_IMAGE, attach_environment_to_image, canonical_bytes, publish_environment
 from ucloud_sandboxes.environment_dependencies import EnvironmentDependencyResolver
 from ucloud_sandboxes.environment_manifest import EnvironmentManifest
 from ucloud_sandboxes.gateway.image_roots import ImageRootsStore, retention_view
 from ucloud_sandboxes.gateway.placement import _sandbox_required_capabilities
+from ucloud_sandboxes.managed_registry import RegistryUsageStore, digest_protection_tag
 from ucloud_sandboxes.sandbox import SandboxSpec
 
 TEST_TIER = "contract"
@@ -37,7 +39,7 @@ class ImageRootsTests(artifact_fixtures.EnvironmentArtifactTests):
             store.record_converted("managed/a", D["1"], **row)
         store.transition("managed/a", D["1"], "reverted")
         self.assertIsNone(store.dispatch_root("managed/a", D["1"]))
-        self.assertEqual(store.live_roots(), set())
+        self.assertEqual(store.live_roots(), {D["4"]})  # Kept, so it can switch again.
         store.transition("managed/a", D["1"], "switched")
         store.transition("managed/a", D["1"], "released")
         with self.assertRaisesRegex(ValueError, "cannot become"):
@@ -138,6 +140,87 @@ class InventoryTests(artifact_fixtures.EnvironmentArtifactTests):
         self.assertEqual((summary["unique_oci_bytes"], summary["releasable_oci_bytes"]), (157, 150))  # D6 is kept.
         self.assertEqual(summary["families"]["SWE-smith"]["releasable_oci_bytes"], 100)
         self.assertEqual(summary["errors"], {})
+
+
+class WaveTests(artifact_fixtures.EnvironmentArtifactTests):
+    """Plan §5 steps 2-3: convert on a converter, record, switch, revert."""
+
+    def annotated_image(self):
+        manifest, source = EnvironmentManifest(self.digest), self.component.source_image
+        self.old = publish_environment(self.registry, source_image=source, environment=manifest,
+                                       image_config={}, signing_key=self.key, tag="old")
+        self.new = publish_environment(self.registry, source_image=source, environment=manifest,
+                                       image_config={"Cmd": ["/bin/new"]}, signing_key=self.key, tag="new")
+        self.client.manifests["image"] = canonical_bytes({"schemaVersion": 2, "mediaType": OCI_IMAGE,
+                                                          "config": {"digest": source}, "layers": []})
+        return attach_environment_to_image(self.registry, image_repository="managed/a", image_reference="image",
+                                           environment_digest=self.old)
+
+    def test_waves_follow_the_plan_and_a_rerun_resumes(self):
+        self.assertEqual([wave_of(f) for f in ("OpenSWE", "TMax", "foundation:terminal-prefix", "MultiSWE", "x")],
+                         ["1", "2", "3", "3", "4"])
+        rows = [{"repository": f"managed/{name}", "manifest_digest": D[digit], "config_digest": D["9"],
+                 "build_input": False, "family": family, "environment_root": D["8"]}
+                for name, digit, family in (("a", "1", "SWE-smith"), ("b", "2", "SWE-smith"), ("c", "3", "TMax"),
+                                            ("d", "4", "OpenSWE"))]
+        rows.append({**rows[0], "repository": "managed/e", "environment_root": None})  # No root: nothing to do.
+        calls, results = [], self.root / "results.jsonl"
+
+        def convert(repository, digest, slot):
+            calls.append((repository, slot))
+            if repository == "managed/b":
+                raise RuntimeError("tree differs")
+            return {"root": D["5"], "components": [D["6"]],
+                    "source_image": D["7"] if repository == "managed/d" else D["9"]}
+        summary = convert_wave(rows, "1", convert=convert, results=results, parallel=2)
+        self.assertEqual((summary["pending"], summary["converted"]), (3, 1))
+        self.assertEqual(sorted(summary["failed"]), ["managed/b@" + D["2"], "managed/d@" + D["4"]])
+        self.assertTrue(all(slot in (0, 1) for _, slot in calls))
+        done = [row for row in read_jsonl(results) if row.get("new_root")]
+        self.assertEqual([(row["repository"], row["old_root"], row["verified"]) for row in done],
+                         [("managed/a", D["8"], True)])
+        calls.clear()
+        convert_wave(rows, "1", convert=convert, results=results, parallel=2)
+        self.assertEqual(sorted(name for name, _ in calls), ["managed/b", "managed/d"])  # Failures retry.
+
+    def test_record_switch_and_revert_repoint_durable_owners(self):
+        digest, roots = self.annotated_image(), ImageRootsStore(self.root / "image-roots.sqlite3")
+        results = self.root / "results.jsonl"
+        result = {"repository": "managed/a", "manifest_digest": digest, "config_digest": self.component.source_image,
+                  "old_root": self.old, "new_root": self.new, "wave": "1", "build_input": False, "verified": True}
+        results.write_text("".join(json.dumps(item) + "\n" for item in (
+            result, {**result, "repository": "managed/b", "old_root": self.new}, {**result, "repository": "managed/c", "new_root": None})))
+        summary = record_results(roots, self.registry, results)
+        self.assertEqual(summary["recorded"], 1)
+        self.assertIn("changed", summary["refused"]["managed/b@" + digest])  # Not its annotation.
+        self.assertEqual(record_results(roots, self.registry, results)["unchanged"], 1)
+        results.write_text(json.dumps({**result, "verified": False, "new_root": self.old}) + "\n")
+        self.assertIn("verification", next(iter(record_results(roots, self.registry, results)["refused"].values())))
+
+        usage, tagged = RegistryUsageStore(self.root / "registry-usage.sqlite"), []
+        self.client.ensure_digest_protection_tag = lambda repository, identity: tagged.append(identity)
+        owner = "image-pool:a"
+        usage.acquire_reference("managed/a", "latest", owner, digest=digest)
+        for identity in (self.old, self.digest):
+            usage.acquire_reference("environments", digest_protection_tag(identity), owner + ":environment",
+                                    digest=identity)
+        usage.acquire_reference("managed/a", "latest", "sandbox-route:v1:x", digest=digest)
+        summary = switch_wave(roots, self.registry, usage, "1", registry_host="r:5000")
+        self.assertEqual((summary["switched"], summary["owners_repointed"]), (1, 1))
+        self.assertEqual(roots.dispatch_root("managed/a", digest), self.new)
+        leases = usage.snapshot().leases
+        held = {lease.digest for lease in leases.values() if lease.owner == owner + ":environment"}
+        self.assertEqual(held, {self.old, self.new, self.digest})  # The old closure stays until release.
+        self.assertFalse(any(lease.owner.startswith("sandbox-route:") and lease.digest == self.new
+                             for lease in leases.values()))
+        self.assertEqual(tagged, [self.new])
+        self.assertEqual(switch_wave(roots, self.registry, usage, "1", registry_host="r:5000")["switched"], 0)
+        self.assertEqual(revert_wave(roots, "1", detail="drill"), {"wave": "1", "reverted": 1})
+        self.assertIsNone(roots.dispatch_root("managed/a", digest))
+        self.assertIn(self.new, roots.live_roots())
+        self.assertEqual(switch_wave(roots, self.registry, usage, "1", registry_host="r:5000",
+                                     keys={("managed/x", digest)})["switched"], 0)  # Another family.
+        self.assertEqual(switch_wave(roots, self.registry, usage, "1", registry_host="r:5000")["switched"], 1)
 
 
 class GatewayDispatchTests(unittest.TestCase):

@@ -323,6 +323,54 @@ order does not change deduplication, only how fast each wave covers training:
 4. the unknown family, less whatever §9 decides to delete: up to 1,455 images,
    410 GB.
 
+### 5.1 Running a wave (built)
+
+`chunk-migrate` carries steps 2 and 3. Wave membership is the inventory
+family (`WAVES` in `chunk_migrate.py`, the list above).
+
+1. **Convert, on each converter** (root, with the production
+   `environment-producer` signing key, the chunk-store S3 key and the index
+   write token):
+   ```bash
+   ucloud-sandboxes chunk-migrate convert --config converter.json \
+     --chunk-index-token-file write.token --work-root /var/lib/convert \
+     --environment-registry-url http://10.42.0.2:5000 --environment-registry-repository <environments> \
+     --environment-trusted-keys trust.json --environment-signing-key producer.pem \
+     --rows inventory.jsonl --wave 1 --results wave-1.jsonl --parallel 12 \
+     --verify-device /dev/nbd0 ... --verify-device /dev/nbd23
+   ```
+   - Each image converts in its own process (`convert-environment
+     --nydusd-blobs`), with its own index owner and its slot's NBD devices.
+   - The full-tree check is mandatory.
+   - A rerun skips converted images and retries failures.
+2. **Record, on the gateway** (as `ucloud`): `chunk-migrate record --results
+   wave-1.jsonl`. Each verified result becomes a `converted` row, once:
+   - both roots load with the gateway's trusted keys;
+   - the old root is still the image's annotation;
+   - both roots name the image's config.
+
+   Refusals are listed per image.
+3. **Switch** (as `ucloud`, with `dispatch_roots` on, or it refuses):
+   `chunk-migrate switch --wave 1 [--rows inventory.jsonl --family SWE-smith]`.
+   - Rows move to `switched`.
+   - Every durable owner of the image (`image-pool:`, `image-foundation:`,
+     `shared-task:`, `shared-source:`) is acquired on the new closure, through
+     the gateway's own protection path and lease fence.
+   - Routes keep the root their spec pinned.
+   - No cache to flush: the resolver keys its cache on the dispatched root.
+4. **Revert** (§7): `chunk-migrate revert --wave 1 [--family …] --reason …`.
+   Retention keeps a reverted root, so the rollback drill can switch the same
+   rows again.
+5. **Status**: `chunk-migrate status`, rows per wave and state.
+
+**Not built yet: release.** It is needed only after every wave is switched
+(§9, decision 2). It needs:
+- release-aware resolution;
+- the release conditions of design decision 6;
+- deleting the manifests, under the lease fence;
+- releasing the old closure's owner rows one by one. `release_owner` would
+  drop the new closure too.
+
 ## 6. Gates
 
 | Gate | Measure | When |
@@ -354,7 +402,7 @@ order does not change deduplication, only how fast each wave covers training:
 | Capabilities and RAFS-aware dispatch | heartbeats, `capabilities.py`, `gateway/placement.py`, `control_plane.py` | ~120 |
 | `image_roots.sqlite3`, journal, gateway readers | new `gateway/image_roots.py`, `image_resolution.py`, `environment_dependencies.py` | ~250 |
 | Retention and eviction from `image_roots`; owner re-pointing | `registry_retention.py`, `cli.py`, `managed_registry.py` | ~150 |
-| `chunk-migrate`: `inventory`, `convert --wave`, `switch`, `revert`, `release`, `status` | new `chunk_migrate.py` | ~400 |
+| `chunk-migrate`: `inventory`, `convert --wave`, `record`, `switch`, `revert`, `status` (built); `release` | new `chunk_migrate.py` | ~400 (437 built) |
 | Production store node, config, runbook | `make_config.py`, `hetzner.md` | runbook |
 | Tests: spec compatibility both ways, mapping, release-then-resolve, retention, the re-resolve hazard | `tests/` | ~500 |
 

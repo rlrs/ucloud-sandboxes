@@ -76,8 +76,10 @@ import unittest
 # +36 locators and nydusd blob layouts stored at registration: runtime reads no
 # longer query the index (gate run 3's stall), +37 nydusd in the node bundle
 # (pins, VM init's verification and install), +32 nydusd's cache within
-# cache_bytes (LRU detach of idle components). Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 112_810
+# cache_bytes (LRU detach of idle components). +245 chunk-migrate convert, record,
+# switch, revert and status (M2 plan §5 steps 2-3; the plan sized the tool at
+# ~400 with release). Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 113_055
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

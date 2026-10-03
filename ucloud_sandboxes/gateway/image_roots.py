@@ -18,7 +18,9 @@ from ..environment_artifact import require_digest
 TRANSITIONS = {"converted": {"switched", "reverted"}, "switched": {"released", "reverted"},
                "reverted": {"switched"}, "released": set()}
 DISPATCHED = ("switched", "released")
-LIVE = ("converted", "switched", "released")  # Retention keeps these new roots.
+# Retention keeps these new roots; a reverted one too, so the switch can follow
+# again without reconversion.
+LIVE = ("converted", "switched", "released", "reverted")
 COLUMNS = ("repository", "manifest_digest", "config_digest", "old_root", "new_root", "wave", "state",
            "build_input", "updated")
 

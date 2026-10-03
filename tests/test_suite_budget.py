@@ -52,8 +52,10 @@ from tests.test_package_budget import package_lines
 # reads and closes at once is acknowledged; the gate stages nydusd's directory,
 # +25 stored locators and blob layouts (virtual blobs read without an index),
 # +64 a bundled nydusd (pinned, verified, refused when tampered; repack),
-# +11 the gate leaves a bundled nydusd to VM init, +45 the device cache budget.
-SUITE_LINE_BUDGET = 97_084
+# +11 the gate leaves a bundled nydusd to VM init, +45 the device cache budget,
+# +87 M2 waves: resumable conversion, recording, switch re-pointing durable
+# owners (routes keep theirs), revert.
+SUITE_LINE_BUDGET = 97_171
 SUITE = Path(__file__).resolve().parent
 
 

@@ -1,21 +1,42 @@
 """Chunk store M2 operator tool (docs/chunk-store-m2-plan.md §5).
 
-``chunk-migrate inventory`` is step 1: a read-only list of every managed image
-with its environment root, components, sizes, build-input status and family,
-from which the waves and their predicted release are planned. It reads
-manifests and the prepared catalog only; it writes its two output files and
-nothing else.
+- ``inventory`` (step 1): a read-only list of every managed image with its
+  environment root, components, sizes, build-input status and family, from
+  which the waves and their predicted release are planned.
+- ``convert`` (step 2, on a disposable converter): converts and full-tree
+  verifies a wave's images into the chunk store, appending one result line per
+  image.
+- ``record`` (gateway): each verified result becomes a ``converted``
+  ``image_roots`` row once its root loads with the gateway's trusted keys.
+- ``switch`` / ``revert`` (step 3, gateway): dispatch a wave's new roots, and
+  re-point its durable owners to the new closure; or go back to the
+  annotation.
+- ``status``: rows per wave and state.
 """
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 import json
+import os
 from pathlib import Path
 import sqlite3
+import subprocess
+import sys
 import threading
+from urllib.parse import urlparse
 import zipfile
 
 SELECTORS_NAME = "all-image-selectors.json"
+# Plan §5: waves in order of training rows per byte. A name ending in ":" is a
+# family prefix (the foundations).
+WAVES = {"1": ("SWE-smith", "OpenSWE"), "2": ("TMax", "Terminal-Lego"),
+         "3": ("ScaleSWE", "SWE-rebench v2", "SWE-Lego", "R2E-Gym", "MultiSWE", "foundation:"),
+         "4": ("unknown",)}
+# Owners a switch re-points to the new closure (plan §3.3). Routes keep the
+# root their spec pinned; any other owner keeps the old closure, which blocks
+# that image's release.
+DURABLE_OWNERS = ("image-pool:", "image-foundation:", "shared-task:", "shared-source:")
+CLI = "import sys; from ucloud_sandboxes.cli import main; sys.exit(main(sys.argv[1:]))"
 
 
 def pinned_references(values):
@@ -165,6 +186,140 @@ def summarize(rows, components, layer_sizes):
                          for name, family in sorted(families.items())}}
 
 
+def wave_of(family):
+    for wave, families in WAVES.items():
+        if any(family == name or (name.endswith(":") and family.startswith(name)) for name in families):
+            return wave
+    return "4"
+
+
+def read_jsonl(path):
+    path = Path(path)
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()] if path.exists() else []
+
+
+def convert_wave(rows, wave, *, convert, results, parallel):
+    """Step 2: convert a wave's images, ``parallel`` at once. ``convert``
+    (repository, manifest digest, slot) returns the converter's result after
+    its full-tree verification, or raises. A rerun skips converted images."""
+    done = {(row["repository"], row["manifest_digest"]) for row in read_jsonl(results) if row.get("new_root")}
+    pending = [row for row in rows if row.get("environment_root") and wave_of(row["family"]) == wave
+               and (row["repository"], row["manifest_digest"]) not in done]
+    guard, slots = threading.Lock(), list(range(parallel))
+
+    def one(row):
+        with guard:
+            slot = slots.pop()
+        record = {key: row[key] for key in ("repository", "manifest_digest", "config_digest", "build_input", "family")}
+        record.update(wave=wave, old_root=row["environment_root"])
+        try:
+            result = convert(row["repository"], row["manifest_digest"], slot)
+            if result["source_image"] != row["config_digest"]:
+                raise ValueError("the converted root names another image config")
+            record.update(new_root=result["root"], components=result["components"], verified=True)
+        except Exception as exc:  # noqa: BLE001 - one failed image is reported, not fatal
+            record["error"] = f"{type(exc).__name__}: {exc}"[-500:]
+        finally:
+            with guard:
+                slots.append(slot)
+        with guard, open(results, "a") as handle:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+        return record
+
+    with ThreadPoolExecutor(parallel) as pool:
+        records = list(pool.map(one, pending))
+    return {"wave": wave, "pending": len(pending), "converted": sum("new_root" in item for item in records),
+            "failed": [f"{item['repository']}@{item['manifest_digest']}" for item in records if "error" in item]}
+
+
+def record_results(roots, environments, results):
+    """Each verified conversion becomes a ``converted`` row once both roots
+    load with the gateway's trusted keys, the old one is still the image's
+    annotation, and both name the image's config. Idempotent."""
+    from .environment_artifact import load_environment, load_image_environment
+    summary = {"recorded": 0, "unchanged": 0, "refused": {}}
+    for result in read_jsonl(results):
+        if not result.get("new_root"):
+            continue
+        key = (result["repository"], result["manifest_digest"])
+        try:
+            current = roots.get(*key)
+            if current is not None and current["new_root"] == result["new_root"]:
+                summary["unchanged"] += 1
+                continue
+            if result.get("verified") is not True:
+                raise ValueError("no full-tree verification")
+            old_root, old = load_image_environment(environments, *key)
+            new = load_environment(environments, result["new_root"])
+            if old_root != result["old_root"] or {old.source_image, new.source_image} != {result["config_digest"]}:
+                raise ValueError("the image's root or config changed since its conversion")
+            roots.record_converted(*key, config_digest=result["config_digest"], old_root=old_root,
+                                   new_root=result["new_root"], wave=result["wave"],
+                                   build_input=result["build_input"], detail="recorded from " + str(results))
+            summary["recorded"] += 1
+        except Exception as exc:  # noqa: BLE001 - reported per image
+            summary["refused"]["@".join(key)] = f"{type(exc).__name__}: {exc}"[:300]
+    return summary
+
+
+def durable_owners(usage):
+    """(repository, manifest digest) -> {(owner, tag)} for the durable,
+    non-expiring image owners a switch re-points."""
+    owners = {}
+    for lease in usage.snapshot().leases.values():
+        if (not lease.expires_at and lease.owner.startswith(DURABLE_OWNERS)
+                and not lease.owner.endswith(":environment")):
+            owners.setdefault((lease.repository, lease.digest), set()).add((lease.owner, lease.tag))
+    return owners
+
+
+def switch_wave(roots, environments, usage, wave, *, registry_host, keys=None):
+    """Step 3: dispatch the wave's converted (or reverted) roots, then acquire
+    every durable owner of the image on the new closure. The old closure
+    stays with those owners until the image is released, and with every route
+    that started on it until the route ends."""
+    from .environment_artifact import load_environment
+    from .environment_dependencies import EnvironmentDependencyResolver
+    from .gateway.registry_refs import _persist_registry_image_protection
+    resolver = EnvironmentDependencyResolver(environments, image_roots=roots)
+    owners, switched, repointed = durable_owners(usage), 0, 0
+    for row in roots.rows(wave=wave):
+        key = (row["repository"], row["manifest_digest"])
+        if row["state"] not in ("converted", "reverted") or (keys is not None and key not in keys):
+            continue
+        load_environment(environments, row["new_root"])  # Still published, and signed by a trusted key.
+        held = sorted(owners.get(key, ()))
+        roots.transition(*key, "switched", detail=json.dumps({"owners": [owner for owner, _ in held]}))
+        for owner, tag in held:
+            image = f"{registry_host}/{key[0]}:{tag}@{key[1]}"
+            if not _persist_registry_image_protection(usage, image, owner, touch=False, persistent=True,
+                                                      dependency_resolver=resolver):
+                raise RuntimeError(f"{image}: the new closure was not retained for {owner}")
+        switched += 1
+        repointed += len(held)
+    return {"wave": wave, "switched": switched, "owners_repointed": repointed}
+
+
+def revert_wave(roots, wave, *, keys=None, detail=""):
+    """Rollback (plan §7): creates take the annotation's root again. Owners
+    keep both closures, and retention keeps a reverted root, so a switch can
+    follow without reconversion."""
+    reverted = 0
+    for row in roots.rows(wave=wave, state="switched"):
+        key = (row["repository"], row["manifest_digest"])
+        if keys is None or key in keys:
+            roots.transition(*key, "reverted", detail=detail)
+            reverted += 1
+    return {"wave": wave, "reverted": reverted}
+
+
+def family_keys(rows_file, family):
+    if family and rows_file is None:
+        raise ValueError("--family needs the inventory --rows")
+    return None if not family else {(row["repository"], row["manifest_digest"])
+                                    for row in read_jsonl(rows_file) if row["family"] == family}
+
+
 def inventory_command(args):
     from .config import DeploymentConfig
     from .environment_config import environment_registry_from_deployment
@@ -181,6 +336,67 @@ def inventory_command(args):
     return 0 if not summary["errors"] else 1
 
 
+def convert_command(args):
+    """Each image converts in its own process: its own index owner (a shared one
+    let parallel converters claim as one builder, M1 gate run 3), its own
+    verification devices, and a crash costs one image."""
+    per_slot = len(args.verify_device) // args.parallel
+    if per_slot < 1:
+        raise ValueError("M2 conversions are full-tree verified: give each parallel slot a --verify-device")
+    host = urlparse(args.environment_registry_url).netloc
+    base = [sys.executable, "-c", CLI, "convert-environment", "--config", str(args.config),
+            "--chunk-index-token-file", str(args.chunk_index_token_file), "--work-root", str(args.work_root),
+            "--environment-registry-url", args.environment_registry_url,
+            "--environment-registry-repository", args.environment_registry_repository,
+            "--environment-trusted-keys", str(args.environment_trusted_keys),
+            "--environment-signing-key", str(args.environment_signing_key), "--nydusd-blobs"]
+
+    def convert(repository, digest, slot):
+        argv = base + ["--image-ref", f"{host}/{repository}@{digest}"]
+        for device in args.verify_device[slot * per_slot:(slot + 1) * per_slot]:
+            argv += ["--verify-device", device]
+        completed = subprocess.run(argv, capture_output=True, text=True, timeout=3 * 3600, env=os.environ)
+        if completed.returncode:
+            raise RuntimeError(" | ".join(completed.stderr.strip().splitlines()[-3:]))
+        return json.loads(completed.stdout.strip().splitlines()[-1])
+    summary = convert_wave(read_jsonl(args.rows), args.wave, convert=convert, results=args.results,
+                           parallel=args.parallel)
+    print(json.dumps(summary, sort_keys=True))
+    return 0 if not summary["failed"] else 1
+
+
+def gateway_command(args):
+    from .config import DeploymentConfig
+    from .environment_config import environment_registry_from_deployment
+    from .gateway.image_roots import ImageRootsStore, roots_path
+    config = DeploymentConfig.from_file(args.config)
+    environments = environment_registry_from_deployment(config)
+    if environments is None:
+        raise ValueError("the deployment has no immutable_environments block")
+    roots, command = ImageRootsStore(roots_path(config.image_file())), args.chunk_migrate_command
+    if command == "record":
+        result = record_results(roots, environments, args.results)
+    elif command == "switch":
+        if not config.immutable_environments.dispatch_roots:
+            raise ValueError("switch needs immutable_environments.dispatch_roots on: otherwise owners and new "
+                             "routes lease the new closure while creates still mount the annotation's root")
+        from .host_locks import HOST_LOCKS
+        from .managed_registry import RegistryUsageStore
+        HOST_LOCKS.configure(config.control_state_file().parent / "gateway-locks")  # The gateway's lease fence.
+        result = switch_wave(roots, environments, RegistryUsageStore(config.registry_usage_file()), args.wave,
+                             registry_host=urlparse(config.registry_url).netloc,
+                             keys=family_keys(args.rows, args.family))
+    elif command == "revert":
+        result = revert_wave(roots, args.wave, keys=family_keys(args.rows, args.family), detail=args.reason)
+    else:
+        result = {}
+        for row in roots.rows():
+            states = result.setdefault(row["wave"], {})
+            states[row["state"]] = states.get(row["state"], 0) + 1
+    print(json.dumps(result, sort_keys=True))
+    return 0 if not result.get("refused") else 1
+
+
 def add_commands(subparsers):
     migrate = subparsers.add_parser("chunk-migrate", help="Chunk store M2 migration (plan §5).")
     commands = migrate.add_subparsers(dest="chunk_migrate_command", required=True)
@@ -192,3 +408,30 @@ def add_commands(subparsers):
     listing.add_argument("--out", type=Path, required=True, help="JSON lines, one per image")
     listing.add_argument("--summary", type=Path, required=True)
     listing.set_defaults(func=inventory_command)
+    from .environment_config import add_environment_registry_args
+    convert = commands.add_parser("convert", help="Convert and verify a wave's images (step 2, converter host).")
+    convert.add_argument("--config", type=Path, required=True, help="deployment.json with chunk_store")
+    convert.add_argument("--chunk-index-token-file", type=Path, required=True)
+    convert.add_argument("--work-root", type=Path, required=True)
+    add_environment_registry_args(convert)
+    convert.add_argument("--environment-signing-key", type=Path, required=True)
+    convert.add_argument("--verify-device", action="append", default=[], help="NBD device; split across slots")
+    convert.add_argument("--parallel", type=int, default=12)
+    convert.set_defaults(func=convert_command)
+    for name, text in (("record", "Record verified conversions as converted rows (gateway)."),
+                       ("switch", "Dispatch a wave's new roots and re-point its durable owners (step 3)."),
+                       ("revert", "Dispatch a switched wave's old roots again (rollback)."),
+                       ("status", "image_roots rows per wave and state.")):
+        command = commands.add_parser(name, help=text)
+        command.add_argument("--config", type=Path, required=True)
+        if name == "record":
+            command.add_argument("--results", type=Path, required=True)
+        if name in ("switch", "revert"):
+            command.add_argument("--family", default="", help="only this inventory family (needs --rows)")
+        if name == "revert":
+            command.add_argument("--reason", default="")
+        command.set_defaults(func=gateway_command)
+    for command in (convert, commands.choices["switch"], commands.choices["revert"]):
+        command.add_argument("--wave", choices=sorted(WAVES), required=True)
+        command.add_argument("--rows", type=Path, required=command is convert, help="inventory rows (JSON lines)")
+    convert.add_argument("--results", type=Path, required=True, help="JSON lines, appended; a rerun resumes")

@@ -1,15 +1,18 @@
 """The converter and packer: dedupe, idempotency, crash injection at every
 write-path step (design §3), granularity, and the tree verifier."""
 import dataclasses
+import hashlib
 from pathlib import Path
 import tarfile
 from tempfile import TemporaryDirectory
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
 from tests.chunk_store_support import (REPOSITORY, ChunkStoreFixture, layer, pseudo_random, push_image,
                                        sample_images, signing)
-from ucloud_sandboxes import chunk_convert, chunk_store
+from ucloud_sandboxes import chunk_convert, chunk_index, chunk_store
 from ucloud_sandboxes.chunk_convert import (STEPS, compare_trees, expected_tree, overlay_whiteouts,
                                             path_ordered_layer, strip_environment_annotation)
 from ucloud_sandboxes.environment_artifact import (ENVIRONMENT_ANNOTATION, RafsEnvironmentComponent, load_image_environment,
@@ -84,26 +87,55 @@ class ConverterTests(unittest.TestCase):
                 self.assertEqual(store.index.reader.locator(base).epoch, 1)
 
     def test_converters_at_once_never_pack_a_chunk_twice(self):
-        # x's layer and y's layer differ but share q. y converts while x is
-        # between packs (one chunk per pack, one id per lookup): x skips q.
+        # x's layer and y's layer differ but share q. y starts while x holds q
+        # (one chunk per pack, one id per reservation): y waits for x's commit.
         store = self.store()
         p, q = pseudo_random("p", 200_000), pseudo_random("q", 200_000)
         push_image(store.client, "x", [layer([("data", "dir"), ("data/p", p), ("data/q", q)])])
         push_image(store.client, "y", [layer([("other", "dir"), ("other/q", q)])])
-        other, ran = dataclasses.replace(store.converter, step=None, metrics={}), []
+        other, ran = dataclasses.replace(store.converter, step=None, metrics={}, owner="y"), []
 
         def step(name, **_):
             if name == "pack_committed" and not ran:
-                ran.append(other.convert(REPOSITORY, "y"))
+                ran.append(threading.Thread(target=lambda: ran.append(other.convert(REPOSITORY, "y"))))
+                ran[0].start()
+                for _ in range(500):  # y has asked for q while x still holds it.
+                    if other.metrics.get("chunks_waited"):
+                        break
+                    time.sleep(0.01)
         store.converter.step = step
-        with patch.object(chunk_store, "MAX_PACK_BYTES", 300_000), patch.object(chunk_convert, "LOOKUP_BATCH", 1):
+        with patch.object(chunk_store, "MAX_PACK_BYTES", 300_000), patch.object(chunk_convert, "LOOKUP_BATCH", 1), \
+                patch.object(chunk_convert, "RESERVE_RETRY_SECONDS", 0.02):
             store.converter.convert(REPOSITORY, "x")
-        self.assertTrue(ran)
-        self.assertEqual(store.converter.metrics["chunks_new"], 1)
+            ran[0].join(30)
+        self.assertEqual(len(ran), 2)  # y finished.
+        self.assertEqual(store.converter.metrics["chunks_new"], 2)
+        self.assertNotIn("chunks_new", other.metrics)
+        self.assertGreaterEqual(other.metrics["chunks_waited"], 1)
         connection = store.index.index._reader()
         packs, dead = connection.execute("SELECT COUNT(*), SUM(NOT EXISTS (SELECT 1 FROM chunks c WHERE c.pack = "
                                          "p.pack)) FROM packs p").fetchone()
         self.assertEqual((packs, dead), (len(store.packs()), 0))  # No pack is dead weight.
+        self.assertEqual(connection.execute("SELECT COUNT(*) FROM reservations").fetchone(), (0,))
+
+    def test_a_dead_builders_reservation_lapses_and_the_chunk_is_packed(self):
+        store = self.store()
+        q = pseudo_random("q", 200_000)
+        push_image(store.client, "y", [layer([("other", "dir"), ("other/q", q)])])
+        chunk_id, waits, sleep, me = hashlib.sha256(q).digest(), [], time.sleep, threading.get_ident()
+        self.assertEqual(store.index.index.reserve([chunk_id], "ghost"), [chunk_index.RESERVED])
+
+        def lapse(seconds):  # The ghost died: its hold runs out while y waits.
+            if threading.get_ident() != me:
+                return sleep(seconds)
+            waits.append(seconds)
+            store.index.index.reserve([chunk_id], "ghost", now=time.time() - chunk_index.CHUNK_RESERVE_SECONDS)
+        with patch.object(chunk_convert.time, "sleep", lapse):
+            root = store.converter.convert(REPOSITORY, "y")["root"]
+        self.assertEqual((waits, store.converter.metrics["chunks_waited"]), ([1.0], 1))
+        self.assertEqual(store.converter.metrics["chunks_new"], 1)
+        base = load_environment(store.registry, root).environment.base
+        self.assertEqual(store.index.reader.locator(base).epoch, 1)  # Every chunk is committed.
 
     def test_an_attached_copy_lets_workers_resolve_the_new_root(self):
         store = self.store()

@@ -59,8 +59,10 @@ import unittest
 # C1.1 second pass (zswap bounded per paused cgroup, stall backoff, eviction by
 # expected idle, reclaim stop counters; benchmarks/pause-reclaim-2026-10-03),
 # +5 admission puts running rollouts first (every queued wake reserved; a
-# swapped wake owes its prefetch). Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 112_046
+# swapped wake owes its prefetch), +7 net: chunk reservations close the convert
+# race (+66), paid for by deleting the attach-timing diagnostic and the
+# superseded chunk lookup (-59). Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 112_053
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

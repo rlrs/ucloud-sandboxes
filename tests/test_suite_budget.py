@@ -39,8 +39,10 @@ from tests.test_package_budget import package_lines
 # nydus-image, test_nydusd_spike), +72 the density benchmark's relay mode
 # (memory-pressure harness; no scenario covers an operator script), +57 the C1.1
 # second pass (zswap cap, stall backoff, eviction order, stop counters), +13
-# running rollouts first in admission (test_managed_growth, transition ledger).
-SUITE_LINE_BUDGET = 96_398
+# running rollouts first in admission (test_managed_growth, transition ledger),
+# +22 net chunk reservations (a waiting converter, a dead builder's lapse),
+# less the deleted attach-timing test.
+SUITE_LINE_BUDGET = 96_420
 SUITE = Path(__file__).resolve().parent
 
 

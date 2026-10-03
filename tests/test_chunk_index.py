@@ -8,7 +8,8 @@ import unittest
 from urllib.parse import parse_qs, urlsplit
 
 from tests.chunk_store_support import IndexFixture, ObjectServer
-from ucloud_sandboxes.chunk_index import ChunkIndexClient, MissingChunks, S3Presigner, http_range, redact
+from ucloud_sandboxes.chunk_index import (BUSY, CHUNK_RESERVE_SECONDS, KNOWN, RESERVED, ChunkIndexClient,
+                                          MissingChunks, S3Presigner, http_range, redact)
 from ucloud_sandboxes.chunk_store import RAW, PackWriter, chunk_map_key, pack_key
 from ucloud_sandboxes.managed_registry import RegistryRequestError
 
@@ -82,10 +83,10 @@ class IndexTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             http_range(url, 2550, 20)  # A short range is never accepted.
 
-    def test_lookup_commit_dedupe_and_layer_claims(self):
+    def test_reserve_commit_dedupe_and_layer_claims(self):
         writer, a, b = self.fixture.writer, b"a" * 5000, b"b" * 7000
         ids = [hashlib.sha256(a).digest(), hashlib.sha256(b).digest()]
-        self.assertEqual(writer.lookup(ids), [False, False])
+        self.assertEqual(writer.reserve(ids, "one"), [RESERVED, RESERVED])
         diff_id = "sha256:" + "d" * 64
         self.assertEqual(writer.claim_layer(diff_id, "conv", "one")["state"], "claimed")
         self.assertEqual(writer.claim_layer(diff_id, "conv", "two")["state"], "busy")
@@ -106,6 +107,21 @@ class IndexTests(unittest.TestCase):
         # A pack must be durable before any row names it.
         with self.assertRaises(RegistryRequestError):
             writer.commit([{"digest": "f" * 64, "size": 100}])
+
+    def test_chunk_reservations_hold_once_renew_lapse_and_clear_on_commit(self):
+        writer, index, data = self.fixture.writer, self.fixture.index, [b"r" * 300, b"s" * 400]
+        ids = [hashlib.sha256(item).digest() for item in data]
+        self.assertEqual(writer.reserve(ids, "one"), [RESERVED, RESERVED])
+        self.assertEqual(writer.reserve(ids[:1], "two"), [BUSY])
+        self.assertEqual(writer.reserve(ids, "one"), [RESERVED, RESERVED])  # The holder renews.
+        later = time.time() + CHUNK_RESERVE_SECONDS + 1
+        self.assertEqual(index.reserve(ids[1:], "two", now=later), [RESERVED])  # one's hold lapsed.
+        writer.commit([self.pack(data[:1], "held")])
+        self.assertEqual(writer.reserve(ids, "two"), [KNOWN, RESERVED])
+        rows = index._reader().execute("SELECT owner FROM reservations").fetchall()
+        self.assertEqual(rows, [("two",)])  # A commit clears its chunks' holds.
+        with self.assertRaises(RegistryRequestError):  # Readers cannot reserve.
+            self.fixture.reader.reserve(ids, "two")
 
     def test_register_requires_every_chunk_and_serves_locators(self):
         from tests.test_chunk_store_formats import bootstrap
@@ -140,12 +156,12 @@ class IndexTests(unittest.TestCase):
         self.fixture.writer.commit([self.pack([data])])
         chunk_id = hashlib.sha256(data).digest()
         self.fixture.index._writer.execute("UPDATE chunks SET condemned = 1")
-        self.assertEqual(self.fixture.writer.lookup([chunk_id]), [False])
+        self.assertEqual(self.fixture.writer.reserve([chunk_id], "one"), [RESERVED])
         with self.assertRaises(MissingChunks):
             self.fixture.service.locate([chunk_id])
         # Rewriting the chunk in a new pack revives it at the new location.
         self.fixture.writer.commit([self.pack([data], "again")])
-        self.assertEqual(self.fixture.writer.lookup([chunk_id]), [True])
+        self.assertEqual(self.fixture.writer.reserve([chunk_id], "one"), [KNOWN])
 
 
 if __name__ == "__main__":

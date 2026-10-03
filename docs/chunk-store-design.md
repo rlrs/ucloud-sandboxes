@@ -265,9 +265,14 @@ with 16–32 conversions in parallel.
    drops whiteouts of a layer that returns to a directory it left (OpenSWE's slim
    layers, M1 gate). The converter identity records it (`;order=path`).
 3. **Dedupe.** Parse the chunk table (S10's `scripts/rafs.py` is about 40 lines).
-   Look the distinct ids up in batches of 256 (`POST /v1/chunks/lookup`), just
-   before packing them, and again from the current id after each pack is
-   committed. The reply gives the known ids, excluding condemned ones.
+   Reserve the distinct ids in batches of 256 (`POST /v1/chunks/reserve?owner=`),
+   just before packing them, and again from the current id after each pack is
+   committed. Per id the reply is known (live, not condemned), reserved for this
+   builder, or busy (another builder's hold, 10 minutes, renewed each batch).
+   - Busy ids are asked for again only after this builder's own pack is
+     committed, so builders never wait on each other.
+   - A hold of a builder that died lapses, and the next asker packs the chunk.
+   - Every chunk is committed before its layer is.
 4. **Pack.** For each unknown id: read its compressed bytes from the local Nydus
    blob, decompress and verify it, and append it in blob order. When a pack is
    full, write the footer, hash the pack, PUT it to S3 (skipped if a HEAD shows
@@ -279,11 +284,12 @@ with 16–32 conversions in parallel.
    layer bootstrap are durable, a final commit completes the layer row.
    Invariant: a pack is durable in S3 before any row names it.
 
-   Committing per pack bounds the duplicate window to one pack. Converters
-   running at once share chunks across different layers. With one lookup per
-   layer and one commit after all its packs, the M1 gate's 12-way convert pass
-   stored 5.1 GB of duplicate chunks in 22.9 GB. A pack that still loses a race
-   keeps dead bytes, which compaction reclaims.
+   Converters running at once share chunks across different layers. With one
+   lookup per layer and one commit after all its packs, the M1 gate's 12-way
+   convert pass stored 5.1 GB of duplicate chunks in 22.9 GB. Per-pack commits
+   left 2.3 GB (run 2). Reservations (step 3) pack each chunk once. A commit
+   clears its chunks' holds; a condemned chunk is reserved and repacked like an
+   unknown one.
 6. **Image.** Run `nydus-image merge --original-blob-ids` over the layer
    bootstraps, with at most 254 blobs (the largest image seen has 25 layers).
    Then derive the chunk map, upload the bootstrap and map, and sign the

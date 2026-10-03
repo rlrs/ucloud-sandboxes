@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Chunk-store converters reserve chunks before packing** (`POST /v1/chunks/reserve`, which replaces `/v1/chunks/lookup`). Builders converting at once pack each shared chunk once: per-pack commits alone left 2.3 GB of duplicate chunks in the M1 gate's 20 GB. A dead builder's hold lapses after 10 minutes. Builders and the index must be upgraded together (no chunk store is deployed).
+- **Removed the attach-timing diagnostic** (`UCLOUD_ENVIRONMENT_TIMING_LOG`). It served the attach spike, which is done (`docs/benchmarks/attach-spike-2026-10-03/`).
+
 ## 0.8.5 - 2026-10-03
 
 Deployed with the pause tier on for new workers: snapshot `439222185`, `swap_gb` 64, zswap off (`docs/rollout-0.8.0.md`, "0.8.5"). Everything below except the admission change and the pause tier is inert by default.

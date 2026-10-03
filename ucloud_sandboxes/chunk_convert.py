@@ -27,6 +27,7 @@ import tarfile
 from tempfile import TemporaryDirectory
 import time
 
+from .chunk_index import BUSY, RESERVED
 from .chunk_store import (BLOCK, MAX_BOOTSTRAP_BYTES, Locator, PackWriter, bootstrap_key, chunk_map_from_bootstrap,
                           blob_layout, chunk_map_key, decode_chunk, encode_tail, pack_key, parse_bootstrap,
                           store_encoding, tail_key, zstd_compress, zstd_content_size, zstd_decompress)
@@ -42,7 +43,8 @@ STEPS = ("layer_converted", "pack_put", "pack_committed", "layer_bootstrap_put",
 _OPAQUE = ".wh..wh..opq"
 _OVERLAY_OPAQUE = "SCHILY.xattr.trusted.overlay.opaque"
 MAX_LAYERS_PER_ROOT = 33  # The base and 32 toolkits (ImmutableEnvironment).
-LOOKUP_BATCH = 256  # Chunk ids per index lookup while packing: about one 64 MiB pack.
+LOOKUP_BATCH = 256  # Chunk ids per index reservation while packing: about one 64 MiB pack.
+RESERVE_RETRY_SECONDS = 1.0  # First wait for chunks another builder holds; doubles to 30 s.
 
 
 def converter_identity(layout, nydusd_blobs=False):
@@ -321,19 +323,21 @@ class RafsConverter:
         return target
 
     def _pack(self, bootstrap, blob, work, diff_id):
-        """Verify, pack, upload and commit the chunks the index does not know,
-        in blob order, one pack at a time.
+        """Reserve, verify, pack, upload and commit the chunks the index does
+        not know, in blob order, one pack at a time.
 
-        Converters running at once share chunks across different layers. The
-        index is asked again before each batch and each pack is committed as
-        soon as it is durable, so a chunk another converter committed meanwhile
-        is skipped: the window is one pack, not one layer (M1 gate: 5.1 GB of
-        duplicate chunks in 22.9 GB with whole-layer commits).
+        Converters running at once share chunks across different layers. Each
+        reserves a batch before packing it, so a chunk is packed once (M1 gate
+        run 2: 2.3 GB of dead pack bytes in 20 GB with per-pack commits alone).
+        A chunk another builder holds is asked for again only after this
+        builder's own pack is committed, so no two builders wait on each other;
+        a dead builder's hold lapses and the chunk is packed here. Every chunk
+        is committed before the layer is.
         """
         first = {}
         for chunk in sorted(bootstrap.chunks, key=lambda chunk: chunk[5]):
             first.setdefault(chunk[0], chunk)
-        ids, count, writer = list(first), 0, None
+        count, writer = 0, None
 
         def flush(writer):
             digest, size = writer.finish()
@@ -344,13 +348,17 @@ class RafsConverter:
             self.index.commit([{"digest": digest, "size": size}])
             self._step("pack_committed", diff_id=diff_id, pack=digest)
 
-        start = 0
-        with open(blob, "rb") as source:
+        def pack(ids, source):
+            """Pack the ids this builder reserves; returns those another holds."""
+            nonlocal count, writer
+            held, start = [], 0
             while start < len(ids):
                 batch = ids[start:start + LOOKUP_BATCH]
                 following = start + len(batch)
-                for offset, (chunk_id, known) in enumerate(zip(batch, self.index.lookup(batch))):
-                    if known:
+                for offset, (chunk_id, state) in enumerate(zip(batch, self.index.reserve(batch, self.owner))):
+                    if state == BUSY:
+                        held.append(chunk_id)
+                    if state != RESERVED:
                         continue
                     _, _, flags, csize, usize, coff, _ = first[chunk_id]
                     payload = os.pread(source.fileno(), csize, coff)
@@ -358,7 +366,7 @@ class RafsConverter:
                     decode_chunk(stored, usize, encoding, chunk_id)  # Every new chunk decodes to its id.
                     if writer is not None and not writer.fits(len(stored)):
                         flush(writer)
-                        writer, following = None, start + offset  # An upload passed: ask again from here.
+                        writer, following = None, start + offset  # Renew the rest of the batch.
                         break
                     if writer is None:
                         writer = PackWriter(work / f"pack-{count}")
@@ -367,8 +375,17 @@ class RafsConverter:
                     self._count("chunks_new")
                     self._count("chunk_bytes_new", len(stored))
                 start = following
-        if writer is not None:
-            flush(writer)
+            if writer is not None:
+                flush(writer)
+                writer = None
+            return held
+
+        with open(blob, "rb") as source:
+            held, delay = pack(list(first), source), RESERVE_RETRY_SECONDS
+            while held:
+                self._count("chunks_waited", len(held))
+                time.sleep(delay)  # The holder commits them, or its hold lapses.
+                held, delay = pack(held, source), min(30, delay * 2)
 
     def _merge(self, results, scratch):
         paths = []

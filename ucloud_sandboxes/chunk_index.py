@@ -19,7 +19,7 @@ import re
 import sqlite3
 import threading
 import time
-from urllib.parse import quote, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 from .chunk_store import (MAX_MAP_ENTRIES, MAX_PACK_BYTES, ChunkMap, Locator, PACK_TRAILER,
                           chunk_map_key, bootstrap_key, pack_key, parse_pack_tail, require_hex)
@@ -28,6 +28,10 @@ from .managed_registry import RegistryRequestError
 
 _LOG = logging.getLogger(__name__)
 LAYER_CLAIM_SECONDS = 30 * 60
+# A builder holds a chunk reservation for one pack's fill and upload; a dead
+# builder's reservations lapse after this and the next asker packs the chunk.
+CHUNK_RESERVE_SECONDS = 10 * 60
+RESERVED, KNOWN, BUSY = 0, 1, 2  # reserve() states, one byte per id on the wire.
 _MAX_JSON = 1024 ** 2
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS chunks (id BLOB PRIMARY KEY, pack INTEGER, off INTEGER, clen INTEGER,
@@ -40,6 +44,7 @@ CREATE TABLE IF NOT EXISTS roots (component BLOB PRIMARY KEY, chunk_map BLOB, bo
     registered INTEGER, epoch INTEGER) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS root_packs (component BLOB, pack INTEGER, bytes INTEGER,
     PRIMARY KEY (component, pack)) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS reservations (id BLOB PRIMARY KEY, owner TEXT, until INTEGER) WITHOUT ROWID;
 """
 
 
@@ -240,17 +245,45 @@ class ChunkIndex:
                 query.format(",".join("?" * len(batch))), batch))
         return found
 
-    def lookup(self, ids):
-        """Known, uncondemned ids (design §3 step 3), as a list of booleans."""
-        rows = self._rows("SELECT id, condemned FROM chunks WHERE id IN ({})", list(dict.fromkeys(ids)))
-        return [chunk_id in rows and not rows[chunk_id][0] for chunk_id in ids]
-
     def locate(self, ids):
         """[(pack digest hex, offset, clen, flags) or None] for each id."""
         rows = self._rows("SELECT c.id, p.digest, c.off, c.clen, c.flags, c.condemned FROM chunks c "
                           "JOIN packs p ON p.pack = c.pack WHERE c.id IN ({})", list(dict.fromkeys(ids)))
         return [None if chunk_id not in rows or rows[chunk_id][4] else
                 (rows[chunk_id][0].hex(), *rows[chunk_id][1:4]) for chunk_id in ids]
+
+    def reserve(self, ids, owner, now=None, seconds=CHUNK_RESERVE_SECONDS):
+        """KNOWN (live, design §3 step 3), RESERVED (``owner`` packs it) or BUSY, per id.
+
+        Builders reserve before packing, so converters running at once never
+        upload one chunk twice (M1 gate run 2: 2.3 GB of dead pack bytes with
+        per-pack commits alone). Reserving again renews ``owner``'s hold.
+        """
+        now = int(time.time() if now is None else now)
+        unique = list(dict.fromkeys(ids))
+        states = {}
+        with self._write_lock:
+            self._writer.execute("BEGIN IMMEDIATE")
+            try:
+                known = self._rows("SELECT id, condemned FROM chunks WHERE id IN ({})", unique, self._writer)
+                held = self._rows("SELECT id, owner, until FROM reservations WHERE id IN ({})", unique,
+                                  self._writer)
+                for chunk_id in unique:
+                    if chunk_id in known and not known[chunk_id][0]:
+                        states[chunk_id] = KNOWN
+                    elif chunk_id in held and held[chunk_id][0] != owner and held[chunk_id][1] > now:
+                        states[chunk_id] = BUSY
+                    else:
+                        states[chunk_id] = RESERVED
+                self._writer.executemany(
+                    "INSERT INTO reservations (id, owner, until) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE "
+                    "SET owner = excluded.owner, until = excluded.until",
+                    [(chunk_id, owner, now + seconds) for chunk_id, state in states.items() if state == RESERVED])
+                self._writer.execute("COMMIT")
+            except BaseException:
+                self._writer.execute("ROLLBACK")
+                raise
+        return [states[chunk_id] for chunk_id in ids]
 
     def claim_layer(self, diff_id, converter, owner, now=None, seconds=LAYER_CLAIM_SECONDS):
         """complete (with its bootstrap), claimed (by ``owner``) or busy."""
@@ -301,6 +334,9 @@ class ChunkIndex:
                         "WHERE chunks.condemned != 0",
                         [(chunk_id, pack, offset, clen, ulen, flags) for chunk_id, offset, clen, ulen, flags in entries])
                     inserted += self._writer.total_changes - before
+                    self._writer.executemany("DELETE FROM reservations WHERE id = ?",
+                                             [(entry[0],) for entry in entries])
+                self._writer.execute("DELETE FROM reservations WHERE until <= ?", (now,))
                 if layer is not None:
                     diff_id, converter, bootstrap = layer
                     self._writer.execute(
@@ -452,6 +488,13 @@ def _claim(service, request):
                                      _converter(request["owner"]))
 
 
+def _reserve(service, path, body):
+    owners = parse_qs(urlsplit(path).query).get("owner", [])
+    if len(owners) != 1:
+        raise ValueError("reserve needs one owner")
+    return bytes(service.index.reserve(_ids(body), _converter(owners[0])))
+
+
 def _ids(body):
     if len(body) % 32 or len(body) // 32 > MAX_MAP_ENTRIES:
         raise ValueError("chunk id batch must be whole 32-byte ids")
@@ -501,22 +544,22 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         if not self._authorized(write=True):
             return self._reply(401, {"error": "unauthorized"})
-        service = self.server.service
+        service, path = self.server.service, urlsplit(self.path).path
         routes = {
-            "/v1/chunks/lookup": (32 * MAX_MAP_ENTRIES, lambda body: bytes(service.index.lookup(_ids(body)))),
             "/v1/chunks/locate": (32 * MAX_MAP_ENTRIES, lambda body: service.locate(_ids(body)).encode()),
+            "/v1/chunks/reserve": (32 * MAX_MAP_ENTRIES, lambda body: _reserve(service, self.path, body)),
             "/v1/chunks/commit": (_MAX_JSON, lambda body: service.commit(json.loads(body))),
             "/v1/layers/claim": (_MAX_JSON, lambda body: _claim(service, json.loads(body))),
             "/v1/roots/register": (_MAX_JSON, lambda body: service.register(json.loads(body))),
         }
-        if self.path not in routes:
+        if path not in routes or (path != self.path and path != "/v1/chunks/reserve"):
             return self._reply(404, {"error": "unknown endpoint"})
-        limit, handler = routes[self.path]
+        limit, handler = routes[path]
         try:
             body = self._body(limit)
         except ValueError as exc:
             return self._reply(413, {"error": str(exc)})
-        binary = self.path in ("/v1/chunks/lookup", "/v1/chunks/locate")
+        binary = path in ("/v1/chunks/locate", "/v1/chunks/reserve")
         self._serve(lambda: handler(body), "application/octet-stream" if binary else "application/json")
 
     def _serve(self, call, content_type):
@@ -562,15 +605,16 @@ class ChunkIndexClient:
                                       timeout=self.timeout, max_bytes=max_bytes)
         return payload
 
-    def lookup(self, ids):
-        payload = self._call("POST", "/v1/chunks/lookup", b"".join(ids), binary=True, max_bytes=len(ids))
-        if len(payload) != len(ids) or set(payload) - {0, 1}:
-            raise ValueError("invalid chunk lookup response")
-        return [bool(value) for value in payload]
-
     def locate(self, ids):
         return Locator.decode(self._call("POST", "/v1/chunks/locate", b"".join(ids), binary=True,
                                          max_bytes=64 * 1024 ** 2))
+
+    def reserve(self, ids, owner):
+        payload = self._call("POST", "/v1/chunks/reserve?owner=" + quote(owner, safe=""), b"".join(ids),
+                             binary=True, max_bytes=len(ids))
+        if len(payload) != len(ids) or set(payload) - {RESERVED, KNOWN, BUSY}:
+            raise ValueError("invalid chunk reserve response")
+        return list(payload)
 
     def claim_layer(self, diff_id, converter, owner):
         return json.loads(self._call("POST", "/v1/layers/claim",

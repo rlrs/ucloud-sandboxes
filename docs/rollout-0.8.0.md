@@ -342,7 +342,8 @@ RL-scale milestones.
 
 ## 0.8.6: node-local model waits
 
-Status: prepared on 2026-10-03, not deployed. Production runs 0.8.5 (snapshot
+Status: deployed on 2026-10-03, together with the gateway-only 0.8.7 and 0.8.8 fixes
+found by its canary (execution log below). Before it, production ran 0.8.5 (snapshot
 `439222185`, bundles in `/work/ucloud-sandboxes/release-0.8.5-20261003`, the pause tier on).
 No training runs yet: canaries are the production signal. Contents are in `CHANGELOG.md`
 under 0.8.6. The design is in `docs/node-local-model-waits.md`.
@@ -440,4 +441,15 @@ under 0.8.6. The design is in `docs/node-local-model-waits.md`.
       answer and closed before the relay checked, so the relay found its socket
       closed and counted the answer unacknowledged. The wakes were harmless no-ops.
       **Fixed in 0.8.8** by probing a duplicated socket.
+- **0.8.8, gateway only** (21:13:19Z). The relay probes acknowledgment on a duplicated
+  socket. **Fallback canary from a cold fleet** (`rlbench-6880cfb95a62`): four sandboxes
+  were hibernated mid-call.
+  - All four rollouts finished all 8 turns, each cut call succeeding on its retry
+    after about 5.8 s.
+  - **Exactly 4 dispatched wakes, and 100 answers acknowledged without one.**
+  - Other calls' overhead p50 / p95 0.037 / 0.122 s.
+  - 13/16 rollouts finished; the 3 failures are images without Python.
+- **Result:** production runs node-local model waits for agents on the private
+  plaintext relay. A wait costs no gateway work and no park row. Waits through the TLS
+  ingress keep the relay-driven park.
 

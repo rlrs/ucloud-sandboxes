@@ -1757,6 +1757,58 @@ worker snapshot, then an autoscaled canary
   3. **C3.2 group create and C4.3 placement wiring:** the levers for the
      512-rollout burst, which is bound by per-node create queueing.
 
+### 2026-10-03 (evening): node-local model waits in production, M1 gate runs 3–4
+
+- **No training until more milestones land.** Canaries and benchmarks are the
+  production signal.
+- **Node-local model waits (pause-reclaim item 6) are in production**, in 0.8.6
+  to 0.8.8
+  ([node-local-model-waits.md](node-local-model-waits.md),
+  [benchmarks/node-local-wake-2026-10-03](benchmarks/node-local-wake-2026-10-03/README.md)).
+  - **Mechanism.** Agents call the relay over plaintext on the private network.
+    The node pauses a sandbox while its call is outstanding, seeing TCP headers
+    only through NFLOG, and the answer's first packet thaws it. The relay checks
+    the guest's TCP acknowledgment, and wakes through the gateway only an answer
+    nobody acknowledged (a sandbox hibernated mid-call).
+  - **Canary, 456 relay calls:**
+    - no `/park` or `/wake`;
+    - answer → agent 22 ms at the median, against 38 ms;
+    - the final-turn hold is gone: turn 7 at 0.038 s, against 1.3 s.
+  - **Hibernation fallback:** 4 sandboxes hibernated mid-call; all 4 rollouts
+    finished, with exactly 4 dispatched wakes.
+  - **The canary's catches, each a gateway-only release:**
+    - the relay's HTTP tunnel route was not marked local (0.8.7);
+    - a fast-closing reader looked unacknowledged (0.8.8).
+- **M1 gate run 3**
+  ([benchmarks/m1-gate-20261003t1910](benchmarks/m1-gate-20261003t1910/README.md)).
+  - **Correctness passes:** full tree, crash injection, rollback and cold
+    commands.
+  - **The nydusd burst beats today's path:** 0.63× traced and 0.90× demand.
+  - **Findings:**
+    - the gate's converters shared one owner, which invalidates stored bytes
+      (fixed);
+    - a 4.5-minute read stall was the chunk index computing locators per
+      attach; registration now stores locators and blob layouts, so reads never
+      query the index.
+- **M2 prerequisites built:**
+  - nydusd built by a pinned script (`runtime/nydusd/build_pinned.sh`, v2.4.5
+    with block-nbd), carried in the node bundle, verified and installed by VM
+    init;
+  - nydusd's shared cache held within `cache_bytes`, by LRU detach of idle
+    images.
+- **Run 4 is in progress** with all of these. It should pass stored bytes
+  (about 17.4 GB expected) with no index stall.
+- **Next:**
+  1. Run 4's verdict, and the burst criterion: S11's absolute 5.5 s against
+     M2's "within 1.3× of today's path".
+  2. **A production chunk store** (store node, index, S3 prefix). This is a
+     deployment decision.
+  3. **M2 waves.**
+  4. **C3.2 group create and C4.3 placement** for the burst.
+  5. **Deletions as they unlock:**
+     - the Python RAFS reader, once nydusd is the only path;
+     - the relay-driven park, once every trainer uses the private relay.
+
 ## Appendix: evidence index
 
 - Image path:

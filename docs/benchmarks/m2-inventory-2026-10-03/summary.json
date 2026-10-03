@@ -1,0 +1,111 @@
+{
+ "build_inputs": 7163,
+ "environment_images": 7926,
+ "errors": {},
+ "families": {
+  "MultiSWE": {
+   "build_inputs": 60,
+   "environment_images": 60,
+   "images": 60,
+   "releasable_oci_bytes": 0,
+   "task_rows": 60,
+   "unique_erofs_bytes": 31379447808,
+   "unique_oci_bytes": 21345600060
+  },
+  "OpenSWE": {
+   "build_inputs": 27,
+   "environment_images": 27,
+   "images": 27,
+   "releasable_oci_bytes": 0,
+   "task_rows": 39224,
+   "unique_erofs_bytes": 8258076672,
+   "unique_oci_bytes": 5319960243
+  },
+  "R2E-Gym": {
+   "build_inputs": 67,
+   "environment_images": 67,
+   "images": 67,
+   "releasable_oci_bytes": 0,
+   "task_rows": 67,
+   "unique_erofs_bytes": 40087187456,
+   "unique_oci_bytes": 22570993109
+  },
+  "SWE-Lego": {
+   "build_inputs": 72,
+   "environment_images": 72,
+   "images": 72,
+   "releasable_oci_bytes": 0,
+   "task_rows": 72,
+   "unique_erofs_bytes": 87669702656,
+   "unique_oci_bytes": 61097330351
+  },
+  "SWE-rebench v2": {
+   "build_inputs": 74,
+   "environment_images": 74,
+   "images": 74,
+   "releasable_oci_bytes": 0,
+   "task_rows": 74,
+   "unique_erofs_bytes": 100167077888,
+   "unique_oci_bytes": 65044117923
+  },
+  "SWE-smith": {
+   "build_inputs": 118,
+   "environment_images": 118,
+   "images": 118,
+   "releasable_oci_bytes": 0,
+   "task_rows": 63585,
+   "unique_erofs_bytes": 105533231104,
+   "unique_oci_bytes": 71947138939
+  },
+  "ScaleSWE": {
+   "build_inputs": 2469,
+   "environment_images": 2469,
+   "images": 2469,
+   "releasable_oci_bytes": 0,
+   "task_rows": 2469,
+   "unique_erofs_bytes": 272384143360,
+   "unique_oci_bytes": 192866797907
+  },
+  "TMax": {
+   "build_inputs": 1240,
+   "environment_images": 1240,
+   "images": 1240,
+   "releasable_oci_bytes": 0,
+   "task_rows": 12956,
+   "unique_erofs_bytes": 551741718528,
+   "unique_oci_bytes": 305475756776
+  },
+  "Terminal-Lego": {
+   "build_inputs": 2344,
+   "environment_images": 2344,
+   "images": 2344,
+   "releasable_oci_bytes": 0,
+   "task_rows": 11746,
+   "unique_erofs_bytes": 320464494592,
+   "unique_oci_bytes": 148808443110
+  },
+  "foundation:terminal-prefix": {
+   "build_inputs": 6,
+   "environment_images": 6,
+   "images": 6,
+   "releasable_oci_bytes": 0,
+   "task_rows": 0,
+   "unique_erofs_bytes": 608112640,
+   "unique_oci_bytes": 217232038
+  },
+  "unknown": {
+   "build_inputs": 686,
+   "environment_images": 1449,
+   "images": 1455,
+   "releasable_oci_bytes": 87652497338,
+   "task_rows": 0,
+   "unique_erofs_bytes": 410417508352,
+   "unique_oci_bytes": 301588137932
+  }
+ },
+ "images": 7932,
+ "releasable_oci_bytes": 87652497338,
+ "repositories": 8277,
+ "unique_erofs_bytes": 1890486018048,
+ "unique_oci_bytes": 1171327581338
+}

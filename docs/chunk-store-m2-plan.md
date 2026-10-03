@@ -38,9 +38,43 @@ M2 starts when all of these hold:
 | Workers | `worker_enabled`, 128 GiB environment cache, `attach_concurrency` 1, `chunk_store` off | live `deployment.json`; `make_config.py:123-172` |
 
 The design's "3.81 TB today" was an S10 extrapolation; the Volume holds 2.8 TB.
-§7's wave sizes are re-derived by the inventory tool (§5, step 1) before any
-conversion, and the predicted release per wave comes from that inventory, not
-from S10.
+
+**Inventory, measured** (`chunk-migrate inventory`, 2026-10-03, read-only, about
+2 minutes; summary in
+[benchmarks/m2-inventory-2026-10-03](benchmarks/m2-inventory-2026-10-03/summary.json)):
+
+| Family | Images | Task rows | Unique EROFS, GB | Unique OCI, GB | Build inputs |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| SWE-smith | 118 | 63,585 | 106 | 72 | all |
+| OpenSWE (prepared) | 27 | 39,224 | 8 | 5 | all |
+| TMax | 1,240 | 12,956 | 552 | 305 | all |
+| Terminal-Lego | 2,344 | 11,746 | 320 | 149 | all |
+| ScaleSWE | 2,469 | 2,469 | 272 | 193 | all |
+| SWE-rebench v2, SWE-Lego, R2E-Gym, MultiSWE | 273 | 273 | 259 | 170 | all |
+| Unknown (not in the selection) | 1,455 | 0 | 410 | 302 | 686 |
+| Foundations | 6 | 0 | 1 | 0.2 | all |
+| **All** (shared bytes once) | **7,932** | | **1,890** | **1,171** | **7,163** |
+
+What it changes:
+- **Almost everything is a build input.** Every prepared task image is a
+  prepared source or decision, which a later build's `FROM` resolves to, so its
+  OCI manifest stays. Releasing the OCI copies of the rest frees only **88 GB**.
+  The design assumed ScaleSWE and the SWE-* families were not build inputs.
+- **The win is the EROFS side: 1.89 TB.** A switched image's EROFS root and
+  components lapse even when its OCI manifest stays (§3.3), so the Volume goes
+  from 2.8 TB to about **1.2 TB** (the OCI layers, about 1.17 TB unique), with
+  the chunks in S3.
+- **The unknown family is mostly leftovers:**
+  - 694 `precomputed-*`;
+  - 526 `bl20260929-*` (the 2026-09-29 build-load benchmark);
+  - 122 `agentic-*`;
+  - 56 `import-*`.
+
+  Images no selection or catalog names could be deleted instead of migrated
+  (§9).
+- **Releasing the OCI copies of prepared sources** (about 1.08 TB more) would
+  need builds to take their `FROM` from the chunk store (`unpack` on demand).
+  That is out of M2's scope.
 
 ## 3. What the code does today, and what M2 must change
 
@@ -273,11 +307,15 @@ journal.
    - Each wave adds at most 150 GB of new chunks.
    - Each wave must release within ±10% of its predicted bytes.
 
-Waves keep design §7's order (wave 4 is small and done last):
-1. foundations and prepared sources;
-2. ScaleSWE;
-3. SWE-smith, R2E-Gym, SWE-Lego, rebench v2 and MultiSWE;
-4. other managed images.
+Waves, ordered by training rows per byte. Chunks are content-addressed, so
+order does not change deduplication, only how fast each wave covers training:
+1. SWE-smith and OpenSWE's prepared images: 145 images, 103k task rows, 114 GB
+   of EROFS;
+2. TMax and Terminal-Lego: 3,584 images, 25k rows, 872 GB;
+3. ScaleSWE, SWE-rebench v2, SWE-Lego, R2E-Gym, MultiSWE and the foundations:
+   2,748 images, 531 GB;
+4. the unknown family, less whatever §9 decides to delete: up to 1,455 images,
+   410 GB.
 
 ## 6. Gates
 

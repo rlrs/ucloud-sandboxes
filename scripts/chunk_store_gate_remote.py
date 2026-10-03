@@ -546,15 +546,17 @@ def unmount_images(runner=subprocess.run):
 AGENT_CLI = "/work/ucloud-sandboxes/bin/ucloud-sandboxes"
 
 
-def create_operation(spec, cli=AGENT_CLI):
+def create_operation(spec, generation, cli=AGENT_CLI):
     """The ``_ucloud_operation`` a node agent requires on create, as the
     gateway sends it; the spec hash comes from the node's own package, whose
-    site-packages its CLI wrapper names (the bench runs on system Python)."""
+    site-packages its CLI wrapper names (the bench runs on system Python).
+    A deleted id is fenced by a tombstone, so each attempt takes a new,
+    larger generation (a resumed bench reuses its sandbox names)."""
     match = re.search(r"PYTHONPATH=(\S+)", Path(cli).read_text())
     if match and match.group(1) not in sys.path:
         sys.path.insert(0, match.group(1))
     from ucloud_sandboxes.sandbox import SandboxSpec, sandbox_spec_fingerprint
-    return {"operation_id": "m1-gate-" + spec["id"], "generation": 1, "kind": "create",
+    return {"operation_id": f"m1-gate-{generation}", "generation": generation, "kind": "create",
             "spec_hash": sandbox_spec_fingerprint(SandboxSpec.from_dict(spec))}
 
 
@@ -572,6 +574,7 @@ class Node:
         host = unquote(values.get("UCLOUD_NODE_AGENT_HOST", "127.0.0.1"))
         self.base = f"http://{'127.0.0.1' if host in ('', '0.0.0.0') else host}:{unquote(values['UCLOUD_NODE_AGENT_PORT'])}"
         self.state = unquote(values["UCLOUD_STATE_DIR"])
+        self.fences = {}  # sandbox id -> (generation, operation id) of its create
 
     def call(self, method, path, body=None, timeout=600, headers=None, retry_seconds=120.0):
         """A 503 (an agent still starting after a reset, deferred admission) is
@@ -603,8 +606,10 @@ class Node:
         # The gateway always sizes a create; an unsized one is refused as a zero request.
         spec = {"id": sandbox_id, "image": image, "network": "bridge", "command": ["sleep", "infinity"],
                 "cpus": 2, "memory_mb": 4096, "disk_mb": 8192}
+        operation = create_operation(spec, time.time_ns() // 1_000_000)
+        self.fences[sandbox_id] = (operation["generation"], operation["operation_id"])
         started = time.monotonic()
-        self.call("POST", "/v1/sandboxes", {**spec, "_ucloud_operation": create_operation(spec)})
+        self.call("POST", "/v1/sandboxes", {**spec, "_ucloud_operation": operation})
         return time.monotonic() - started
 
     def run(self, sandbox_id, command, timeout=300):
@@ -618,12 +623,13 @@ class Node:
             after = max([after, *(event.get("sequence", 0) for event in events.get("events", []))])
         return {"wall": round(time.monotonic() - started, 3), "rc": session.get("exit_code")}
 
-    def delete(self, sandbox_id):
+    def delete(self, sandbox_id, fence=None):
         """Delete with the create's operation fence; a sandbox left behind keeps
         its mounts, and the next reset's backend then refuses to start."""
+        generation, operation_id = fence or self.fences[sandbox_id]
         try:
             self.call("DELETE", f"/v1/sandboxes/{sandbox_id}", headers={
-                "X-UCloud-Sandbox-Generation": "1", "X-UCloud-Sandbox-Operation-Id": "m1-gate-" + sandbox_id})
+                "X-UCloud-Sandbox-Generation": str(generation), "X-UCloud-Sandbox-Operation-Id": operation_id})
         except urllib.error.HTTPError as error:
             if error.code != 404:
                 raise
@@ -634,12 +640,13 @@ class Node:
         Only on a node holding nothing but this bench's sandboxes (canaries can
         take real placements); those are deleted first, as the restarted
         backend refuses any mount the old one left (a fence, by design)."""
-        ids = [item.get("id") or (item.get("spec") or {}).get("id")
-               for item in self.call("GET", "/v1/sandboxes")["sandboxes"]]
-        if any(not str(sandbox_id).startswith("m1-") for sandbox_id in ids):
-            raise SystemExit(f"refusing to reset a node with other sandboxes: {sorted(map(str, ids))}")
-        for sandbox_id in ids:
-            self.delete(sandbox_id)
+        found = {item.get("id") or (item.get("spec") or {}).get("id"):
+                 (item.get("generation"), item.get("operation_id"))
+                 for item in self.call("GET", "/v1/sandboxes")["sandboxes"]}
+        if any(not str(sandbox_id).startswith("m1-") for sandbox_id in found):
+            raise SystemExit(f"refusing to reset a node with other sandboxes: {sorted(map(str, found))}")
+        for sandbox_id, fence in found.items():
+            self.delete(sandbox_id, fence)
         root = Path(self.state) / "environment-io"
         subprocess.run(["systemctl", "stop", "ucloud-sandbox-node.service", "ucloud-environment-io.service"],
                        check=True)

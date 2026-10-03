@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.8.5 (prepared 2026-10-03, not deployed)
+
+Gateway first, then workers on a new node bundle. The pause tier stays off until its own config step (`docs/rollout-0.8.0.md`, "0.8.5"). Everything below except the admission change is inert by default.
+
+- **Admission puts running rollouts first (on by default).** A new sandbox may only spend the headroom that every queued continuation and restore leaves; before, only the head one's was protected, so launches slipped in while later wakes waited. A relay wake whose pages a pause reclaimed owes its thaw prefetch (1 GiB) instead of its whole swapped footprint; without swap nothing changes. In a 140-rollout memory-pressure run on one CCX63 (today's path), 137 waits were hibernated instead of 160 and the slowest wake fell from 57 s to 32 s (`docs/benchmarks/admission-priority-2026-10-03/`).
+- **Pause tier (C1.1) second pass, still off (`sandbox.direct_pause_tier`).** Reclaim now actually frees a paused sandbox's memory. Validated under the same pressure (`docs/benchmarks/pause-reclaim-2026-10-03/`): every model wait came back as a resume (wake p95 0.13 s against 14.2 s on today's path) and nothing was hibernated.
+  - **zswap bounded per sandbox:** with zswap on, a paused cgroup may hold at most 25% of its memory bound there (`memory.zswap.max`, set at pause); the rest goes to swap. Incompressible guest memory filled a zswap pool charged to the same cgroup, so reclaims freed 13 MB each.
+  - **128 MiB reclaim windows** (16 MiB halved the rate).
+  - **No permanent stall:** a reclaim freeing under 16 MiB backs off (doubling from 10 s); only two in a row escalate to hibernate.
+  - **Eviction order:** hinted waits by expected idle × resident bytes, then the most recently paused, not the longest paused.
+  - **Heartbeat counters** for why reclaims stop: `pause_reclaim_target_reached`, `_not_shrinking`, `_partial`, `_errors` (new `ResidentWaitMetrics` fields: gateway first).
+- **M2 readers and gateway (C2.13), inert.** `SandboxSpec.environment_root` (gateway-only), worker capabilities `environment-root-dispatch-v1` and `environment-rafs-v1`, the gateway's `image_roots` table and retention view, and `chunk-migrate inventory`. Nothing dispatches roots while `immutable_environments.chunk_store.dispatch_roots` is false (the default) and no `image_roots` state exists.
+- **Shared startup traces (C2.7 groundwork), off** (`immutable_environments.shared_traces`).
+- **Opt-in diagnostics and spikes, off unless an environment variable is set:** the attach timing log (`UCLOUD_ENVIRONMENT_TIMING_LOG`) and the nydusd device (`UCLOUD_ENVIRONMENT_NYDUSD`, `UCLOUD_CHUNK_STORE_VIRTUAL_BLOBS`, `--nydusd-blobs`).
+- **Chunk-store converter fixes** (off with the chunk store): per-pack commits, path-ordered layers, exact rollback symlinks.
+
 ## 0.8.4 - 2026-10-02
 
 - **Component attach is serial again by default.** 0.8.3 attached image components in parallel on every worker. In a 48-sandbox burst on one CCX63, creates finished sooner (time to ready p50 6.1 s against 9.1 s on 0.8.2), but the first command inside each sandbox took a median of 17.1 s against 2.5 s, and the whole burst took 61 s against 49 s. New `immutable_environments.attach_concurrency` (integer 1–256, default 1) bounds concurrent attaches per worker backend. At 1 a worker attaches one component at a time, as in 0.8.2, and the rendered node init is unchanged. Single flight per component is kept at every setting. Workers need the new node bundle.

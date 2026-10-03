@@ -196,3 +196,92 @@ code (off). Scripts are in `/work/ucloud-sandboxes/release-0.8.2-20261002`.
   - 25 of the 48 were recipe-family fallbacks to their prepared base (no task build).
 
   The report is in `build/bench-smoke-20261002/rollout-48.json`.
+
+## 0.8.5: admission order and the pause tier (plan, not executed)
+
+Status: prepared on 2026-10-03, not deployed. Production runs 0.8.4: gateway
+`77.42.92.27`, worker snapshot `438866767`, bundles in
+`/work/ucloud-sandboxes/release-0.8.4-20261002`, `swap_gb` 0, pause tier off. The
+contents and default states are in `CHANGELOG.md` under 0.8.5. Two changes ship one
+after the other: **A** puts the 0.8.5 code everywhere with the pause tier still off;
+**B** turns the pause tier on for new workers, with zswap off.
+
+### Evidence
+
+Unregistered CCX63 workers ran the relay pressure harness: 140 managed agents,
+1.5 GiB heaps, 20 ± 5 s model waits, rollouts that end with a delete.
+- Today's path, plus 0.8.5's admission order: 137 hibernated waits against 160,
+  slowest wake 32 s against 57 s.
+- Pause tier with swap and zswap off: every wait resumed, wake p95 0.13 s against
+  14.2 s on today's path, no hibernation, no lost agent, swap at most 8.2 GB.
+- Reports: `docs/benchmarks/admission-priority-2026-10-03/`,
+  `pause-reclaim-2026-10-03/` and `memory-pressure-2026-10-03/`.
+
+### A. Ship 0.8.5 with the pause tier off
+
+1. **Preflight, read-only.** The fleet must be idle: 0 sandbox nodes, no routes, no
+   builds, no relay work. Back up relay PostgreSQL (`scripts/backup_relay_postgres.py`).
+2. **Build** the wheel from the release commit and stage
+   `/work/ucloud-sandboxes/release-0.8.5-<date>/` with `package_085.py`,
+   `gateway_upgrade_085.py`, `set_snapshot_085.py` and `set_pause_tier_085.py`. The
+   scripts are in `build/release-0.8.5/` locally; set `WHEEL_SHA256` in the first two.
+   - `package_085.py` repacks the 0.8.4 sandbox and builder bundles with the 0.8.5
+     wheel. It asserts that native files and the dependency closure are unchanged.
+   - Run `scripts/verify_installed_wheel.py` and the full suite.
+3. **Gateway first.** Run `gateway_upgrade_085.py check`, then `apply`. Its only config
+   change is `node_package_root`. 0.8.5 workers send new `ResidentWaitMetrics`
+   fields, which a 0.8.4 gateway drops. `/healthz` must report 0.8.5.
+4. **New worker snapshot** from `438866767`, as for 0.8.4: CPX32 source, source-only
+   disk overrides, VM init as `ucloud`, the lifecycle canary on the source, then
+   drain the source before sanitizing it. Point new workers at it with
+   `set_snapshot_085.py`. Builders stay on `436561313`.
+5. **Canary through the autoscaler.** One fresh CCX63 running the 0.8.4 canary
+   (create, exec, files, park, wake, delete), plus:
+   - `bench_rl_scale.py rollout --think-mode relay --tasks 64`. Compare with
+     `docs/benchmarks/rl-scale-relay-2026-10-03` (53 ms per call, p95 0.16 s on
+     turns 0–6);
+   - the heartbeat's `resident_wait` carries the four `pause_reclaim_*` counters, all 0.
+6. **Watch** heartbeat staleness, create p95 and relay delivery until the next
+   training run.
+
+**Rollback A.**
+- Gateway: `gateway_upgrade_085.py rollback`.
+- Workers: put back `deployment.before-snapshot.json` (snapshot `438866767`), restart
+  the autoscaler, and scale to zero.
+- No schema changes ship; the new heartbeat fields are additive.
+
+### B. Pause tier on, zswap off
+
+Only after A has run cleanly through a training run.
+
+1. **Flip the config** with `set_pause_tier_085.py`. It changes exactly:
+   - `sandbox.direct_pause_tier` → true;
+   - `sandbox.swap_gb` 0 → 64;
+   - `sandbox.direct_pause_tier_zswap` → false.
+
+   It validates the new file with the installed loader before publishing (checked
+   read-only against the live config on 2026-10-03), then restarts the autoscaler.
+2. **Cost.** 64 GiB of swap per CCX63. The worker's sandbox disk budget falls from
+   609,280 to 543,744 MB (11%). VM init creates the swap file and makes the RAM
+   memory tmpfs swappable.
+3. **Replace the fleet.** Workers read the config at VM init, so running workers keep
+   today's policy. Scale to zero while idle; new workers come up with the pause tier.
+4. **Canary gate**, one fresh worker:
+   - VM init shows `swapon` 64G, zswap N, and a swappable application-memory tmpfs.
+   - The relay rollout (`--think-mode relay --tasks 64`) passes with:
+     - `pauses` and `thaws` counting one per model wait;
+     - relay overhead per call within 1.5× of A's canary at p95;
+     - `pause_escalations` and `pause_reclaim_errors` at 0;
+     - no lost agent.
+   - Under no memory pressure there should be no reclaims at all.
+5. **Watch the first training run** for `pause_reclaim_stalls`, `pause_escalations`,
+   thaw time (`thaw_ms_max`), memory PSI and swap use in the heartbeat. Stop and roll
+   back B if escalations climb or agents are lost.
+
+**Rollback B.** Put back `deployment.before-pause-tier.json`, restart the autoscaler,
+and replace the pause-tier workers. The 0.8.5 code stays.
+
+**Still open after B.** Model waits still go through the gateway's park protocol
+(item 6, `docs/benchmarks/rl-scale-relay-2026-10-03`). zswap stays off until the
+fleet's real compression ratio is measured. `warm_park.py` can be deleted once the
+pause tier is the only path.

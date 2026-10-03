@@ -1,4 +1,186 @@
 {
+ "observe": {
+  "calls": 64,
+  "paused_calls": 0,
+  "pause_markers": 0,
+  "pauses_outside_a_call": 0,
+  "answer_to_agent_s": {
+   "p50": 0.0015,
+   "p95": 0.0017,
+   "max": 0.0116
+  },
+  "first_pause_after_send_ms": {
+   "p50": null,
+   "p95": null
+  },
+  "answer_to_next_request_s": {
+   "p50": 0.2482,
+   "p95": 0.3286,
+   "max": 0.368,
+   "over_1s": 0
+  },
+  "tick_late_s": null
+ },
+ "local": {
+  "calls": 64,
+  "paused_calls": 56,
+  "pause_markers": 56,
+  "pauses_outside_a_call": 0,
+  "answer_to_agent_s": {
+   "p50": 0.0094,
+   "p95": 0.012,
+   "max": 0.0126
+  },
+  "first_pause_after_send_ms": {
+   "p50": 62.8803,
+   "p95": 67.4651
+  },
+  "answer_to_next_request_s": {
+   "p50": 0.2383,
+   "p95": 0.3338,
+   "max": 0.378,
+   "over_1s": 0
+  },
+  "tick_late_s": null
+ },
+ "node": {
+  "calls": 64,
+  "paused_calls": 64,
+  "pause_markers": 155,
+  "pauses_outside_a_call": 5,
+  "answer_to_agent_s": {
+   "p50": 0.0173,
+   "p95": 0.0202,
+   "max": 0.021
+  },
+  "first_pause_after_send_ms": {
+   "p50": 66.4043,
+   "p95": 150.8477
+  },
+  "answer_to_next_request_s": {
+   "p50": 0.2746,
+   "p95": 0.5252,
+   "max": 7.637,
+   "over_1s": 2
+  },
+  "tick_late_s": null
+ },
+ "node-large": {
+  "calls": 36,
+  "paused_calls": 36,
+  "pause_markers": 86,
+  "pauses_outside_a_call": 0,
+  "answer_to_agent_s": {
+   "p50": 0.0192,
+   "p95": 0.0256,
+   "max": 0.026
+  },
+  "first_pause_after_send_ms": {
+   "p50": 66.3676,
+   "p95": 170.8643
+  },
+  "answer_to_next_request_s": {
+   "p50": 0.2887,
+   "p95": 0.4006,
+   "max": 0.411,
+   "over_1s": 0
+  },
+  "tick_late_s": null
+ },
+ "node-lanes2": {
+  "calls": 72,
+  "paused_calls": 72,
+  "pause_markers": 116,
+  "pauses_outside_a_call": 0,
+  "answer_to_agent_s": {
+   "p50": 0.0172,
+   "p95": 0.0215,
+   "max": 0.0738
+  },
+  "first_pause_after_send_ms": {
+   "p50": 66.3826,
+   "p95": 167.248
+  },
+  "answer_to_next_request_s": {
+   "p50": 0.2729,
+   "p95": 0.4213,
+   "max": 2.062,
+   "over_1s": 1
+  },
+  "tick_late_s": null
+ },
+ "node-ticker": {
+  "calls": 36,
+  "paused_calls": 36,
+  "pause_markers": 89,
+  "pauses_outside_a_call": 4,
+  "answer_to_agent_s": {
+   "p50": 0.0179,
+   "p95": 0.02,
+   "max": 0.0202
+  },
+  "first_pause_after_send_ms": {
+   "p50": 65.2111,
+   "p95": 192.1306
+  },
+  "answer_to_next_request_s": {
+   "p50": 0.291,
+   "p95": 5.1381,
+   "max": 7.595,
+   "over_1s": 2
+  },
+  "tick_late_s": {
+   "p50": 0.7054,
+   "p95": 2.0323
+  }
+ },
+ "node2": {
+  "calls": 96,
+  "paused_calls": 96,
+  "pause_markers": 229,
+  "pauses_outside_a_call": 1,
+  "answer_to_agent_s": {
+   "p50": 0.0169,
+   "p95": 0.02,
+   "max": 0.0223
+  },
+  "first_pause_after_send_ms": {
+   "p50": 65.5422,
+   "p95": 108.9673
+  },
+  "answer_to_next_request_s": {
+   "p50": 0.2737,
+   "p95": 0.4125,
+   "max": 0.491,
+   "over_1s": 0
+  },
+  "tick_late_s": null
+ },
+ "node2-ticker": {
+  "calls": 96,
+  "paused_calls": 96,
+  "pause_markers": 234,
+  "pauses_outside_a_call": 3,
+  "answer_to_agent_s": {
+   "p50": 0.0178,
+   "p95": 0.0209,
+   "max": 2.4457
+  },
+  "first_pause_after_send_ms": {
+   "p50": 68.2921,
+   "p95": 125.8693
+  },
+  "answer_to_next_request_s": {
+   "p50": 0.2814,
+   "p95": 0.4376,
+   "max": 5.364,
+   "over_1s": 1
+  },
+  "tick_late_s": {
+   "p50": 0.7313,
+   "p95": 2.0973
+  }
+ },
  "node3": {
   "calls": 96,
   "paused_calls": 96,

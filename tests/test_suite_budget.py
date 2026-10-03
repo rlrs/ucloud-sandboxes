@@ -45,8 +45,9 @@ from tests.test_package_budget import package_lines
 # the sha256 pin, the gate installing it on canaries only), +25 blob-tail
 # liveness (real nydus-image: a whiteout-hidden chunk blocks registration),
 # +322 node-local model waits (packet and netlink parsing, the scheduler on a
-# fake clock, runtime glue, the relay's no-park and acknowledged delivery).
-SUITE_LINE_BUDGET = 96_813
+# fake clock, runtime glue, the relay's no-park and acknowledged delivery),
+# +25 the gate's parallel converters as distinct owners.
+SUITE_LINE_BUDGET = 96_838
 SUITE = Path(__file__).resolve().parent
 
 

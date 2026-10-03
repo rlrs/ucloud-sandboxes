@@ -7,6 +7,7 @@ from pathlib import Path
 import shlex
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -316,6 +317,28 @@ class StoreNodeAdapterTests(unittest.TestCase):
 
 
 class RemoteHelperTests(unittest.TestCase):
+    def test_parallel_converters_are_distinct_owners(self):
+        # One shared owner let every converter take every layer claim and chunk reservation.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sample.json").write_text(json.dumps([
+                {"prepared_reference": f"10.42.0.2:5000/ucloud-managed/task-{index}:tag@sha256:{index:064x}"}
+                for index in range(6)]))
+            owners = []
+
+            def run(argv, _env):
+                owners.append(argv[argv.index("--owner") + 1])
+                return {"returncode": 0}
+            args = SimpleNamespace(s3_env=str(root / "s3.env"), sample=str(root / "sample.json"),
+                                   registry_url="http://10.42.0.48:5000", exclude="", results=str(root / "r.jsonl"),
+                                   parallel=3, devices_per_slot=1, owner="m1-gate-r:converter", config="c",
+                                   token_file="t", work_root="w", trust="k", signing_key="s", attach_tag=None)
+            (root / "s3.env").write_text("")
+            with patch.object(remote, "run_converter", run), patch.object(remote, "converter_argv",
+                                                                          wraps=remote.converter_argv):
+                remote.cmd_convert(args)
+        self.assertEqual(sorted(set(owners)), [f"m1-gate-r:converter:{slot}" for slot in range(3)])
+
     def test_reset_unmounts_only_image_mounts_overlays_first(self):
         listing = ("/ x\n/s/environment-io/components/c1 erofs\n/v/ucloud-rootfs-cache/images/i1/rootfs overlay\n"
                    "/v/ucloud-rootfs-cache/images/i2/rootfs erofs\n/home/other erofs\n")

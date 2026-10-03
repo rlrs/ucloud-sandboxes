@@ -289,7 +289,9 @@ def cmd_convert(args):
         with lock:
             slot = slots.pop()
         try:
-            record = run_converter(converter_argv(args, refs[index][2], args.owner,
+            # One owner per slot: a shared owner made layer claims and chunk
+            # reservations treat every parallel converter as one builder.
+            record = run_converter(converter_argv(args, refs[index][2], f"{args.owner}:{slot}",
                                                   slot_devices(slot, args.devices_per_slot)), env)
         finally:
             with lock:

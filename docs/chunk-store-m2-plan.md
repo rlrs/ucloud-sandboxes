@@ -461,7 +461,16 @@ holds.
 
    So M2 can release the attach-only families' OCI copies once
    `resolve_build` can regenerate a released reference with `unpack`.
-   0.9.0 adds a counter of `resolve_build` rewrites per reference, to confirm
-   the rarity before the first release. Once C2.14 moves the remaining task
+
+   **No new counter is needed.** `prepared_decisions` already keeps every
+   `resolve_build` rewrite, one row per distinct build context. Read-only on
+   2026-10-03, it holds 35 decisions:
+   - 26 rewrote nothing;
+   - 6 named terminal-prefix foundations;
+   - 3 named two precomputed sources;
+   - none named an attach-only family's image.
+
+   It cannot see a user Dockerfile that names a managed task image directly,
+   because no rewrite happens. `unpack` covers that case. Once C2.14 moves the remaining task
    setup offline, sources become intermediate too, and the end state keeps
    OCI only for foundations.

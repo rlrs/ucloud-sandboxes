@@ -1704,6 +1704,59 @@ worker snapshot, then an autoscaled canary
     - The Python NBD reader, its cache and trace prefetch become deletable
       once nydusd is the only RAFS path.
 
+### 2026-10-03: model waits under memory pressure, and the pause tier in production
+
+- **Relay baseline**
+  ([benchmarks/rl-scale-relay-2026-10-03](benchmarks/rl-scale-relay-2026-10-03/README.md)).
+  Production runs every agent through the model relay. Each model wait was
+  a park request the node declined, adding 53 ms per call at the median and
+  0.16 s at p95. The final turn holds about 1.3 s (cause not pinned). Under
+  memory pressure, the only answer was a full hibernate.
+- **Memory pressure and the pause tier's second pass**
+  ([memory-pressure](benchmarks/memory-pressure-2026-10-03/README.md),
+  [pause-reclaim](benchmarks/pause-reclaim-2026-10-03/README.md),
+  [admission-priority](benchmarks/admission-priority-2026-10-03/README.md)).
+  - **First pass.** C1.1 freed about 13 MB per reclaim, because incompressible
+    guest memory filled a zswap pool charged to the same cgroup.
+  - **Fixes, aligned with DSec:**
+    - `memory.zswap.max` capped at 25% of the bound (zswap is off in
+      production);
+    - 128 MiB reclaim windows;
+    - stall backoff in place of a permanent stall;
+    - evicting the waits that will stay idle longest;
+    - admission puts running rollouts first.
+  - **Result** at 140 rollouts with 1.5 GiB heaps on one CCX63: every wait
+    resumed, wake p95 0.13 s against 14.2 s on today's path, nothing
+    hibernated, swap at most 8.2 GB.
+- **0.8.5 in production** ([rollout-0.8.0.md](rollout-0.8.0.md), "0.8.5"). The
+  pause tier is on, with 64 GiB of swap and zswap off (snapshot `439222185`).
+  - **Relay canary at 64 rollouts:** no escalation, reclaim error or
+    hibernation, and relay overhead p95 0.229 s against a 0.24 s gate.
+  - **To watch in the first training run:** the thaw adds about 20 ms per
+    call, and the final-turn hold rose to 2.6 s at p95.
+  - **Not yet exercised in production:** reclaim and admission under real
+    pressure.
+  - **Plan:** the C1.1 gates (pause and thaw) pass. "Pause on by default"
+    from the realigned order is done.
+- **M1 gate's remaining misses:**
+  - **Stored bytes:** the convert race now uses per-chunk reservations in the
+    index (`820a418`). A chunk is packed once, and a dead builder's hold
+    lapses.
+  - **nydusd as configuration:** `chunk_store.nydusd`, pinned by sha256
+    (`9e8426b`). The spike's environment switches are gone, and the attach
+    diagnostic was deleted.
+  - **Gate run 3** tests both on the production path: nydusd canaries,
+    attach 8, and a 0.8.5 baseline worker. All gate workers stay
+    unregistered (`gateway_port: 1`).
+- **Next, in order:**
+  1. Gate run 3, then the nydusd items before M2: build and pin nydusd in the
+     node bundle, retention of tail-only chunks, and a node cache budget.
+  2. **Node-local model waits** (pause-reclaim item 6). They remove the
+     gateway round trip, durable row and 409 retry from every wait. This is
+     C1.1 "Ownership", and M1's exit criterion: no PostgreSQL on warm paths.
+  3. **C3.2 group create and C4.3 placement wiring:** the levers for the
+     512-rollout burst, which is bound by per-node create queueing.
+
 ## Appendix: evidence index
 
 - Image path:

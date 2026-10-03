@@ -795,7 +795,8 @@ class Gate:
             print(json.dumps(verdict, indent=1, sort_keys=True))
             return verdict
         (self.root / "report.json").write_text(json.dumps(verdict, indent=1, sort_keys=True) + "\n")
-        directory = Path(self.args.docs_dir) / f"m1-gate-{self.args.report_date}"
+        # Named by run: two runs on one day must not overwrite each other.
+        directory = Path(self.args.docs_dir) / f"m1-gate-{self.args.run_id}"
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "summary.json").write_text(json.dumps(verdict, indent=1, sort_keys=True) + "\n")
         (directory / "README.md").write_text(render_readme(verdict, self.args.report_date))

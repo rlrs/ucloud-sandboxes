@@ -1617,7 +1617,7 @@ worker snapshot, then an autoscaled canary
   - S13: fanotify deferred to C2.1; per-image mounts.
 - **Built:** the M1 core and the C2.6 store node (asyncio, 4 MiB extents,
   hedging).
-- **Gate run 1** (`benchmarks/m1-gate-2026-10-03`):
+- **Gate run 1** (`benchmarks/m1-gate-20261002t2212`):
   - 181/181 full tree, and crash injection passed;
   - stored bytes failed (convert race), the burst failed (creates dominate),
     and rollback was 8/10;

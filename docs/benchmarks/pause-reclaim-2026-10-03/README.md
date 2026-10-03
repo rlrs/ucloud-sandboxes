@@ -110,8 +110,10 @@ Measured against that:
    relay tells the node directly, and pause or reclaim needs no gateway
    round trip.
 
-Items 1–4 shipped in `668f547`. Item 5 (admission) and item 6 (node-local
-waits) are next.
+Items 1–4 shipped in `668f547`. Item 5 (admission) shipped in `b39f00b` and
+was validated in [admission-priority-2026-10-03](../admission-priority-2026-10-03/README.md):
+modest on today's path, neutral on the pause tier. Item 6 (node-local waits)
+remains.
 
 ## Pass 2: the second pass under the same pressure (2026-10-03)
 
@@ -143,16 +145,18 @@ waits) are next.
   memory frees less per reclaim, because up to a quarter of the bound stays
   in zswap. It thrashes more too (PSI full 11.8): incompressible pages cost a
   compression attempt, then a write.
-- **The tail is admission, not reclaim.**
+- **The tail was mostly the harness.** In this harness, finished rollouts
+  were never deleted.
   - 11 and 16 of about 950 wakes per node took over 5 s; a few took 3–5
     minutes after up to 7 retries.
-  - These are thawed sandboxes waiting for headroom while new creates take
-    it, which is item 5.
   - The 2 "deaths" per node are late-created sandboxes whose wakes were still
     retrying when the run was interrupted.
-- **Density barely moved:** 128 created against 124–130. Admission still
-  counts each sandbox's bound, so reclaimed memory relieves pressure but does
-  not admit more. That is also item 5.
+  - Both come from late wakes and creates waiting for headroom that finished
+    rollouts held forever. With rollouts that end
+    ([admission-priority-2026-10-03](../admission-priority-2026-10-03/README.md)),
+    this tier's wakes have a p95 of 0.13 s and a maximum of 3.1 s.
+- **Density:** 128 created against 124–130, which is the node's capacity at
+  2 GiB bounds.
 
 **Validation (as planned before pass 2):** re-run `benchmark_sandbox_density.py --mode relay` (140
 rollouts on one CCX63), with wakes retried as the relay does.

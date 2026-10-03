@@ -1,5 +1,7 @@
 """Chunk store M2 on the gateway: the image_roots table and journal, the
 resolver's dispatched root, and placement's capability requirement."""
+import json
+import sqlite3
 from types import SimpleNamespace
 import unittest
 
@@ -7,10 +9,11 @@ import unittest
 from tests import test_environment_artifact as artifact_fixtures
 from tests.harness import LocalFleet
 from ucloud_sandboxes.capabilities import ENVIRONMENT_RAFS_CAPABILITY, ENVIRONMENT_ROOT_CAPABILITY
+from ucloud_sandboxes.chunk_migrate import inventory
 from ucloud_sandboxes.environment_artifact import OCI_IMAGE, attach_environment_to_image, canonical_bytes, publish_environment
 from ucloud_sandboxes.environment_dependencies import EnvironmentDependencyResolver
 from ucloud_sandboxes.environment_manifest import EnvironmentManifest
-from ucloud_sandboxes.gateway.image_roots import ImageRootsStore, live_roots_for
+from ucloud_sandboxes.gateway.image_roots import ImageRootsStore, retention_view
 from ucloud_sandboxes.gateway.placement import _sandbox_required_capabilities
 from ucloud_sandboxes.sandbox import SandboxSpec
 
@@ -45,9 +48,12 @@ class ImageRootsTests(artifact_fixtures.EnvironmentArtifactTests):
             store.transition("managed/b", D["1"], "switched")
         self.assertEqual(ImageRootsStore(self.root / "image-roots.sqlite3").get("managed/a", D["1"])["state"],
                          "released")  # Reopening an existing file keeps it.
-        # Retention keeps released, switched and converted roots, and needs no table to exist.
-        self.assertEqual(live_roots_for(self.root / "images.sqlite"), {D["4"]})
-        self.assertEqual(live_roots_for(self.root / "elsewhere" / "images.sqlite"), set())
+        # Retention keeps converted, switched and released roots, and stops counting
+        # a dispatched image's annotation; it needs no table to exist.
+        store.record_converted("managed/c", D["5"], config_digest=D["2"], old_root=D["6"], new_root=D["7"],
+                               wave="1", build_input=True)
+        self.assertEqual(retention_view(self.root / "images.sqlite"), ({D["4"], D["7"]}, {("managed/a", D["1"])}))
+        self.assertEqual(retention_view(self.root / "elsewhere" / "images.sqlite"), (set(), set()))
 
     def test_the_resolver_dispatches_a_switched_root_and_its_closure(self):
         manifest, source = EnvironmentManifest(self.digest), self.component.source_image
@@ -78,6 +84,60 @@ class ImageRootsTests(artifact_fixtures.EnvironmentArtifactTests):
         pinned = SandboxSpec(id="s", image="r/a@" + D["1"], cpus=1, memory_mb=512, environment_root=D["2"])
         self.assertEqual(_sandbox_required_capabilities(pinned.to_dict()),
                          (ENVIRONMENT_ROOT_CAPABILITY, ENVIRONMENT_RAFS_CAPABILITY))
+
+
+class InventoryTests(artifact_fixtures.EnvironmentArtifactTests):
+    def test_inventory_lists_roots_build_inputs_families_and_releasable_bytes(self):
+        manifest, source = EnvironmentManifest(self.digest), self.component.source_image
+        root = publish_environment(self.registry, source_image=source, environment=manifest, image_config={},
+                                   signing_key=self.key, tag="root")
+        self.client.manifests["image-a"] = canonical_bytes({"schemaVersion": 2, "mediaType": OCI_IMAGE,
+                                                            "config": {"digest": source}, "layers": []})
+        digests = {"a": attach_environment_to_image(self.registry, image_repository="managed/a",
+                                                    image_reference="image-a", environment_digest=root),
+                   "b": D["2"], "c": D["3"]}
+        layers = {"a": [(D["5"], 100), (D["6"], 7)], "b": [(D["7"], 50)], "c": [(D["6"], 7)]}
+        for name in "bc":  # Images without an environment annotation.
+            self.client.manifests[digests[name]] = canonical_bytes({"schemaVersion": 2, "mediaType": OCI_IMAGE,
+                                                                    "config": {"digest": D["8"]}, "layers": []})
+
+        class Registry:
+            def catalog(self):
+                return ["environments", "managed/a", "managed/b", "managed/c"]
+
+            def tags(self, repository):
+                return ["latest", "ucloud-digest-x"] if repository == "managed/a" else ["latest"]
+
+            def manifest_digest(self, repository, tag):
+                return digests[repository[-1]]
+
+            def manifest_layers(self, repository, digest):
+                items = [SimpleNamespace(digest=d, size=s) for d, s in layers[repository[-1]]]
+                return SimpleNamespace(layers=items, total_size=sum(item.size for item in items))
+        catalog = self.root / "prepared-images.sqlite3"
+        db = sqlite3.connect(catalog)
+        db.execute("CREATE TABLE prepared_sources (source TEXT, preparation TEXT, reference TEXT)")
+        db.execute("CREATE TABLE prepared_foundations (key TEXT, source TEXT, family TEXT, base TEXT, payload TEXT)")
+        db.execute("CREATE TABLE prepared_decisions (identity TEXT, payload TEXT)")
+        db.execute("INSERT INTO prepared_sources VALUES ('x', 'source', ?)", ("r:5000/managed/c:latest@" + D["3"],))
+        db.commit()
+        db.close()
+        selection = self.root / "selection.json"
+        selection.write_text(json.dumps({"images": [
+            {"family": "SWE-smith", "image": "x", "prepared_reference": "r:5000/managed/a:latest@" + digests["a"],
+             "upstream_rows": 3}]}))
+        summary = inventory(Registry(), self.registry, prefix="managed/", catalog_file=catalog, selection=selection,
+                            out_rows=self.root / "rows.jsonl", out_summary=self.root / "summary.json")
+        rows = {row["repository"]: row for row in map(json.loads, (self.root / "rows.jsonl").read_text().splitlines())}
+        self.assertEqual(rows["managed/a"]["tags"], ["latest", "ucloud-digest-x"])  # Aliases of one digest.
+        self.assertEqual((rows["managed/a"]["environment_root"], rows["managed/a"]["components"]), (root, [self.digest]))
+        self.assertEqual((rows["managed/a"]["family"], rows["managed/a"]["task_rows"]), ("SWE-smith", 3))
+        self.assertIsNone(rows["managed/b"]["environment_root"])
+        self.assertEqual([row["build_input"] for row in rows.values()], [False, False, True])
+        self.assertEqual((summary["images"], summary["environment_images"], summary["build_inputs"]), (3, 1, 1))
+        self.assertEqual((summary["unique_oci_bytes"], summary["releasable_oci_bytes"]), (157, 150))  # D6 is kept.
+        self.assertEqual(summary["families"]["SWE-smith"]["releasable_oci_bytes"], 100)
+        self.assertEqual(summary["errors"], {})
 
 
 class GatewayDispatchTests(unittest.TestCase):

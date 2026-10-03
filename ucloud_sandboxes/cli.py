@@ -323,6 +323,8 @@ def build_parser() -> argparse.ArgumentParser:
     environment_io.set_defaults(func=cmd_serve_environment_io)
     from .chunk_convert import add_commands as add_chunk_store_commands
     add_chunk_store_commands(subparsers)
+    from .chunk_migrate import add_commands as add_chunk_migrate_commands
+    add_chunk_migrate_commands(subparsers)
 
     publish_environment = subparsers.add_parser(
         "publish-environment", help="Publish a fresh allowlisted immutable artifact for an existing OCI image.",
@@ -2126,9 +2128,10 @@ def _run_reference_retention(
         environment_repository = repositories[ENVIRONMENT_REASON]
         excluded = set(repositories.values())
         index = ImageEnvironmentIndex(client)
-        # Chunk store M2: converted and dispatched roots stay live on their
-        # image_roots rows alone (plan §3.3); old roots keep their annotations.
-        from .gateway.image_roots import live_roots_for
+        # Chunk store M2 (plan §3.3): converted and dispatched roots stay live on
+        # their image_roots rows; a dispatched image's annotation no longer counts.
+        from .gateway.image_roots import retention_view
+        mapped_roots, dispatched = retention_view(config.image_file())
         if repository_prefix:
             decision = skip(
                 ENVIRONMENT_REASON, "a repository prefix limits the managed image scan",
@@ -2142,7 +2145,8 @@ def _run_reference_retention(
                         record
                         for record in remaining_images
                         if record.repository not in excluded
-                    ) | live_roots_for(config.image_file()),
+                        and (record.repository, record.digest) not in dispatched
+                    ) | mapped_roots,
                 )
                 decision = decide(ENVIRONMENT_REASON, live)
                 if decision.delete:
@@ -2160,7 +2164,9 @@ def _run_reference_retention(
                 )
         deleted_environments: list[RegistryTag] = []
         if execute and decision.delete:
-            # An image pushed since the scan may annotate an old root.
+            # An image pushed since the scan may annotate an old root, and a
+            # row may have been recorded or switched since.
+            mapped_roots, dispatched = retention_view(config.image_file())
             fresh = environment_live_identities(
                 client,
                 environment_repository,
@@ -2169,7 +2175,8 @@ def _run_reference_retention(
                     for repository in client.catalog()
                     if repository not in excluded
                     for record in list_repository_tags(client, repository)
-                ) | live_roots_for(config.image_file()),
+                    if (record.repository, record.digest) not in dispatched
+                ) | mapped_roots,
             )
             deleted_environments = execute_reference_prune(
                 client, decision, usage_store=usage_store,

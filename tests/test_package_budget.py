@@ -50,9 +50,10 @@ import unittest
 # hardlink groups, +60 path-ordered layers and warm-before-verify, +18 per-pack
 # commits (convert race), +69 exact symlinks in rollback (an EROFS name walk),
 # +63 M2 readers: SandboxSpec.environment_root, dispatched roots, capabilities,
-# +171 the gateway's image_roots table, dispatch and retention. Lower it on
-# deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 111_252
+# +171 the gateway's image_roots table, dispatch and retention, +207 chunk-migrate
+# inventory and retention's dispatched view (design §8 allows the migration tool
+# 250). Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 111_459
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

@@ -27,11 +27,17 @@ def roots_path(image_file):
     return Path(image_file).with_name("image-roots.sqlite3")
 
 
-def live_roots_for(image_file):
-    """Roots retention keeps for their image_roots rows alone (plan §3.3); none
-    before the gateway first opens the table."""
+def retention_view(image_file):
+    """(roots retention keeps for their rows alone, images whose annotation no
+    longer counts) (plan §3.3). A dispatched image's old root is kept only by
+    references (routes, owners), so a build input, whose manifest stays,
+    still releases its EROFS root. Empty before the gateway opens the table."""
     path = roots_path(image_file)
-    return ImageRootsStore(path).live_roots() if path.exists() else set()
+    if not path.exists():
+        return set(), set()
+    store = ImageRootsStore(path)
+    return store.live_roots(), {(row["repository"], row["manifest_digest"])
+                                for state in DISPATCHED for row in store.rows(state=state)}
 
 
 class ImageRootsStore:

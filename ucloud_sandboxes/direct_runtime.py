@@ -55,6 +55,7 @@ def build_direct_runtime_service(
     checkpoint_registry_repository: str = "",
     environment_registry: object | None = None,
     environment_backend_socket: Path | None = None,
+    environment_rafs: bool = False,
     telemetry: Telemetry | None = None,
 ) -> DirectSandboxService:
     """Assemble the one production direct-runtime owner for an entire node."""
@@ -156,6 +157,7 @@ def build_direct_runtime_service(
             resolved_image_cache_root,
             environment_registry,
             EnvironmentBackendClient(environment_backend_socket),
+            rafs=environment_rafs,
         )
     overlays = OverlayRootfsManager(
         image_store,

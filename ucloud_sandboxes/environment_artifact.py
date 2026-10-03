@@ -871,3 +871,25 @@ def load_image_environment(registry, repository, reference, *, required=True):
     if not isinstance(config, dict) or config.get("digest") != environment.source_image:
         raise ValueError("signed environment belongs to another OCI image")
     return root, environment
+
+
+def load_dispatched_environment(registry, repository, reference, root):
+    """A signed root the gateway dispatched for an image (chunk store M2).
+
+    While the image's manifest exists the root must belong to it, as an
+    annotated root must. A released image has no manifest; its signed root,
+    which carries the image config, stands alone.
+    """
+    environment = load_environment(registry, require_digest(root))
+    try:
+        document, _ = registry.client.manifest_document(repository, reference)
+    except RegistryRequestError as exc:
+        if exc.status_code != 404:
+            raise
+        return root, environment
+    if _DIGEST.fullmatch(reference) and content_digest(canonical_bytes(document)) != reference:
+        raise ValueError("source image identity mismatch")
+    config = document.get("config")
+    if not isinstance(config, dict) or config.get("digest") != environment.source_image:
+        raise ValueError("dispatched environment belongs to another OCI image")
+    return root, environment

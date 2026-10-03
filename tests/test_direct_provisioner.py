@@ -98,7 +98,7 @@ class FakeImageStore:
         return self.image
 
     @contextmanager
-    def operation_lease(self, image_ref: str):
+    def operation_lease(self, image_ref: str, environment_root=None):
         yield self.materialize(image_ref)
 
     def reconcile_images(self, referenced_image_ids, *, is_referenced) -> None:

@@ -239,6 +239,9 @@ class EnvironmentBootstrapTests(unittest.TestCase):
             node = render_vm_init_script(vm_fixtures.VmInitTests._options(
                 **common, **chunk, environment_chunk_store_url="http://10.42.0.200:5091"))
             self.assertIn("--chunk-concurrent-misses 32 --chunk-store-url http://10.42.0.200:5091", node)
+            # The node agent advertises RAFS (M2 dispatch) only with a store node behind it.
+            self.assertIn(" --environment-backend-socket /run/ucloud-environment/io.sock --environment-rafs", node)
+            self.assertNotIn("--environment-rafs", reader)
             with self.assertRaisesRegex(ValueError, "store node"):
                 render_vm_init_script(vm_fixtures.VmInitTests._options(
                     **common, environment_chunk_store_url="http://10.42.0.200:5091"))

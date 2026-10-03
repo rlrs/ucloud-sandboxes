@@ -482,7 +482,7 @@ class FakeDockerStore(DockerOverlay2RootfsStore):
         return self.images[image_ref.rsplit(":", 1)[1]]
 
     @contextmanager
-    def operation_lease(self, image_ref):
+    def operation_lease(self, image_ref, environment_root=None):
         image_id, rootfs, _layers = self._record(image_ref)
         yield SimpleNamespace(image_id=image_id, rootfs=rootfs,
                               image_config=DockerImageConfig.from_inspection(

@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 from threading import Lock
 
 from .environment_artifact import (ImmutableEnvironment, canonical_bytes,
-    environment_root_digest, load_image_environment, require_digest)
+    environment_root_digest, load_dispatched_environment, load_image_environment, require_digest)
 from .direct_registry import DirectRegistryCapacityUnavailable
 from .environment_backend import NO_BLOCK_DEVICE, block_device_count, mount_has_dependents
 from .environment_manifest import HOST_EROFS_ABI
@@ -37,8 +37,9 @@ class EnvironmentDeviceCapacityError(DirectRegistryCapacityUnavailable):
 class EnvironmentRootfsStore:
     backend_abi = HOST_EROFS_ABI
 
-    def __init__(self, root, registry, backend, *, runner=None, referenced=None, block_devices=None):
+    def __init__(self, root, registry, backend, *, runner=None, referenced=None, block_devices=None, rafs=False):
         self.root, self.registry, self.backend = Path(root), registry, backend
+        self.rafs = bool(rafs)  # The backend reads RAFS components (a chunk index and store node).
         if not self.root.is_absolute():
             raise ValueError("environment image store must be absolute")
         self.images, self.locks = self.root / "images", self.root / "locks"
@@ -175,7 +176,7 @@ class EnvironmentRootfsStore:
         self._track(image_id, environment)
         return rootfs
 
-    def _resolved(self, image_ref):
+    def _resolved(self, image_ref, environment_root=None):
         coordinates = registry_repository_tag_from_image_ref(image_ref)
         expected_host = urlparse(self.registry.client.base_url).netloc
         if coordinates is None or registry_host_from_image_ref(image_ref) != expected_host:
@@ -183,7 +184,7 @@ class EnvironmentRootfsStore:
         repository, tag = coordinates
         pinned = manifest_digest_from_image_ref(image_ref)
         reference = pinned or tag
-        key = (repository, pinned)
+        key = (repository, pinned, environment_root)
         pending = None
         if pinned:
             with self._metrics_guard:
@@ -200,7 +201,9 @@ class EnvironmentRootfsStore:
                 root, environment = pending.result()
                 return environment, {"root": root, "source": image_ref, "environment": environment.to_dict()}
         try:
-            root, environment = load_image_environment(self.registry, repository, reference)
+            root, environment = (
+                load_dispatched_environment(self.registry, repository, reference, environment_root)
+                if environment_root else load_image_environment(self.registry, repository, reference))
             if pending is not None:
                 with self._metrics_guard:
                     self._resolutions[key] = (root, environment)
@@ -219,8 +222,8 @@ class EnvironmentRootfsStore:
         return environment, {"root": root, "source": image_ref, "environment": environment.to_dict()}
 
     @contextmanager
-    def operation_lease(self, image_ref):
-        environment, receipt = self._resolved(image_ref)
+    def operation_lease(self, image_ref, environment_root=None):
+        environment, receipt = self._resolved(image_ref, environment_root)
         image_id = "sha256:" + environment.environment.sha256
         while True:
             with self._lease(image_id):

@@ -6,11 +6,12 @@ import unittest
 # Import the module, not the TestCase: discovery would rerun it here.
 from tests import test_environment_artifact as artifact_fixtures
 from ucloud_sandboxes.environment_artifact import (ENVIRONMENT_ANNOTATION, OCI_IMAGE,
-    attach_environment_to_image, canonical_bytes, load_environment, publish_environment)
+    attach_environment_to_image, canonical_bytes, content_digest, load_environment, publish_environment)
 from ucloud_sandboxes.environment_manifest import EnvironmentManifest, HOST_EROFS_ABI
 from ucloud_sandboxes.environment_rootfs import EnvironmentImageRuntime, EnvironmentRootfsStore
 from ucloud_sandboxes.images import ImageManager, ImageStore
 from ucloud_sandboxes.image_rootfs import OverlayRootfsManager
+from ucloud_sandboxes.sandbox import SandboxSpec, sandbox_spec_fingerprint
 
 
 class EnvironmentRootfsTests(artifact_fixtures.EnvironmentArtifactTests):
@@ -95,6 +96,54 @@ class EnvironmentRootfsTests(artifact_fixtures.EnvironmentArtifactTests):
             self.assertEqual((first.image_id, first.rootfs), (second.image_id, second.rootfs))
             self.assertEqual((first.image_config.command, second.image_config.command), (("/bin/a",), ("/bin/b",)))
         self.assertEqual(len(mount_commands), 1)
+
+    def test_a_dispatched_root_pins_the_image_and_survives_its_release(self):
+        # Chunk store M2: the gateway dispatches the root; the worker binds it
+        # to the image while the manifest exists, and uses it alone after.
+        manifest, source = EnvironmentManifest(self.digest), self.component.source_image
+        annotated_root = publish_environment(self.registry, source_image=source, environment=manifest,
+            image_config={"Cmd": ["/bin/old"]}, signing_key=self.key, tag="root-old")
+        new_root = publish_environment(self.registry, source_image=source, environment=manifest,
+            image_config={"Cmd": ["/bin/new"]}, signing_key=self.key, tag="root-new")
+        other = canonical_bytes({"schemaVersion": 2, "mediaType": OCI_IMAGE,
+                                 "config": {"digest": "sha256:" + "7" * 64}, "layers": []})
+        self.client.manifests[content_digest(other)] = other
+        self.client.manifests["task"] = canonical_bytes({"schemaVersion": 2, "mediaType": OCI_IMAGE,
+                                                         "config": {"digest": source}, "layers": []})
+        digest = attach_environment_to_image(self.registry, image_repository="environments", image_reference="task",
+                                             environment_digest=annotated_root)
+        self.client.base_url = "http://localhost:5000"
+        ref = "localhost:5000/environments:task@" + digest
+        run = lambda command, **_: SimpleNamespace(returncode=0, stdout="", stderr="")  # noqa: E731
+        backend = SimpleNamespace(ensure=lambda digest: self.root / "components" / digest[7:], drop=lambda digest: True)
+
+        def store():
+            return EnvironmentRootfsStore(self.root / "store", self.registry, backend,
+                                          runner=SimpleNamespace(run=run), referenced=lambda _: False)
+        with store().operation_lease(ref) as image:
+            self.assertEqual(image.image_config.command, ("/bin/old",))  # No root: the annotation.
+        with store().operation_lease(ref, new_root) as image:
+            self.assertEqual(image.image_config.command, ("/bin/new",))
+        with self.assertRaisesRegex(ValueError, "another OCI image"):  # A root binds to its image.
+            with store().operation_lease("localhost:5000/environments:other@" + content_digest(other), new_root):
+                pass
+        for key in [key for key in self.client.manifests if key in (digest, "task")]:
+            del self.client.manifests[key]  # Released: the manifest is gone.
+        with store().operation_lease(ref, new_root) as image:
+            self.assertEqual(image.image_config.command, ("/bin/new",))
+
+    def test_the_spec_field_is_optional_and_keeps_old_fingerprints(self):
+        raw = {"id": "s", "image": "localhost:5000/environments:task@sha256:" + "1" * 64, "cpus": 1, "memory_mb": 512}
+        plain = SandboxSpec.from_dict(raw)
+        self.assertNotIn("environment_root", plain.to_dict())
+        self.assertEqual(sandbox_spec_fingerprint(SandboxSpec.from_dict(plain.to_dict())),
+                         sandbox_spec_fingerprint(plain))
+        pinned = SandboxSpec.from_dict({**raw, "environment_root": "sha256:" + "2" * 64})
+        pinned.validate()
+        self.assertEqual(SandboxSpec.from_dict(pinned.to_dict()), pinned)
+        self.assertNotEqual(sandbox_spec_fingerprint(pinned), sandbox_spec_fingerprint(plain))
+        with self.assertRaisesRegex(ValueError, "sha256 digest"):
+            SandboxSpec.from_dict({**raw, "environment_root": "latest"}).validate()
 
 
 if __name__ == "__main__":

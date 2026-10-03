@@ -37,6 +37,8 @@ from .capabilities import (
     SPLIT_CHECKPOINT_CAPABILITY,
     REFLINK_MEMORY_RESTORE_CAPABILITY,
     HOST_EROFS_CAPABILITY,
+    ENVIRONMENT_ROOT_CAPABILITY,
+    ENVIRONMENT_RAFS_CAPABILITY,
     RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX,
     RUNTIME_CPU_CAPABILITY_PREFIX,
     STORAGE_NATIVE_DETACH_CAPABILITY,
@@ -2065,7 +2067,9 @@ def build_direct_node_agent_server(
         direct_capabilities.append(RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX + fingerprint.node_compatibility_sha256)
         direct_capabilities.append(RUNTIME_CPU_CAPABILITY_PREFIX + fingerprint.cpu_features_sha256)
     if getattr(service.provisioner.overlays.image_store, "backend_abi", None) == HOST_EROFS_ABI:
-        direct_capabilities.append(HOST_EROFS_CAPABILITY)
+        direct_capabilities.extend((HOST_EROFS_CAPABILITY, ENVIRONMENT_ROOT_CAPABILITY))
+        if getattr(service.provisioner.overlays.image_store, "rafs", False):
+            direct_capabilities.append(ENVIRONMENT_RAFS_CAPABILITY)
     DirectBoundHandler.commit_exports = CommitExports(service)
     if DirectBoundHandler.commit_exports.registry is not None:
         direct_capabilities.append(COMMIT_EXPORT_CAPABILITY)

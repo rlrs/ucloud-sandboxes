@@ -25,6 +25,7 @@ from .models import ResourceQuantity, utc_now
 
 
 SANDBOX_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+ENVIRONMENT_ROOT_RE = re.compile(r"sha256:[0-9a-f]{64}")
 OPERATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 SANDBOX_RESERVED_LABEL_PREFIX = "ucloud-sandboxes."
@@ -459,6 +460,10 @@ class SandboxSpec:
     filesystem: SandboxFilesystemSpec | None = None
     linux_host: SandboxLinuxHostSpec | None = None
     labels: dict[str, str] = field(default_factory=dict)
+    # The signed environment root the gateway dispatched (chunk store M2): set
+    # by the gateway only, it pins a sandbox's root for its whole life, moves
+    # included. Absent, the worker reads the image's annotation.
+    environment_root: str | None = None
 
     def __post_init__(self) -> None:
         if self.security is None:
@@ -504,6 +509,7 @@ class SandboxSpec:
             "memory_mb",
             "network",
             "dns_servers",
+            "environment_root",
             "network_policy",
             "parkable",
             "profile",
@@ -589,6 +595,11 @@ class SandboxSpec:
             filesystem=filesystem,
             linux_host=SandboxLinuxHostSpec.from_dict(linux_host_raw),
             labels=labels,
+            environment_root=(
+                _json_string(raw["environment_root"], "environment_root")
+                if raw.get("environment_root") is not None
+                else None
+            ),
         )
 
     def validate(self) -> None:
@@ -599,6 +610,8 @@ class SandboxSpec:
             )
         if not self.image.strip() or "\0" in self.image:
             raise ValueError("sandbox image is required.")
+        if self.environment_root is not None and not ENVIRONMENT_ROOT_RE.fullmatch(self.environment_root):
+            raise ValueError("environment_root must be a sha256 digest.")
         if any("\0" in argument for argument in self.command):
             raise ValueError("sandbox command cannot contain NUL.")
         for key, value in self.env.items():
@@ -712,6 +725,8 @@ class SandboxSpec:
         raw["security"] = self.security.to_dict()
         raw["filesystem"] = self.filesystem.to_dict()
         raw["linux_host"] = self.linux_host.to_dict()
+        if self.environment_root is None:
+            raw.pop("environment_root")  # Specs without it keep their fingerprints.
         return raw
 
     def requested_resources(self) -> ResourceQuantity:

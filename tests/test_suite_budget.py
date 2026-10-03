@@ -32,8 +32,9 @@ from tests.test_package_budget import package_lines
 # +24 verifier fixes from the M1 gate (replaced hardlink members, node locators),
 # +17 path-ordered layers, +52 the convert race and the gate bench's node API
 # (operation, unmount; test_chunk_store_gate: no scenario covers an operator script),
-# +22 exact rollback symlinks (real mkfs.erofs images), +43 the gate's baseline worker.
-SUITE_LINE_BUDGET = 95_805
+# +22 exact rollback symlinks (real mkfs.erofs images), +43 the gate's baseline worker,
+# +53 M2 readers (dispatched roots, spec fingerprints, the RAFS flag).
+SUITE_LINE_BUDGET = 95_858
 SUITE = Path(__file__).resolve().parent
 
 

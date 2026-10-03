@@ -85,7 +85,8 @@ ENVIRONMENT_IO_SERVICE
 '''
     # Start (never restart): active filesystem devices outlive frontend upgrades.
     start = f"$SUDO systemctl enable {SERVICE}\n$SUDO systemctl start {SERVICE}\n"
-    return registry_flags + " --environment-backend-socket " + SOCKET, setup, start
+    rafs = " --environment-rafs" if options.environment_chunk_store_url else ""
+    return registry_flags + " --environment-backend-socket " + SOCKET + rafs, setup, start
 
 
 def validate(options):

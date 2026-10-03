@@ -48,9 +48,10 @@ import unittest
 #   native device replaces the worker read path it feeds, not this node.
 # +13 attach_concurrency (0.8.3 burst fix), +24 M1 gate: verify through the node,
 # hardlink groups, +60 path-ordered layers and warm-before-verify, +18 per-pack
-# commits (convert race), +69 exact symlinks in rollback (an EROFS name walk).
+# commits (convert race), +69 exact symlinks in rollback (an EROFS name walk),
+# +63 M2 readers: SandboxSpec.environment_root, dispatched roots, capabilities.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 111_018
+PACKAGE_LINE_BUDGET = 111_081
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

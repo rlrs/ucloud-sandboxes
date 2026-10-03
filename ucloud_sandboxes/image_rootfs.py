@@ -202,7 +202,9 @@ class ImmutableRootfsStore(Protocol):
     """Image acquisition/GC contract; sandbox writable lifecycle stays in the manager."""
     images: Path
 
-    def operation_lease(self, image_ref: str) -> AbstractContextManager[MaterializedRootfs]: ...
+    def operation_lease(
+        self, image_ref: str, environment_root: str | None = None
+    ) -> AbstractContextManager[MaterializedRootfs]: ...
     def mounted_rootfs_lease(self, image_id: str, *, rootfs_identity_sha256: str) -> AbstractContextManager[Path]: ...
     def warm(self, image_ref: str) -> None: ...
     def collect_image(self, image_id: str, *, is_referenced: Callable[[str], bool]) -> bool: ...
@@ -360,7 +362,9 @@ class DockerOverlay2RootfsStore:
             del image
 
     @contextmanager
-    def operation_lease(self, image_ref: str) -> Iterator[MaterializedRootfs]:
+    def operation_lease(
+        self, image_ref: str, environment_root: str | None = None
+    ) -> Iterator[MaterializedRootfs]:
         """Materialize an image and protect its digest until durable commit.
 
         The shared flock is process-crash safe. GC takes the same lock
@@ -368,6 +372,9 @@ class DockerOverlay2RootfsStore:
         has either committed its durable image root or released this lease.
         """
 
+        if environment_root is not None:
+            # Only immutable-environment workers advertise dispatched roots.
+            raise ValueError("this worker's Docker image store cannot use a dispatched environment root")
         image_ref = str(image_ref).strip()
         if not image_ref or "\0" in image_ref:
             raise ValueError("image_ref is invalid")
@@ -1138,9 +1145,11 @@ class OverlayRootfsManager:
             path.mkdir(mode=0o700, parents=True, exist_ok=True)
             _require_private_directory(path)
 
-    def resolve(self, image_ref: str) -> AbstractContextManager[MaterializedRootfs]:
+    def resolve(
+        self, image_ref: str, environment_root: str | None = None
+    ) -> AbstractContextManager[MaterializedRootfs]:
         """Lease resolved immutable content until its registry owner commits."""
-        return self.image_store.operation_lease(image_ref)
+        return self.image_store.operation_lease(image_ref, environment_root)
 
     def warm(self, image_ref: str) -> None:
         self.image_store.warm(image_ref)

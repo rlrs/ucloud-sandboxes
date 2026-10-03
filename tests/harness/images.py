@@ -154,7 +154,7 @@ class LocalRootfsStore:
         return EnvironmentManifest(base=image_id).rootfs_fingerprint(DOCKER_OVERLAY2_ABI)
 
     @contextmanager
-    def operation_lease(self, image_ref: str) -> Iterator[MaterializedRootfs]:
+    def operation_lease(self, image_ref: str, environment_root=None) -> Iterator[MaterializedRootfs]:
         yield self._materialize(image_ref)
 
     @contextmanager

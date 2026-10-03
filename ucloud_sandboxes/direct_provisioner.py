@@ -170,7 +170,7 @@ class DirectSandboxProvisioner:
         # before persisting an operation or reserving node capacity.
         with ExitStack() as resolved:
             with phase_timings.phase("image_resolve"):
-                image = resolved.enter_context(self.overlays.resolve(spec.image))
+                image = resolved.enter_context(self.overlays.resolve(spec.image, spec.environment_root))
             split = self.warden.memory_backing is not None and spec.parkable
             with phase_timings.phase("registry_commit"):
                 registration = self.registry.plan(
@@ -206,7 +206,7 @@ class DirectSandboxProvisioner:
                 "storage-native migration belongs to another runtime compatibility"
             )
         self._validate_spec(portable.spec)
-        with self.overlays.resolve(portable.spec.image) as image:
+        with self.overlays.resolve(portable.spec.image, portable.spec.environment_root) as image:
             return self._stage_storage_native_import_materialized(
                 migration,
                 migration_id=migration_id,
@@ -674,7 +674,7 @@ class DirectSandboxProvisioner:
             )
         unrooted = registration.phase in {"planned", "quota_ready"}
         if unrooted and image is None:
-            with self.overlays.resolve(registration.spec.image) as image:
+            with self.overlays.resolve(registration.spec.image, registration.spec.environment_root) as image:
                 return self._advance(
                     registration,
                     image=image,

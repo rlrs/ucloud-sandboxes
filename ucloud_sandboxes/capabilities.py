@@ -10,6 +10,10 @@ STORAGE_NATIVE_CAPABILITY = "storage-native-v1"
 SPLIT_CHECKPOINT_CAPABILITY = "sandbox-checkpoint-v3"
 REFLINK_MEMORY_RESTORE_CAPABILITY = "sandbox-memory-reflink-restore-v1"
 HOST_EROFS_CAPABILITY = "immutable-environment-host-erofs-v1"
+# Chunk store M2: honours SandboxSpec.environment_root; reads RAFS components
+# through a chunk index and store node.
+ENVIRONMENT_ROOT_CAPABILITY = "environment-root-dispatch-v1"
+ENVIRONMENT_RAFS_CAPABILITY = "environment-rafs-v1"
 RUNTIME_COMPATIBILITY_CAPABILITY_PREFIX = "runtime-compatibility-sha256:"
 # Checkpoint import compares the full runtime fingerprint, including the CPU
 # feature set; same-model VMs can expose different flags (erms, fsrm).

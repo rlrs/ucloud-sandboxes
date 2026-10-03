@@ -399,6 +399,8 @@ def build_parser() -> argparse.ArgumentParser:
     direct_node_agent.add_argument("--checkpoint-registry-repository", default="")
     add_environment_registry_args(direct_node_agent)
     direct_node_agent.add_argument("--environment-backend-socket", type=Path)
+    direct_node_agent.add_argument("--environment-rafs", action="store_true",
+                                   help="the environment backend reads chunk-store (RAFS) components")
     direct_node_agent.add_argument("--runsc", type=Path, required=True)
     direct_node_agent.add_argument("--runsc-commit", required=True)
     direct_node_agent.add_argument(
@@ -1328,6 +1330,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         checkpoint_registry_repository=args.checkpoint_registry_repository,
         environment_registry=environment_registry_from_args(args),
         environment_backend_socket=getattr(args, "environment_backend_socket", None),
+        environment_rafs=getattr(args, "environment_rafs", False),
         telemetry=telemetry,
     )
     server = build_direct_node_agent_server(

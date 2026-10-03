@@ -7,8 +7,8 @@ the old OCI copies and components are released and swept. This plan refines
 design §7 with what the code does today (survey of 2026-10-03, `file:line`
 below) and with measured production numbers.
 
-Status: **draft, 2026-10-03.** Nothing here has shipped. It depends on the M1
-gate (§1). Open decisions are in §9.
+Status: **decided 2026-10-03** (§9); nothing has shipped. It depends on the M1
+gate (§1).
 
 ## 1. Preconditions
 
@@ -261,7 +261,8 @@ journal.
    - release the old owners;
    - let online retention lapse the old roots and components;
    - run one sweep in a window with admission paused, and record the Volume.
-5. **The next wave starts after the previous sweep.**
+5. **Releases come after every wave is switched** (§9, decision 2). Each release
+   ends in its own sweep, and the next release starts after the previous sweep.
    - Each wave adds at most 150 GB of new chunks.
    - Each wave must release within ±10% of its predicted bytes.
 
@@ -310,21 +311,26 @@ Waves keep design §7's order (wave 4 is small and done last):
 by the waves: 3 or 4 switch-to-release cycles of 1–3 days each, with no fixed
 holds.
 
-## 9. Open decisions
+## 9. Decisions (2026-10-03)
 
-1. **Store-node redundancy** (§4.1). Recommended: no second node in M2; a
-   replacement runbook with a measured replacement time instead. That matches
-   today's single gateway registry. Add a second node (about €110/month,
-   workers failing over by health) only if the measured replacement time is
-   unacceptable during training runs. A worker fallback to S3 stays rejected
-   (S12: slow, and through the gateway NAT).
-2. **Release at all, given 920 GB free?** Release is what shrinks the Volume
-   (decision 4). M2 could switch every wave and defer releases until M3's GC
-   exists, leaving rollback trivial for longer. Recommended: switch everything
-   first, then release wave by wave.
-3. **Sweep windows.** Each sweep stops the registry for an unmeasured time
-   (§3.4). Is a short weekly window with admission paused acceptable, or
-   should the sweep be made online first?
-4. **FROM pins in user Dockerfiles** are not indexed. Treat every user-built
-   image (wave 4) as a build input and keep its OCI manifest (recommended),
-   or index pins first?
+1. **One store node.** No second node in M2. Instead, a replacement runbook
+   whose replacement time is measured before wave 1's release (§4.1). That
+   matches today's single gateway registry. A second node (about €110/month)
+   is reconsidered only if the measured time is unacceptable during training
+   runs. A worker fallback to S3 stays rejected (S12: slow, and through the
+   gateway NAT).
+2. **Switch everything first, then release wave by wave.** Every wave is
+   converted and switched before the first release, which keeps rollback a
+   journal revert for as long as possible. There is room for it: 920 GB free,
+   and the Volume never receives chunk bytes. Releases then shrink the Volume
+   in wave order (design decision 4).
+3. **Sweep windows: measure first.**
+   - Step 1's timed dry walk sizes the sweep.
+   - If it fits about 15 minutes, each release ends in a window with gateway
+     admission paused.
+   - If not, the sweep is made online (deleting blobs while the registry
+     serves) before the first release, rather than stopping the registry for
+     longer.
+4. **User-built images are build inputs.** FROM pins in user Dockerfiles are
+   not indexed, so every wave-4 image keeps its OCI manifest. Only its EROFS
+   root and components are released.

@@ -721,7 +721,7 @@ class Gate:
         server["registered"] = True  # From here it may heartbeat: teardown drains it.
         self.save()
         self.gw(f"set -a; . /etc/ucloud-sandboxes/hetzner.env; set +a; cd /work/ucloud-sandboxes && "
-                f"sudo -E -u ucloud env PYTHONPATH=\"$(cat {self.staging}/site-packages.path)\" python3 -c "
+                f"runuser -u ucloud -- env PYTHONPATH=\"$(cat {self.staging}/site-packages.path)\" python3 -c "
                 "'import sys; from ucloud_sandboxes.cli import main; sys.exit(main(sys.argv[1:]))' "
                 f"init-vm {server['id']} --config {self.staging}/deployment-canary.json --role sandbox "
                 f"--package-spec {shlex.quote(self.args.bundle)} --ssh-private-key-file "

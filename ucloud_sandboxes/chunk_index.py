@@ -21,8 +21,9 @@ import threading
 import time
 from urllib.parse import parse_qs, quote, urlsplit
 
-from .chunk_store import (MAX_MAP_ENTRIES, MAX_PACK_BYTES, ChunkMap, Locator, PACK_TRAILER,
-                          chunk_map_key, bootstrap_key, pack_key, parse_pack_tail, require_hex)
+from .chunk_store import (MAX_BOOTSTRAP_BYTES, MAX_MAP_ENTRIES, MAX_PACK_BYTES, ChunkMap, Locator, PACK_TRAILER,
+                          bootstrap_key, chunk_map_key, decode_tail_table, pack_key, parse_bootstrap,
+                          parse_pack_tail, require_hex, tail_key, zstd_content_size, zstd_decompress)
 from .environment_artifact import RAFS_MAX_CHUNK_MAP_BYTES, content_digest, require_digest
 from .managed_registry import RegistryRequestError
 
@@ -32,6 +33,7 @@ LAYER_CLAIM_SECONDS = 30 * 60
 # builder's reservations lapse after this and the next asker packs the chunk.
 CHUNK_RESERVE_SECONDS = 10 * 60
 RESERVED, KNOWN, BUSY = 0, 1, 2  # reserve() states, one byte per id on the wire.
+MAX_TAIL_BYTES = 256 * 1024 ** 2  # A blob's tail object (chunk_store.encode_tail).
 _MAX_JSON = 1024 ** 2
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS chunks (id BLOB PRIMARY KEY, pack INTEGER, off INTEGER, clen INTEGER,
@@ -350,11 +352,15 @@ class ChunkIndex:
                 raise
         return {"chunks_inserted": inserted}
 
-    def register(self, component, chunk_map_digest, bootstrap_digest, chunk_map, now=None):
-        """Bind a component to its chunk map once every id is live (§3 step 8)."""
+    def register(self, component, chunk_map_digest, bootstrap_digest, chunk_map, now=None, tail_ids=()):
+        """Bind a component to its chunk map once every id is live (§3 step 8).
+
+        ``tail_ids`` are its blobs' other chunks (nydusd conversions): live
+        with the root, though no chunk map entry names them.
+        """
         now = int(time.time() if now is None else now)
         key = bytes.fromhex(require_digest(component)[7:])
-        ids = list(dict.fromkeys(chunk_map.ids))
+        ids = list(dict.fromkeys((*chunk_map.ids, *tail_ids)))
         with self._write_lock:
             self._writer.execute("BEGIN IMMEDIATE")
             try:
@@ -440,8 +446,30 @@ class ChunkIndexService:
     def register(self, request):
         chunk_map = request["chunk_map"]
         parsed = self.chunk_map(chunk_map["digest"], chunk_map["size"])
-        return self.index.register(request["component"], chunk_map["digest"],
-                                   require_digest(request["bootstrap"]), parsed)
+        bootstrap = require_digest(request["bootstrap"])
+        return self.index.register(request["component"], chunk_map["digest"], bootstrap, parsed,
+                                   tail_ids=self._tail_ids(bootstrap))
+
+    def _tail_ids(self, bootstrap_digest):
+        """Every chunk of the bootstrap's blobs that have a tail (nydusd conversions).
+
+        A merged bootstrap omits chunks only whiteout-hidden files use, but
+        nydusd and block readahead read across them, so they live with the
+        root (docs/benchmarks/nydusd-spike-2026-10-03).
+        """
+        compressed = self.store.get(bootstrap_key(self.store.prefix, bootstrap_digest[7:]), MAX_BOOTSTRAP_BYTES)
+        bootstrap = zstd_decompress(compressed, zstd_content_size(compressed, MAX_BOOTSTRAP_BYTES))
+        if content_digest(bootstrap) != bootstrap_digest:
+            raise ValueError("bootstrap identity mismatch")
+        ids = []
+        for device in parse_bootstrap(bootstrap).devices:
+            key = tail_key(self.store.prefix, device[0])
+            size = self.store.size(key)
+            if size is not None:  # The table plus nydus's own blob metadata.
+                if size > MAX_TAIL_BYTES:
+                    raise ValueError("nydus blob tail exceeds its bound")
+                ids.extend(entry[2] for entry in decode_tail_table(self.store.get(key, size))[0])
+        return ids
 
     def _worker_url(self, key):
         if self.store_url is None:

@@ -127,11 +127,14 @@ class IndexTests(unittest.TestCase):
         from tests.test_chunk_store_formats import bootstrap
         from ucloud_sandboxes.chunk_store import chunk_map_from_bootstrap, parse_bootstrap
         from tests.chunk_store_support import pseudo_random
+        from ucloud_sandboxes.chunk_store import bootstrap_key, zstd_compress
         chunk_map = chunk_map_from_bootstrap(parse_bootstrap(bootstrap()))
         encoded = chunk_map.encode()
         map_digest = "sha256:" + hashlib.sha256(encoded).hexdigest()
         self.objects.objects[chunk_map_key(self.fixture.store.prefix, map_digest[7:])] = encoded
-        component, boot = "sha256:" + "c" * 64, "sha256:" + "b" * 64
+        component, boot = "sha256:" + "c" * 64, "sha256:" + hashlib.sha256(bootstrap()).hexdigest()
+        # Registration reads the bootstrap for its blobs' tails (none here).
+        self.objects.objects[bootstrap_key(self.fixture.store.prefix, boot[7:])] = zstd_compress(bootstrap())
         descriptor = {"digest": map_digest, "size": len(encoded)}
         with self.assertRaises(RegistryRequestError) as raised:
             self.fixture.writer.register(component, boot, descriptor)

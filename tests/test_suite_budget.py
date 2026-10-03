@@ -42,8 +42,9 @@ from tests.test_package_budget import package_lines
 # running rollouts first in admission (test_managed_growth, transition ledger),
 # +22 net chunk reservations (a waiting converter, a dead builder's lapse),
 # less the deleted attach-timing test, +46 nydusd as config (schema, unit flags,
-# the sha256 pin, the gate installing it on canaries only).
-SUITE_LINE_BUDGET = 96_466
+# the sha256 pin, the gate installing it on canaries only), +25 blob-tail
+# liveness (real nydus-image: a whiteout-hidden chunk blocks registration).
+SUITE_LINE_BUDGET = 96_491
 SUITE = Path(__file__).resolve().parent
 
 

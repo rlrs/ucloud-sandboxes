@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory
 import shutil
 
 from tests.chunk_store_support import NYDUS, REPOSITORY, ChunkStoreFixture, sample_images
-from ucloud_sandboxes.chunk_index import http_range, http_request
+from ucloud_sandboxes.chunk_index import MissingChunks, http_range, http_request
 from ucloud_sandboxes.chunk_store_node import ChunkStoreNode, ChunkStoreServer, ExtentCache, S3Source, VirtualBlobs
 from ucloud_sandboxes.environment_artifact import load_environment
 from ucloud_sandboxes.managed_registry import RegistryRequestError
@@ -89,6 +89,26 @@ class VirtualBlobTests(unittest.TestCase):
         self.assertEqual(caught.exception.status_code, 401)
         with self.assertRaises(RegistryRequestError):
             self.get(component, "0" * 64, 0, 10)
+
+
+@unittest.skipUnless(NYDUS or shutil.which("nydus-image"), "needs nydus-image v2.4.5 (UCLOUD_TEST_NYDUS_IMAGE)")
+class TailLivenessTests(unittest.TestCase):
+    def test_chunks_only_a_blob_tail_names_are_live_with_the_root(self):
+        # Image a whites out the base layer's etc/gone: its chunk is in the
+        # base blob, which nydusd reads across, but real merges leave it out
+        # of a's chunk map (the fake never shadows).
+        store = ChunkStoreFixture(self, nydus=NYDUS or shutil.which("nydus-image"))
+        store.converter.nydusd_blobs = True
+        sample_images(store.client)
+        component = store.registry.load(load_environment(
+            store.registry, store.converter.convert(REPOSITORY, "a")["root"]).components[0])
+        gone, service = hashlib.sha256(b"x" * 5000).digest(), store.index.service
+        self.assertNotIn(gone, service.chunk_map(component.chunk_map["digest"]).ids)
+        self.assertIn(gone, service._tail_ids(component.bootstrap["digest"]))
+        store.index.index._writer.execute("UPDATE chunks SET condemned = 1 WHERE id = ?", (gone,))
+        with self.assertRaises(MissingChunks):  # GC must keep it while the root lives.
+            service.register({"component": "sha256:" + "c" * 64, "bootstrap": component.bootstrap["digest"],
+                              "chunk_map": component.chunk_map})
 
 
 class NydusdDeviceTests(unittest.TestCase):

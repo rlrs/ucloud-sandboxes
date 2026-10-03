@@ -64,8 +64,9 @@ import unittest
 # superseded chunk lookup (-59), +50 nydusd as config (chunk_store.nydusd, pinned
 # by sha256; the spike's environment switches deleted). The Python RAFS reader,
 # its cache and trace prefetch go once nydusd is the only RAFS path (M2).
+# +28 blob-tail chunks live with their root (registration reads the tails).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 112_103
+PACKAGE_LINE_BUDGET = 112_131
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

@@ -434,10 +434,16 @@ per owner, which is C2.14's growth budget.
    delete row-less S3 packs older than 24 h. Dead components' bootstraps and
    maps follow the same cycle.
 
+**Blob tails (nydusd conversions).** A merged bootstrap leaves out chunks that
+only whiteout-hidden files use, but nydusd and block readahead read across
+them. Registration therefore counts every chunk in the tail table of each of
+the root's blobs: in its missing check and in `root_packs`. Such a chunk lives
+as long as a root whose blob holds it.
+
 **Compaction** waits until dead bytes exceed 20% of the store, which the frozen
 corpus makes slow to arrive. Candidates are packs whose origin root is dead but
 which are still referenced; their live set comes from the referencing roots'
-chunk maps. A pack under 50% live has its live chunks copied into a new pack.
+chunk maps and their blobs' tail tables. A pack under 50% live has its live chunks copied into a new pack.
 The `chunks` rows are updated, the affected roots' locator epoch is bumped
 (locators are unsigned, so nothing is re-signed), and the old pack is condemned.
 The 48 h hold outlives a locator's 24 h URLs.

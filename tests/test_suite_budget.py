@@ -50,8 +50,9 @@ from tests.test_package_budget import package_lines
 # re-paused by a status read is thawed, retried, and kept from escalation,
 # +35 a direct caller's tunnel answer needs no park or wake, +19 a guest that
 # reads and closes at once is acknowledged; the gate stages nydusd's directory,
-# +25 stored locators and blob layouts (virtual blobs read without an index).
-SUITE_LINE_BUDGET = 96_963
+# +25 stored locators and blob layouts (virtual blobs read without an index),
+# +64 a bundled nydusd (pinned, verified, refused when tampered; repack).
+SUITE_LINE_BUDGET = 97_027
 SUITE = Path(__file__).resolve().parent
 
 

@@ -659,6 +659,34 @@ else:
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 self.assertEqual(completed.stdout.strip().split("\t"), expected)
 
+    def test_a_bundled_nydusd_is_pinned_verified_and_installed(self) -> None:
+        from ucloud_sandboxes.environment_config import PINNED_NYDUS_COMMIT
+        _script, validator = self._bundle_validator()
+        for corruption in (None, "binary", "commit"):
+            with self.subTest(corruption=corruption), TemporaryDirectory() as raw_dir:
+                root = Path(raw_dir)
+                manifest = write_bundle(root, "sandbox")
+                entry = {"nydus_commit": PINNED_NYDUS_COMMIT, "features": ["block-nbd"]}
+                for key, digest_key, name in (("file", "sha256", "nydusd"), ("manifest_file", "manifest_sha256",
+                                              "build-manifest.json"), ("license_file", "license_sha256", "LICENSE")):
+                    path = root / "runtime/nydusd" / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(name.encode())
+                    entry.update({key: f"runtime/nydusd/{name}", digest_key: hashlib.sha256(name.encode()).hexdigest()})
+                entry["size"] = len(b"nydusd")
+                if corruption == "binary":
+                    (root / "runtime/nydusd/nydusd").write_bytes(b"NYDUSD")
+                elif corruption == "commit":
+                    entry["nydus_commit"] = "0" * 40
+                manifest["runtime"]["nydusd"] = entry
+                (root / "package-bundle.json").write_text(json.dumps(manifest), encoding="utf-8")
+                completed = self._run_bundle_validator(validator, root)
+                if corruption is None:
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertEqual(completed.stdout.strip().split("\t")[-1], entry["sha256"])
+                else:
+                    self.assertNotEqual(completed.returncode, 0)
+
     def test_bundle_validator_fails_closed_on_provenance_corruption(self) -> None:
         _script, validator = self._bundle_validator()
         self.assertEqual(len(CORRUPTIONS), 18)

@@ -247,6 +247,14 @@ class EnvironmentBootstrapTests(unittest.TestCase):
                           + "9" * 64, render_vm_init_script(vm_fixtures.VmInitTests._options(
                               **common, **chunk, **nydusd, environment_chunk_store_url="http://10.42.0.200:5091")))
             self.assertNotIn("--nydusd", node)
+            from ucloud_sandboxes.environment_config import NYDUSD_INSTALL_PATH
+            bundled = render_vm_init_script(vm_fixtures.VmInitTests._options(
+                **common, **chunk, environment_chunk_store_url="http://10.42.0.200:5091",
+                environment_chunk_nydusd=NYDUSD_INSTALL_PATH, environment_chunk_nydusd_sha256="9" * 64))
+            # The bundle's own install path pins the bundle's binary; another path is the operator's.
+            self.assertIn('[ "${UCLOUD_BUNDLED_NYDUSD_SHA256:-}" = ' + "9" * 64 + " ]", bundled)
+            self.assertNotIn("this bundle does not carry", render_vm_init_script(vm_fixtures.VmInitTests._options(
+                **common, **chunk, **nydusd, environment_chunk_store_url="http://10.42.0.200:5091")))
             for invalid in (nydusd, {**nydusd, "environment_chunk_nydusd_sha256": "x"}):
                 with self.subTest(nydusd=invalid), self.assertRaises(ValueError):  # Pinned, and only with a store node.
                     render_vm_init_script(vm_fixtures.VmInitTests._options(**common, **chunk, **invalid))

@@ -32,6 +32,7 @@ from ucloud_sandboxes.vm_init import (
     PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
     PINNED_STORAGE_NATIVE_PATCHES,
 )
+from ucloud_sandboxes.environment_config import NYDUSD_FEATURES, PINNED_NYDUS_COMMIT
 from ucloud_sandboxes.gvisor_distribution import (
     GVISOR_COMMIT,
     GVISOR_SIDECARS,
@@ -156,6 +157,16 @@ def validate_source_bundle(root: Path, manifest: dict[str, object]) -> None:
             if provenance_path.is_symlink() or provenance_path.stat().st_size != provenance.get("size"):
                 raise ValueError("gVisor build provenance size mismatch")
             validate_digest(provenance_path, provenance["sha256"], "gVisor build provenance")
+
+    nydusd = runtime.get("nydusd")
+    if nydusd is not None:  # Optional: the chunk store's RAFS daemon (C2.1).
+        if role != "sandbox" or not isinstance(nydusd, dict):
+            raise ValueError("invalid nydusd section")
+        for key, file_key in (("sha256", "file"), ("manifest_sha256", "manifest_file"),
+                              ("license_sha256", "license_file")):
+            if nydusd.get(file_key) != NYDUSD_FILES[file_key]:
+                raise ValueError(f"invalid nydusd {file_key}")
+            validate_digest(root / NYDUSD_FILES[file_key], str(nydusd.get(key)), f"nydusd {file_key}")
 
     kernel = runtime.get("kernel")
     if not isinstance(kernel, dict) or not isinstance(kernel.get("files"), list):
@@ -334,6 +345,38 @@ def add_tree(archive: tarfile.TarFile, root: Path) -> None:
 def build_agent_archive(runtime_root: Path, output: Path) -> None:
     with tarfile.open(output, "w") as archive:
         add_tree(archive, runtime_root)
+
+
+NYDUSD_FILES = {"file": "runtime/nydusd/nydusd", "manifest_file": "runtime/nydusd/build-manifest.json",
+                "license_file": "runtime/nydusd/LICENSE"}
+
+
+def add_nydusd(root: Path, manifest: dict, build_dir: Path) -> dict:
+    """runtime/nydusd from runtime/nydusd/build_pinned.sh's output: the pinned
+    commit and features, and the binary its build manifest names."""
+    if manifest["runtime"].get("role") != "sandbox":
+        raise ValueError("only sandbox bundles carry nydusd")
+    built = {"file": build_dir / "nydusd", "manifest_file": build_dir / "build-manifest.json",
+             "license_file": build_dir / "LICENSE"}
+    payload = json.loads(built["manifest_file"].read_text(encoding="utf-8"))
+    if (payload.get("schema") != 1 or payload.get("nydus_commit") != PINNED_NYDUS_COMMIT
+            or payload.get("features") != list(NYDUSD_FEATURES) or payload.get("license") != "Apache-2.0"):
+        raise ValueError("nydusd build is not the pinned commit and features")
+    validate_digest(built["file"], str(payload.get("artifact_sha256")), "nydusd")
+    if not built["license_file"].is_file():
+        raise ValueError("nydusd license is absent")
+    entry = {"nydus_commit": PINNED_NYDUS_COMMIT, "features": list(NYDUSD_FEATURES),
+             "host_architecture": payload.get("host_architecture")}
+    for key, digest_key in (("file", "sha256"), ("manifest_file", "manifest_sha256"),
+                            ("license_file", "license_sha256")):
+        target = root / NYDUSD_FILES[key]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(built[key], target)
+        target.chmod(0o755 if key == "file" else 0o644)
+        entry.update({key: NYDUSD_FILES[key], digest_key: sha256_file(target)})
+    entry["size"] = (root / NYDUSD_FILES["file"]).stat().st_size
+    manifest["runtime"]["nydusd"] = entry
+    return entry
 
 
 def validate_storage_build(

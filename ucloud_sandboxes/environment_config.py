@@ -129,6 +129,13 @@ class StoreNodeConfig:
         return replace(result, url=result.url.rstrip("/"))
 
 
+# nydusd as the node bundle ships it (runtime/nydusd/build_pinned.sh): v2.4.5,
+# with the experimental block-nbd export no release binary carries.
+PINNED_NYDUS_COMMIT = "e3190057422fee17f594bb3a5c10741b45dac6ce"
+NYDUSD_FEATURES = ("block-nbd",)
+NYDUSD_INSTALL_PATH = "/usr/local/libexec/ucloud-sandboxes/nydusd"
+
+
 @dataclass(frozen=True)
 class NydusdConfig:
     """``chunk_store.nydusd`` (C2.1, docs/benchmarks/nydusd-spike-2026-10-03):

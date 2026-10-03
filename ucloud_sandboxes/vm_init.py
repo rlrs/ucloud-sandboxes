@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 from .deployment import DEFAULT_INIT_VERSION, package_version
 from .direct_network import DirectNetworkTcpEgress
 from .models import ResourceQuantity
+from .environment_config import NYDUSD_FEATURES, NYDUSD_INSTALL_PATH, PINNED_NYDUS_COMMIT
 from .gvisor_distribution import GVISOR_COMMIT, GVISOR_SIDECARS
 from .heartbeat_sender import DEFAULT_HEARTBEAT_INTERVAL_SECONDS
 from .storage_native_publication import DEFAULT_MAX_CONCURRENT_PUBLICATIONS
@@ -684,6 +685,12 @@ fi
     docker_registry_mirrors = ["http://" + authority for authority in mirrors.get("docker.io", [])]
     docker_insecure_registries = list(dict.fromkeys(
         (*options.docker_insecure_registries, *(a for authorities in mirrors.values() for a in authorities))))
+    # chunk_store.nydusd naming the bundle's install path pins the bundle's binary.
+    nydusd_pin_check = ""
+    if options.environment_chunk_nydusd == NYDUSD_INSTALL_PATH:
+        nydusd_pin_check = (
+            '    [ "${UCLOUD_BUNDLED_NYDUSD_SHA256:-}" = ' + options.environment_chunk_nydusd_sha256 + ' ] || '
+            '{ echo "chunk_store.nydusd pins a nydusd this bundle does not carry" >&2; exit 1; }\n')
     script = f"""#!/usr/bin/env bash
 set -euo pipefail
 
@@ -1189,7 +1196,21 @@ if runtime.get("role") == "sandbox":
         )
     ):
         raise SystemExit("storage-native build manifest provenance mismatch")
-    result.extend((direct_sha256, managed_sha256, storage_sha256))
+    # Optional: the chunk store's RAFS daemon (C2.1), runtime/nydusd/build_pinned.sh.
+    nydusd = runtime.get("nydusd")
+    nydusd_sha256 = ""
+    if nydusd is not None:
+        nydusd_files = {{"file": "runtime/nydusd/nydusd", "manifest_file": "runtime/nydusd/build-manifest.json",
+                        "license_file": "runtime/nydusd/LICENSE"}}
+        if not isinstance(nydusd, dict) or any(nydusd.get(key) != value for key, value in nydusd_files.items()):
+            raise SystemExit("invalid nydusd metadata")
+        if nydusd.get("nydus_commit") != {PINNED_NYDUS_COMMIT!r} or nydusd.get("features") != {list(NYDUSD_FEATURES)!r}:
+            raise SystemExit("nydusd is not the pinned commit and features")
+        nydusd_sha256 = verified_artifact(nydusd, nydusd_files["file"], "nydusd")
+        for key, digest_key in (("manifest_file", "manifest_sha256"), ("license_file", "license_sha256")):
+            if digest(bundle_dir / nydusd_files[key]) != nydusd.get(digest_key):
+                raise SystemExit(f"nydusd {{key}} checksum mismatch")
+    result.extend((direct_sha256, managed_sha256, storage_sha256, nydusd_sha256))
 
 print("\\t".join(result))
 PY
@@ -1199,6 +1220,7 @@ IFS=$'\t' read -r \
   UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256 \
   UCLOUD_BUNDLED_MANAGED_INIT_SHA256 \
   UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_SHA256 \
+  UCLOUD_BUNDLED_NYDUSD_SHA256 \
   <<< "$UCLOUD_PACKAGE_METADATA"
 UCLOUD_PREBUILT_AGENT_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/agent/node-agent-runtime.tar"
 UCLOUD_BUNDLED_KERNEL_MODULE_DIR="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/kernel/$(uname -r)"
@@ -1588,7 +1610,15 @@ if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
     $SUDO install -m 0644 -o root -g root \
       "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_LICENSE" \
       /usr/share/doc/ucloud-sandboxes/storage-native/LICENSE
-  fi
+    if [ -n "${{UCLOUD_BUNDLED_NYDUSD_SHA256:-}}" ]; then
+      echo "Installing bundle-verified nydusd"
+      $SUDO install -D -m 0755 -o root -g root "$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/nydusd/nydusd" {NYDUSD_INSTALL_PATH}
+      printf '%s  %s\n' "$UCLOUD_BUNDLED_NYDUSD_SHA256" {NYDUSD_INSTALL_PATH} | sha256sum --check --status -
+      $SUDO install -d -m 0755 -o root -g root /usr/share/doc/ucloud-sandboxes/nydusd
+      $SUDO install -m 0644 -o root -g root "$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/nydusd/build-manifest.json" \
+        "$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/nydusd/LICENSE" /usr/share/doc/ucloud-sandboxes/nydusd/
+    fi
+{nydusd_pin_check}  fi
   $SUDO install -d -m 0700 -o root -g root \
     "$UCLOUD_STORAGE_NATIVE_ROOT" \
     "$UCLOUD_STORAGE_NATIVE_ROOT/runtime" \

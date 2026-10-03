@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from scripts.repack_node_bundle import (
+    add_nydusd,
     add_runtime_debs,
     replace_direct_runtime,
     replace_agent_package,
@@ -19,6 +20,31 @@ from scripts.repack_node_bundle import (
 
 
 class RepackNodeBundleTests(unittest.TestCase):
+    def test_nydusd_is_added_only_from_the_pinned_build(self):
+        from ucloud_sandboxes.environment_config import PINNED_NYDUS_COMMIT
+        with TemporaryDirectory() as raw:
+            root, build = Path(raw, "bundle"), Path(raw, "build")
+            build.mkdir()
+            (build / "nydusd").write_bytes(b"daemon")
+            (build / "LICENSE").write_text("Apache-2.0\n")
+            manifest = {"runtime": {"role": "sandbox"}}
+
+            def built(**changes):
+                payload = {"schema": 1, "nydus_commit": PINNED_NYDUS_COMMIT, "features": ["block-nbd"],
+                           "license": "Apache-2.0", "artifact_sha256": sha256_file(build / "nydusd"),
+                           "host_architecture": "x86_64", **changes}
+                (build / "build-manifest.json").write_text(json.dumps(payload))
+            for changes in ({"nydus_commit": "0" * 40}, {"features": []}, {"artifact_sha256": "0" * 64}):
+                built(**changes)
+                with self.subTest(changes=changes), self.assertRaises(ValueError):
+                    add_nydusd(root, manifest, build)
+            built()
+            entry = add_nydusd(root, manifest, build)
+            self.assertEqual((entry["file"], entry["sha256"]), ("runtime/nydusd/nydusd", sha256_file(build / "nydusd")))
+            self.assertTrue(os.access(root / "runtime/nydusd/nydusd", os.X_OK))
+            with self.assertRaises(ValueError):  # Builders never carry it.
+                add_nydusd(root, {"runtime": {"role": "builder"}}, build)
+
     def test_explicit_debian_extension_keeps_prior_closure_and_rejects_upgrade(self):
         with TemporaryDirectory() as temporary:
             root = Path(temporary)

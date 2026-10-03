@@ -453,3 +453,124 @@ under 0.8.6. The design is in `docs/node-local-model-waits.md`.
   plaintext relay. A wait costs no gateway work and no park row. Waits through the TLS
   ingress keep the relay-driven park.
 
+
+## 0.9.0: the production chunk store
+
+Status: deployed on 2026-10-03 (execution log below). Before it, production ran
+gateway 0.8.8 with workers on the 0.8.6 bundle (snapshot `439244700`).
+- **What it adds.** The chunk store's production infrastructure, and nydusd in
+  the worker bundle.
+- **What it leaves alone.** Every sandbox still mounts its EROFS root, because
+  no `image_roots` row is switched.
+- **What it enables.** M2's waves can start
+  ([chunk-store-m2-plan.md](chunk-store-m2-plan.md) §5).
+
+Contents are in `CHANGELOG.md` under 0.9.0.
+
+### Steps
+
+The kit is in `/work/ucloud-sandboxes/release-0.9.0-<date>/`.
+
+1. **Preflight.** The fleet must be idle.
+2. **Build.**
+   - `package_090.py` repacks the 0.8.6 bundles with the 0.9.0 wheel and adds
+     the pinned nydusd to the sandbox bundle (`nydusd-pinned/`, from
+     `runtime/nydusd/build_pinned.sh`).
+   - The gateway's installed 0.8.8 lacks the pin constants that
+     `repack_node_bundle.py` imports. So it runs with `PYTHONPATH` set to the
+     unpacked 0.9.0 wheel; the dependencies are unchanged since 0.8.6.
+3. **Gateway:** `gateway_upgrade_090.py check`, then `apply`. This points
+   `node_package_root` at the kit.
+4. **Config:** `set_chunk_store_090.py`. It is derived from the live config,
+   not `make_config.py`, and adds `immutable_environments.chunk_store`:
+   - S3 prefix `production/chunks`;
+   - index and store node on `10.42.0.200`;
+   - a 240 GiB extent cache;
+   - the nydusd pin.
+
+   It also makes the index tokens as `ucloud` and restarts the autoscaler.
+   - `attach_concurrency` stays 1: EROFS attach is still the Python miss
+     path.
+   - `dispatch_roots` stays off.
+5. **Store node.**
+   - Create it: `hz.py server sandboxes-store-1 ccx43 <worker snapshot> 10.42.0.200 public`.
+   - Then run `init-vm <id> --role store` as `ucloud`, using `runuser -p`
+     with `hetzner.env` sourced: the tokens are owned by `ucloud`.
+   - Check `/healthz` on ports 5090 and 5091, and `/v1/metrics`.
+6. **Worker snapshot** from `439244700`, as for 0.8.6:
+   - a CPX32 source with the source-only config;
+   - the lifecycle canary on the source;
+   - drain, then sanitize: remove the 0.8.6 init package and run
+     `prepare_hetzner_snapshot.sh`.
+
+   Then `set_snapshot_090.py`.
+7. **Autoscaled canary.** The worker must show:
+   - the 0.9.0 agent;
+   - `environment-root-dispatch-v1` and `environment-rafs-v1`;
+   - the pinned nydusd and `--chunk-store-url`;
+   - no `--attach-concurrency`;
+   - the pause tier, swap and local waits unchanged.
+
+   The lifecycle canary must pass.
+8. **Root dispatch with an empty table:** `set_dispatch_roots_090.py`, then
+   `dispatch_check_090.py <images…>`. Every create must carry its
+   annotation's root, then run and delete cleanly. Then run the lifecycle
+   canary again.
+
+### Rollback
+
+Each step has its own backup: `deployment.before-dispatch-roots.json`,
+`deployment.before-snapshot.json` and `deployment.before-chunk-store.json`.
+- **Gateway:** `gateway_upgrade_090.py rollback`.
+- **Store node:** it holds only a cache, and nothing reads it until a wave
+  switches. Delete it with `hz.py delete-server sandboxes-store-1`.
+
+### Execution log (2026-10-03)
+
+- **Build.**
+  - Wheel `b7d13da9…` (commit "0.9.0: the production chunk store's release").
+  - Bundles: sandbox `fae7a5bb…`, with nydusd `ba7ac636…`; builder
+    `649461e7…`.
+  - Native files and dependencies unchanged.
+- **Gateway** 0.9.0 at about 22:52Z: healthy, the relay migration a no-op.
+- **Config:**
+  - `chunk_store` added;
+  - tokens made as `ucloud` (`serve-chunk-index` exited 78 as designed);
+  - `dispatch_roots` false and `attach_concurrency` 1.
+- **Store node `sandboxes-store-1`** (CCX43, server `168580830`,
+  `10.42.0.200`):
+  - store init in 4.7 s;
+  - `ucloud-chunk-store` and `ucloud-chunk-index` active, bound to the
+    private address only;
+  - 321 GB of disk free for the 240 GiB cache, and 61 GB of RAM.
+- **Snapshot `439298797`** from source `168580907`:
+  - the source advertised both M2 capabilities;
+  - its nydusd sha matched the pin;
+  - the lifecycle canary passed: create 0.91 s, park 0.26 s, wake 0.34 s.
+  - The source was drained, sanitized, snapshotted and deleted.
+- **Autoscaled canary.** A fresh CCX63 `10.42.0.3` (job `168581195`).
+  - Agent 0.9.0, with both capabilities.
+  - nydusd `ba7ac636…`, `--chunk-store-url http://10.42.0.200:5091`, and
+    serial attach.
+  - The pause tier, local waits, 64G of swap and the `ucloud_local_wait`
+    table are all present.
+  - The store node is reachable from the worker.
+  - Lifecycle canary passed; create took 57.9 s, including provisioning
+    from zero.
+- **Root dispatch on** (an empty table, no running sandboxes).
+  `dispatch_check_090.py` on 4 images: the terminal-resolver alias, two
+  shared task images and a precomputed source.
+  - All 4 creates carried `environment_root`, equal to the manifest
+    annotation.
+  - All 4 ran a command and deleted cleanly.
+  - The lifecycle canary then passed: create 0.74 s, park 0.30 s, wake
+    0.43 s.
+- **Result.**
+  - Production has a chunk store, with nothing in it yet.
+  - Every worker can read RAFS through nydusd.
+  - Every create pins its root.
+  - **Next is M2 wave 1:**
+    - convert on disposable converters;
+    - `chunk-migrate record`;
+    - warm the store node;
+    - switch.

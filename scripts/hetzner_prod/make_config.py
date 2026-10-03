@@ -146,8 +146,9 @@ immutable_environments = {
 # hosts ucloud-chunk-index. Turn on after the store node is up (docs/hetzner.md,
 # "Chunk store node") and replace RAFS-reading workers: their locators switch
 # to store-node URLs at once. Store node: CCX43, 10.42.0.200, public IPv4 for
-# S3 fills only; the services bind the private address.
-CHUNK_STORE = False
+# S3 fills only; the services bind the private address. On in production since
+# 0.9.0 (docs/rollout-0.8.0.md, "0.9.0"); the live config was derived, not rendered.
+CHUNK_STORE = True
 STORE_NODE = "10.42.0.200"
 if CHUNK_STORE:
     immutable_environments["chunk_store"] = {
@@ -160,10 +161,14 @@ if CHUNK_STORE:
         "url_ttl_seconds": 86400, "mount_granularity": "image", "nydus_image": "/usr/local/bin/nydus-image",
         # 1-3 ms per miss from the store, not S3's 30-100 ms (S12 recommendation 4).
         "concurrent_misses": 16,
+        # C2.1: the bundle's pinned nydusd (runtime/nydusd/build_pinned.sh, v2.4.5).
+        "nydusd": {"path": "/usr/local/libexec/ucloud-sandboxes/nydusd",
+                   "sha256": "ba7ac636136cbbf2ffeb5fdea31a90289726ca84bc1bdddeec69e9c25897f304"},
         "store_node": {
             "url": f"http://{STORE_NODE}:5091", "listen": f"{STORE_NODE}:5091",
-            # CCX43: 360 GB NVMe; the index (31 GB at full corpus) shares it.
-            "cache_dir": "/var/lib/ucloud-chunk-store/cache", "cache_bytes": 280 * 1024**3,
+            # CCX43: 360 GB NVMe; the index (31 GB at full corpus), the OS and
+            # the bundle share it.
+            "cache_dir": "/var/lib/ucloud-chunk-store/cache", "cache_bytes": 240 * 1024**3,
             "extent_bytes": 4 * 1024**2,  # docs/benchmarks/chunk-store-node-2026-10-02
             "s3_concurrency": 64, "serve_index": True,
         },

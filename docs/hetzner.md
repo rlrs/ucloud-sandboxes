@@ -793,9 +793,11 @@ the private network instead, a read-through NVMe cache over S3 that also hosts
 [benchmarks/chunk-store-node-2026-10-02](benchmarks/chunk-store-node-2026-10-02/README.md).
 
 **Shape:** one CCX43 (16 dedicated vCPUs, 64 GB RAM, 360 GB NVMe) at
-`10.42.0.200`, booted from the worker snapshot. Its RAM holds the index
-resident (31 GB at the full corpus) plus the page cache of hot extents; its
-disk holds the hot set, not the corpus (`cache_bytes` 280 GiB). It gets a
+`10.42.0.200`, booted from the worker snapshot. In production since 0.9.0, as
+`sandboxes-store-1`.
+- **RAM** holds the index resident (31 GB at the full corpus), plus the page
+  cache of hot extents.
+- **Disk** holds the hot set, not the corpus (`cache_bytes` 240 GiB). It gets a
 public IPv4 for S3 fills only: both services bind the private address, and
 the worker firewall applies. Check the account's dedicated-core limit first
 (S12 was refused CPX clients with `resource_limit_exceeded`).
@@ -803,7 +805,10 @@ the worker firewall applies. Check the account's dedicated-core limit first
 **Bring-up** (from the gateway, as root, unless noted):
 
 1. `hz.py server sandboxes-store-1 ccx43 <worker-snapshot-id> 10.42.0.200 public`.
-2. In `make_config.py` set `CHUNK_STORE = True`, then run it and
+2. Add the `chunk_store` block to the live config. In production this was
+   done by `set_chunk_store_090.py`, derived from the live
+   `deployment.json` (docs/rollout-0.8.0.md, "0.9.0"). On a fresh
+   deployment, set `CHUNK_STORE = True` in `make_config.py`, then run it and
    `upgrade-gateway.sh <version>`. Reconcile starts the gateway's
    `ucloud-sandbox-chunk-index.service` once: with `serve_index` it creates
    the read and write tokens as `ucloud` and exits 78.
@@ -813,8 +818,10 @@ the worker firewall applies. Check the account's dedicated-core limit first
    `/var/lib/ucloud-chunk-index/index.sqlite` (owner `ucloud`, mode 0600)
    after step 4 creates the directory, and restart `ucloud-chunk-index`
    there. The tokens stay the same files on the gateway.
-4. Run store init, with the S3 key in the environment (only this process, the
-   index and builders see it):
+4. Run store init as `ucloud`, because the tokens are owned by `ucloud`,
+   with the S3 key in the environment. Only this process, the index and
+   builders see the key. Prefix the command below with `runuser -u ucloud -p
+   --`.
    ```bash
    set -a; . /etc/ucloud-sandboxes/hetzner.env; . /etc/ucloud-sandboxes/chunk-store.env; set +a
    /work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes init-vm <server-id> \

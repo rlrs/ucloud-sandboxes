@@ -889,5 +889,74 @@ class SandboxDensityBenchmarkTests(unittest.TestCase):
                     process.wait(timeout=5)
 
 
+class FakeRelayNode:
+    """A node that defers even parks, pauses odd ones, and loses one agent."""
+
+    def __init__(self):
+        self.records, self.counters, self.deleted = {}, {}, []
+
+    def call(self, path, *, method="GET", payload=None, headers=None, timeout=None):
+        if path == "/v1/heartbeat":
+            return {"heartbeat": {"runtime_metrics": {"cpu_count": 48, "paused_sandboxes": 0},
+                                  "capabilities": ["direct-runsc-v1", "hibernate-local-v2"],
+                                  "active_sandboxes": len(self.records), "active_sandbox_creates": 0,
+                                  "inventory_complete": True}}
+        if path == "/v1/images/pull":
+            return {"image": {"id": "sha256:" + "a" * 64}}
+        if path == "/v1/sandboxes":
+            if method == "GET":
+                return {"sandboxes": [dict(record) for record in self.records.values()]}
+            assert payload["managed_process"] is True and "command" not in payload
+            self.records[payload["id"]] = {"id": payload["id"], "state": "running", "generation": 1}
+            self.counters[payload["id"]] = 0
+            return {"sandbox": dict(self.records[payload["id"]])}
+        sandbox_id, _, action = path.removeprefix("/v1/sandboxes/").partition("/")
+        if action == "jobs":
+            self.jobs = getattr(self, "jobs", 0) + 1
+            assert payload["argv"][:2] == ["python3", "-c"]
+            return {"job": {"job_id": payload["job_id"]}}
+        if action.startswith("jobs/"):
+            return {"job": {"state": "exited", "signal": 7}}
+        if method == "DELETE":
+            self.records.pop(sandbox_id, None)
+            self.deleted.append(sandbox_id)
+            return {}
+        assert payload["relay_request_id"] and payload["generation"] == 1
+        if action == "park" and sandbox_id.endswith("-0"):
+            raise RuntimeError(f"POST {path}: HTTP 409: " + json.dumps({"error_code": "park_deferred"}))
+        if action == "park":
+            self.records[sandbox_id]["state"] = "paused"
+        if action == "wake":
+            self.records[sandbox_id]["state"] = "running"
+        return {"sandbox": dict(self.records[sandbox_id])}
+
+    def probe(self, sandbox_id, *, act=False, cpu_ms=100, wait_seconds=60):
+        if sandbox_id.endswith("-2") and self.counters[sandbox_id] == 1:
+            raise RuntimeError("workload exec failed: connection refused")
+        self.counters[sandbox_id] += int(act)
+        return {"nonce": sandbox_id, "pid": 7, "resident_bytes": 4 * 1024 * 1024, "dirty_mb": 1,
+                "dirty_page_count": 256, "counter": self.counters[sandbox_id]}
+
+
+class RelayModeTests(unittest.TestCase):
+    def test_relay_mode_records_outcomes_deaths_and_cleans_up(self):
+        args = benchmark.parse_args([
+            "--node-url", "http://node", "--node-token-file", "/dev/null", "--output", "/dev/null",
+            "--mode", "relay", "--count", "3", "--cycles", "2", "--resident-mb", "4", "--dirty-mb", "1",
+            "--memory-mb", "256", "--expected-cpus", "48", "--model-seconds", "2", "--model-jitter", "1"])
+        node = FakeRelayNode()
+        evidence = benchmark.run_relay(args, node, sample=lambda: {"memavailable_mb": 100},
+                                       sleep=lambda seconds: None)
+        summary = evidence["summary"]
+        self.assertEqual((summary["created"], summary["deaths"]), (3, 1))
+        self.assertEqual(summary["park_outcome"], {"409:park_deferred": 2, "accepted:paused": 3})
+        self.assertEqual(summary["state_before_wake"], {"running": 2, "paused": 3})
+        self.assertIn("paused", summary["act_after"])
+        self.assertEqual(evidence["status"], "failed")  # The lost agent fails the run.
+        self.assertEqual(sorted(node.deleted), sorted(evidence["owned_ids"]))
+        self.assertEqual(node.jobs, 3)  # Managed agents, like production's relay agents.
+        self.assertEqual(next(iter(evidence["deaths"].values()))["job"]["signal"], 7)
+
+
 if __name__ == "__main__":
     unittest.main()

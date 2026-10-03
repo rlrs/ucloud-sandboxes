@@ -64,17 +64,23 @@ What it changes:
   components lapse even when its OCI manifest stays (§3.3), so the Volume goes
   from 2.8 TB to about **1.2 TB** (the OCI layers, about 1.17 TB unique), with
   the chunks in S3.
-- **The unknown family is mostly leftovers:**
+- **The selection is not the scope.** It was drawn from what had already been
+  prepared. The goal is every image of every environment prepared, so the
+  corpus grows to tens of thousands of images: OpenSWE alone has 35,549 (C2.14).
+  "Not in the selection" means not prepared yet, never unneeded.
+- **The unknown family** is 1,455 images:
   - 694 `precomputed-*`;
   - 526 `bl20260929-*` (the 2026-09-29 build-load benchmark);
   - 122 `agentic-*`;
   - 56 `import-*`.
 
-  Images no selection or catalog names could be deleted instead of migrated
-  (§9).
-- **Releasing the OCI copies of prepared sources** (about 1.08 TB more) would
-  need builds to take their `FROM` from the chunk store (`unpack` on demand).
-  That is out of M2's scope.
+  They migrate like any other image. Only proven test artifacts, such as the
+  benchmark's warm-up images, are candidates for deletion, from a list the
+  operator reviews (§9).
+- **OCI copies are the long-term Volume problem** (§9, decision 5). Every
+  prepared image is registered as a build input today. With everything
+  prepared, keeping each one's OCI copy would grow the Volume by many TB. That
+  is what "not many TB more" rules out.
 
 ## 3. What the code does today, and what M2 must change
 
@@ -379,3 +385,17 @@ holds.
 4. **User-built images are build inputs.** FROM pins in user Dockerfiles are
    not indexed, so every wave-4 image keeps its OCI manifest. Only its EROFS
    root and components are released.
+5. **Open: which prepared images keep an OCI copy.** Today the catalog registers
+   every prepared task image as a build input. Most are leaves that a build
+   rarely or never uses as `FROM`, apart from import aliases.
+
+   Recommended:
+   - keep OCI for foundations, prepared sources that builds actually name,
+     and user-built images;
+   - release the leaf task images' OCI copies. A build that needs one gets it
+     back with `unpack-environment`, which is byte-exact.
+   - C2.14 then builds new prepared images straight into the chunk store,
+     keeping OCI only for foundations.
+
+   First measure how often builds name a prepared leaf as `FROM`, from the
+   gateway's build records and the catalog's `prepared-build` leases.

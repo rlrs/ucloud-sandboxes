@@ -46,8 +46,9 @@ from tests.test_package_budget import package_lines
 # liveness (real nydus-image: a whiteout-hidden chunk blocks registration),
 # +322 node-local model waits (packet and netlink parsing, the scheduler on a
 # fake clock, runtime glue, the relay's no-park and acknowledged delivery),
-# +25 the gate's parallel converters as distinct owners.
-SUITE_LINE_BUDGET = 96_838
+# +27 the gate's parallel converters as distinct owners, +43 an answered call
+# re-paused by a status read is thawed, retried, and kept from escalation.
+SUITE_LINE_BUDGET = 96_884
 SUITE = Path(__file__).resolve().parent
 
 

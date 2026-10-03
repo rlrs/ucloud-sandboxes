@@ -543,6 +543,9 @@ class DirectNodeRuntime:
         """
         record = None
         try:
+            local_waits = self._local_waits
+            if local_waits is not None and local_waits.answered(key):
+                return  # Its answer arrived: the local wait thaws it, never hibernate it.
             record, _ = self.park_with_activity_revision(
                 key[0], operation_id=f"pause-escalation:{uuid4().hex}",
                 generation=key[1], escalate=True)

@@ -7,6 +7,7 @@ from pathlib import Path
 import shlex
 import sys
 import tempfile
+import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -324,10 +325,11 @@ class RemoteHelperTests(unittest.TestCase):
             (root / "sample.json").write_text(json.dumps([
                 {"prepared_reference": f"10.42.0.2:5000/ucloud-managed/task-{index}:tag@sha256:{index:064x}"}
                 for index in range(6)]))
-            owners = []
+            owners, together = [], threading.Barrier(3, timeout=10)
 
             def run(argv, _env):
                 owners.append(argv[argv.index("--owner") + 1])
+                together.wait()  # Three converters at once, as in the gate.
                 return {"returncode": 0}
             args = SimpleNamespace(s3_env=str(root / "s3.env"), sample=str(root / "sample.json"),
                                    registry_url="http://10.42.0.48:5000", exclude="", results=str(root / "r.jsonl"),

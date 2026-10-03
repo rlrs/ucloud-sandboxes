@@ -13,12 +13,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import ipaddress
+import logging
 import socket
 import struct
 import subprocess
 import threading
 import time
 
+from .sandbox import SandboxBusyError, SandboxStartupBusyError
+
+_LOG = logging.getLogger(__name__)
 TABLE = "ucloud_local_wait"
 NFLOG_GROUP = 4207
 SNAPLEN = 64  # IPv4 and the first 14 bytes of TCP, with IP options.
@@ -26,6 +30,10 @@ SETTLE_SECONDS = 0.05  # A call's request went out at least this long ago,
 IDLE_SECONDS = 0.05  # and the sandbox used no more than IDLE_USEC of CPU in this window.
 IDLE_USEC = 2000
 _EPSILON = 1e-6  # Clock arithmetic: a window of exactly 50 ms is a full window.
+# An answered call is watched this long, until the next request: any pause
+# that lands on it is undone. A status read in progress re-pauses after it
+# (keep_paused), and a thaw queued behind that read can lose to it.
+ANSWERED_WATCH_SECONDS = 30.0
 
 # Netlink and nfnetlink_log (linux/netfilter/nfnetlink_log.h).
 NETLINK_NETFILTER = 12
@@ -171,6 +179,7 @@ class Flow:
     last_out: float = 0.0
     last_in: float = 0.0
     cpu: list = field(default_factory=list)  # (monotonic time, usage_usec)
+    answered_until: float = 0.0  # Thaw any pause that lands on this answered call until then.
 
     def outstanding(self, now, settle=SETTLE_SECONDS):
         return self.last_out > self.last_in and now - self.last_out >= settle - _EPSILON
@@ -219,7 +228,7 @@ class LocalWaitScheduler:
         self._candidates, self._pause, self._thaw, self._is_paused = candidates, pause, thaw, is_paused
         self._executor, self._reader_factory, self._rules = executor, reader, rules
         self._clock, self._tick, self._refresh_seconds = clock or time.monotonic, tick, refresh_seconds
-        self.flows, self.waits, self._busy = {}, {}, set()
+        self.flows, self.waits, self._busy, self._logged = {}, {}, set(), {}
         self._guard, self._stop = threading.Lock(), threading.Event()
         self._threads, self._reader, self._refreshed = [], None, float("-inf")
 
@@ -261,8 +270,19 @@ class LocalWaitScheduler:
                 return
             flow.last_in = now
             wait = self.waits.get(packet.guest)
-        if wait is not None and self._is_paused(wait.key):
+        if wait is None:
+            return
+        with self._guard:
+            flow.answered_until = now + ANSWERED_WATCH_SECONDS
+        if self._is_paused(wait.key):
             self._submit(wait.key, self._thaw)
+
+    def answered(self, key, now=None):
+        """Its call is answered: hibernating it would strand the answer it holds."""
+        now = self._clock() if now is None else now
+        with self._guard:
+            return any(wait.key == key and flow.last_in >= flow.last_out and flow.answered_until > now
+                       for guest, wait in self.waits.items() if (flow := self.flows.get(guest)) is not None)
 
     def _submit(self, key, action):
         with self._guard:
@@ -275,8 +295,14 @@ class LocalWaitScheduler:
     def _run(self, key, action):
         try:
             action(key)
-        except Exception:  # noqa: BLE001 - activity, deletion or a lost race: the next tick decides again
-            pass
+        except (SandboxBusyError, SandboxStartupBusyError):
+            pass  # Exec, file or lifecycle activity holds the sandbox: the next tick decides again.
+        except Exception:  # noqa: BLE001 - a deletion or a lost race; the next tick decides again
+            now = self._clock()
+            if now - self._logged.get(key, float("-inf")) >= 10.0:
+                self._logged[key] = now
+                _LOG.warning("local wait %s of %s failed", "pause" if action is self._pause else "thaw", key,
+                             exc_info=True)
         finally:
             with self._guard:
                 self._busy.discard(key)
@@ -305,9 +331,16 @@ class LocalWaitScheduler:
         with self._guard:
             pending = [(self.waits[guest], flow) for guest, flow in self.flows.items()
                        if guest in self.waits and flow.last_out > flow.last_in]
+            answered = [self.waits[guest].key for guest, flow in self.flows.items()
+                        if guest in self.waits and flow.last_in >= flow.last_out and flow.answered_until > now]
             for flow in self.flows.values():
                 if flow.last_out <= flow.last_in:
                     flow.cpu.clear()
+                else:
+                    flow.answered_until = 0.0  # The next request went out: that answer was consumed.
+        for key in answered:  # Never leave an answered call paused; retried every tick.
+            if self._is_paused(key):
+                self._submit(key, self._thaw)
         for wait, flow in pending:
             try:
                 flow.sample(now, cpu_usage_usec(wait.cpu_stat))

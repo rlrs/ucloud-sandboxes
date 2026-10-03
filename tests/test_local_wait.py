@@ -152,6 +152,48 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(self.calls, [("pause", ("s1", 1)), ("thaw", ("s1", 1))])
         self.assertEqual(self.paused, set())
 
+    def test_a_pause_landing_on_an_answered_call_is_undone(self):
+        # A status read thawed the paused sandbox (keep_paused), the answer
+        # arrived meanwhile, then the read paused it again with the answer inside.
+        self.send()
+        self.run_for(0.2)
+        self.paused.discard(("s1", 1))  # The read's thaw.
+        self.answer()
+        self.assertEqual(self.calls, [("pause", ("s1", 1))])
+        self.paused.add(("s1", 1))  # The read's re-pause.
+        self.run_for(0.02)
+        self.assertEqual(self.calls[-1], ("thaw", ("s1", 1)))
+        self.send()  # The next request consumes the watch.
+        self.run_for(0.02)
+        self.paused.add(("s1", 1))
+        self.run_for(0.03)
+        self.assertEqual(self.calls[-1], ("thaw", ("s1", 1)))  # Nothing new until the policy pauses again.
+
+    def test_a_failed_thaw_of_an_answered_call_is_retried(self):
+        self.send()
+        self.run_for(0.2)
+        failures = []
+
+        def refuse(key):
+            failures.append(key)
+            raise RuntimeError("busy: a status read holds the request lock")
+        thaw, self.scheduler._thaw = self.scheduler._thaw, refuse
+        with self.assertLogs("ucloud_sandboxes.local_wait", "WARNING"):
+            self.answer()
+            self.run_for(0.03)
+        self.assertEqual(len(failures), 4)  # The packet's attempt, then every tick.
+        self.scheduler._thaw = thaw
+        self.run_for(0.01)
+        self.assertEqual((self.calls[-1], self.paused), (("thaw", ("s1", 1)), set()))
+
+    def test_an_answered_call_reports_itself_to_escalation(self):
+        self.send()
+        self.run_for(0.2)
+        self.assertFalse(self.scheduler.answered(("s1", 1), now=self.now))
+        self.answer()
+        self.assertTrue(self.scheduler.answered(("s1", 1), now=self.now))
+        self.assertFalse(self.scheduler.answered(("s1", 1), now=self.now + local_wait.ANSWERED_WATCH_SECONDS))
+
     def test_flows_follow_the_candidates(self):
         self.send()
         self.scheduler._candidates = lambda: []

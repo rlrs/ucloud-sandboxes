@@ -1,0 +1,1146 @@
+{
+ "0": {
+  "view": {
+   "rootfs": "/work/ucloud-sandboxes/state/direct-runtime/bundles/m1-split-x0.sandbox-1791034592833/rootfs",
+   "sentry_pid": 138845,
+   "flags": [
+    "--platform=systrap",
+    "--gofer-mount-confs=lisafs:self"
+   ],
+   "sentry_fds": {
+    "file": 33,
+    "socket": 4,
+    "other": 20
+   },
+   "gofer_flags": [
+    "--gofer-mount-confs=lisafs:self",
+    "--mounts-fd=4"
+   ]
+  },
+  "sandbox": {
+   "true": {
+    "cold": {
+     "t": 0.0707,
+     "exec_wall": 0.16
+    },
+    "warm": [
+     {
+      "t": 0.0156,
+      "exec_wall": 0.06
+     },
+     {
+      "t": 0.0148,
+      "exec_wall": 0.07
+     },
+     {
+      "t": 0.0167,
+      "exec_wall": 0.06
+     }
+    ]
+   },
+   "import_sys": {
+    "cold": {
+     "t": 0.4244,
+     "exec_wall": 0.45
+    },
+    "warm": [
+     {
+      "t": 0.0913,
+      "exec_wall": 0.13
+     },
+     {
+      "t": 0.0856,
+      "exec_wall": 0.13
+     },
+     {
+      "t": 0.0805,
+      "exec_wall": 0.12
+     }
+    ]
+   },
+   "pip_version": {
+    "cold": {
+     "t": 1.5246,
+     "exec_wall": 1.57
+    },
+    "warm": [
+     {
+      "t": 0.4122,
+      "exec_wall": 0.45
+     },
+     {
+      "t": 0.3707,
+      "exec_wall": 0.4
+     },
+     {
+      "t": 0.4111,
+      "exec_wall": 0.45
+     }
+    ]
+   }
+  },
+  "native": {
+   "true": {
+    "first": {
+     "t": 0.0095,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.0061,
+      "rc": 0
+     },
+     {
+      "t": 0.007,
+      "rc": 0
+     },
+     {
+      "t": 0.0062,
+      "rc": 0
+     }
+    ]
+   },
+   "import_sys": {
+    "first": {
+     "t": 0.0733,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.0374,
+      "rc": 0
+     },
+     {
+      "t": 0.0253,
+      "rc": 0
+     },
+     {
+      "t": 0.0534,
+      "rc": 0
+     }
+    ]
+   },
+   "pip_version": {
+    "first": {
+     "t": 0.22,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.1893,
+      "rc": 0
+     },
+     {
+      "t": 0.1886,
+      "rc": 0
+     },
+     {
+      "t": 0.215,
+      "rc": 0
+     }
+    ]
+   }
+  }
+ },
+ "1": {
+  "view": {
+   "rootfs": "/work/ucloud-sandboxes/state/direct-runtime/bundles/m1-split-x1.sandbox-1791034599160/rootfs",
+   "sentry_pid": 139258,
+   "flags": [
+    "--platform=systrap",
+    "--gofer-mount-confs=lisafs:self"
+   ],
+   "sentry_fds": {
+    "file": 67,
+    "socket": 4,
+    "other": 20
+   },
+   "gofer_flags": [
+    "--gofer-mount-confs=lisafs:self",
+    "--mounts-fd=4"
+   ]
+  },
+  "sandbox": {
+   "true": {
+    "cold": {
+     "t": 0.016,
+     "exec_wall": 0.07
+    },
+    "warm": [
+     {
+      "t": 0.0171,
+      "exec_wall": 0.06
+     },
+     {
+      "t": 0.0172,
+      "exec_wall": 0.06
+     },
+     {
+      "t": 0.0158,
+      "exec_wall": 0.06
+     }
+    ]
+   },
+   "import_sys": {
+    "cold": {
+     "t": 0.2569,
+     "exec_wall": 0.3
+    },
+    "warm": [
+     {
+      "t": 0.1105,
+      "exec_wall": 0.15
+     },
+     {
+      "t": 0.0927,
+      "exec_wall": 0.14
+     },
+     {
+      "t": 0.0875,
+      "exec_wall": 0.13
+     }
+    ]
+   },
+   "pip_version": {
+    "cold": {
+     "t": 1.0795,
+     "exec_wall": 1.12
+    },
+    "warm": [
+     {
+      "t": 0.4718,
+      "exec_wall": 0.52
+     },
+     {
+      "t": 0.4548,
+      "exec_wall": 0.5
+     },
+     {
+      "t": 0.4069,
+      "exec_wall": 0.44
+     }
+    ]
+   }
+  },
+  "native": {
+   "true": {
+    "first": {
+     "t": 0.007,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.0063,
+      "rc": 0
+     },
+     {
+      "t": 0.0062,
+      "rc": 0
+     },
+     {
+      "t": 0.0062,
+      "rc": 0
+     }
+    ]
+   },
+   "import_sys": {
+    "first": {
+     "t": 0.0589,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.053,
+      "rc": 0
+     },
+     {
+      "t": 0.0268,
+      "rc": 0
+     },
+     {
+      "t": 0.0506,
+      "rc": 0
+     }
+    ]
+   },
+   "pip_version": {
+    "first": {
+     "t": 0.2175,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.2187,
+      "rc": 0
+     },
+     {
+      "t": 0.1897,
+      "rc": 0
+     },
+     {
+      "t": 0.2226,
+      "rc": 0
+     }
+    ]
+   }
+  }
+ },
+ "2": {
+  "view": {
+   "rootfs": "/work/ucloud-sandboxes/state/direct-runtime/bundles/m1-split-x2.sandbox-1791034604808/rootfs",
+   "sentry_pid": 139540,
+   "flags": [
+    "--platform=systrap",
+    "--gofer-mount-confs=lisafs:self"
+   ],
+   "sentry_fds": {
+    "file": 34,
+    "socket": 4,
+    "other": 20
+   },
+   "gofer_flags": [
+    "--gofer-mount-confs=lisafs:self",
+    "--mounts-fd=4"
+   ]
+  },
+  "sandbox": {
+   "true": {
+    "cold": {
+     "t": 0.0165,
+     "exec_wall": 0.07
+    },
+    "warm": [
+     {
+      "t": null,
+      "exec_wall": 0.05
+     },
+     {
+      "t": 0.0148,
+      "exec_wall": 0.06
+     },
+     {
+      "t": 0.0145,
+      "exec_wall": 0.06
+     }
+    ]
+   },
+   "import_sys": {
+    "cold": {
+     "t": 0.3171,
+     "exec_wall": 0.36
+    },
+    "warm": [
+     {
+      "t": 0.0751,
+      "exec_wall": 0.12
+     },
+     {
+      "t": 0.0738,
+      "exec_wall": 0.12
+     },
+     {
+      "t": 0.0711,
+      "exec_wall": 0.11
+     }
+    ]
+   },
+   "pip_version": {
+    "cold": {
+     "t": 1.4911,
+     "exec_wall": 1.53
+    },
+    "warm": [
+     {
+      "t": 0.7643,
+      "exec_wall": 0.81
+     },
+     {
+      "t": 0.7311,
+      "exec_wall": 0.77
+     },
+     {
+      "t": 0.7891,
+      "exec_wall": 0.83
+     }
+    ]
+   }
+  },
+  "native": {
+   "true": {
+    "first": {
+     "t": 0.006,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.007,
+      "rc": 0
+     },
+     {
+      "t": 0.005,
+      "rc": 0
+     },
+     {
+      "t": 0.0074,
+      "rc": 0
+     }
+    ]
+   },
+   "import_sys": {
+    "first": {
+     "t": 0.0477,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.04,
+      "rc": 0
+     },
+     {
+      "t": 0.0446,
+      "rc": 0
+     },
+     {
+      "t": 0.039,
+      "rc": 0
+     }
+    ]
+   },
+   "pip_version": {
+    "first": {
+     "t": 0.5769,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.5812,
+      "rc": 0
+     },
+     {
+      "t": 0.6152,
+      "rc": 0
+     },
+     {
+      "t": 0.5775,
+      "rc": 0
+     }
+    ]
+   }
+  }
+ },
+ "3": {
+  "view": {
+   "rootfs": "/work/ucloud-sandboxes/state/direct-runtime/bundles/m1-split-x3.sandbox-1791034613074/rootfs",
+   "sentry_pid": 139895,
+   "flags": [
+    "--platform=systrap",
+    "--gofer-mount-confs=lisafs:self"
+   ],
+   "sentry_fds": {
+    "file": 67,
+    "socket": 4,
+    "other": 20
+   },
+   "gofer_flags": [
+    "--gofer-mount-confs=lisafs:self",
+    "--mounts-fd=4"
+   ]
+  },
+  "sandbox": {
+   "true": {
+    "cold": {
+     "t": 0.0135,
+     "exec_wall": 0.06
+    },
+    "warm": [
+     {
+      "t": 0.0152,
+      "exec_wall": 0.06
+     },
+     {
+      "t": null,
+      "exec_wall": 0.03
+     },
+     {
+      "t": 0.015,
+      "exec_wall": 0.06
+     }
+    ]
+   },
+   "import_sys": {
+    "cold": {
+     "t": 0.2154,
+     "exec_wall": 0.26
+    },
+    "warm": [
+     {
+      "t": 0.0614,
+      "exec_wall": 0.1
+     },
+     {
+      "t": 0.0609,
+      "exec_wall": 0.1
+     },
+     {
+      "t": 0.0607,
+      "exec_wall": 0.11
+     }
+    ]
+   },
+   "pip_version": {
+    "cold": {
+     "t": 0.9204,
+     "exec_wall": 0.96
+    },
+    "warm": [
+     {
+      "t": 0.4014,
+      "exec_wall": 0.44
+     },
+     {
+      "t": 0.4014,
+      "exec_wall": 0.44
+     },
+     {
+      "t": 0.4554,
+      "exec_wall": 0.49
+     }
+    ]
+   }
+  },
+  "native": {
+   "true": {
+    "first": {
+     "t": 0.0077,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.0071,
+      "rc": 0
+     },
+     {
+      "t": 0.0063,
+      "rc": 0
+     },
+     {
+      "t": 0.0061,
+      "rc": 0
+     }
+    ]
+   },
+   "import_sys": {
+    "first": {
+     "t": 0.0327,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.0294,
+      "rc": 0
+     },
+     {
+      "t": 0.0286,
+      "rc": 0
+     },
+     {
+      "t": 0.0286,
+      "rc": 0
+     }
+    ]
+   },
+   "pip_version": {
+    "first": {
+     "t": 0.2223,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.2178,
+      "rc": 0
+     },
+     {
+      "t": 0.1903,
+      "rc": 0
+     },
+     {
+      "t": 0.19,
+      "rc": 0
+     }
+    ]
+   }
+  }
+ },
+ "4": {
+  "view": {
+   "rootfs": "/work/ucloud-sandboxes/state/direct-runtime/bundles/m1-split-x4.sandbox-1791034618140/rootfs",
+   "sentry_pid": 140237,
+   "flags": [
+    "--platform=systrap",
+    "--gofer-mount-confs=lisafs:self"
+   ],
+   "sentry_fds": {
+    "file": 67,
+    "socket": 4,
+    "other": 20
+   },
+   "gofer_flags": [
+    "--gofer-mount-confs=lisafs:self",
+    "--mounts-fd=4"
+   ]
+  },
+  "sandbox": {
+   "true": {
+    "cold": {
+     "t": 0.0176,
+     "exec_wall": 0.07
+    },
+    "warm": [
+     {
+      "t": 0.0155,
+      "exec_wall": 0.05
+     },
+     {
+      "t": null,
+      "exec_wall": 0.05
+     },
+     {
+      "t": null,
+      "exec_wall": 0.04
+     }
+    ]
+   },
+   "import_sys": {
+    "cold": {
+     "t": 0.1411,
+     "exec_wall": 0.18
+    },
+    "warm": [
+     {
+      "t": 0.0488,
+      "exec_wall": 0.09
+     },
+     {
+      "t": 0.0593,
+      "exec_wall": 0.1
+     },
+     {
+      "t": 0.0633,
+      "exec_wall": 0.1
+     }
+    ]
+   },
+   "pip_version": {
+    "cold": {
+     "t": 1.0105,
+     "exec_wall": 1.05
+    },
+    "warm": [
+     {
+      "t": 0.4355,
+      "exec_wall": 0.48
+     },
+     {
+      "t": 0.4229,
+      "exec_wall": 0.46
+     },
+     {
+      "t": 0.431,
+      "exec_wall": 0.46
+     }
+    ]
+   }
+  },
+  "native": {
+   "true": {
+    "first": {
+     "t": 0.0037,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.0064,
+      "rc": 0
+     },
+     {
+      "t": 0.0027,
+      "rc": 0
+     },
+     {
+      "t": 0.0061,
+      "rc": 0
+     }
+    ]
+   },
+   "import_sys": {
+    "first": {
+     "t": 0.0296,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.0284,
+      "rc": 0
+     },
+     {
+      "t": 0.0242,
+      "rc": 0
+     },
+     {
+      "t": 0.0285,
+      "rc": 0
+     }
+    ]
+   },
+   "pip_version": {
+    "first": {
+     "t": 0.2173,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.2167,
+      "rc": 0
+     },
+     {
+      "t": 0.2155,
+      "rc": 0
+     },
+     {
+      "t": 0.1893,
+      "rc": 0
+     }
+    ]
+   }
+  }
+ },
+ "5": {
+  "view": {
+   "rootfs": "/work/ucloud-sandboxes/state/direct-runtime/bundles/m1-split-x5.sandbox-1791034623240/rootfs",
+   "sentry_pid": 140539,
+   "flags": [
+    "--platform=systrap",
+    "--gofer-mount-confs=lisafs:self"
+   ],
+   "sentry_fds": {
+    "file": 29,
+    "socket": 4,
+    "other": 20
+   },
+   "gofer_flags": [
+    "--gofer-mount-confs=lisafs:self",
+    "--mounts-fd=4"
+   ]
+  },
+  "sandbox": {
+   "true": {
+    "cold": {
+     "t": 0.0148,
+     "exec_wall": 0.1
+    },
+    "warm": [
+     {
+      "t": 0.0135,
+      "exec_wall": 0.06
+     },
+     {
+      "t": 0.0139,
+      "exec_wall": 0.06
+     },
+     {
+      "t": null,
+      "exec_wall": 0.05
+     }
+    ]
+   },
+   "import_sys": {
+    "cold": {
+     "t": 0.4021,
+     "exec_wall": 0.45
+    },
+    "warm": [
+     {
+      "t": 0.0621,
+      "exec_wall": 0.1
+     },
+     {
+      "t": 0.0566,
+      "exec_wall": 0.09
+     },
+     {
+      "t": 0.0635,
+      "exec_wall": 0.1
+     }
+    ]
+   },
+   "pip_version": {
+    "cold": {
+     "t": 1.6764,
+     "exec_wall": 1.72
+    },
+    "warm": [
+     {
+      "t": 0.4238,
+      "exec_wall": 0.46
+     },
+     {
+      "t": 0.4149,
+      "exec_wall": 0.45
+     },
+     {
+      "t": 0.4032,
+      "exec_wall": 0.44
+     }
+    ]
+   }
+  },
+  "native": {
+   "true": {
+    "first": {
+     "t": 0.0058,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.0049,
+      "rc": 0
+     },
+     {
+      "t": 0.0052,
+      "rc": 0
+     },
+     {
+      "t": 0.0032,
+      "rc": 0
+     }
+    ]
+   },
+   "import_sys": {
+    "first": {
+     "t": 0.0284,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.0154,
+      "rc": 0
+     },
+     {
+      "t": 0.0147,
+      "rc": 0
+     },
+     {
+      "t": 0.0273,
+      "rc": 0
+     }
+    ]
+   },
+   "pip_version": {
+    "first": {
+     "t": 0.2456,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.2186,
+      "rc": 0
+     },
+     {
+      "t": 0.2453,
+      "rc": 0
+     },
+     {
+      "t": 0.2114,
+      "rc": 0
+     }
+    ]
+   }
+  }
+ },
+ "6": {
+  "view": {
+   "rootfs": "/work/ucloud-sandboxes/state/direct-runtime/bundles/m1-split-x6.sandbox-1791034629254/rootfs",
+   "sentry_pid": 140928,
+   "flags": [
+    "--platform=systrap",
+    "--gofer-mount-confs=lisafs:self"
+   ],
+   "sentry_fds": {
+    "file": 34,
+    "socket": 4,
+    "other": 20
+   },
+   "gofer_flags": [
+    "--gofer-mount-confs=lisafs:self",
+    "--mounts-fd=4"
+   ]
+  },
+  "sandbox": {
+   "true": {
+    "cold": {
+     "t": 0.0163,
+     "exec_wall": 0.07
+    },
+    "warm": [
+     {
+      "t": 0.0134,
+      "exec_wall": 0.06
+     },
+     {
+      "t": 0.014,
+      "exec_wall": 0.06
+     },
+     {
+      "t": null,
+      "exec_wall": 0.05
+     }
+    ]
+   },
+   "import_sys": {
+    "cold": {
+     "t": 0.014,
+     "exec_wall": 0.06
+    },
+    "warm": [
+     {
+      "t": 0.0151,
+      "exec_wall": 0.06
+     },
+     {
+      "t": null,
+      "exec_wall": 0.05
+     },
+     {
+      "t": null,
+      "exec_wall": 0.05
+     }
+    ]
+   },
+   "pip_version": {
+    "cold": {
+     "t": 0.0134,
+     "exec_wall": 0.06
+    },
+    "warm": [
+     {
+      "t": 0.0142,
+      "exec_wall": 0.06
+     },
+     {
+      "t": null,
+      "exec_wall": 0.05
+     },
+     {
+      "t": null,
+      "exec_wall": 0.05
+     }
+    ]
+   }
+  },
+  "native": {
+   "true": {
+    "first": {
+     "t": 0.007,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.007,
+      "rc": 0
+     },
+     {
+      "t": 0.0064,
+      "rc": 0
+     },
+     {
+      "t": 0.0064,
+      "rc": 0
+     }
+    ]
+   },
+   "import_sys": {
+    "first": {
+     "t": 0.0063,
+     "rc": 127
+    },
+    "warm": [
+     {
+      "t": 0.0063,
+      "rc": 127
+     },
+     {
+      "t": 0.0064,
+      "rc": 127
+     },
+     {
+      "t": 0.0071,
+      "rc": 127
+     }
+    ]
+   },
+   "pip_version": {
+    "first": {
+     "t": 0.0067,
+     "rc": 127
+    },
+    "warm": [
+     {
+      "t": 0.0063,
+      "rc": 127
+     },
+     {
+      "t": 0.0068,
+      "rc": 127
+     },
+     {
+      "t": 0.0064,
+      "rc": 127
+     }
+    ]
+   }
+  }
+ },
+ "7": {
+  "view": {
+   "rootfs": "/work/ucloud-sandboxes/state/direct-runtime/bundles/m1-split-x7.sandbox-1791034630795/rootfs",
+   "sentry_pid": 141246,
+   "flags": [
+    "--platform=systrap",
+    "--gofer-mount-confs=lisafs:self"
+   ],
+   "sentry_fds": {
+    "file": 34,
+    "socket": 4,
+    "other": 20
+   },
+   "gofer_flags": [
+    "--gofer-mount-confs=lisafs:self",
+    "--mounts-fd=4"
+   ]
+  },
+  "sandbox": {
+   "true": {
+    "cold": {
+     "t": 0.0146,
+     "exec_wall": 0.07
+    },
+    "warm": [
+     {
+      "t": 0.0127,
+      "exec_wall": 0.06
+     },
+     {
+      "t": null,
+      "exec_wall": 0.05
+     },
+     {
+      "t": null,
+      "exec_wall": 0.05
+     }
+    ]
+   },
+   "import_sys": {
+    "cold": {
+     "t": 0.0127,
+     "exec_wall": 0.06
+    },
+    "warm": [
+     {
+      "t": null,
+      "exec_wall": 0.05
+     },
+     {
+      "t": null,
+      "exec_wall": 0.05
+     },
+     {
+      "t": 0.0131,
+      "exec_wall": 0.06
+     }
+    ]
+   },
+   "pip_version": {
+    "cold": {
+     "t": null,
+     "exec_wall": 0.05
+    },
+    "warm": [
+     {
+      "t": 0.0138,
+      "exec_wall": 0.06
+     },
+     {
+      "t": null,
+      "exec_wall": 0.05
+     },
+     {
+      "t": null,
+      "exec_wall": 0.05
+     }
+    ]
+   }
+  },
+  "native": {
+   "true": {
+    "first": {
+     "t": 0.007,
+     "rc": 0
+    },
+    "warm": [
+     {
+      "t": 0.0066,
+      "rc": 0
+     },
+     {
+      "t": 0.007,
+      "rc": 0
+     },
+     {
+      "t": 0.0065,
+      "rc": 0
+     }
+    ]
+   },
+   "import_sys": {
+    "first": {
+     "t": 0.0063,
+     "rc": 127
+    },
+    "warm": [
+     {
+      "t": 0.0065,
+      "rc": 127
+     },
+     {
+      "t": 0.0049,
+      "rc": 127
+     },
+     {
+      "t": 0.0067,
+      "rc": 127
+     }
+    ]
+   },
+   "pip_version": {
+    "first": {
+     "t": 0.0069,
+     "rc": 127
+    },
+    "warm": [
+     {
+      "t": 0.0062,
+      "rc": 127
+     },
+     {
+      "t": 0.0062,
+      "rc": 127
+     },
+     {
+      "t": 0.0064,
+      "rc": 127
+     }
+    ]
+   }
+  }
+ }
+}

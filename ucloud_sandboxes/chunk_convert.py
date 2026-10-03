@@ -36,11 +36,12 @@ from .environment_artifact import (EMPTY_LAYER_DIFF_ID, ENVIRONMENT_ANNOTATION, 
 
 _LOG = logging.getLogger(__name__)
 DOCKER_MANIFEST = "application/vnd.docker.distribution.manifest.v2+json"
-STEPS = ("layer_converted", "pack_put", "layer_bootstrap_put", "layer_committed", "image_merged",
+STEPS = ("layer_converted", "pack_put", "pack_committed", "layer_bootstrap_put", "layer_committed", "image_merged",
          "metadata_put", "component_signed", "verified", "component_published", "registered", "root_published")
 _OPAQUE = ".wh..wh..opq"
 _OVERLAY_OPAQUE = "SCHILY.xattr.trusted.overlay.opaque"
 MAX_LAYERS_PER_ROOT = 33  # The base and 32 toolkits (ImmutableEnvironment).
+LOOKUP_BATCH = 256  # Chunk ids per index lookup while packing: about one 64 MiB pack.
 
 
 def converter_identity(layout):
@@ -264,17 +265,12 @@ class RafsConverter:
         if len(blobs) > 1 or [device[0] for device in parsed.devices] != blobs:
             raise ValueError("nydus-image produced an unexpected blob table for one layer")
         self._step("layer_converted", diff_id=diff_id)
-        packs = self._pack(parsed, work / "blobs" / blobs[0], work) if blobs else []
-        for digest, size, path in packs:
-            self.store.put_file(pack_key(self.store.prefix, digest), path, size)
-            self._count("pack_bytes", size)
-            self._step("pack_put", diff_id=diff_id, pack=digest)
+        if blobs:
+            self._pack(parsed, work / "blobs" / blobs[0], work, diff_id)
         bootstrap_digest = content_digest(bootstrap)
         self.store.put_bytes(bootstrap_key(self.store.prefix, bootstrap_digest[7:]), zstd_compress(bootstrap))
         self._step("layer_bootstrap_put", diff_id=diff_id)
-        # A pack is durable in S3 before any index row names it.
-        self.index.commit([{"digest": digest, "size": size} for digest, size, _ in packs],
-                          {"diff_id": diff_id, "converter": converter, "bootstrap": bootstrap_digest})
+        self.index.commit([], {"diff_id": diff_id, "converter": converter, "bootstrap": bootstrap_digest})
         self._step("layer_committed", diff_id=diff_id)
         self._count("layers_converted")
         return LayerResult(diff_id, bootstrap, blobs[0] if blobs else ""), tar
@@ -304,33 +300,55 @@ class RafsConverter:
         os.replace(str(target) + ".part", target)
         return target
 
-    def _pack(self, bootstrap, blob, work):
-        """Verify and pack the chunks the index does not know, in blob order."""
+    def _pack(self, bootstrap, blob, work, diff_id):
+        """Verify, pack, upload and commit the chunks the index does not know,
+        in blob order, one pack at a time.
+
+        Converters running at once share chunks across different layers. The
+        index is asked again before each batch and each pack is committed as
+        soon as it is durable, so a chunk another converter committed meanwhile
+        is skipped: the window is one pack, not one layer (M1 gate: 5.1 GB of
+        duplicate chunks in 22.9 GB with whole-layer commits).
+        """
         first = {}
         for chunk in sorted(bootstrap.chunks, key=lambda chunk: chunk[5]):
             first.setdefault(chunk[0], chunk)
-        ids = list(first)
-        known = dict(zip(ids, self.index.lookup(ids))) if ids else {}
-        packs, writer = [], None
+        ids, count, writer = list(first), 0, None
+
+        def flush(writer):
+            digest, size = writer.finish()
+            self.store.put_file(pack_key(self.store.prefix, digest), writer.path, size)
+            self._count("pack_bytes", size)
+            self._step("pack_put", diff_id=diff_id, pack=digest)
+            # A pack is durable in S3 before any index row names it.
+            self.index.commit([{"digest": digest, "size": size}])
+            self._step("pack_committed", diff_id=diff_id, pack=digest)
+
+        start = 0
         with open(blob, "rb") as source:
-            for chunk_id, chunk in first.items():
-                if known[chunk_id]:
-                    continue
-                _, _, flags, csize, usize, coff, _ = chunk
-                payload = os.pread(source.fileno(), csize, coff)
-                stored, encoding = store_encoding(payload, usize, flags)
-                decode_chunk(stored, usize, encoding, chunk_id)  # Every new chunk decodes to its id.
-                if writer is not None and not writer.fits(len(stored)):
-                    packs.append((*writer.finish(), writer.path))
-                    writer = None
-                if writer is None:
-                    writer = PackWriter(work / f"pack-{len(packs)}")
-                writer.add(chunk_id, stored, usize, encoding)
-                self._count("chunks_new")
-                self._count("chunk_bytes_new", len(stored))
+            while start < len(ids):
+                batch = ids[start:start + LOOKUP_BATCH]
+                following = start + len(batch)
+                for offset, (chunk_id, known) in enumerate(zip(batch, self.index.lookup(batch))):
+                    if known:
+                        continue
+                    _, _, flags, csize, usize, coff, _ = first[chunk_id]
+                    payload = os.pread(source.fileno(), csize, coff)
+                    stored, encoding = store_encoding(payload, usize, flags)
+                    decode_chunk(stored, usize, encoding, chunk_id)  # Every new chunk decodes to its id.
+                    if writer is not None and not writer.fits(len(stored)):
+                        flush(writer)
+                        writer, following = None, start + offset  # An upload passed: ask again from here.
+                        break
+                    if writer is None:
+                        writer = PackWriter(work / f"pack-{count}")
+                        count += 1
+                    writer.add(chunk_id, stored, usize, encoding)
+                    self._count("chunks_new")
+                    self._count("chunk_bytes_new", len(stored))
+                start = following
         if writer is not None:
-            packs.append((*writer.finish(), writer.path))
-        return packs
+            flush(writer)
 
     def _merge(self, results, scratch):
         paths = []

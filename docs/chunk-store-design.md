@@ -258,21 +258,32 @@ with 16–32 conversions in parallel.
    second builder waits, which removes the common duplicate of parallel builds on
    one foundation. If the row is complete, download its bootstrap and skip the
    layer. Otherwise run `nydus-image create -t targz-rafs --fs-version 6
-   --digester sha256 --compressor zstd --chunk-size 0x40000 --repeatable`, at
-   about 27 CPU-s per GB of gzip (S10). Never `dir-rafs`, which drops mtimes.
-3. **Dedupe.** Parse the chunk table (S10's `scripts/rafs.py` is about 40 lines)
-   and make one batched `POST /v1/chunks/lookup` over the distinct ids. It
-   returns the known ids, excluding condemned ones.
+   --digester sha256 --compressor zstd --chunk-size 0x40000`, at about 27 CPU-s
+   per GB of gzip (S10). Never `dir-rafs`, which drops mtimes, and never
+   `--repeatable`, which zeroes owners. A layer tar out of depth-first path order
+   is first rewritten in that order (uncompressed, `-t tar-rafs`): `nydus-image`
+   drops whiteouts of a layer that returns to a directory it left (OpenSWE's slim
+   layers, M1 gate). The converter identity records it (`;order=path`).
+3. **Dedupe.** Parse the chunk table (S10's `scripts/rafs.py` is about 40 lines).
+   Look the distinct ids up in batches of 256 (`POST /v1/chunks/lookup`), just
+   before packing them, and again from the current id after each pack is
+   committed. The reply gives the known ids, excluding condemned ones.
 4. **Pack.** For each unknown id: read its compressed bytes from the local Nydus
-   blob, decompress and verify it, and append it in blob order. Then write the
-   footer, hash the pack, and PUT it to S3 (skipped if a HEAD shows it exists).
-   The Nydus blobs are discarded.
-5. **Commit.** `POST /v1/chunks/commit {pack digest, size}`. The service HEADs
-   the object and reads its footer. One transaction does `INSERT OR IGNORE` of
-   the chunks and the pack row and completes the layer row, and the reply gives
-   canonical locations. A pack that lost a race keeps dead duplicate bytes, which
-   compaction can reclaim. Invariant: a pack is durable in S3 before any row
-   names it.
+   blob, decompress and verify it, and append it in blob order. When a pack is
+   full, write the footer, hash the pack, PUT it to S3 (skipped if a HEAD shows
+   it exists) and commit it (step 5) before starting the next. The Nydus blobs
+   are discarded.
+5. **Commit.** Per pack, `POST /v1/chunks/commit {pack digest, size}`. The
+   service HEADs the object and reads its footer, and one transaction does
+   `INSERT OR IGNORE` of the chunks and the pack row. After the last pack and the
+   layer bootstrap are durable, a final commit completes the layer row.
+   Invariant: a pack is durable in S3 before any row names it.
+
+   Committing per pack bounds the duplicate window to one pack. Converters
+   running at once share chunks across different layers. With one lookup per
+   layer and one commit after all its packs, the M1 gate's 12-way convert pass
+   stored 5.1 GB of duplicate chunks in 22.9 GB. A pack that still loses a race
+   keeps dead bytes, which compaction reclaims.
 6. **Image.** Run `nydus-image merge --original-blob-ids` over the layer
    bootstraps, with at most 254 blobs (the largest image seen has 25 layers).
    Then derive the chunk map, upload the bootstrap and map, and sign the
@@ -294,13 +305,14 @@ with 16–32 conversions in parallel.
 | --- | --- | --- |
 | Before the pack PUT | Local temporaries | Rerun |
 | After the PUT, before commit | Orphan pack | GC deletes row-less packs once they are over 24 h old |
+| After a pack's commit, before the layer row | Committed chunks, an incomplete layer | A rerun claims the layer again and skips the committed chunks |
 | After commit, before registration | Committed, unreferenced chunks | A 7-day grace protects them; a rerun reuses them |
 | After the root manifest, before the gateway record | Unreferenced root | Registry retention drops it after 1 h; a rerun yields the same digest |
 | Registration finds condemned ids | Nothing registered | Reconvert; the chunks are written again |
 
-**Write concurrency.** The index takes one SQLite writer: under one commit per
-second at 32 builders, plus one batched lookup per new layer. Lookups are
-concurrent WAL reads.
+**Write concurrency.** The index takes one SQLite writer: about one commit per
+pack, a few per second at 32 builders, plus one lookup per 256 new ids and one
+after each pack. Lookups are concurrent WAL reads.
 
 ## 4. Read path on workers
 

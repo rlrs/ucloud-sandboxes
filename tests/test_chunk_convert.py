@@ -1,11 +1,15 @@
 """The converter and packer: dedupe, idempotency, crash injection at every
 write-path step (design §3), granularity, and the tree verifier."""
+import dataclasses
 from pathlib import Path
 import tarfile
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
-from tests.chunk_store_support import REPOSITORY, ChunkStoreFixture, layer, sample_images, signing
+from tests.chunk_store_support import (REPOSITORY, ChunkStoreFixture, layer, pseudo_random, push_image,
+                                       sample_images, signing)
+from ucloud_sandboxes import chunk_convert, chunk_store
 from ucloud_sandboxes.chunk_convert import (STEPS, compare_trees, expected_tree, overlay_whiteouts,
                                             path_ordered_layer, strip_environment_annotation)
 from ucloud_sandboxes.environment_artifact import (ENVIRONMENT_ANNOTATION, RafsEnvironmentComponent, load_image_environment,
@@ -78,6 +82,28 @@ class ConverterTests(unittest.TestCase):
                 # Every chunk the root needs is committed and served.
                 base = load_environment(store.registry, reference).environment.base
                 self.assertEqual(store.index.reader.locator(base).epoch, 1)
+
+    def test_converters_at_once_never_pack_a_chunk_twice(self):
+        # x's layer and y's layer differ but share q. y converts while x is
+        # between packs (one chunk per pack, one id per lookup): x skips q.
+        store = self.store()
+        p, q = pseudo_random("p", 200_000), pseudo_random("q", 200_000)
+        push_image(store.client, "x", [layer([("data", "dir"), ("data/p", p), ("data/q", q)])])
+        push_image(store.client, "y", [layer([("other", "dir"), ("other/q", q)])])
+        other, ran = dataclasses.replace(store.converter, step=None, metrics={}), []
+
+        def step(name, **_):
+            if name == "pack_committed" and not ran:
+                ran.append(other.convert(REPOSITORY, "y"))
+        store.converter.step = step
+        with patch.object(chunk_store, "MAX_PACK_BYTES", 300_000), patch.object(chunk_convert, "LOOKUP_BATCH", 1):
+            store.converter.convert(REPOSITORY, "x")
+        self.assertTrue(ran)
+        self.assertEqual(store.converter.metrics["chunks_new"], 1)
+        connection = store.index.index._reader()
+        packs, dead = connection.execute("SELECT COUNT(*), SUM(NOT EXISTS (SELECT 1 FROM chunks c WHERE c.pack = "
+                                         "p.pack)) FROM packs p").fetchone()
+        self.assertEqual((packs, dead), (len(store.packs()), 0))  # No pack is dead weight.
 
     def test_an_attached_copy_lets_workers_resolve_the_new_root(self):
         store = self.store()

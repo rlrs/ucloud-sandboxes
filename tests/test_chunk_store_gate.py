@@ -198,8 +198,9 @@ class ResumeAndTeardownTests(GateTest):
 def passing_results():
     seq = {f"{index}:{command}": {"traced": {"wall": 1.2 * baseline if baseline else 2.4, "rc": 0}}
            for index, baselines in gate.S10_BASELINES.items() for command, baseline in baselines.items()}
-    return {"convert": [{"index": i, "ok": True, "verified": True} for i in range(170)],
-            "crash": [{"index": 170 + n, "step": step, "killed": True, "ok": True, "verified": True}
+    held = gate.SAMPLE_SIZE - len(gate.STEPS)
+    return {"convert": [{"index": i, "ok": True, "verified": True} for i in range(held)],
+            "crash": [{"index": held + n, "step": step, "killed": True, "ok": True, "verified": True}
                       for n, step in enumerate(gate.STEPS)],
             "tally": {"s3": {"stored_bytes": 17.6e9}}, "bench_seq": seq,
             "bench_burst": {"traced": {"wall": 5.1, "n": 20}},

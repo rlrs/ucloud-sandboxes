@@ -56,7 +56,7 @@ PHASES = ("provision", "configure", "convert", "crash", "workers", "rollback", "
 NEEDS = {"configure": "provision", "convert": "configure", "crash": "convert", "workers": "convert",
          "rollback": "convert"}
 # Write-path steps (ucloud_sandboxes/chunk_convert.py STEPS; a test keeps them equal).
-STEPS = ("layer_converted", "pack_put", "layer_bootstrap_put", "layer_committed", "image_merged",
+STEPS = ("layer_converted", "pack_put", "pack_committed", "layer_bootstrap_put", "layer_committed", "image_merged",
          "metadata_put", "component_signed", "verified", "component_published", "registered", "root_published")
 RESERVED = (ipaddress.ip_address("10.42.0.40"), ipaddress.ip_address("10.42.0.47"))  # Spike and snapshot sources.
 RUN_PREFIX = "spike/m1/"

@@ -128,10 +128,11 @@ def decode_chunk(payload, ulen, flags, chunk_id):
     return data
 
 
-def store_encoding(payload, ulen, flags):
+def store_encoding(payload, ulen, flags, *, keep=False):
     """(payload, flags) to store: nydus's zstd bytes, or raw when they save
-    under 3% or the chunk is under 4 KiB (design §1.1). Never recompresses."""
-    if flags & 1 and ulen >= BLOCK and len(payload) * 100 <= ulen * 97:
+    under 3% or the chunk is under 4 KiB (design §1.1). Never recompresses.
+    ``keep`` stores nydus's bytes as they are, so a blob can be rebuilt."""
+    if flags & 1 and (keep or ulen >= BLOCK and len(payload) * 100 <= ulen * 97):
         return bytes(payload), ZSTD
     return (zstd_decompress(payload, ulen) if flags & 1 else bytes(payload)), RAW
 
@@ -362,6 +363,52 @@ def bootstrap_key(prefix, digest):
 
 def chunk_map_key(prefix, digest):
     return f"{prefix}/meta/{require_hex(digest)}.map"
+
+
+def tail_key(prefix, blob_id):
+    """A nydus blob's chunk table and tail (encode_tail); only conversions
+    for nydusd keep one (spike, docs/benchmarks/nydusd-spike-2026-10-03)."""
+    return f"{prefix}/meta/{require_hex(blob_id)}.tail"
+
+
+TAIL_HEADER = struct.Struct("<8sI")
+TAIL_ENTRY = struct.Struct("<QI32s?")  # Blob offset, size, chunk id, zstd.
+_TAIL_MAGIC = b"UCTAIL\x00\x01"
+
+
+def blob_layout(bootstrap, blob_id):
+    """((offset, size, chunk id, zstd), ...) of one nydus blob's chunks in a
+    parsed layer bootstrap, in blob order; they must fill it from 0."""
+    position = next((index for index, device in enumerate(bootstrap.devices) if device[0] == blob_id), None)
+    if position is None:
+        raise LookupError("the bootstrap names no such blob")
+    unique = {}
+    for digest, blob, flags, csize, _usize, coff, _uoff in bootstrap.chunks:
+        entry = (coff, csize, digest, bool(flags & 1))
+        if blob == position and unique.setdefault(coff, entry) != entry:
+            raise ValueError("two chunks share one blob offset")
+    layout = tuple(sorted(unique.values()))
+    if any(left[0] + left[1] != right[0] for left, right in zip(((0, 0),) + layout, layout)):
+        raise ValueError("a blob's chunks do not fill it from 0")
+    return layout
+
+
+def encode_tail(layout, tail):
+    """The tail object: the blob's chunk table, then the bytes after its last
+    chunk (nydus's chunk info, digests and TOC)."""
+    return b"".join((TAIL_HEADER.pack(_TAIL_MAGIC, len(layout)), *(TAIL_ENTRY.pack(*entry) for entry in layout), tail))
+
+
+def decode_tail_table(payload):
+    """(chunk table, offset of the tail bytes) from a tail object's prefix."""
+    magic, count = TAIL_HEADER.unpack_from(payload)
+    table = TAIL_HEADER.size + count * TAIL_ENTRY.size
+    if magic != _TAIL_MAGIC or count > MAX_MAP_ENTRIES or len(payload) < table:
+        raise ValueError("invalid nydus blob tail")
+    layout = tuple(TAIL_ENTRY.iter_unpack(payload[TAIL_HEADER.size:table]))
+    if any(left[0] + left[1] != right[0] for left, right in zip(((0, 0),) + layout, layout)):
+        raise ValueError("a blob's chunks do not fill it from 0")
+    return layout, table
 
 
 # --- Locator: chunk-map entry i -> (pack, offset, clen, flags); unsigned ---

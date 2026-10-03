@@ -526,7 +526,7 @@ def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetc
     ``chunk_store_url`` makes the store node, with that token, the only source."""
     if os.geteuid() != 0 or registry is None:
         raise ValueError("the artifact I/O backend requires root and registry trust")
-    rafs, cache_options = None, None
+    rafs, cache_options, factory = None, None, {}
     if chunk_index is not None:
         from .chunk_index import ChunkIndexClient
         from .environment_rafs import load_rafs_image, store_access
@@ -542,13 +542,21 @@ def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetc
                                                          **access)
         # S3 demand misses wait 30-100 ms, not the registry's 3 ms.
         cache_options = {"concurrent_misses": concurrent_misses}
+        # Spike (docs/benchmarks/nydusd-spike-2026-10-03): nydusd serves RAFS
+        # images from the store node's virtual blobs; our cache, prefetch and
+        # traces never see their reads.
+        nydusd = os.environ.get("UCLOUD_ENVIRONMENT_NYDUSD")
+        if nydusd and chunk_store_url:
+            from .environment_nydusd import NydusdFactory
+            factory = {"device_factory": NydusdFactory(nydusd, chunk_store_url, chunk_index[1], Path(root) / "nydusd")}
+            prefetch = False
     traces = None
     if shared_traces:
         from .environment_trace import RegistryTraceStore
         traces = RegistryTraceStore(LocalTraceStore(Path(root) / "traces"), registry.client)
     backend = EnvironmentBackend(root, registry, cache_bytes=cache_bytes, prefetch=PrefetchPolicy(enabled=prefetch),
                                  rafs=rafs, cache_options=cache_options, attach_concurrency=attach_concurrency,
-                                 traces=traces)
+                                 traces=traces, **factory)
     try:
         with EnvironmentBackendServer(socket_path, backend) as server:
             server.serve_forever()

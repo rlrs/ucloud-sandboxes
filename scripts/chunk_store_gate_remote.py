@@ -256,6 +256,8 @@ def converter_argv(args, ref, owner, devices, attach_tag=True):
             "--environment-signing-key", args.signing_key, "--owner", owner]
     for device in devices:
         argv += ["--verify-device", device]
+    if getattr(args, "nydusd_blobs", False):  # The nydusd spike's conversions.
+        argv.append("--nydusd-blobs")
     return argv + (["--attach-tag", args.attach_tag] if attach_tag else [])
 
 
@@ -779,6 +781,7 @@ def parser():
     convert = add("convert", cmd_convert, *common, "results", "exclude")
     convert.add_argument("--parallel", type=int, default=8)
     convert.add_argument("--devices-per-slot", type=int, default=4)
+    convert.add_argument("--nydusd-blobs", action="store_true")
     crash = add("crash", cmd_crash, *common, "results", "holdout", "steps")
     crash.add_argument("--devices-per-slot", type=int, default=4)
     crash_run = commands.add_parser("crash-run")

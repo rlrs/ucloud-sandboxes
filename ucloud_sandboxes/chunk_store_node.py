@@ -52,9 +52,12 @@ HEDGE_MIN_SECONDS, HEDGE_MAX_SECONDS, MAX_HEDGES = 0.15, 2.0, 2
 READ_BLOCK = 256 * 1024  # Progress granularity of a fill.
 _RETRYABLE = {408, 429, 500, 502, 503, 504}
 # Only the chunk store's content-addressed objects; a read token reads nothing else.
-_KEY = re.compile(r"packs/([0-9a-f]{2})/([0-9a-f]{64})\.pack|meta/([0-9a-f]{64})\.(boot\.zst|map)")
-_KINDS = {"pack": "packs/{0}/{1}.pack", "boot": "meta/{1}.boot.zst", "map": "meta/{1}.map"}
-_FILE = re.compile(r"([0-9a-f]{64})\.(pack|boot|map)\.(\d{1,6})\.(\d{1,12})\.([0-9a-f]{64})")
+_KEY = re.compile(r"packs/([0-9a-f]{2})/([0-9a-f]{64})\.pack|meta/([0-9a-f]{64})\.(boot\.zst|map|tail)")
+_KINDS = {"pack": "packs/{0}/{1}.pack", "boot": "meta/{1}.boot.zst", "map": "meta/{1}.map",
+          "tail": "meta/{1}.tail"}
+# nydusd's registry backend: GET/HEAD /v2/<repository>/blobs/sha256:<blob id>.
+_VIRTUAL = re.compile(r"/v2/virtual/([0-9a-f]{64})/blobs/sha256:([0-9a-f]{64})")
+_FILE = re.compile(r"([0-9a-f]{64})\.(pack|boot|map|tail)\.(\d{1,6})\.(\d{1,12})\.([0-9a-f]{64})")
 
 
 def object_identity(relative):
@@ -64,7 +67,7 @@ def object_identity(relative):
         raise LookupError("not a chunk store object")
     if match.group(2):
         return match.group(2), "pack"
-    return match.group(3), "boot" if match.group(4) == "boot.zst" else "map"
+    return match.group(3), {"boot.zst": "boot", "map": "map", "tail": "tail"}[match.group(4)]
 
 
 def object_key(digest, kind):
@@ -718,6 +721,84 @@ class ChunkStoreNode:
 
 # --- HTTP ---
 
+class VirtualBlobs:
+    """nydusd's blobs, rebuilt from packs (spike, docs/benchmarks/nydusd-spike-2026-10-03).
+
+    A converter run with ``--nydusd-blobs`` keeps nydus's own chunk bytes and
+    each blob's tail object: its chunk table, then the bytes after its last
+    chunk. A blob is those chunks in order, located through the index (with
+    the write token, as builders do), then the tail. Nothing here is trusted:
+    nydusd checks every chunk against the TOC the signed bootstrap pins.
+    """
+
+    def __init__(self, node, index, *, cached=4096):
+        self.node, self.index, self.cached = node, index, cached
+        self._layouts, self._guard = OrderedDict(), threading.Lock()
+
+    def _bytes(self, relative, first=None, last=None):
+        """(object size, bytes) of one range."""
+        total, _, length, pieces = self.node.read(relative, first, last)
+        try:
+            return total, b"".join(os.pread(stream.fileno(), count, offset) for stream, offset, count in pieces)
+        finally:
+            for stream, _, _ in pieces:
+                stream.close()
+
+    def layout(self, blob_id):
+        """(size, segments): segments are (blob offset, length, object key,
+        object offset), in order, covering the blob exactly."""
+        with self._guard:
+            if blob_id in self._layouts:
+                self._layouts.move_to_end(blob_id)
+                return self._layouts[blob_id]
+        from .chunk_store import RAW, TAIL_ENTRY, TAIL_HEADER, ZSTD, decode_tail_table
+        tail = f"meta/{blob_id}.tail"
+        total, header = self._bytes(tail, 0, TAIL_HEADER.size - 1)
+        count = TAIL_HEADER.unpack(header)[1]
+        chunks, start = decode_tail_table(self._bytes(tail, 0, TAIL_HEADER.size + count * TAIL_ENTRY.size - 1)[1])
+        found = self.index.locate([digest for _, _, digest, _ in chunks])
+        segments = []
+        for (coff, csize, _, compressed), (pack, offset, clen, flags) in zip(chunks, found.entries):
+            if clen != csize or flags != (ZSTD if compressed else RAW):
+                raise ValueError("the store holds this chunk re-encoded; convert with --nydusd-blobs")
+            key, last = object_key(found.packs[pack][0], "pack"), segments[-1] if segments else None
+            if last and last[2] == key and last[3] + last[1] == offset:
+                segments[-1] = (last[0], last[1] + csize, key, last[3])
+            else:
+                segments.append((coff, csize, key, offset))
+        end = chunks[-1][0] + chunks[-1][1]
+        segments.append((end, total - start, tail, start))
+        result = (end + total - start, tuple(segments))
+        with self._guard:
+            self._layouts[blob_id] = result
+            while len(self._layouts) > self.cached:
+                self._layouts.popitem(last=False)
+        return result
+
+    def read(self, component, blob_id, first=None, last=None, suffix=None):
+        """Like ChunkStoreNode.read, over the rebuilt blob; ``component``
+        (the request's repository) only names who asked."""
+        size, segments = self.layout(blob_id)
+        if suffix is not None:
+            first, last = max(0, size - suffix), size - 1
+        elif first is None:
+            first, last = 0, size - 1
+        last = size - 1 if last is None else min(last, size - 1)
+        if first >= size or last < first or last - first + 1 > MAX_RESPONSE_BYTES:
+            raise RangeNotSatisfiable(size)
+        pieces = []
+        try:
+            for start, length, relative, offset in segments:
+                low, high = max(first, start), min(last + 1, start + length)
+                if low < high:
+                    pieces += self.node.read(relative, offset + low - start, offset + high - start - 1)[3]
+        except BaseException:
+            for stream, _, _ in pieces:
+                stream.close()
+            raise
+        return size, first, last - first + 1, pieces
+
+
 def parse_range(header):
     """(first, last, suffix) of one ``bytes=`` range; all None for no header."""
     if not header:
@@ -743,12 +824,13 @@ class ChunkStoreServer:
     under a busy GIL; the loop accepts it in tens of milliseconds.
     """
 
-    def __init__(self, address, node, *, read_token, write_token, read_threads=512):
+    def __init__(self, address, node, *, read_token, write_token, read_threads=512, blobs=None):
         read_token, write_token = (token.encode() if isinstance(token, str) else token
                                    for token in (read_token, write_token))
         if not write_token or not read_token or read_token == write_token:
             raise ValueError("the chunk store needs distinct read and write tokens")
         self.node, self.read_token, self.write_token = node, read_token, write_token
+        self.blobs = blobs  # VirtualBlobs, for nydusd (spike); None serves none.
         self.socket = socket.create_server(address, reuse_port=False, backlog=4096)
         self.server_address = self.socket.getsockname()[:2]
         self._reads = ThreadPoolExecutor(max_workers=read_threads, thread_name_prefix="chunk-store-read")
@@ -823,6 +905,11 @@ class ChunkStoreServer:
             if not self._authorized(headers, write=False):
                 return await _reply(writer, 401, {"error": "unauthorized"})
             return await self._object(writer, path.removeprefix("/v1/objects/"), headers.get("range"))
+        match = _VIRTUAL.fullmatch(path)
+        if method in ("GET", "HEAD") and match and self.blobs is not None:
+            if not self._authorized(headers, write=False):
+                return await _reply(writer, 401, {"error": "unauthorized"})
+            return await self._object(writer, match.groups(), headers.get("range"), head=method == "HEAD")
         if not self._authorized(headers, write=not (method == "GET" and path == "/v1/metrics")):
             return await _reply(writer, 401, {"error": "unauthorized"})
         if method == "GET" and path == "/v1/metrics":
@@ -850,10 +937,14 @@ class ChunkStoreServer:
             return await _reply(writer, 200, {"removed_extents": node.cache.remove(digest, kind)})
         return await _reply(writer, 404, {"error": "unknown endpoint"})
 
-    async def _object(self, writer, relative, spec):
+    async def _object(self, writer, relative, spec, head=False):
+        """One object, or with ``relative`` = (component, blob id) one virtual blob."""
         try:
             first, last, suffix = parse_range(spec)
-            found = self.node.read(relative, first, last, suffix, cached_only=True)
+            if isinstance(relative, tuple):  # A layout needs the index: always off the loop.
+                found = await self._loop.run_in_executor(self._reads, self.blobs.read, *relative, first, last, suffix)
+            else:
+                found = self.node.read(relative, first, last, suffix, cached_only=True)
             if found is None:  # A fill or a first hash: off the loop.
                 found = await self._loop.run_in_executor(self._reads, self.node.read, relative, first, last, suffix)
         except NotFound:
@@ -873,12 +964,12 @@ class ChunkStoreServer:
             return await _reply(writer, 503, {"error": "object store unavailable"})
         total, start, length, pieces = found
         try:
-            head = [f"HTTP/1.1 {206 if spec else 200} {'Partial Content' if spec else 'OK'}",
-                    "Content-Type: application/octet-stream", f"Content-Length: {length}"]
+            lines = [f"HTTP/1.1 {206 if spec else 200} {'Partial Content' if spec else 'OK'}",
+                     "Content-Type: application/octet-stream", f"Content-Length: {length}"]
             if spec:
-                head.append(f"Content-Range: bytes {start}-{start + length - 1}/{total}")
-            writer.write(("\r\n".join(head) + "\r\n\r\n").encode())
-            for stream, offset, count in pieces:  # Page cache to socket, no copy through Python.
+                lines.append(f"Content-Range: bytes {start}-{start + length - 1}/{total}")
+            writer.write(("\r\n".join(lines) + "\r\n\r\n").encode())
+            for stream, offset, count in () if head else pieces:  # Page cache to socket, no copy through Python.
                 await self._loop.sendfile(writer.transport, stream, offset, count)
         finally:
             for stream, _, _ in pieces:
@@ -973,8 +1064,13 @@ def serve_chunk_store(args):
         return 78
     tokens = [read_token(path) for path in (store.read_token_file, store.write_token_file)]
     node = build_node(store)
+    blobs = None
+    if os.environ.get("UCLOUD_CHUNK_STORE_VIRTUAL_BLOBS"):  # Spike: nydusd reads blobs rebuilt from packs.
+        from .chunk_index import ChunkIndexClient
+        blobs = VirtualBlobs(node, ChunkIndexClient(store.index_url, tokens[1].decode()))
     host, port = store.store_node.listen.rsplit(":", 1)
-    with ChunkStoreServer((host, int(port)), node, read_token=tokens[0], write_token=tokens[1]) as server:
+    with ChunkStoreServer((host, int(port)), node, read_token=tokens[0], write_token=tokens[1],
+                          blobs=blobs) as server:
         server.serve_forever()
     return 0
 

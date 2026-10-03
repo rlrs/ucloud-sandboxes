@@ -620,15 +620,16 @@ class Gate:
             "mirror", "--source-url", self.args.production_registry, "--target-url", registry,
             "--sample", f"{HOST}/sample.json", "--tag", "m1-src", "--work-root", "/var/lib/m1-gate/work",
             "--rate-mb", self.args.mirror_rate_mb]) or self.dry))
-        protect = sorted({*S10_BASELINES, *BURST_IMAGES, *ROLLBACK_IMAGES})
+        protect = sorted({*S10_BASELINES, *self.burst_images(), *ROLLBACK_IMAGES})
         holdout = self.step("convert", "holdout", lambda: self.job("converter", "holdout", [
             "holdout", "--registry-url", registry, "--sample", f"{HOST}/sample.json",
             # Spares for images whose conversion never reaches a step (no new chunks: no pack_put).
-            "--protect", ",".join(map(str, protect)), "--count", 2 * len(STEPS)], timeout_hours=1))
+            "--protect", ",".join(map(str, protect)), "--count", self.args.holdout_count], timeout_hours=1))
         self.state["results"]["holdout"] = holdout
         self.step("convert", "convert", lambda: self.job("converter", "convert", [
             "convert", *common, "--results", f"{OUT}/convert.jsonl", "--exclude", f"{OUT}/holdout.json",
-            "--parallel", self.args.parallel, "--devices-per-slot", self.args.devices_per_slot], timeout_hours=12))
+            "--parallel", self.args.parallel, "--devices-per-slot", self.args.devices_per_slot,
+            *(["--nydusd-blobs"] if self.args.nydusd_blobs else [])], timeout_hours=12))
         self.state["results"]["convert"] = self.step("convert", "results",
                                                      lambda: self.fetch("converter", f"{OUT}/convert.jsonl"))
         self.state["results"]["tally_convert"] = self.step("convert", "tally", lambda: self.tally("convert"))
@@ -669,10 +670,12 @@ class Gate:
         def gateway_runtime():
             stage = self.root / "stage"
             stage.mkdir(parents=True, exist_ok=True)
-            (stage / "bench-seq.json").write_text(json.dumps({str(i): image(i) for i in S10_BASELINES}, indent=1))
-            (stage / "bench-burst.json").write_text(json.dumps({str(i): image(i) for i in BURST_IMAGES}, indent=1))
+            (stage / "bench-seq.json").write_text(json.dumps({str(i): image(i) for i in S10_BASELINES
+                                                              if i < len(sample)}, indent=1))
+            burst = self.burst_images()
+            (stage / "bench-burst.json").write_text(json.dumps({str(i): image(i) for i in burst}, indent=1))
             (stage / "bench-burst-base.json").write_text(json.dumps({str(i): production_image(i)
-                                                                     for i in BURST_IMAGES}, indent=1))
+                                                                     for i in burst}, indent=1))
             (stage / "overrides.json").write_text(json.dumps(self.worker_overrides(), indent=1, sort_keys=True))
             self.push(stage / "bench-seq.json", stage / "bench-burst.json", stage / "bench-burst-base.json",
                       stage / "overrides.json")
@@ -724,10 +727,13 @@ class Gate:
                                     "bench-burst-base.json"]), True)[2])
         # Two workers run the sequential cycles and the burst at once; one runs them in turn.
         # The baseline worker runs the same burst on today's path alongside.
+        if args.skip_bench:  # Another driver runs the benches on the staged workers, then teardown.
+            self.save()
+            return
         canaries = [role for role in roles if role != "b1"]
         plan = [("seq", canaries[0]), ("burst", canaries[-1]), *([("burst-base", "b1")] if args.baseline else [])]
         bench = {kind: ["bench", "--kind", kind.split("-")[0], "--images", f"{HOST}/bench-{kind}.json",
-                        "--run", args.run_id, "--n", len(BURST_IMAGES)] for kind, _ in plan}
+                        "--run", args.run_id, "--n", len(self.burst_images())] for kind, _ in plan}
         python = "/usr/bin/python3"  # The bench needs only the standard library.
         for position, (kind, role) in enumerate(plan):
             self.step("workers", f"start-bench-{kind}", lambda role=role, kind=kind: (
@@ -742,6 +748,11 @@ class Gate:
         for role in roles:
             self.step("workers", f"drain-{role}", lambda role=role: self.drain(role))
         self.save()
+
+    def burst_images(self):
+        if self.args.burst_images:
+            return tuple(int(item) for item in self.args.burst_images.split(","))
+        return BURST_IMAGES
 
     def worker_overrides(self):
         if self.args.worker_overrides:
@@ -1061,6 +1072,10 @@ def parse_args(argv=None):
     parser.add_argument("--distribution-sha256", default="")
     parser.add_argument("--gate-registry-port", type=int, default=5000, help="the live config's registry_port")
     parser.add_argument("--sample", default=SAMPLE)
+    parser.add_argument("--burst-images", default="", help="sample indices for the burst (default: S12's 20)")
+    parser.add_argument("--holdout-count", type=int, default=2 * len(STEPS), help="images kept for crash injection")
+    parser.add_argument("--nydusd-blobs", action="store_true", help="convert for nydusd (the nydusd spike)")
+    parser.add_argument("--skip-bench", action="store_true", help="workers: set up only, run no bench or drain")
     parser.add_argument("--production-registry", default="http://10.42.0.2:5000", help="read only")
     parser.add_argument("--mirror-rate-mb", type=float, default=100.0)
     parser.add_argument("--parallel", type=int, default=12)

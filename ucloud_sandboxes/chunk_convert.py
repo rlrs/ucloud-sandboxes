@@ -28,8 +28,8 @@ from tempfile import TemporaryDirectory
 import time
 
 from .chunk_store import (BLOCK, MAX_BOOTSTRAP_BYTES, Locator, PackWriter, bootstrap_key, chunk_map_from_bootstrap,
-                          chunk_map_key, decode_chunk, pack_key, parse_bootstrap, store_encoding,
-                          zstd_compress, zstd_content_size, zstd_decompress)
+                          blob_layout, chunk_map_key, decode_chunk, encode_tail, pack_key, parse_bootstrap,
+                          store_encoding, tail_key, zstd_compress, zstd_content_size, zstd_decompress)
 from .environment_artifact import (EMPTY_LAYER_DIFF_ID, ENVIRONMENT_ANNOTATION, OCI_IMAGE, RAFS_CONVERTER,
                                    RafsEnvironmentComponent, canonical_bytes, content_digest, load_environment,
                                    publish_environment, require_digest, sign_rafs_component)
@@ -45,10 +45,22 @@ MAX_LAYERS_PER_ROOT = 33  # The base and 32 toolkits (ImmutableEnvironment).
 LOOKUP_BATCH = 256  # Chunk ids per index lookup while packing: about one 64 MiB pack.
 
 
-def converter_identity(layout):
+def converter_identity(layout, nydusd_blobs=False):
     """Everything besides the layer that decides a layer bootstrap's bytes."""
     whiteouts = "oci" if layout == "image" else "overlayfs"
-    return f"{RAFS_CONVERTER};fs6;sha256;zstd;0x40000;owners;whiteouts={whiteouts};order=path"  # never --repeatable: it zeroes owners
+    identity = f"{RAFS_CONVERTER};fs6;sha256;zstd;0x40000;owners;whiteouts={whiteouts};order=path"  # never --repeatable: it zeroes owners
+    return identity + (";blob-toc;nydus-encoding" if nydusd_blobs else "")
+
+
+def blob_tail(bootstrap, blob):
+    """A converted blob's tail object (chunk_store.encode_tail)."""
+    layout = blob_layout(bootstrap, Path(blob).name)
+    with open(blob, "rb") as stream:
+        stream.seek(layout[-1][0] + layout[-1][1])
+        tail = stream.read(MAX_BOOTSTRAP_BYTES + 1)
+    if not 0 < len(tail) <= MAX_BOOTSTRAP_BYTES:
+        raise ValueError("nydus blob tail is missing or too large")
+    return encode_tail(layout, tail)
 
 
 def strip_environment_annotation(document):
@@ -155,6 +167,9 @@ class RafsConverter:
     work_root: Path
     nydus_image: str = "nydus-image"
     layout: str = "image"
+    # Spike: blobs nydusd can read through the store node (blob-toc for chunk
+    # digests, nydus's own chunk bytes, and each blob's tail kept).
+    nydusd_blobs: bool = False
     verifier: object = None  # (images, layer tars) -> None; raises on any difference
     owner: str = field(default_factory=lambda: f"{socket.gethostname()}:{os.getpid()}")
     step: object = None  # Crash injection: called with each name in STEPS.
@@ -228,7 +243,7 @@ class RafsConverter:
 
     def _layer(self, repository, descriptor, diff_id, scratch):
         """Claim, convert, pack and commit one layer, or reuse its bootstrap."""
-        converter = converter_identity(self.layout)
+        converter = converter_identity(self.layout, self.nydusd_blobs)
         while True:
             claim = self.index.claim_layer(diff_id, converter, self.owner)
             if claim["state"] != "busy":
@@ -256,6 +271,8 @@ class RafsConverter:
         else:
             source, kind = layer, ["-t", "targz-rafs" if gzipped else "tar-rafs"]
         output = work / "layer.json"
+        if self.nydusd_blobs:
+            kind = [*kind, "--features", "blob-toc"]
         subprocess.run([self.nydus_image, "create", *kind, "--fs-version", "6", "--digester", "sha256",
                         "--compressor", "zstd", "--chunk-size", "0x40000",
                         "-D", str(work / "blobs"), "-B", str(work / "layer.boot"), "-J", str(output), str(source)],
@@ -268,6 +285,8 @@ class RafsConverter:
         self._step("layer_converted", diff_id=diff_id)
         if blobs:
             self._pack(parsed, work / "blobs" / blobs[0], work, diff_id)
+            if self.nydusd_blobs:
+                self.store.put_bytes(tail_key(self.store.prefix, blobs[0]), blob_tail(parsed, work / "blobs" / blobs[0]))
         bootstrap_digest = content_digest(bootstrap)
         self.store.put_bytes(bootstrap_key(self.store.prefix, bootstrap_digest[7:]), zstd_compress(bootstrap))
         self._step("layer_bootstrap_put", diff_id=diff_id)
@@ -335,7 +354,7 @@ class RafsConverter:
                         continue
                     _, _, flags, csize, usize, coff, _ = first[chunk_id]
                     payload = os.pread(source.fileno(), csize, coff)
-                    stored, encoding = store_encoding(payload, usize, flags)
+                    stored, encoding = store_encoding(payload, usize, flags, keep=self.nydusd_blobs)
                     decode_chunk(stored, usize, encoding, chunk_id)  # Every new chunk decodes to its id.
                     if writer is not None and not writer.fits(len(stored)):
                         flush(writer)
@@ -759,7 +778,8 @@ def convert_command(args):
                               work_root=args.work_root, store_node=store_node) if args.verify_device else None
     converter = RafsConverter(registry, store.object_store(), index, key, args.work_root,
                               nydus_image=store.nydus_image, layout=args.layout or store.mount_granularity,
-                              verifier=verifier, **({"owner": args.owner} if args.owner else {}))
+                              verifier=verifier, nydusd_blobs=args.nydusd_blobs,
+                              **({"owner": args.owner} if args.owner else {}))
     result = converter.convert(coordinates[0], manifest_digest_from_image_ref(args.image_ref) or coordinates[1],
                                attach_tag=args.attach_tag or None)
     print(json.dumps(result, sort_keys=True))
@@ -810,6 +830,8 @@ def add_commands(subparsers):
             command.add_argument("--layout", choices=("image", "layer"))
             command.add_argument("--owner", default="")
             command.add_argument("--attach-tag", default="", help="also tag an annotated copy for workers")
+            command.add_argument("--nydusd-blobs", action="store_true",
+                                 help="spike: blob-toc blobs nydusd can read through the store node")
             command.add_argument("--verify-device", action="append", default=[],
                                  help="NBD device for the full-tree verification mount (root); repeatable")
         else:

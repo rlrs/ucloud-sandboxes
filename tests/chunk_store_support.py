@@ -284,7 +284,7 @@ def _mapped(bootstrap_size, cursor_blocks=0):
     return max(128, round_up(max(bootstrap_size // 4096, cursor_blocks), 128))
 
 
-def _create(arguments):
+def _create(arguments, blob_toc=False):
     options = dict(zip(arguments[::2], arguments[1::2]))
     source = arguments[-1]
     opener = gzip.open if options["-t"] == "targz-rafs" else open
@@ -307,8 +307,12 @@ def _create(arguments):
                 offset = round_up(offset + len(piece))
     blob_ids = []
     if chunks:
+        if blob_toc:  # Stands in for chunk info, digests and the TOC.
+            blob += b"nydus-tail:" + hashlib.sha256(bytes(blob)).digest() * 200
         blob_id = hashlib.sha256(bytes(blob)).hexdigest()
         Path(options["-D"], blob_id).write_bytes(bytes(blob))
+        if os.environ.get("FAKE_NYDUS_KEEP"):  # Tests compare rebuilt blobs with these.
+            Path(os.environ["FAKE_NYDUS_KEEP"], blob_id).write_bytes(bytes(blob))
         blob_ids.append(blob_id)
     size = len(write_bootstrap([("0" * 64, 1, 128)] * len(blob_ids), chunks))
     devices = [(blob_ids[0], max(1, offset // 4096), _mapped(size))] if blob_ids else []
@@ -349,7 +353,7 @@ def main(argv):
                 skip = True
                 continue
             cleaned.append(value)
-        _create(cleaned)
+        _create(cleaned, blob_toc="blob-toc" in arguments)
     elif command == "merge":
         _merge(arguments)
     else:

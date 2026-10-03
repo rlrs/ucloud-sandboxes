@@ -53,9 +53,11 @@ import unittest
 # +171 the gateway's image_roots table, dispatch and retention, +207 chunk-migrate
 # inventory and retention's dispatched view (design §8 allows the migration tool
 # 250), +52 the attach-timing diagnostic (remove after the attach spike or fold
-# into heartbeat metrics), +100 shared startup traces (C2.7). Lower it on
-# deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 111_611
+# into heartbeat metrics), +100 shared startup traces (C2.7), +310 the nydusd
+# spike (C2.1 candidate: blob-toc conversion, the store node's virtual blobs,
+# the opt-in nydusd device; keep or delete with the spike's verdict). Lower it
+# on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 111_921
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

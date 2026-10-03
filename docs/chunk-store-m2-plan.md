@@ -397,5 +397,23 @@ holds.
    - C2.14 then builds new prepared images straight into the chunk store,
      keeping OCI only for foundations.
 
-   First measure how often builds name a prepared leaf as `FROM`, from the
-   gateway's build records and the catalog's `prepared-build` leases.
+   **What the gateway records (2026-10-03).** Nothing records `FROM`:
+   - build history (8,689 builds, 2026-09-29 to 10-01) keeps timings only;
+   - `prepared-build` leases are transient and gone once a build ends.
+
+   The selection's family states (review of 2026-10-02) answer most of it:
+   - **Attach-only families** (ScaleSWE, SWE-smith, R2E-Gym, SWE-Lego,
+     rebench v2, MultiSWE): about 2,860 images and about 435 GB of OCI. They
+     are in the catalog for import aliases, which resolve creates, not builds.
+     A `FROM` on them would be a user Dockerfile naming an upstream task
+     image, which is rare.
+   - **TMax and Terminal-Lego sources** are real `FROM` bases for the live task
+     setup that still runs at request time.
+   - **OpenSWE** builds from its foundations.
+
+   So M2 can release the attach-only families' OCI copies once
+   `resolve_build` can regenerate a released reference with `unpack`.
+   0.9.0 adds a counter of `resolve_build` rewrites per reference, to confirm
+   the rarity before the first release. Once C2.14 moves the remaining task
+   setup offline, sources become intermediate too, and the end state keeps
+   OCI only for foundations.

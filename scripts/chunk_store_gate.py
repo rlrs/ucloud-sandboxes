@@ -654,8 +654,10 @@ class Gate:
             return f"{alias}/{name.split('/', 1)[1].rsplit(':', 1)[0]}:{ATTACH_TAG}"
 
         def production_image(index):
-            """The same image as production workers see it: the live registry, by digest."""
-            return "ucloud-sandbox-registry:5000/" + sample[index]["prepared_reference"].split("/", 1)[1]
+            """The same image as production workers see it: the live registry's
+            worker address (10.42.0.2:5000; registry_private_ip is unset, so not
+            the alias), by digest, exactly as the sample pinned it."""
+            return sample[index]["prepared_reference"]
 
         def gateway_runtime():
             stage = self.root / "stage"

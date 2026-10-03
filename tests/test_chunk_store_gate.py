@@ -200,7 +200,7 @@ class ResumeAndTeardownTests(GateTest):
         self.assertTrue(any("10.42.0.52" in call and "bench --kind burst --images /opt/m1-gate/bench-burst-base.json"
                             in call for call in calls))
         images = json.loads((self.root / "state" / "20261002t1800" / "stage" / "bench-burst-base.json").read_text())
-        self.assertTrue(all(ref.startswith("ucloud-sandbox-registry:5000/ucloud-managed/") and "@sha256:" in ref
+        self.assertTrue(all(ref.startswith("10.42.0.2:5000/ucloud-managed/") and "@sha256:" in ref
                             for ref in images.values()))
         self.assertIn("sandboxes-m1-20261002t1800-b1", self.state()["resources"]["servers"])
 

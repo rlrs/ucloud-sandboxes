@@ -76,15 +76,16 @@ Measured against that:
 
 ## Fix design (C1.1, second pass)
 
-1. **Choose zswap per cgroup by measured compressibility.**
-   - Start each reclaim with zswap allowed.
-   - After the first window, read the cgroup's `zswap / zswapped`. If the
-     pool keeps more than about 60% of what it took, write
-     `memory.zswap.max=0` for that cgroup and continue straight to NVMe swap.
-   - Record the ratio. The fleet's real compressibility then decides whether
-     zswap stays the default.
-   - This keeps DSec's zswap-in-front-of-swap where it pays, without the
-     incompressible worst case.
+1. **Bound zswap per paused cgroup.**
+   - When zswap is on, a paused sandbox may hold at most a fixed share (25%)
+     of its memory bound in zswap: `memory.zswap.max`, set once at pause. The
+     kernel sends the rest to NVMe swap.
+   - This is a fixed, kernel-native bound, whatever the memory compresses to.
+     A per-reclaim "measure the ratio, then switch zswap off" rule was
+     rejected as a runtime heuristic.
+   - zswap stays off by default (`direct_pause_tier_zswap`). The fleet's real
+     compression ratio, read from `memory.stat`, decides whether to turn it
+     on.
 2. **Reclaim to the target in larger windows** (128 MiB), still cancellable
    between windows. Record each reclaim's stop reason; it is dropped today
    (`node_runtime.py:457-461`).
@@ -109,7 +110,51 @@ Measured against that:
    relay tells the node directly, and pause or reclaim needs no gateway
    round trip.
 
-**Validation:** re-run `benchmark_sandbox_density.py --mode relay` (140
+Items 1–4 shipped in `668f547`. Item 5 (admission) and item 6 (node-local
+waits) are next.
+
+## Pass 2: the second pass under the same pressure (2026-10-03)
+
+- **Setup.** Two disposable, unregistered CCX63, on bundle `94d5a908`
+  (0.8.4 plus `668f547`), with the pause tier, zswap on and 128 GiB of swap.
+  The same 140-rollout relay harness ran on each, now retrying deferred wakes
+  as the relay does:
+  - random heaps on one node;
+  - about 4:1 compressible heaps (`--compressible`) on the other.
+- **Raw evidence:** [raw/pass2-random.json.gz](raw/pass2-random.json.gz) and
+  [raw/pass2-compress.json.gz](raw/pass2-compress.json.gz).
+
+| 140 rollouts, one CCX63 | pass 1 (random) | **pass 2, random** | **pass 2, compressible** | today's policy |
+| --- | ---: | ---: | ---: | ---: |
+| reclaims; bytes freed | 586; 7.7 GB (13 MB each) | **80; 26.2 GB (327 MB each)** | **42; 41.0 GB (977 MB each)** | — |
+| stalls; escalations to hibernate | 234; 225 | **15; 2** | **5; 0** | — (181 checkpoints) |
+| how reclaims stopped (target, not shrinking, partial, errors) | not recorded | 3, 53, 3, 0 | 12, 25, 0, 0 | — |
+| waits that ended hibernated or parked | 188 of 879 | **2 of 963** | **0 of 936** | 146 of 877 |
+| wake p50 / p95 | 43 ms / 1.3 s, and 9–13 s once hibernated | **37 ms / 0.72 s** | **37 ms / 0.72 s** | 59 ms / 1.9 s, and 14–16 s once hibernated |
+| cycles completed | 974 | 1,075 | 1,048 | 965 |
+| swap used, most; zswap pool, most | 1.5 GB; 0.6 GB | 4.8 GB; 2.1 GB | 5.7 GB; 1.3 GB | — |
+| memory PSI full, highest avg10 | 0.65 | 11.8 | 1.1 | 0 |
+
+**Reading it:**
+- **The middle tier works.** Paused rollouts now give memory back through
+  swap rather than being hibernated. Escalations fell from 225 to 2 and 0,
+  and almost every wait returns as a resume, not a restore.
+- **Compressible memory gains most.** Each reclaim freed about 1 GB. Random
+  memory frees less per reclaim, because up to a quarter of the bound stays
+  in zswap. It thrashes more too (PSI full 11.8): incompressible pages cost a
+  compression attempt, then a write.
+- **The tail is admission, not reclaim.**
+  - 11 and 16 of about 950 wakes per node took over 5 s; a few took 3–5
+    minutes after up to 7 retries.
+  - These are thawed sandboxes waiting for headroom while new creates take
+    it, which is item 5.
+  - The 2 "deaths" per node are late-created sandboxes whose wakes were still
+    retrying when the run was interrupted.
+- **Density barely moved:** 128 created against 124–130. Admission still
+  counts each sandbox's bound, so reclaimed memory relieves pressure but does
+  not admit more. That is also item 5.
+
+**Validation (as planned before pass 2):** re-run `benchmark_sandbox_density.py --mode relay` (140
 rollouts on one CCX63), with wakes retried as the relay does.
 - **Reproducing these numbers:** pass `--compressible` heaps once the harness
   has them.
@@ -118,5 +163,7 @@ rollouts on one CCX63), with wakes retried as the relay does.
 
 ## Resources
 
-- One CCX63 for about 25 minutes, deleted afterwards.
+- Probe: one CCX63 for about 25 minutes, deleted afterwards.
+- Pass 2: two CCX63 for about 30 minutes, deleted afterwards. Neither was
+  ever registered.
 - It never registered with the gateway (`gateway_port: 1`).

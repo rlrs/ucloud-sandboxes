@@ -1,0 +1,3284 @@
+{
+ "arm": "local-large",
+ "mode": "local",
+ "args": {
+  "command": "arm",
+  "name": "local-large",
+  "mode": "local",
+  "node_url": "http://127.0.0.1:8090",
+  "node_token_file": "/var/lib/ucloud-sandboxes/state/node-control-token",
+  "image": "10.42.0.2:5000/ucloud-managed/shared-task-9db2bebb1e964a67a1cc4e4fd55f-247362126efd@sha256:8249b386d6a9de39c1ad7d048bd72b160565b4021b782be6ec46f03e5b69391a",
+  "relay_host": "10.42.0.41",
+  "relay_port": 8443,
+  "count": 6,
+  "lanes": 1,
+  "cycles": 6,
+  "think_min": 2.0,
+  "think_max": 5.0,
+  "compute_ms": 200,
+  "sizes": "65536,1048576",
+  "ticker": 0.0,
+  "delay": 2.0,
+  "cpus": 0.5,
+  "memory_mb": 512,
+  "seed": 1
+ },
+ "ids": [
+  "wake-local-large-eafa9e-0",
+  "wake-local-large-eafa9e-1",
+  "wake-local-large-eafa9e-2",
+  "wake-local-large-eafa9e-3",
+  "wake-local-large-eafa9e-4",
+  "wake-local-large-eafa9e-5"
+ ],
+ "plans": {
+  "wake-local-large-eafa9e-0": [
+   [
+    [
+     2.4,
+     65536
+    ],
+    [
+     4.54,
+     1048576
+    ],
+    [
+     4.29,
+     65536
+    ],
+    [
+     2.77,
+     1048576
+    ],
+    [
+     3.49,
+     65536
+    ],
+    [
+     3.35,
+     1048576
+    ]
+   ]
+  ],
+  "wake-local-large-eafa9e-1": [
+   [
+    [
+     3.95,
+     65536
+    ],
+    [
+     4.37,
+     1048576
+    ],
+    [
+     2.28,
+     65536
+    ],
+    [
+     2.09,
+     1048576
+    ],
+    [
+     4.51,
+     65536
+    ],
+    [
+     3.3,
+     1048576
+    ]
+   ]
+  ],
+  "wake-local-large-eafa9e-2": [
+   [
+    [
+     4.29,
+     65536
+    ],
+    [
+     2.01,
+     1048576
+    ],
+    [
+     3.34,
+     65536
+    ],
+    [
+     4.16,
+     1048576
+    ],
+    [
+     2.69,
+     65536
+    ],
+    [
+     4.84,
+     1048576
+    ]
+   ]
+  ],
+  "wake-local-large-eafa9e-3": [
+   [
+    [
+     4.7,
+     65536
+    ],
+    [
+     2.09,
+     1048576
+    ],
+    [
+     2.08,
+     65536
+    ],
+    [
+     3.62,
+     1048576
+    ],
+    [
+     4.82,
+     65536
+    ],
+    [
+     3.14,
+     1048576
+    ]
+   ]
+  ],
+  "wake-local-large-eafa9e-4": [
+   [
+    [
+     2.65,
+     65536
+    ],
+    [
+     3.27,
+     1048576
+    ],
+    [
+     2.09,
+     65536
+    ],
+    [
+     2.67,
+     1048576
+    ],
+    [
+     3.31,
+     65536
+    ],
+    [
+     3.49,
+     1048576
+    ]
+   ]
+  ],
+  "wake-local-large-eafa9e-5": [
+   [
+    [
+     2.7,
+     65536
+    ],
+    [
+     2.69,
+     1048576
+    ],
+    [
+     2.66,
+     65536
+    ],
+    [
+     3.38,
+     1048576
+    ],
+    [
+     2.87,
+     65536
+    ],
+    [
+     2.06,
+     1048576
+    ]
+   ]
+  ]
+ },
+ "events": [
+  {
+   "t": 1791056615.2669885,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "paused",
+   "runsc_ms": 8.53,
+   "rc": 0,
+   "waited_ms": 55.0
+  },
+  {
+   "t": 1791056615.5728447,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "paused",
+   "runsc_ms": 8.69,
+   "rc": 0,
+   "waited_ms": 51.5
+  },
+  {
+   "t": 1791056615.6019635,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "paused",
+   "runsc_ms": 8.04,
+   "rc": 0,
+   "waited_ms": 52.9
+  },
+  {
+   "t": 1791056616.7420018,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "paused",
+   "runsc_ms": 8.43,
+   "rc": 0,
+   "waited_ms": 50.2
+  },
+  {
+   "t": 1791056617.036577,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "paused",
+   "runsc_ms": 8.95,
+   "rc": 0,
+   "waited_ms": 54.6
+  },
+  {
+   "t": 1791056617.5120564,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "paused",
+   "runsc_ms": 8.23,
+   "rc": 0,
+   "waited_ms": 54.9
+  },
+  {
+   "t": 1791056618.2329528,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056618.2339032,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056618.2340744,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056618.2343168,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056618.2344565,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056618.2346723,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056618.2348676,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 9576
+  },
+  {
+   "t": 1791056618.23501,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 5422
+  },
+  {
+   "t": 1791056618.23512,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 12312
+  },
+  {
+   "t": 1791056618.2352245,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 47880
+  },
+  {
+   "t": 1791056618.2353141,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 36936
+  },
+  {
+   "t": 1791056618.2355382,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056618.24134,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 7040
+  },
+  {
+   "t": 1791056618.241509,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "thawed",
+   "runsc_ms": 8.28,
+   "since_packet_ms": 8.56,
+   "rc": 0
+  },
+  {
+   "t": 1791056618.5232394,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "paused",
+   "runsc_ms": 8.31,
+   "rc": 0,
+   "waited_ms": 53.6
+  },
+  {
+   "t": 1791056618.7843194,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056618.7851849,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056618.7853107,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056618.7854774,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056618.785569,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056618.785703,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056618.7858396,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 9576
+  },
+  {
+   "t": 1791056618.7859383,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 5422
+  },
+  {
+   "t": 1791056618.7860358,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 12312
+  },
+  {
+   "t": 1791056618.7861729,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056618.7862394,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056618.786309,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056618.7929475,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 7040
+  },
+  {
+   "t": 1791056618.793172,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "thawed",
+   "runsc_ms": 8.64,
+   "since_packet_ms": 8.85,
+   "rc": 0
+  },
+  {
+   "t": 1791056618.984637,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056618.985519,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056618.9856725,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056618.9857757,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056618.985868,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056618.9859605,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056618.9860315,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 9576
+  },
+  {
+   "t": 1791056618.9861333,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 5422
+  },
+  {
+   "t": 1791056618.9862034,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 12312
+  },
+  {
+   "t": 1791056618.9862769,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056618.9863596,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056618.9864247,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056618.9934158,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "thawed",
+   "runsc_ms": 8.52,
+   "since_packet_ms": 8.78,
+   "rc": 0
+  },
+  {
+   "t": 1791056619.0737388,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "paused",
+   "runsc_ms": 8.84,
+   "rc": 0,
+   "waited_ms": 53.9
+  },
+  {
+   "t": 1791056619.318897,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "paused",
+   "runsc_ms": 12.04,
+   "rc": 0,
+   "waited_ms": 54.9
+  },
+  {
+   "t": 1791056619.540662,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056619.5409982,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056619.5416691,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056619.5417728,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056619.5419018,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056619.5420065,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056619.5420797,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 9576
+  },
+  {
+   "t": 1791056619.542175,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 5422
+  },
+  {
+   "t": 1791056619.542245,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 12312
+  },
+  {
+   "t": 1791056619.542367,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056619.5424454,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 47810
+  },
+  {
+   "t": 1791056619.5425127,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056619.542587,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056619.5495718,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 7424
+  },
+  {
+   "t": 1791056619.5499494,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "thawed",
+   "runsc_ms": 9.02,
+   "since_packet_ms": 9.29,
+   "rc": 0
+  },
+  {
+   "t": 1791056619.7451231,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056619.745994,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056619.7461646,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056619.7462738,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056619.746343,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056619.7464628,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056619.7465456,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 9576
+  },
+  {
+   "t": 1791056619.7466109,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 5422
+  },
+  {
+   "t": 1791056619.7466774,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 12312
+  },
+  {
+   "t": 1791056619.7467535,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056619.746852,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056619.746924,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056619.7562182,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 6912
+  },
+  {
+   "t": 1791056619.7565012,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 9600
+  },
+  {
+   "t": 1791056619.7567778,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "thawed",
+   "runsc_ms": 11.44,
+   "since_packet_ms": 11.66,
+   "rc": 0
+  },
+  {
+   "t": 1791056619.9096243,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "paused",
+   "runsc_ms": 8.98,
+   "rc": 0,
+   "waited_ms": 51.4
+  },
+  {
+   "t": 1791056620.0662384,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "paused",
+   "runsc_ms": 8.74,
+   "rc": 0,
+   "waited_ms": 54.1
+  },
+  {
+   "t": 1791056621.0549726,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056621.055755,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056621.0558996,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056621.0560226,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056621.056133,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056621.0562818,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056621.056457,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 9576
+  },
+  {
+   "t": 1791056621.056553,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 5422
+  },
+  {
+   "t": 1791056621.0566366,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 12312
+  },
+  {
+   "t": 1791056621.0567174,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 45144
+  },
+  {
+   "t": 1791056621.056781,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 28728
+  },
+  {
+   "t": 1791056621.0568774,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056621.0569484,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056621.057061,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056621.0571458,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056621.057237,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 43952
+  },
+  {
+   "t": 1791056621.0636437,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 7040
+  },
+  {
+   "t": 1791056621.063859,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "thawed",
+   "runsc_ms": 8.67,
+   "since_packet_ms": 8.89,
+   "rc": 0
+  },
+  {
+   "t": 1791056621.101541,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 169
+  },
+  {
+   "t": 1791056621.1017954,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056621.1024034,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056621.1025095,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056621.102568,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056621.1026502,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 25952
+  },
+  {
+   "t": 1791056621.1105707,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "thawed",
+   "runsc_ms": 8.83,
+   "since_packet_ms": 9.03,
+   "rc": 0
+  },
+  {
+   "t": 1791056621.1219332,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 169
+  },
+  {
+   "t": 1791056621.122675,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056621.1227868,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056621.1228828,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056621.1229534,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056621.1230414,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 25952
+  },
+  {
+   "t": 1791056621.1332786,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "thawed",
+   "runsc_ms": 11.14,
+   "since_packet_ms": 11.35,
+   "rc": 0
+  },
+  {
+   "t": 1791056621.3442256,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "paused",
+   "runsc_ms": 9.35,
+   "rc": 0,
+   "waited_ms": 51.6
+  },
+  {
+   "t": 1791056621.4054358,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "paused",
+   "runsc_ms": 9.11,
+   "rc": 0,
+   "waited_ms": 55.1
+  },
+  {
+   "t": 1791056621.4817095,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "paused",
+   "runsc_ms": 8.63,
+   "rc": 0,
+   "waited_ms": 51.5
+  },
+  {
+   "t": 1791056621.9298644,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 169
+  },
+  {
+   "t": 1791056621.9301186,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056621.9306598,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056621.9307563,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056621.9308505,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056621.9309497,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 25952
+  },
+  {
+   "t": 1791056621.9379203,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "thawed",
+   "runsc_ms": 7.85,
+   "since_packet_ms": 8.06,
+   "rc": 0
+  },
+  {
+   "t": 1791056622.2111623,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "paused",
+   "runsc_ms": 8.23,
+   "rc": 0,
+   "waited_ms": 54.1
+  },
+  {
+   "t": 1791056622.5926113,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 169
+  },
+  {
+   "t": 1791056622.5929544,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056622.593523,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056622.59362,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056622.593681,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056622.5937824,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 25952
+  },
+  {
+   "t": 1791056622.6010797,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "thawed",
+   "runsc_ms": 8.18,
+   "since_packet_ms": 8.47,
+   "rc": 0
+  },
+  {
+   "t": 1791056622.9117465,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "paused",
+   "runsc_ms": 8.83,
+   "rc": 0,
+   "waited_ms": 50.8
+  },
+  {
+   "t": 1791056623.5639236,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 169
+  },
+  {
+   "t": 1791056623.5646682,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056623.5647829,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056623.5648885,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056623.5649545,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056623.5650434,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 25952
+  },
+  {
+   "t": 1791056623.5724533,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "thawed",
+   "runsc_ms": 8.3,
+   "since_packet_ms": 8.53,
+   "rc": 0
+  },
+  {
+   "t": 1791056623.8465874,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "paused",
+   "runsc_ms": 10.31,
+   "rc": 0,
+   "waited_ms": 53.0
+  },
+  {
+   "t": 1791056624.092325,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056624.0926208,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056624.093263,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056624.0933816,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056624.0934572,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056624.0935585,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056624.0936801,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056624.093765,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056624.0938756,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056624.0939808,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056624.1015651,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "thawed",
+   "runsc_ms": 9.0,
+   "since_packet_ms": 9.24,
+   "rc": 0
+  },
+  {
+   "t": 1791056624.2941134,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 169
+  },
+  {
+   "t": 1791056624.2945018,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056624.2946532,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056624.2961378,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056624.2962487,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056624.2963715,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 25952
+  },
+  {
+   "t": 1791056624.30548,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "thawed",
+   "runsc_ms": 11.14,
+   "since_packet_ms": 11.37,
+   "rc": 0
+  },
+  {
+   "t": 1791056624.372463,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "paused",
+   "runsc_ms": 8.13,
+   "rc": 0,
+   "waited_ms": 54.2
+  },
+  {
+   "t": 1791056624.663601,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "paused",
+   "runsc_ms": 8.09,
+   "rc": 0,
+   "waited_ms": 52.0
+  },
+  {
+   "t": 1791056624.7232418,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056624.72373,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056624.7238536,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056624.724508,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056624.7246084,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056624.7246974,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056624.7247708,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056624.7248604,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056624.724988,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056624.725071,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056624.7251453,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 1248
+  },
+  {
+   "t": 1791056624.732358,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "thawed",
+   "runsc_ms": 8.7,
+   "since_packet_ms": 9.12,
+   "rc": 0
+  },
+  {
+   "t": 1791056625.000308,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "paused",
+   "runsc_ms": 8.42,
+   "rc": 0,
+   "waited_ms": 50.7
+  },
+  {
+   "t": 1791056625.769474,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056625.7697313,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056625.7703285,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056625.770472,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056625.7705803,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056625.7706776,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056625.7708068,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056625.770928,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056625.771039,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056625.7711213,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056625.7788048,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "thawed",
+   "runsc_ms": 9.13,
+   "since_packet_ms": 9.33,
+   "rc": 0
+  },
+  {
+   "t": 1791056625.8740373,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056625.874805,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056625.8749642,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056625.8750527,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056625.8751247,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056625.8752406,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056625.8753178,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056625.8754234,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056625.8755138,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056625.8756075,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056625.8834429,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "thawed",
+   "runsc_ms": 9.19,
+   "since_packet_ms": 9.41,
+   "rc": 0
+  },
+  {
+   "t": 1791056626.1329088,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "paused",
+   "runsc_ms": 8.79,
+   "rc": 0,
+   "waited_ms": 52.8
+  },
+  {
+   "t": 1791056626.1460845,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "paused",
+   "runsc_ms": 7.93,
+   "rc": 0,
+   "waited_ms": 54.6
+  },
+  {
+   "t": 1791056627.0129528,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056627.0137649,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056627.0140224,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056627.0141535,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056627.014328,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056627.014516,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056627.0145955,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056627.0147429,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056627.0148675,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056627.0149643,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056627.0215995,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "thawed",
+   "runsc_ms": 8.42,
+   "since_packet_ms": 8.65,
+   "rc": 0
+  },
+  {
+   "t": 1791056627.3114808,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "paused",
+   "runsc_ms": 7.82,
+   "rc": 0,
+   "waited_ms": 51.6
+  },
+  {
+   "t": 1791056627.374243,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056627.374713,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056627.375352,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056627.3754919,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056627.3755627,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056627.375794,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056627.3759077,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056627.3760333,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056627.376116,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056627.3762069,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056627.3838556,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "thawed",
+   "runsc_ms": 9.35,
+   "since_packet_ms": 9.61,
+   "rc": 0
+  },
+  {
+   "t": 1791056627.6205926,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 169
+  },
+  {
+   "t": 1791056627.6208909,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056627.6214614,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056627.6215482,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056627.6216424,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056627.6217268,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 25952
+  },
+  {
+   "t": 1791056627.631779,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "thawed",
+   "runsc_ms": 10.96,
+   "since_packet_ms": 11.19,
+   "rc": 0
+  },
+  {
+   "t": 1791056627.6644542,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "paused",
+   "runsc_ms": 8.28,
+   "rc": 0,
+   "waited_ms": 52.7
+  },
+  {
+   "t": 1791056627.816284,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 169
+  },
+  {
+   "t": 1791056627.8165562,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056627.8166695,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056627.8172238,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056627.8173249,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056627.817422,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 25952
+  },
+  {
+   "t": 1791056627.819877,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 1328
+  },
+  {
+   "t": 1791056627.8262663,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "thawed",
+   "runsc_ms": 9.76,
+   "since_packet_ms": 9.98,
+   "rc": 0
+  },
+  {
+   "t": 1791056628.0801396,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "paused",
+   "runsc_ms": 8.78,
+   "rc": 0,
+   "waited_ms": 51.3
+  },
+  {
+   "t": 1791056628.1048584,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "paused",
+   "runsc_ms": 8.79,
+   "rc": 0,
+   "waited_ms": 52.1
+  },
+  {
+   "t": 1791056629.9426353,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 169
+  },
+  {
+   "t": 1791056629.9428756,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056629.943389,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056629.943582,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056629.9436924,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056629.9438603,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 25952
+  },
+  {
+   "t": 1791056629.9511552,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "thawed",
+   "runsc_ms": 8.35,
+   "since_packet_ms": 8.52,
+   "rc": 0
+  },
+  {
+   "t": 1791056630.104698,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056630.1054096,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056630.1056066,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056630.1057827,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056630.105903,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056630.1060193,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056630.106155,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056630.106253,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056630.1063993,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056630.1065376,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056630.1066353,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 8208
+  },
+  {
+   "t": 1791056630.106723,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 8208
+  },
+  {
+   "t": 1791056630.1067975,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 9576
+  },
+  {
+   "t": 1791056630.1069186,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 9576
+  },
+  {
+   "t": 1791056630.1070108,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 10944
+  },
+  {
+   "t": 1791056630.1070976,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 10944
+  },
+  {
+   "t": 1791056630.1071904,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 12312
+  },
+  {
+   "t": 1791056630.1072624,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 12312
+  },
+  {
+   "t": 1791056630.1073825,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.1075046,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.1076365,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.1077425,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.1078248,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.1079211,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.1080596,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.1081831,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.1082687,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.1084104,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.108562,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.1086621,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.108748,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.1088693,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.1149786,
+   "id": "wake-local-large-eafa9e-5",
+   "event": "thawed",
+   "runsc_ms": 10.06,
+   "since_packet_ms": 10.28,
+   "rc": 0
+  },
+  {
+   "t": 1791056630.3119423,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "paused",
+   "runsc_ms": 8.73,
+   "rc": 0,
+   "waited_ms": 51.1
+  },
+  {
+   "t": 1791056630.5941422,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 169
+  },
+  {
+   "t": 1791056630.5944514,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056630.5951595,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056630.5953119,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.5954497,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.5955627,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 25952
+  },
+  {
+   "t": 1791056630.6054783,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "thawed",
+   "runsc_ms": 11.11,
+   "since_packet_ms": 11.34,
+   "rc": 0
+  },
+  {
+   "t": 1791056630.8919184,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 169
+  },
+  {
+   "t": 1791056630.8922117,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056630.892822,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056630.8929543,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.8930247,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056630.8931093,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 25952
+  },
+  {
+   "t": 1791056630.900609,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "thawed",
+   "runsc_ms": 8.47,
+   "since_packet_ms": 8.69,
+   "rc": 0
+  },
+  {
+   "t": 1791056630.9431055,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "paused",
+   "runsc_ms": 8.36,
+   "rc": 0,
+   "waited_ms": 51.3
+  },
+  {
+   "t": 1791056631.0940948,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 169
+  },
+  {
+   "t": 1791056631.0948634,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056631.0950015,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056631.0952017,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056631.095337,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056631.0954924,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 25952
+  },
+  {
+   "t": 1791056631.1027482,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "thawed",
+   "runsc_ms": 8.44,
+   "since_packet_ms": 8.65,
+   "rc": 0
+  },
+  {
+   "t": 1791056631.2123492,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "paused",
+   "runsc_ms": 9.98,
+   "rc": 0,
+   "waited_ms": 53.0
+  },
+  {
+   "t": 1791056631.3668725,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "paused",
+   "runsc_ms": 8.25,
+   "rc": 0,
+   "waited_ms": 55.2
+  },
+  {
+   "t": 1791056631.5108085,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056631.5111616,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056631.5119076,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056631.5128193,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056631.512946,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056631.513089,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056631.5132768,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056631.513445,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056631.5135982,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056631.5137494,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056631.5138702,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056631.5139973,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056631.514077,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056631.5219512,
+   "id": "wake-local-large-eafa9e-4",
+   "event": "thawed",
+   "runsc_ms": 10.85,
+   "since_packet_ms": 11.14,
+   "rc": 0
+  },
+  {
+   "t": 1791056634.1842408,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056634.1845567,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056634.1853902,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056634.185535,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056634.1856146,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056634.1857667,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056634.1859424,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056634.1860478,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056634.186147,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056634.186268,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056634.1863585,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056634.1959517,
+   "id": "wake-local-large-eafa9e-1",
+   "event": "thawed",
+   "runsc_ms": 11.47,
+   "since_packet_ms": 11.71,
+   "rc": 0
+  },
+  {
+   "t": 1791056634.2900226,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056634.2908645,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056634.2909706,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056634.2910998,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056634.2911785,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056634.2912817,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056634.2914014,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056634.2914882,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056634.2915573,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056634.2916353,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056634.298383,
+   "id": "wake-local-large-eafa9e-3",
+   "event": "thawed",
+   "runsc_ms": 8.13,
+   "since_packet_ms": 8.36,
+   "rc": 0
+  },
+  {
+   "t": 1791056634.6541746,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056634.654458,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056634.6551125,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056634.6552048,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056634.655281,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056634.6553717,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056634.655504,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056634.6555893,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056634.6556592,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056634.6557424,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056634.6626837,
+   "id": "wake-local-large-eafa9e-0",
+   "event": "thawed",
+   "runsc_ms": 8.27,
+   "since_packet_ms": 8.51,
+   "rc": 0
+  },
+  {
+   "t": 1791056635.0928888,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 171
+  },
+  {
+   "t": 1791056635.0931756,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 6840
+  },
+  {
+   "t": 1791056635.0938761,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 5472
+  },
+  {
+   "t": 1791056635.0940065,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056635.0941207,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 13680
+  },
+  {
+   "t": 1791056635.0943165,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056635.0944288,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 27360
+  },
+  {
+   "t": 1791056635.0945551,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056635.0946565,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 54720
+  },
+  {
+   "t": 1791056635.0947661,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "wake_packet",
+   "bytes": 64296
+  },
+  {
+   "t": 1791056635.1019075,
+   "id": "wake-local-large-eafa9e-2",
+   "event": "thawed",
+   "runsc_ms": 8.79,
+   "since_packet_ms": 9.02,
+   "rc": 0
+  }
+ ],
+ "errors": [],
+ "nstat": {
+  "TcpRetransSegs": 2,
+  "TcpExtTCPLostRetransmit": 0,
+  "TcpExtTCPTimeouts": 0
+ },
+ "relay": [
+  {
+   "id": "wake-local-large-eafa9e-0:0:0",
+   "client": "100.96.0.17",
+   "received": 1791056612.527978,
+   "answered": 1791056614.92815,
+   "written": 1791056614.9284713,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-5:0:0",
+   "client": "100.96.0.21",
+   "received": 1791056612.5650897,
+   "answered": 1791056615.2652566,
+   "written": 1791056615.2655818,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-4:0:0",
+   "client": "100.96.0.15",
+   "received": 1791056612.634644,
+   "answered": 1791056615.286881,
+   "written": 1791056615.287397,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-1:0:0",
+   "client": "100.96.0.19",
+   "received": 1791056612.5095212,
+   "answered": 1791056616.459696,
+   "written": 1791056616.4600408,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-2:0:0",
+   "client": "100.96.0.23",
+   "received": 1791056612.4863343,
+   "answered": 1791056616.7764957,
+   "written": 1791056616.776801,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-3:0:0",
+   "client": "100.96.0.29",
+   "received": 1791056612.4936182,
+   "answered": 1791056617.193807,
+   "written": 1791056617.1941233,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-5:0:1",
+   "client": "100.96.0.21",
+   "received": 1791056615.5412207,
+   "answered": 1791056618.232617,
+   "written": 1791056618.2343633,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-4:0:1",
+   "client": "100.96.0.15",
+   "received": 1791056615.5129619,
+   "answered": 1791056618.784059,
+   "written": 1791056618.7855637,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-2:0:1",
+   "client": "100.96.0.23",
+   "received": 1791056616.973258,
+   "answered": 1791056618.9843814,
+   "written": 1791056618.9858015,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-3:0:1",
+   "client": "100.96.0.29",
+   "received": 1791056617.4492738,
+   "answered": 1791056619.5403895,
+   "written": 1791056619.5420399,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-0:0:1",
+   "client": "100.96.0.17",
+   "received": 1791056615.2037609,
+   "answered": 1791056619.7448637,
+   "written": 1791056619.7563941,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-1:0:1",
+   "client": "100.96.0.19",
+   "received": 1791056616.6836057,
+   "answered": 1791056621.0547237,
+   "written": 1791056621.0571291,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-4:0:2",
+   "client": "100.96.0.15",
+   "received": 1791056619.0112224,
+   "answered": 1791056621.1013198,
+   "written": 1791056621.101621,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-5:0:2",
+   "client": "100.96.0.21",
+   "received": 1791056618.4616203,
+   "answered": 1791056621.1217103,
+   "written": 1791056621.122018,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-3:0:2",
+   "client": "100.96.0.29",
+   "received": 1791056619.8495042,
+   "answered": 1791056621.9296062,
+   "written": 1791056621.9299529,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-2:0:2",
+   "client": "100.96.0.23",
+   "received": 1791056619.252268,
+   "answered": 1791056622.5923688,
+   "written": 1791056622.592641,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-1:0:2",
+   "client": "100.96.0.19",
+   "received": 1791056621.2835197,
+   "answered": 1791056623.5636427,
+   "written": 1791056623.5639746,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-4:0:3",
+   "client": "100.96.0.15",
+   "received": 1791056621.4218712,
+   "answered": 1791056624.092062,
+   "written": 1791056624.0930395,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-0:0:2",
+   "client": "100.96.0.17",
+   "received": 1791056620.0037196,
+   "answered": 1791056624.2938502,
+   "written": 1791056624.2941651,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-5:0:3",
+   "client": "100.96.0.21",
+   "received": 1791056621.3414824,
+   "answered": 1791056624.7229319,
+   "written": 1791056624.7246063,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-3:0:3",
+   "client": "100.96.0.29",
+   "received": 1791056622.1490715,
+   "answered": 1791056625.7692308,
+   "written": 1791056625.7706013,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-1:0:3",
+   "client": "100.96.0.19",
+   "received": 1791056623.7836044,
+   "answered": 1791056625.8737693,
+   "written": 1791056625.874698,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-2:0:3",
+   "client": "100.96.0.23",
+   "received": 1791056622.8524628,
+   "answered": 1791056627.012671,
+   "written": 1791056627.0135539,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-0:0:3",
+   "client": "100.96.0.17",
+   "received": 1791056624.603725,
+   "answered": 1791056627.3739345,
+   "written": 1791056627.374976,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-4:0:4",
+   "client": "100.96.0.15",
+   "received": 1791056624.3103294,
+   "answered": 1791056627.6204193,
+   "written": 1791056627.6206808,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-5:0:4",
+   "client": "100.96.0.21",
+   "received": 1791056624.9415689,
+   "answered": 1791056627.8160388,
+   "written": 1791056627.816372,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-2:0:4",
+   "client": "100.96.0.23",
+   "received": 1791056627.2523324,
+   "answered": 1791056629.9424295,
+   "written": 1791056629.9426982,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-5:0:5",
+   "client": "100.96.0.21",
+   "received": 1791056628.044204,
+   "answered": 1791056630.1044507,
+   "written": 1791056630.1055903,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-1:0:4",
+   "client": "100.96.0.19",
+   "received": 1791056626.0837731,
+   "answered": 1791056630.5938714,
+   "written": 1791056630.594191,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-3:0:4",
+   "client": "100.96.0.29",
+   "received": 1791056626.071586,
+   "answered": 1791056630.8916833,
+   "written": 1791056630.891973,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-0:0:4",
+   "client": "100.96.0.17",
+   "received": 1791056627.603749,
+   "answered": 1791056631.0938692,
+   "written": 1791056631.0941644,
+   "size": 65536
+  },
+  {
+   "id": "wake-local-large-eafa9e-4:0:5",
+   "client": "100.96.0.15",
+   "received": 1791056628.0203712,
+   "answered": 1791056631.5105581,
+   "written": 1791056631.5115488,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-1:0:5",
+   "client": "100.96.0.19",
+   "received": 1791056630.8837714,
+   "answered": 1791056634.1839843,
+   "written": 1791056634.1850533,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-3:0:5",
+   "client": "100.96.0.29",
+   "received": 1791056631.1495996,
+   "answered": 1791056634.2897682,
+   "written": 1791056634.290767,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-0:0:5",
+   "client": "100.96.0.17",
+   "received": 1791056631.3036873,
+   "answered": 1791056634.6538913,
+   "written": 1791056634.6548986,
+   "size": 1048576
+  },
+  {
+   "id": "wake-local-large-eafa9e-2:0:5",
+   "client": "100.96.0.23",
+   "received": 1791056630.2524228,
+   "answered": 1791056635.0925932,
+   "written": 1791056635.093528,
+   "size": 1048576
+  }
+ ],
+ "agents": {
+  "wake-local-large-eafa9e-0": {
+   "job": {
+    "sandbox_id": "wake-local-large-eafa9e-0",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "e900aaff2b10aa70b2c9565369cf43b7580665e85af68d0479634572765cf9ed",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:43:31.114429624Z",
+    "completed_at": "2026-10-03T19:43:54.678119906Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 691,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:43:58.327143+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056612.423329,
+     "recv": 1791056614.9294176,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056615.2030587,
+     "recv": 1791056619.760008,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056620.0030336,
+     "recv": 1791056624.3052726,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056624.6029847,
+     "recv": 1791056627.3862827,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056627.6030076,
+     "recv": 1791056631.102477,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056631.3029723,
+     "recv": 1791056634.6639795,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "done": 1791056634.665964
+    }
+   ]
+  },
+  "wake-local-large-eafa9e-1": {
+   "job": {
+    "sandbox_id": "wake-local-large-eafa9e-1",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "6274bd6fa3e24d08db06100764d58d2e3a4d5f7c4b96b8e4e848a4c8c5f3388b",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:43:31.142239708Z",
+    "completed_at": "2026-10-03T19:43:54.219011756Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 692,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:43:58.361968+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056612.482962,
+     "recv": 1791056616.4608765,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056616.6829088,
+     "recv": 1791056621.0664852,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056621.2828524,
+     "recv": 1791056623.5722086,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056623.7828913,
+     "recv": 1791056625.8856573,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056626.0831788,
+     "recv": 1791056630.6049607,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056630.882984,
+     "recv": 1791056634.196448,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "done": 1791056634.1985633
+    }
+   ]
+  },
+  "wake-local-large-eafa9e-2": {
+   "job": {
+    "sandbox_id": "wake-local-large-eafa9e-2",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "76beaa96ee5d96c5646db612cefcab760510aed75efdea1793c6c4b2b6786b08",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:43:31.175416714Z",
+    "completed_at": "2026-10-03T19:43:55.117707062Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 693,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:43:58.397072+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056612.3766387,
+     "recv": 1791056616.7777653,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056616.97256,
+     "recv": 1791056618.9965436,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056619.2515411,
+     "recv": 1791056622.6010427,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056622.8516483,
+     "recv": 1791056627.0241559,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056627.2516441,
+     "recv": 1791056629.9507768,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056630.2516513,
+     "recv": 1791056635.1029937,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "done": 1791056635.1048496
+    }
+   ]
+  },
+  "wake-local-large-eafa9e-3": {
+   "job": {
+    "sandbox_id": "wake-local-large-eafa9e-3",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "28f0c446dc4513c5f3d27bfdbc09ee0b313d9b4722ec8530720cecd11ca4f8a1",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:43:31.204362721Z",
+    "completed_at": "2026-10-03T19:43:54.315917625Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 694,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:43:58.433868+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056612.4483166,
+     "recv": 1791056617.1951559,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056617.4483757,
+     "recv": 1791056619.5569155,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056619.8487923,
+     "recv": 1791056621.9379556,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056622.148347,
+     "recv": 1791056625.7817645,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056626.0709703,
+     "recv": 1791056630.9003046,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056631.1489935,
+     "recv": 1791056634.2995224,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "done": 1791056634.3011215
+    }
+   ]
+  },
+  "wake-local-large-eafa9e-4": {
+   "job": {
+    "sandbox_id": "wake-local-large-eafa9e-4",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "d3929119dfb933c350ce822d91808cc5abf12893a0c2666f9d91ca7a177128ea",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:43:31.237652355Z",
+    "completed_at": "2026-10-03T19:43:51.53812954Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 694,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:43:58.476278+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056612.6098676,
+     "recv": 1791056615.2882278,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056615.5122163,
+     "recv": 1791056618.7958994,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056619.0105011,
+     "recv": 1791056621.1103892,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056621.4211824,
+     "recv": 1791056624.1040132,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056624.3096795,
+     "recv": 1791056627.6312945,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056628.019658,
+     "recv": 1791056631.5239165,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "done": 1791056631.5258236
+    }
+   ]
+  },
+  "wake-local-large-eafa9e-5": {
+   "job": {
+    "sandbox_id": "wake-local-large-eafa9e-5",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "d685d3f586c9d15444a5215db15e35a2d174c3a135d326ef04679f21e96a6c43",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:43:31.272455688Z",
+    "completed_at": "2026-10-03T19:43:50.130479478Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 694,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:43:58.511287+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056612.5404935,
+     "recv": 1791056615.2665439,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056615.5405283,
+     "recv": 1791056618.244436,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056618.4610004,
+     "recv": 1791056621.1331632,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056621.3407633,
+     "recv": 1791056624.7353265,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056624.9406724,
+     "recv": 1791056627.8257928,
+     "bytes": 65536,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056628.0435793,
+     "recv": 1791056630.1156301,
+     "bytes": 1048576,
+     "status": 200
+    },
+    {
+     "done": 1791056630.1178699
+    }
+   ]
+  }
+ },
+ "summary": {
+  "calls": 36,
+  "expected": 36,
+  "answer_latency_s": {
+   "n": 36,
+   "p50": 0.0095,
+   "p95": 0.0124,
+   "max": 0.0149
+  },
+  "pauses": 30,
+  "pauses_outside_a_wait": 0,
+  "paused_share_of_wait": 0.805,
+  "pause_runsc_ms": {
+   "n": 30,
+   "p50": 8.69,
+   "p95": 10.31,
+   "max": 12.04
+  },
+  "pause_after_last_send_ms": {
+   "n": 30,
+   "p50": 52.9,
+   "p95": 55.1,
+   "max": 55.2
+  },
+  "thaw_since_packet_ms": {
+   "n": 30,
+   "p50": 9.12,
+   "p95": 11.66,
+   "max": 11.71
+  },
+  "thaw_runsc_ms": {
+   "n": 30,
+   "p50": 8.83,
+   "p95": 11.44,
+   "max": 11.47
+  },
+  "tick_late_s": null,
+  "nstat": {
+   "TcpRetransSegs": 2,
+   "TcpExtTCPLostRetransmit": 0,
+   "TcpExtTCPTimeouts": 0
+  },
+  "errors": 0
+ }
+}

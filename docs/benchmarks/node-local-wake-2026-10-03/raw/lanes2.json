@@ -1,0 +1,3732 @@
+{
+ "arm": "lanes2",
+ "mode": "local",
+ "args": {
+  "command": "arm",
+  "name": "lanes2",
+  "mode": "local",
+  "node_url": "http://127.0.0.1:8090",
+  "node_token_file": "/var/lib/ucloud-sandboxes/state/node-control-token",
+  "image": "10.42.0.2:5000/ucloud-managed/shared-task-9db2bebb1e964a67a1cc4e4fd55f-247362126efd@sha256:8249b386d6a9de39c1ad7d048bd72b160565b4021b782be6ec46f03e5b69391a",
+  "relay_host": "10.42.0.41",
+  "relay_port": 8443,
+  "count": 6,
+  "lanes": 2,
+  "cycles": 6,
+  "think_min": 2.0,
+  "think_max": 5.0,
+  "compute_ms": 200,
+  "sizes": "2048",
+  "ticker": 0.0,
+  "delay": 2.0,
+  "cpus": 0.5,
+  "memory_mb": 512,
+  "seed": 1
+ },
+ "ids": [
+  "wake-lanes2-85a2f7-0",
+  "wake-lanes2-85a2f7-1",
+  "wake-lanes2-85a2f7-2",
+  "wake-lanes2-85a2f7-3",
+  "wake-lanes2-85a2f7-4",
+  "wake-lanes2-85a2f7-5"
+ ],
+ "plans": {
+  "wake-lanes2-85a2f7-0": [
+   [
+    [
+     2.4,
+     2048
+    ],
+    [
+     4.54,
+     2048
+    ],
+    [
+     4.29,
+     2048
+    ],
+    [
+     2.77,
+     2048
+    ],
+    [
+     3.49,
+     2048
+    ],
+    [
+     3.35,
+     2048
+    ]
+   ],
+   [
+    [
+     3.95,
+     2048
+    ],
+    [
+     4.37,
+     2048
+    ],
+    [
+     2.28,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ],
+    [
+     4.51,
+     2048
+    ],
+    [
+     3.3,
+     2048
+    ]
+   ]
+  ],
+  "wake-lanes2-85a2f7-1": [
+   [
+    [
+     4.29,
+     2048
+    ],
+    [
+     2.01,
+     2048
+    ],
+    [
+     3.34,
+     2048
+    ],
+    [
+     4.16,
+     2048
+    ],
+    [
+     2.69,
+     2048
+    ],
+    [
+     4.84,
+     2048
+    ]
+   ],
+   [
+    [
+     4.7,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ],
+    [
+     2.08,
+     2048
+    ],
+    [
+     3.62,
+     2048
+    ],
+    [
+     4.82,
+     2048
+    ],
+    [
+     3.14,
+     2048
+    ]
+   ]
+  ],
+  "wake-lanes2-85a2f7-2": [
+   [
+    [
+     2.65,
+     2048
+    ],
+    [
+     3.27,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ],
+    [
+     2.67,
+     2048
+    ],
+    [
+     3.31,
+     2048
+    ],
+    [
+     3.49,
+     2048
+    ]
+   ],
+   [
+    [
+     2.7,
+     2048
+    ],
+    [
+     2.69,
+     2048
+    ],
+    [
+     2.66,
+     2048
+    ],
+    [
+     3.38,
+     2048
+    ],
+    [
+     2.87,
+     2048
+    ],
+    [
+     2.06,
+     2048
+    ]
+   ]
+  ],
+  "wake-lanes2-85a2f7-3": [
+   [
+    [
+     4.51,
+     2048
+    ],
+    [
+     3.67,
+     2048
+    ],
+    [
+     3.93,
+     2048
+    ],
+    [
+     2.56,
+     2048
+    ],
+    [
+     4.98,
+     2048
+    ],
+    [
+     4.58,
+     2048
+    ]
+   ],
+   [
+    [
+     2.36,
+     2048
+    ],
+    [
+     3.0,
+     2048
+    ],
+    [
+     4.16,
+     2048
+    ],
+    [
+     4.13,
+     2048
+    ],
+    [
+     4.81,
+     2048
+    ],
+    [
+     3.27,
+     2048
+    ]
+   ]
+  ],
+  "wake-lanes2-85a2f7-4": [
+   [
+    [
+     4.49,
+     2048
+    ],
+    [
+     4.01,
+     2048
+    ],
+    [
+     2.91,
+     2048
+    ],
+    [
+     3.76,
+     2048
+    ],
+    [
+     4.65,
+     2048
+    ],
+    [
+     4.54,
+     2048
+    ]
+   ],
+   [
+    [
+     3.52,
+     2048
+    ],
+    [
+     3.77,
+     2048
+    ],
+    [
+     2.1,
+     2048
+    ],
+    [
+     2.73,
+     2048
+    ],
+    [
+     4.39,
+     2048
+    ],
+    [
+     3.24,
+     2048
+    ]
+   ]
+  ],
+  "wake-lanes2-85a2f7-5": [
+   [
+    [
+     2.52,
+     2048
+    ],
+    [
+     3.65,
+     2048
+    ],
+    [
+     4.11,
+     2048
+    ],
+    [
+     4.02,
+     2048
+    ],
+    [
+     3.12,
+     2048
+    ],
+    [
+     3.32,
+     2048
+    ]
+   ],
+   [
+    [
+     3.53,
+     2048
+    ],
+    [
+     4.34,
+     2048
+    ],
+    [
+     3.56,
+     2048
+    ],
+    [
+     3.18,
+     2048
+    ],
+    [
+     3.47,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ]
+   ]
+  ]
+ },
+ "events": [
+  {
+   "t": 1791056687.4936848,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "paused",
+   "runsc_ms": 9.2,
+   "rc": 0,
+   "waited_ms": 52.8
+  },
+  {
+   "t": 1791056687.5613613,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "paused",
+   "runsc_ms": 10.09,
+   "rc": 0,
+   "waited_ms": 50.2
+  },
+  {
+   "t": 1791056687.8004339,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "paused",
+   "runsc_ms": 8.92,
+   "rc": 0,
+   "waited_ms": 50.5
+  },
+  {
+   "t": 1791056687.8087463,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "paused",
+   "runsc_ms": 8.16,
+   "rc": 0,
+   "waited_ms": 62.7
+  },
+  {
+   "t": 1791056688.3984413,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056688.3987312,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056688.3993766,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056688.406992,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "thawed",
+   "runsc_ms": 8.31,
+   "since_packet_ms": 8.55,
+   "rc": 0
+  },
+  {
+   "t": 1791056688.5956016,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "paused",
+   "runsc_ms": 8.85,
+   "rc": 0,
+   "waited_ms": 54.9
+  },
+  {
+   "t": 1791056688.6987739,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "paused",
+   "runsc_ms": 8.26,
+   "rc": 0,
+   "waited_ms": 52.3
+  },
+  {
+   "t": 1791056688.8535123,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056688.8537636,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056688.8543708,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056688.8621979,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "thawed",
+   "runsc_ms": 8.48,
+   "since_packet_ms": 8.68,
+   "rc": 0
+  },
+  {
+   "t": 1791056689.1498823,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "paused",
+   "runsc_ms": 9.22,
+   "rc": 0,
+   "waited_ms": 52.0
+  },
+  {
+   "t": 1791056689.2496707,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056689.2499752,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056689.2505944,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056689.2588542,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "thawed",
+   "runsc_ms": 8.94,
+   "since_packet_ms": 9.18,
+   "rc": 0
+  },
+  {
+   "t": 1791056689.2591085,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "paused",
+   "runsc_ms": 7.95,
+   "rc": 0,
+   "waited_ms": 52.3
+  },
+  {
+   "t": 1791056689.2795641,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056689.2804973,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056689.28065,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056689.2908082,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "thawed",
+   "runsc_ms": 10.97,
+   "since_packet_ms": 11.25,
+   "rc": 0
+  },
+  {
+   "t": 1791056689.3407931,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056689.3411486,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056689.3413088,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056689.350005,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "thawed",
+   "runsc_ms": 8.97,
+   "since_packet_ms": 9.21,
+   "rc": 0
+  },
+  {
+   "t": 1791056689.591883,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "paused",
+   "runsc_ms": 8.67,
+   "rc": 0,
+   "waited_ms": 52.9
+  },
+  {
+   "t": 1791056689.6056974,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "paused",
+   "runsc_ms": 8.51,
+   "rc": 0,
+   "waited_ms": 52.8
+  },
+  {
+   "t": 1791056689.6601105,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "paused",
+   "runsc_ms": 7.76,
+   "rc": 0,
+   "waited_ms": 53.5
+  },
+  {
+   "t": 1791056690.4315338,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056690.431821,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056690.4325185,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056690.4326446,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056690.4328127,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056690.4332757,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056690.4400063,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "thawed",
+   "runsc_ms": 8.24,
+   "since_packet_ms": 8.47,
+   "rc": 0
+  },
+  {
+   "t": 1791056690.4401867,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "thawed",
+   "runsc_ms": 7.43,
+   "since_packet_ms": 7.54,
+   "rc": 0
+  },
+  {
+   "t": 1791056690.7015631,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "paused",
+   "runsc_ms": 8.43,
+   "rc": 0,
+   "waited_ms": 53.1
+  },
+  {
+   "t": 1791056690.8030868,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "paused",
+   "runsc_ms": 8.17,
+   "rc": 0,
+   "waited_ms": 54.1
+  },
+  {
+   "t": 1791056691.0115392,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056691.0123205,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056691.0124295,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056691.0201223,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "thawed",
+   "runsc_ms": 8.35,
+   "since_packet_ms": 8.58,
+   "rc": 0
+  },
+  {
+   "t": 1791056691.209598,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056691.2098696,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056691.2104502,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056691.2183676,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "thawed",
+   "runsc_ms": 8.57,
+   "since_packet_ms": 8.77,
+   "rc": 0
+  },
+  {
+   "t": 1791056691.3160872,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "paused",
+   "runsc_ms": 9.84,
+   "rc": 0,
+   "waited_ms": 54.7
+  },
+  {
+   "t": 1791056691.3885694,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056691.38937,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056691.3895943,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056691.3971393,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "thawed",
+   "runsc_ms": 8.35,
+   "since_packet_ms": 8.57,
+   "rc": 0
+  },
+  {
+   "t": 1791056691.5617998,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "paused",
+   "runsc_ms": 9.16,
+   "rc": 0,
+   "waited_ms": 53.8
+  },
+  {
+   "t": 1791056691.6895075,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056691.6897764,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056691.6903832,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056691.6982615,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "thawed",
+   "runsc_ms": 8.55,
+   "since_packet_ms": 8.75,
+   "rc": 0
+  },
+  {
+   "t": 1791056691.6996276,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "paused",
+   "runsc_ms": 7.46,
+   "rc": 0,
+   "waited_ms": 54.2
+  },
+  {
+   "t": 1791056691.959809,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "paused",
+   "runsc_ms": 10.25,
+   "rc": 0,
+   "waited_ms": 50.8
+  },
+  {
+   "t": 1791056692.041697,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056692.041983,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056692.0425444,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056692.0503032,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "thawed",
+   "runsc_ms": 8.38,
+   "since_packet_ms": 8.61,
+   "rc": 0
+  },
+  {
+   "t": 1791056692.3024154,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056692.3026779,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056692.3033066,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056692.3109136,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "thawed",
+   "runsc_ms": 8.28,
+   "since_packet_ms": 8.5,
+   "rc": 0
+  },
+  {
+   "t": 1791056692.349467,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "paused",
+   "runsc_ms": 8.36,
+   "rc": 0,
+   "waited_ms": 52.5
+  },
+  {
+   "t": 1791056692.5927942,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "paused",
+   "runsc_ms": 8.8,
+   "rc": 0,
+   "waited_ms": 53.6
+  },
+  {
+   "t": 1791056692.9788575,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056692.9794614,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056692.9796312,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056692.9901228,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "thawed",
+   "runsc_ms": 11.07,
+   "since_packet_ms": 11.27,
+   "rc": 0
+  },
+  {
+   "t": 1791056693.2150505,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056693.2153976,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056693.2161763,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056693.226919,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "thawed",
+   "runsc_ms": 11.59,
+   "since_packet_ms": 11.87,
+   "rc": 0
+  },
+  {
+   "t": 1791056693.3181148,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "paused",
+   "runsc_ms": 8.47,
+   "rc": 0,
+   "waited_ms": 54.5
+  },
+  {
+   "t": 1791056693.342109,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056693.342412,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056693.3429852,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056693.353566,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "thawed",
+   "runsc_ms": 11.23,
+   "since_packet_ms": 11.46,
+   "rc": 0
+  },
+  {
+   "t": 1791056693.4592934,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056693.4595723,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056693.4601364,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056693.4706383,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "thawed",
+   "runsc_ms": 11.15,
+   "since_packet_ms": 11.35,
+   "rc": 0
+  },
+  {
+   "t": 1791056693.4990442,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "paused",
+   "runsc_ms": 9.95,
+   "rc": 0,
+   "waited_ms": 54.1
+  },
+  {
+   "t": 1791056693.5410223,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056693.5419817,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056693.542134,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056693.551878,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "thawed",
+   "runsc_ms": 10.61,
+   "since_packet_ms": 10.86,
+   "rc": 0
+  },
+  {
+   "t": 1791056693.8439088,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "paused",
+   "runsc_ms": 29.01,
+   "rc": 0,
+   "waited_ms": 73.8
+  },
+  {
+   "t": 1791056693.858019,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "paused",
+   "runsc_ms": 8.8,
+   "rc": 0,
+   "waited_ms": 60.6
+  },
+  {
+   "t": 1791056693.8943772,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "paused",
+   "runsc_ms": 12.7,
+   "rc": 0,
+   "waited_ms": 51.3
+  },
+  {
+   "t": 1791056693.9794116,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056693.9796698,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056693.9802792,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056693.988035,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "thawed",
+   "runsc_ms": 8.42,
+   "since_packet_ms": 8.62,
+   "rc": 0
+  },
+  {
+   "t": 1791056694.2713218,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "paused",
+   "runsc_ms": 7.97,
+   "rc": 0,
+   "waited_ms": 54.7
+  },
+  {
+   "t": 1791056694.6309896,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056694.6312869,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056694.6318576,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056694.6398487,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "thawed",
+   "runsc_ms": 8.61,
+   "since_packet_ms": 8.86,
+   "rc": 0
+  },
+  {
+   "t": 1791056694.8006825,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056694.8009694,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056694.8016095,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056694.8090208,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "thawed",
+   "runsc_ms": 8.12,
+   "since_packet_ms": 8.34,
+   "rc": 0
+  },
+  {
+   "t": 1791056694.8394625,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056694.8397548,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056694.8404932,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056694.8505335,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "thawed",
+   "runsc_ms": 10.85,
+   "since_packet_ms": 11.07,
+   "rc": 0
+  },
+  {
+   "t": 1791056694.9095974,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "paused",
+   "runsc_ms": 8.21,
+   "rc": 0,
+   "waited_ms": 50.9
+  },
+  {
+   "t": 1791056695.094665,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "paused",
+   "runsc_ms": 8.38,
+   "rc": 0,
+   "waited_ms": 54.9
+  },
+  {
+   "t": 1791056695.160363,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "paused",
+   "runsc_ms": 8.6,
+   "rc": 0,
+   "waited_ms": 52.9
+  },
+  {
+   "t": 1791056695.7485504,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056695.7488873,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056695.7494698,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056695.75707,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "thawed",
+   "runsc_ms": 8.26,
+   "since_packet_ms": 8.52,
+   "rc": 0
+  },
+  {
+   "t": 1791056696.016609,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "paused",
+   "runsc_ms": 10.32,
+   "rc": 0,
+   "waited_ms": 50.9
+  },
+  {
+   "t": 1791056696.0693142,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056696.0696435,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056696.07031,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056696.0804422,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "thawed",
+   "runsc_ms": 10.87,
+   "since_packet_ms": 11.13,
+   "rc": 0
+  },
+  {
+   "t": 1791056696.3522103,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "paused",
+   "runsc_ms": 8.67,
+   "rc": 0,
+   "waited_ms": 54.9
+  },
+  {
+   "t": 1791056696.4116805,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056696.412,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056696.4121504,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056696.4231925,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "thawed",
+   "runsc_ms": 11.25,
+   "since_packet_ms": 11.51,
+   "rc": 0
+  },
+  {
+   "t": 1791056696.5425642,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "paused",
+   "runsc_ms": 27.23,
+   "rc": 0,
+   "waited_ms": 93.0
+  },
+  {
+   "t": 1791056696.579274,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056696.5796094,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056696.5804305,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056696.5887835,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "thawed",
+   "runsc_ms": 9.26,
+   "since_packet_ms": 9.52,
+   "rc": 0
+  },
+  {
+   "t": 1791056696.741105,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056696.741392,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056696.7419827,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056696.7494328,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "thawed",
+   "runsc_ms": 8.1,
+   "since_packet_ms": 8.33,
+   "rc": 0
+  },
+  {
+   "t": 1791056696.8155856,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056696.8158693,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056696.8164423,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056696.8240998,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "thawed",
+   "runsc_ms": 8.3,
+   "since_packet_ms": 8.51,
+   "rc": 0
+  },
+  {
+   "t": 1791056696.952325,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "paused",
+   "runsc_ms": 10.42,
+   "rc": 0,
+   "waited_ms": 52.8
+  },
+  {
+   "t": 1791056697.091464,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "paused",
+   "runsc_ms": 8.52,
+   "rc": 0,
+   "waited_ms": 52.6
+  },
+  {
+   "t": 1791056697.200499,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "paused",
+   "runsc_ms": 8.86,
+   "rc": 0,
+   "waited_ms": 53.7
+  },
+  {
+   "t": 1791056697.3620393,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056697.3623784,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056697.3629587,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056697.3707619,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "thawed",
+   "runsc_ms": 8.49,
+   "since_packet_ms": 8.72,
+   "rc": 0
+  },
+  {
+   "t": 1791056697.5809395,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056697.5816605,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056697.5817797,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056697.5923676,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "thawed",
+   "runsc_ms": 11.21,
+   "since_packet_ms": 11.43,
+   "rc": 0
+  },
+  {
+   "t": 1791056697.6919804,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "paused",
+   "runsc_ms": 8.39,
+   "rc": 0,
+   "waited_ms": 52.3
+  },
+  {
+   "t": 1791056697.8293676,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056697.8302352,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056697.8304088,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056697.8409393,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "thawed",
+   "runsc_ms": 11.32,
+   "since_packet_ms": 11.57,
+   "rc": 0
+  },
+  {
+   "t": 1791056697.915539,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "paused",
+   "runsc_ms": 8.38,
+   "rc": 0,
+   "waited_ms": 55.0
+  },
+  {
+   "t": 1791056698.1577873,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "paused",
+   "runsc_ms": 8.23,
+   "rc": 0,
+   "waited_ms": 50.6
+  },
+  {
+   "t": 1791056698.379195,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056698.3794782,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056698.3796303,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056698.390259,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "thawed",
+   "runsc_ms": 10.84,
+   "since_packet_ms": 11.07,
+   "rc": 0
+  },
+  {
+   "t": 1791056698.7518778,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "paused",
+   "runsc_ms": 8.38,
+   "rc": 0,
+   "waited_ms": 54.9
+  },
+  {
+   "t": 1791056699.1619685,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056699.1622434,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056699.1628125,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056699.1699367,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "thawed",
+   "runsc_ms": 7.76,
+   "since_packet_ms": 7.97,
+   "rc": 0
+  },
+  {
+   "t": 1791056699.259484,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056699.2597353,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056699.2603376,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056699.2676885,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "thawed",
+   "runsc_ms": 8.01,
+   "since_packet_ms": 8.21,
+   "rc": 0
+  },
+  {
+   "t": 1791056699.4947922,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "paused",
+   "runsc_ms": 8.24,
+   "rc": 0,
+   "waited_ms": 54.3
+  },
+  {
+   "t": 1791056699.5806515,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "paused",
+   "runsc_ms": 8.1,
+   "rc": 0,
+   "waited_ms": 52.4
+  },
+  {
+   "t": 1791056699.6598644,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056699.6601493,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056699.660758,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056699.6681747,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "thawed",
+   "runsc_ms": 8.09,
+   "since_packet_ms": 8.31,
+   "rc": 0
+  },
+  {
+   "t": 1791056699.8029897,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056699.8032937,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056699.8039093,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056699.8143227,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "thawed",
+   "runsc_ms": 11.09,
+   "since_packet_ms": 11.33,
+   "rc": 0
+  },
+  {
+   "t": 1791056699.9518805,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "paused",
+   "runsc_ms": 8.73,
+   "rc": 0,
+   "waited_ms": 54.6
+  },
+  {
+   "t": 1791056699.9759796,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056699.9767761,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056699.9769213,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056699.9872878,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "thawed",
+   "runsc_ms": 11.08,
+   "since_packet_ms": 11.31,
+   "rc": 0
+  },
+  {
+   "t": 1791056700.0416465,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "paused",
+   "runsc_ms": 31.5,
+   "rc": 0,
+   "waited_ms": 57.4
+  },
+  {
+   "t": 1791056700.1919773,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056700.1923828,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056700.1930351,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056700.20387,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "thawed",
+   "runsc_ms": 11.62,
+   "since_packet_ms": 11.89,
+   "rc": 0
+  },
+  {
+   "t": 1791056700.2973132,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "paused",
+   "runsc_ms": 9.1,
+   "rc": 0,
+   "waited_ms": 50.3
+  },
+  {
+   "t": 1791056700.3185074,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056700.3187568,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056700.3193564,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056700.3272088,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "thawed",
+   "runsc_ms": 8.5,
+   "since_packet_ms": 8.7,
+   "rc": 0
+  },
+  {
+   "t": 1791056700.4945207,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "paused",
+   "runsc_ms": 8.9,
+   "rc": 0,
+   "waited_ms": 54.2
+  },
+  {
+   "t": 1791056700.59622,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "paused",
+   "runsc_ms": 8.17,
+   "rc": 0,
+   "waited_ms": 50.2
+  },
+  {
+   "t": 1791056700.7909925,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056700.7912934,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056700.792035,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056700.8023317,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "thawed",
+   "runsc_ms": 11.09,
+   "since_packet_ms": 11.34,
+   "rc": 0
+  },
+  {
+   "t": 1791056701.0914192,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "paused",
+   "runsc_ms": 9.18,
+   "rc": 0,
+   "waited_ms": 51.9
+  },
+  {
+   "t": 1791056702.210847,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056702.2111576,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056702.2118227,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056702.2219088,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "thawed",
+   "runsc_ms": 10.81,
+   "since_packet_ms": 11.06,
+   "rc": 0
+  },
+  {
+   "t": 1791056702.2428493,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056702.2431135,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056702.2433045,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056702.2540765,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "thawed",
+   "runsc_ms": 11.03,
+   "since_packet_ms": 11.23,
+   "rc": 0
+  },
+  {
+   "t": 1791056702.5599055,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "paused",
+   "runsc_ms": 8.7,
+   "rc": 0,
+   "waited_ms": 52.4
+  },
+  {
+   "t": 1791056702.5893075,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "paused",
+   "runsc_ms": 8.49,
+   "rc": 0,
+   "waited_ms": 50.5
+  },
+  {
+   "t": 1791056702.9195852,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056702.9202933,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056702.9204512,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056702.9280515,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "thawed",
+   "runsc_ms": 8.25,
+   "since_packet_ms": 8.47,
+   "rc": 0
+  },
+  {
+   "t": 1791056703.1992135,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056703.199456,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056703.1995957,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056703.2107618,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "thawed",
+   "runsc_ms": 11.36,
+   "since_packet_ms": 11.55,
+   "rc": 0
+  },
+  {
+   "t": 1791056703.2614703,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056703.2617543,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056703.2624493,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056703.262998,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "paused",
+   "runsc_ms": 9.19,
+   "rc": 0,
+   "waited_ms": 54.9
+  },
+  {
+   "t": 1791056703.2702296,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "thawed",
+   "runsc_ms": 8.55,
+   "since_packet_ms": 8.76,
+   "rc": 0
+  },
+  {
+   "t": 1791056703.358459,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056703.3587418,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056703.3588974,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056703.364131,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "paused",
+   "runsc_ms": 22.52,
+   "rc": 0,
+   "waited_ms": 67.0
+  },
+  {
+   "t": 1791056703.3696973,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "thawed",
+   "runsc_ms": 11.01,
+   "since_packet_ms": 11.24,
+   "rc": 0
+  },
+  {
+   "t": 1791056703.4897163,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "paused",
+   "runsc_ms": 20.11,
+   "rc": 0,
+   "waited_ms": 54.0
+  },
+  {
+   "t": 1791056703.70081,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "paused",
+   "runsc_ms": 9.23,
+   "rc": 0,
+   "waited_ms": 53.6
+  },
+  {
+   "t": 1791056704.0086224,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056704.009473,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056704.0095892,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056704.021459,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "thawed",
+   "runsc_ms": 12.53,
+   "since_packet_ms": 12.84,
+   "rc": 0
+  },
+  {
+   "t": 1791056704.2428172,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056704.2436512,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056704.2437642,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056704.2538788,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "thawed",
+   "runsc_ms": 10.81,
+   "since_packet_ms": 11.06,
+   "rc": 0
+  },
+  {
+   "t": 1791056704.302056,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "paused",
+   "runsc_ms": 8.89,
+   "rc": 0,
+   "waited_ms": 55.3
+  },
+  {
+   "t": 1791056704.5199635,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "paused",
+   "runsc_ms": 8.37,
+   "rc": 0,
+   "waited_ms": 52.3
+  },
+  {
+   "t": 1791056705.4141893,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056705.4145284,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056705.4152527,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056705.4238963,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "thawed",
+   "runsc_ms": 9.46,
+   "since_packet_ms": 9.71,
+   "rc": 0
+  },
+  {
+   "t": 1791056705.6809855,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056705.6812823,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056705.681916,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056705.6928756,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "thawed",
+   "runsc_ms": 11.64,
+   "since_packet_ms": 11.89,
+   "rc": 0
+  },
+  {
+   "t": 1791056705.6977844,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "paused",
+   "runsc_ms": 10.04,
+   "rc": 0,
+   "waited_ms": 51.5
+  },
+  {
+   "t": 1791056705.996022,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "paused",
+   "runsc_ms": 11.78,
+   "rc": 0,
+   "waited_ms": 52.3
+  },
+  {
+   "t": 1791056706.1452394,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056706.1455407,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056706.1456215,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056706.154125,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "thawed",
+   "runsc_ms": 8.66,
+   "since_packet_ms": 8.89,
+   "rc": 0
+  },
+  {
+   "t": 1791056706.328566,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056706.328968,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056706.3296268,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056706.337292,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "wake_packet",
+   "bytes": 24
+  },
+  {
+   "t": 1791056706.3376036,
+   "id": "wake-lanes2-85a2f7-5",
+   "event": "thawed",
+   "runsc_ms": 8.73,
+   "since_packet_ms": 9.04,
+   "rc": 0
+  },
+  {
+   "t": 1791056706.3395278,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056706.3403845,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056706.3405461,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056706.350314,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 24
+  },
+  {
+   "t": 1791056706.3504815,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "wake_packet",
+   "bytes": 0
+  },
+  {
+   "t": 1791056706.350791,
+   "id": "wake-lanes2-85a2f7-1",
+   "event": "thawed",
+   "runsc_ms": 11.1,
+   "since_packet_ms": 11.26,
+   "rc": 0
+  },
+  {
+   "t": 1791056706.4014714,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "paused",
+   "runsc_ms": 8.4,
+   "rc": 0,
+   "waited_ms": 51.9
+  },
+  {
+   "t": 1791056706.6992805,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056706.6995742,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056706.6997354,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056706.7080896,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "thawed",
+   "runsc_ms": 8.57,
+   "since_packet_ms": 8.81,
+   "rc": 0
+  },
+  {
+   "t": 1791056706.8623443,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "paused",
+   "runsc_ms": 9.57,
+   "rc": 0,
+   "waited_ms": 51.8
+  },
+  {
+   "t": 1791056707.7324064,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056707.732763,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056707.7335157,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056707.7415435,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "wake_packet",
+   "bytes": 24
+  },
+  {
+   "t": 1791056707.7419248,
+   "id": "wake-lanes2-85a2f7-3",
+   "event": "thawed",
+   "runsc_ms": 9.26,
+   "since_packet_ms": 9.52,
+   "rc": 0
+  },
+  {
+   "t": 1791056708.4016654,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056708.4019728,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056708.4025853,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056708.4127996,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 24
+  },
+  {
+   "t": 1791056708.4130807,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "wake_packet",
+   "bytes": 0
+  },
+  {
+   "t": 1791056708.413289,
+   "id": "wake-lanes2-85a2f7-2",
+   "event": "thawed",
+   "runsc_ms": 11.38,
+   "since_packet_ms": 11.62,
+   "rc": 0
+  },
+  {
+   "t": 1791056710.1516306,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056710.1519532,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056710.1525528,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056710.1600728,
+   "id": "wake-lanes2-85a2f7-0",
+   "event": "thawed",
+   "runsc_ms": 8.18,
+   "since_packet_ms": 8.44,
+   "rc": 0
+  },
+  {
+   "t": 1791056710.4725428,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 168
+  },
+  {
+   "t": 1791056710.473315,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 1368
+  },
+  {
+   "t": 1791056710.4735012,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 702
+  },
+  {
+   "t": 1791056710.4810648,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "wake_packet",
+   "bytes": 24
+  },
+  {
+   "t": 1791056710.4812593,
+   "id": "wake-lanes2-85a2f7-4",
+   "event": "thawed",
+   "runsc_ms": 8.49,
+   "since_packet_ms": 8.73,
+   "rc": 0
+  }
+ ],
+ "errors": [],
+ "nstat": {
+  "TcpRetransSegs": 3,
+  "TcpExtTCPLostRetransmit": 0,
+  "TcpExtTCPTimeouts": 0
+ },
+ "relay": [
+  {
+   "id": "wake-lanes2-85a2f7-3:1:0",
+   "client": "100.96.0.19",
+   "received": 1791056684.8332098,
+   "answered": 1791056687.1933026,
+   "written": 1791056687.1935728,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-0:0:0",
+   "client": "100.96.0.15",
+   "received": 1791056684.9001875,
+   "answered": 1791056687.3002741,
+   "written": 1791056687.3004963,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-5:0:0",
+   "client": "100.96.0.25",
+   "received": 1791056684.8647952,
+   "answered": 1791056687.384902,
+   "written": 1791056687.3852606,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-2:0:0",
+   "client": "100.96.0.21",
+   "received": 1791056684.7436516,
+   "answered": 1791056687.3937309,
+   "written": 1791056687.3939507,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-2:1:0",
+   "client": "100.96.0.21",
+   "received": 1791056684.7493453,
+   "answered": 1791056687.4494321,
+   "written": 1791056687.4497054,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-4:1:0",
+   "client": "100.96.0.17",
+   "received": 1791056684.762907,
+   "answered": 1791056688.2830186,
+   "written": 1791056688.2833297,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-5:1:0",
+   "client": "100.96.0.25",
+   "received": 1791056684.8680303,
+   "answered": 1791056688.3981452,
+   "written": 1791056688.3984208,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-0:1:0",
+   "client": "100.96.0.15",
+   "received": 1791056684.9031258,
+   "answered": 1791056688.8532393,
+   "written": 1791056688.8535178,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-1:0:0",
+   "client": "100.96.0.23",
+   "received": 1791056684.6998773,
+   "answered": 1791056688.9899645,
+   "written": 1791056688.9902337,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-4:0:0",
+   "client": "100.96.0.17",
+   "received": 1791056684.7593517,
+   "answered": 1791056689.2494442,
+   "written": 1791056689.2496939,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-3:0:0",
+   "client": "100.96.0.19",
+   "received": 1791056684.7691488,
+   "answered": 1791056689.2792478,
+   "written": 1791056689.27957,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-1:1:0",
+   "client": "100.96.0.23",
+   "received": 1791056684.6404645,
+   "answered": 1791056689.3405561,
+   "written": 1791056689.3408194,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-2:1:1",
+   "client": "100.96.0.21",
+   "received": 1791056687.7412066,
+   "answered": 1791056690.4313164,
+   "written": 1791056690.4315596,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-3:1:1",
+   "client": "100.96.0.19",
+   "received": 1791056687.431737,
+   "answered": 1791056690.4318001,
+   "written": 1791056690.4319324,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-2:0:1",
+   "client": "100.96.0.21",
+   "received": 1791056687.741179,
+   "answered": 1791056691.0113037,
+   "written": 1791056691.0115523,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-1:0:1",
+   "client": "100.96.0.23",
+   "received": 1791056689.1992514,
+   "answered": 1791056691.209355,
+   "written": 1791056691.2096086,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-5:0:1",
+   "client": "100.96.0.25",
+   "received": 1791056687.7382133,
+   "answered": 1791056691.38831,
+   "written": 1791056691.388555,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-1:1:1",
+   "client": "100.96.0.23",
+   "received": 1791056689.5991697,
+   "answered": 1791056691.6892793,
+   "written": 1791056691.6895127,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-0:0:1",
+   "client": "100.96.0.15",
+   "received": 1791056687.5012937,
+   "answered": 1791056692.0414302,
+   "written": 1791056692.041698,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-4:1:1",
+   "client": "100.96.0.17",
+   "received": 1791056688.5321279,
+   "answered": 1791056692.3022406,
+   "written": 1791056692.3024678,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-5:1:1",
+   "client": "100.96.0.25",
+   "received": 1791056688.6385407,
+   "answered": 1791056692.978657,
+   "written": 1791056692.978899,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-3:0:1",
+   "client": "100.96.0.19",
+   "received": 1791056689.5446444,
+   "answered": 1791056693.2147388,
+   "written": 1791056693.2150748,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-2:0:2",
+   "client": "100.96.0.21",
+   "received": 1791056691.2518015,
+   "answered": 1791056693.3418906,
+   "written": 1791056693.342126,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-2:1:2",
+   "client": "100.96.0.21",
+   "received": 1791056690.741117,
+   "answered": 1791056693.401214,
+   "written": 1791056693.4014447,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-0:1:1",
+   "client": "100.96.0.15",
+   "received": 1791056689.0889826,
+   "answered": 1791056693.45908,
+   "written": 1791056693.459321,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-4:0:1",
+   "client": "100.96.0.17",
+   "received": 1791056689.5306237,
+   "answered": 1791056693.5407414,
+   "written": 1791056693.541068,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-1:1:2",
+   "client": "100.96.0.23",
+   "received": 1791056691.899085,
+   "answered": 1791056693.979177,
+   "written": 1791056693.9794388,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-4:1:2",
+   "client": "100.96.0.17",
+   "received": 1791056692.5306098,
+   "answered": 1791056694.630723,
+   "written": 1791056694.6310027,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-3:1:2",
+   "client": "100.96.0.19",
+   "received": 1791056690.6403558,
+   "answered": 1791056694.8004463,
+   "written": 1791056694.800693,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-1:0:2",
+   "client": "100.96.0.23",
+   "received": 1791056691.4991176,
+   "answered": 1791056694.8392146,
+   "written": 1791056694.8394928,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-5:0:2",
+   "client": "100.96.0.25",
+   "received": 1791056691.6381955,
+   "answered": 1791056695.748314,
+   "written": 1791056695.7485683,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-0:1:2",
+   "client": "100.96.0.15",
+   "received": 1791056693.7889802,
+   "answered": 1791056696.0690777,
+   "written": 1791056696.0693488,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-2:0:3",
+   "client": "100.96.0.21",
+   "received": 1791056693.7413425,
+   "answered": 1791056696.411438,
+   "written": 1791056696.4117064,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-0:0:2",
+   "client": "100.96.0.15",
+   "received": 1791056692.288918,
+   "answered": 1791056696.579017,
+   "written": 1791056696.5792778,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-4:0:2",
+   "client": "100.96.0.17",
+   "received": 1791056693.8307996,
+   "answered": 1791056696.7408948,
+   "written": 1791056696.7411344,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-5:1:2",
+   "client": "100.96.0.25",
+   "received": 1791056693.2552457,
+   "answered": 1791056696.8153431,
+   "written": 1791056696.8155901,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-3:0:2",
+   "client": "100.96.0.19",
+   "received": 1791056693.4315283,
+   "answered": 1791056697.3618004,
+   "written": 1791056697.362059,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-4:1:3",
+   "client": "100.96.0.17",
+   "received": 1791056694.8506107,
+   "answered": 1791056697.5806954,
+   "written": 1791056697.5809467,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-1:1:3",
+   "client": "100.96.0.23",
+   "received": 1791056694.209034,
+   "answered": 1791056697.8291304,
+   "written": 1791056697.8293903,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-0:1:3",
+   "client": "100.96.0.15",
+   "received": 1791056696.2888567,
+   "answered": 1791056698.378951,
+   "written": 1791056698.3791988,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-3:1:3",
+   "client": "100.96.0.19",
+   "received": 1791056695.031588,
+   "answered": 1791056699.1616974,
+   "written": 1791056699.161966,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-1:0:3",
+   "client": "100.96.0.23",
+   "received": 1791056695.0991514,
+   "answered": 1791056699.259237,
+   "written": 1791056699.2594788,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-0:0:3",
+   "client": "100.96.0.15",
+   "received": 1791056696.8894556,
+   "answered": 1791056699.6595857,
+   "written": 1791056699.6598568,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-2:1:3",
+   "client": "100.96.0.21",
+   "received": 1791056696.4226089,
+   "answered": 1791056699.8027165,
+   "written": 1791056699.8030226,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-5:0:3",
+   "client": "100.96.0.25",
+   "received": 1791056695.9556668,
+   "answered": 1791056699.9757576,
+   "written": 1791056699.9760017,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-3:0:3",
+   "client": "100.96.0.19",
+   "received": 1791056697.6315892,
+   "answered": 1791056700.191685,
+   "written": 1791056700.1919994,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-5:1:3",
+   "client": "100.96.0.25",
+   "received": 1791056697.1382282,
+   "answered": 1791056700.3183122,
+   "written": 1791056700.3185394,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-4:0:3",
+   "client": "100.96.0.17",
+   "received": 1791056697.0306344,
+   "answered": 1791056700.7907407,
+   "written": 1791056700.791026,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-1:0:4",
+   "client": "100.96.0.23",
+   "received": 1791056699.5204656,
+   "answered": 1791056702.2105765,
+   "written": 1791056702.2108564,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-4:1:4",
+   "client": "100.96.0.17",
+   "received": 1791056697.8525093,
+   "answered": 1791056702.2426014,
+   "written": 1791056702.2428896,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-1:1:4",
+   "client": "100.96.0.23",
+   "received": 1791056698.099214,
+   "answered": 1791056702.9193177,
+   "written": 1791056702.9195693,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-0:1:4",
+   "client": "100.96.0.15",
+   "received": 1791056698.6889062,
+   "answered": 1791056703.199091,
+   "written": 1791056703.1992562,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-2:0:4",
+   "client": "100.96.0.21",
+   "received": 1791056699.951034,
+   "answered": 1791056703.2611413,
+   "written": 1791056703.261452,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-5:0:4",
+   "client": "100.96.0.25",
+   "received": 1791056700.2381074,
+   "answered": 1791056703.3581977,
+   "written": 1791056703.358464,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-0:0:4",
+   "client": "100.96.0.15",
+   "received": 1791056699.8888597,
+   "answered": 1791056703.378946,
+   "written": 1791056703.379215,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-5:1:4",
+   "client": "100.96.0.25",
+   "received": 1791056700.538172,
+   "answered": 1791056704.0083086,
+   "written": 1791056704.0086176,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-3:1:4",
+   "client": "100.96.0.19",
+   "received": 1791056699.4325905,
+   "answered": 1791056704.2426836,
+   "written": 1791056704.2428765,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-3:0:4",
+   "client": "100.96.0.19",
+   "received": 1791056700.431621,
+   "answered": 1791056705.4117513,
+   "written": 1791056705.4120948,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-4:0:4",
+   "client": "100.96.0.17",
+   "received": 1791056701.03061,
+   "answered": 1791056705.680726,
+   "written": 1791056705.6810207,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-4:1:5",
+   "client": "100.96.0.17",
+   "received": 1791056702.5305872,
+   "answered": 1791056705.7706764,
+   "written": 1791056705.77095,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-2:1:4",
+   "client": "100.96.0.21",
+   "received": 1791056703.2748992,
+   "answered": 1791056706.1450179,
+   "written": 1791056706.1452756,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-5:1:5",
+   "client": "100.96.0.25",
+   "received": 1791056704.2381232,
+   "answered": 1791056706.3282213,
+   "written": 1791056706.3285575,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-1:1:5",
+   "client": "100.96.0.23",
+   "received": 1791056703.1991985,
+   "answered": 1791056706.3392775,
+   "written": 1791056706.339554,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-0:1:5",
+   "client": "100.96.0.15",
+   "received": 1791056703.3989077,
+   "answered": 1791056706.6990068,
+   "written": 1791056706.6992652,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-5:0:5",
+   "client": "100.96.0.25",
+   "received": 1791056703.6382134,
+   "answered": 1791056706.9583166,
+   "written": 1791056706.9585664,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-1:0:5",
+   "client": "100.96.0.23",
+   "received": 1791056702.4991472,
+   "answered": 1791056707.339236,
+   "written": 1791056707.3394823,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-3:1:5",
+   "client": "100.96.0.19",
+   "received": 1791056704.459404,
+   "answered": 1791056707.7315443,
+   "written": 1791056707.7318594,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-2:1:5",
+   "client": "100.96.0.21",
+   "received": 1791056706.341303,
+   "answered": 1791056708.4014127,
+   "written": 1791056708.4016826,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-2:0:5",
+   "client": "100.96.0.21",
+   "received": 1791056706.3413255,
+   "answered": 1791056709.8314242,
+   "written": 1791056709.8317106,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-0:0:5",
+   "client": "100.96.0.15",
+   "received": 1791056706.8012233,
+   "answered": 1791056710.1513474,
+   "written": 1791056710.1516252,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-3:0:5",
+   "client": "100.96.0.19",
+   "received": 1791056705.6364994,
+   "answered": 1791056710.2165942,
+   "written": 1791056710.216861,
+   "size": 2048
+  },
+  {
+   "id": "wake-lanes2-85a2f7-4:0:5",
+   "client": "100.96.0.17",
+   "received": 1791056705.9322002,
+   "answered": 1791056710.472297,
+   "written": 1791056710.47256,
+   "size": 2048
+  }
+ ],
+ "agents": {
+  "wake-lanes2-85a2f7-0": {
+   "job": {
+    "sandbox_id": "wake-lanes2-85a2f7-0",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "e26dbc3bff3b7bc95c0f3cb03340a691df0e0172dccbb8fde22ff1d8cabcdcb7",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:44:43.091210621Z",
+    "completed_at": "2026-10-03T19:45:10.17477844Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 1327,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:45:14.306027+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056684.7981327,
+     "recv": 1791056687.3013046,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 0,
+     "sent": 1791056684.7984612,
+     "recv": 1791056688.861543,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056687.500641,
+     "recv": 1791056692.0498967,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 1,
+     "sent": 1791056689.0882697,
+     "recv": 1791056693.4700272,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 2,
+     "sent": 1791056693.788207,
+     "recv": 1791056696.0799801,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056692.288145,
+     "recv": 1791056696.588376,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 3,
+     "sent": 1791056696.288158,
+     "recv": 1791056698.3897467,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056696.888655,
+     "recv": 1791056699.6677263,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 4,
+     "sent": 1791056698.6881897,
+     "recv": 1791056703.20988,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056699.8881292,
+     "recv": 1791056703.3886054,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 5,
+     "sent": 1791056703.3981194,
+     "recv": 1791056706.707503,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056706.8005655,
+     "recv": 1791056710.1596239,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791056710.1612082
+    }
+   ]
+  },
+  "wake-lanes2-85a2f7-1": {
+   "job": {
+    "sandbox_id": "wake-lanes2-85a2f7-1",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "52cd780b35e5166d47925fa88fec5b58cac6c06abec71f0e5ea0f50416422bd8",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:44:43.117370073Z",
+    "completed_at": "2026-10-03T19:45:07.355586947Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 1330,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:45:14.339926+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056684.5987494,
+     "recv": 1791056688.9913313,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 0,
+     "sent": 1791056684.5984612,
+     "recv": 1791056689.3492877,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056689.1985228,
+     "recv": 1791056691.2179604,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 1,
+     "sent": 1791056689.5984743,
+     "recv": 1791056691.6976004,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 2,
+     "sent": 1791056691.898334,
+     "recv": 1791056693.9873044,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056691.4984004,
+     "recv": 1791056694.850016,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 3,
+     "sent": 1791056694.20834,
+     "recv": 1791056697.8400102,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056695.0984302,
+     "recv": 1791056699.2672474,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056699.5197873,
+     "recv": 1791056702.2212613,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 4,
+     "sent": 1791056698.0984693,
+     "recv": 1791056702.927481,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 5,
+     "sent": 1791056703.198463,
+     "recv": 1791056706.3499317,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056702.4983711,
+     "recv": 1791056707.3402596,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791056707.341736
+    }
+   ]
+  },
+  "wake-lanes2-85a2f7-2": {
+   "job": {
+    "sandbox_id": "wake-lanes2-85a2f7-2",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "9416da7b237625818b960d7b0269f040fec8b9899896ca6c8fa54605a383fc2d",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:44:43.149349259Z",
+    "completed_at": "2026-10-03T19:45:09.848048164Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 1332,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:45:14.373695+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056684.6664352,
+     "recv": 1791056687.3947163,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 0,
+     "sent": 1791056684.6422157,
+     "recv": 1791056687.463916,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 1,
+     "sent": 1791056687.740633,
+     "recv": 1791056690.4395475,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056687.7404299,
+     "recv": 1791056691.019674,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056691.2511556,
+     "recv": 1791056693.3528035,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 2,
+     "sent": 1791056690.7403688,
+     "recv": 1791056693.4411852,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056693.740475,
+     "recv": 1791056696.4226267,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 3,
+     "sent": 1791056696.4218488,
+     "recv": 1791056699.8137436,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056699.9503171,
+     "recv": 1791056703.2698112,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 4,
+     "sent": 1791056703.2742121,
+     "recv": 1791056706.1536655,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 5,
+     "sent": 1791056706.3403633,
+     "recv": 1791056708.4122796,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056706.340741,
+     "recv": 1791056709.8326066,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791056709.8342085
+    }
+   ]
+  },
+  "wake-lanes2-85a2f7-3": {
+   "job": {
+    "sandbox_id": "wake-lanes2-85a2f7-3",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "f1b8ec6aaa895dac5c4d9633221d06e577476a8acfa4e95d71c9f1b6d1aeca2c",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:44:43.176730765Z",
+    "completed_at": "2026-10-03T19:45:10.232407428Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 1326,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:45:14.407265+00:00"
+   },
+   "rows": [
+    {
+     "lane": 1,
+     "call": 0,
+     "sent": 1791056684.7310004,
+     "recv": 1791056687.194365,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056684.7557876,
+     "recv": 1791056689.290258,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 1,
+     "sent": 1791056687.430878,
+     "recv": 1791056690.4397044,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056689.5440533,
+     "recv": 1791056693.2269282,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 2,
+     "sent": 1791056690.639636,
+     "recv": 1791056694.8085284,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056693.4308765,
+     "recv": 1791056697.370336,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 3,
+     "sent": 1791056695.030923,
+     "recv": 1791056699.1694756,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056697.6308665,
+     "recv": 1791056700.2031505,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 4,
+     "sent": 1791056699.4316988,
+     "recv": 1791056704.2531688,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056700.4309742,
+     "recv": 1791056705.4231803,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 5,
+     "sent": 1791056704.457492,
+     "recv": 1791056707.74105,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056705.6358156,
+     "recv": 1791056710.217517,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791056710.219139
+    }
+   ]
+  },
+  "wake-lanes2-85a2f7-4": {
+   "job": {
+    "sandbox_id": "wake-lanes2-85a2f7-4",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "fa4af35540dcde4f543fe7a08b0f910c48a4e83d25c1341fa5881f837595fd89",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:44:43.205676612Z",
+    "completed_at": "2026-10-03T19:45:10.497432203Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 1335,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:45:14.440852+00:00"
+   },
+   "rows": [
+    {
+     "lane": 1,
+     "call": 0,
+     "sent": 1791056684.6528475,
+     "recv": 1791056688.2841804,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056684.6524682,
+     "recv": 1791056689.2583365,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 1,
+     "sent": 1791056688.5314867,
+     "recv": 1791056692.3105812,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056689.5299356,
+     "recv": 1791056693.5510144,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 2,
+     "sent": 1791056692.5299153,
+     "recv": 1791056694.6394422,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056693.8299203,
+     "recv": 1791056696.7490304,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 3,
+     "sent": 1791056694.8498478,
+     "recv": 1791056697.591434,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056697.0299566,
+     "recv": 1791056700.8015509,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 4,
+     "sent": 1791056697.8517766,
+     "recv": 1791056702.2532685,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056701.0299292,
+     "recv": 1791056705.6918516,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 5,
+     "sent": 1791056702.5299628,
+     "recv": 1791056705.8304532,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056705.931509,
+     "recv": 1791056710.4805417,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791056710.4822943
+    }
+   ]
+  },
+  "wake-lanes2-85a2f7-5": {
+   "job": {
+    "sandbox_id": "wake-lanes2-85a2f7-5",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "b473f0673648f07c8deb51c2eefdef36935f0e6a0073dc175c4476aeb91ed7ec",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:44:43.239502974Z",
+    "completed_at": "2026-10-03T19:45:06.978667393Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 1330,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:45:14.474692+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056684.8377852,
+     "recv": 1791056687.3860586,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 0,
+     "sent": 1791056684.8375328,
+     "recv": 1791056688.4066148,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056687.7374556,
+     "recv": 1791056691.3967297,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 1,
+     "sent": 1791056688.6376202,
+     "recv": 1791056692.9895535,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056691.6374986,
+     "recv": 1791056695.7565212,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 2,
+     "sent": 1791056693.241381,
+     "recv": 1791056696.8235247,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056695.9549983,
+     "recv": 1791056699.9866285,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 3,
+     "sent": 1791056697.137526,
+     "recv": 1791056700.326731,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056700.2374136,
+     "recv": 1791056703.368951,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 4,
+     "sent": 1791056700.537483,
+     "recv": 1791056704.017332,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 5,
+     "sent": 1791056704.2373977,
+     "recv": 1791056706.336825,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056703.6374733,
+     "recv": 1791056706.9595973,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791056706.9609942
+    }
+   ]
+  }
+ },
+ "summary": {
+  "calls": 72,
+  "expected": 72,
+  "answer_latency_s": {
+   "n": 72,
+   "p50": 0.0084,
+   "p95": 0.0119,
+   "max": 0.0595
+  },
+  "pauses": 58,
+  "pauses_outside_a_wait": 0,
+  "paused_share_of_wait": 0.8309,
+  "pause_runsc_ms": {
+   "n": 58,
+   "p50": 8.8,
+   "p95": 27.23,
+   "max": 31.5
+  },
+  "pause_after_last_send_ms": {
+   "n": 58,
+   "p50": 53.1,
+   "p95": 67.0,
+   "max": 93.0
+  },
+  "thaw_since_packet_ms": {
+   "n": 58,
+   "p50": 9.21,
+   "p95": 11.89,
+   "max": 12.84
+  },
+  "thaw_runsc_ms": {
+   "n": 58,
+   "p50": 8.97,
+   "p95": 11.62,
+   "max": 12.53
+  },
+  "tick_late_s": null,
+  "nstat": {
+   "TcpRetransSegs": 3,
+   "TcpExtTCPLostRetransmit": 0,
+   "TcpExtTCPTimeouts": 0
+  },
+  "errors": 0
+ }
+}

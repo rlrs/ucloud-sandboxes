@@ -1,0 +1,1585 @@
+{
+ "arm": "observe",
+ "mode": "observe",
+ "args": {
+  "command": "arm",
+  "name": "observe",
+  "mode": "observe",
+  "node_url": "http://127.0.0.1:8090",
+  "node_token_file": "/var/lib/ucloud-sandboxes/state/node-control-token",
+  "image": "10.42.0.2:5000/ucloud-managed/shared-task-9db2bebb1e964a67a1cc4e4fd55f-247362126efd@sha256:8249b386d6a9de39c1ad7d048bd72b160565b4021b782be6ec46f03e5b69391a",
+  "relay_host": "10.42.0.41",
+  "relay_port": 8443,
+  "count": 8,
+  "lanes": 1,
+  "cycles": 8,
+  "think_min": 2.0,
+  "think_max": 5.0,
+  "compute_ms": 200,
+  "sizes": "2048",
+  "ticker": 0.0,
+  "delay": 2.0,
+  "cpus": 0.5,
+  "memory_mb": 512,
+  "seed": 1
+ },
+ "ids": [
+  "wake-observe-2743ef-0",
+  "wake-observe-2743ef-1",
+  "wake-observe-2743ef-2",
+  "wake-observe-2743ef-3",
+  "wake-observe-2743ef-4",
+  "wake-observe-2743ef-5",
+  "wake-observe-2743ef-6",
+  "wake-observe-2743ef-7"
+ ],
+ "plans": {
+  "wake-observe-2743ef-0": [
+   [
+    [
+     2.4,
+     2048
+    ],
+    [
+     4.54,
+     2048
+    ],
+    [
+     4.29,
+     2048
+    ],
+    [
+     2.77,
+     2048
+    ],
+    [
+     3.49,
+     2048
+    ],
+    [
+     3.35,
+     2048
+    ],
+    [
+     3.95,
+     2048
+    ],
+    [
+     4.37,
+     2048
+    ]
+   ]
+  ],
+  "wake-observe-2743ef-1": [
+   [
+    [
+     2.28,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ],
+    [
+     4.51,
+     2048
+    ],
+    [
+     3.3,
+     2048
+    ],
+    [
+     4.29,
+     2048
+    ],
+    [
+     2.01,
+     2048
+    ],
+    [
+     3.34,
+     2048
+    ],
+    [
+     4.16,
+     2048
+    ]
+   ]
+  ],
+  "wake-observe-2743ef-2": [
+   [
+    [
+     2.69,
+     2048
+    ],
+    [
+     4.84,
+     2048
+    ],
+    [
+     4.7,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ],
+    [
+     2.08,
+     2048
+    ],
+    [
+     3.62,
+     2048
+    ],
+    [
+     4.82,
+     2048
+    ],
+    [
+     3.14,
+     2048
+    ]
+   ]
+  ],
+  "wake-observe-2743ef-3": [
+   [
+    [
+     2.65,
+     2048
+    ],
+    [
+     3.27,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ],
+    [
+     2.67,
+     2048
+    ],
+    [
+     3.31,
+     2048
+    ],
+    [
+     3.49,
+     2048
+    ],
+    [
+     2.7,
+     2048
+    ],
+    [
+     2.69,
+     2048
+    ]
+   ]
+  ],
+  "wake-observe-2743ef-4": [
+   [
+    [
+     2.66,
+     2048
+    ],
+    [
+     3.38,
+     2048
+    ],
+    [
+     2.87,
+     2048
+    ],
+    [
+     2.06,
+     2048
+    ],
+    [
+     4.51,
+     2048
+    ],
+    [
+     3.67,
+     2048
+    ],
+    [
+     3.93,
+     2048
+    ],
+    [
+     2.56,
+     2048
+    ]
+   ]
+  ],
+  "wake-observe-2743ef-5": [
+   [
+    [
+     4.98,
+     2048
+    ],
+    [
+     4.58,
+     2048
+    ],
+    [
+     2.36,
+     2048
+    ],
+    [
+     3.0,
+     2048
+    ],
+    [
+     4.16,
+     2048
+    ],
+    [
+     4.13,
+     2048
+    ],
+    [
+     4.81,
+     2048
+    ],
+    [
+     3.27,
+     2048
+    ]
+   ]
+  ],
+  "wake-observe-2743ef-6": [
+   [
+    [
+     4.49,
+     2048
+    ],
+    [
+     4.01,
+     2048
+    ],
+    [
+     2.91,
+     2048
+    ],
+    [
+     3.76,
+     2048
+    ],
+    [
+     4.65,
+     2048
+    ],
+    [
+     4.54,
+     2048
+    ],
+    [
+     3.52,
+     2048
+    ],
+    [
+     3.77,
+     2048
+    ]
+   ]
+  ],
+  "wake-observe-2743ef-7": [
+   [
+    [
+     2.1,
+     2048
+    ],
+    [
+     2.73,
+     2048
+    ],
+    [
+     4.39,
+     2048
+    ],
+    [
+     3.24,
+     2048
+    ],
+    [
+     2.52,
+     2048
+    ],
+    [
+     3.65,
+     2048
+    ],
+    [
+     4.11,
+     2048
+    ],
+    [
+     4.02,
+     2048
+    ]
+   ]
+  ]
+ },
+ "events": [],
+ "errors": [],
+ "nstat": {
+  "TcpRetransSegs": 0,
+  "TcpExtTCPLostRetransmit": 0,
+  "TcpExtTCPTimeouts": 0
+ },
+ "relay": [
+  {
+   "id": "wake-observe-2743ef-1:0:0",
+   "client": "100.96.0.23",
+   "received": 1791056531.6558883,
+   "answered": 1791056533.9359941,
+   "written": 1791056533.936246,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-7:0:0",
+   "client": "100.96.0.19",
+   "received": 1791056531.9016647,
+   "answered": 1791056534.0017493,
+   "written": 1791056534.002025,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-0:0:0",
+   "client": "100.96.0.15",
+   "received": 1791056531.6484196,
+   "answered": 1791056534.048512,
+   "written": 1791056534.0487654,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-4:0:0",
+   "client": "100.96.0.13",
+   "received": 1791056531.7352939,
+   "answered": 1791056534.3953972,
+   "written": 1791056534.395673,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-2:0:0",
+   "client": "100.96.0.9",
+   "received": 1791056531.7216644,
+   "answered": 1791056534.4117448,
+   "written": 1791056534.4119473,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-3:0:0",
+   "client": "100.96.0.11",
+   "received": 1791056531.7883193,
+   "answered": 1791056534.4384062,
+   "written": 1791056534.4386456,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-6:0:0",
+   "client": "100.96.0.17",
+   "received": 1791056531.7941725,
+   "answered": 1791056536.284265,
+   "written": 1791056536.284541,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-1:0:1",
+   "client": "100.96.0.23",
+   "received": 1791056534.2118213,
+   "answered": 1791056536.3018692,
+   "written": 1791056536.302147,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-5:0:0",
+   "client": "100.96.0.21",
+   "received": 1791056531.6630652,
+   "answered": 1791056536.6431599,
+   "written": 1791056536.6434417,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-7:0:1",
+   "client": "100.96.0.19",
+   "received": 1791056534.279587,
+   "answered": 1791056537.0097027,
+   "written": 1791056537.0099792,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-3:0:1",
+   "client": "100.96.0.11",
+   "received": 1791056534.680205,
+   "answered": 1791056537.9503353,
+   "written": 1791056537.9506693,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-4:0:1",
+   "client": "100.96.0.13",
+   "received": 1791056534.6123242,
+   "answered": 1791056537.9924152,
+   "written": 1791056537.99267,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-0:0:1",
+   "client": "100.96.0.15",
+   "received": 1791056534.3103309,
+   "answered": 1791056538.850432,
+   "written": 1791056538.8507504,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-2:0:1",
+   "client": "100.96.0.9",
+   "received": 1791056534.7812424,
+   "answered": 1791056539.6213455,
+   "written": 1791056539.6215968,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-3:0:2",
+   "client": "100.96.0.11",
+   "received": 1791056538.290889,
+   "answered": 1791056540.3809783,
+   "written": 1791056540.3812528,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-6:0:1",
+   "client": "100.96.0.17",
+   "received": 1791056536.5650256,
+   "answered": 1791056540.5751402,
+   "written": 1791056540.5753944,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-1:0:2",
+   "client": "100.96.0.23",
+   "received": 1791056536.5118103,
+   "answered": 1791056541.021895,
+   "written": 1791056541.0221505,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-4:0:2",
+   "client": "100.96.0.13",
+   "received": 1791056538.223773,
+   "answered": 1791056541.094444,
+   "written": 1791056541.0946994,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-5:0:1",
+   "client": "100.96.0.21",
+   "received": 1791056536.938722,
+   "answered": 1791056541.5188067,
+   "written": 1791056541.5190668,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-7:0:2",
+   "client": "100.96.0.19",
+   "received": 1791056537.2779698,
+   "answered": 1791056541.6680837,
+   "written": 1791056541.668353,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-3:0:3",
+   "client": "100.96.0.11",
+   "received": 1791056540.6801078,
+   "answered": 1791056543.3502088,
+   "written": 1791056543.3504817,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-0:0:2",
+   "client": "100.96.0.15",
+   "received": 1791056539.1140747,
+   "answered": 1791056543.4041684,
+   "written": 1791056543.4044359,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-4:0:3",
+   "client": "100.96.0.13",
+   "received": 1791056541.4122462,
+   "answered": 1791056543.4723365,
+   "written": 1791056543.4725895,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-6:0:2",
+   "client": "100.96.0.17",
+   "received": 1791056540.7737236,
+   "answered": 1791056543.6838126,
+   "written": 1791056543.6840403,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-5:0:2",
+   "client": "100.96.0.21",
+   "received": 1791056541.7585125,
+   "answered": 1791056544.1186135,
+   "written": 1791056544.118898,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-1:0:3",
+   "client": "100.96.0.23",
+   "received": 1791056541.2206316,
+   "answered": 1791056544.520724,
+   "written": 1791056544.520993,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-2:0:2",
+   "client": "100.96.0.9",
+   "received": 1791056539.881444,
+   "answered": 1791056544.5815308,
+   "written": 1791056544.581754,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-7:0:3",
+   "client": "100.96.0.19",
+   "received": 1791056541.97805,
+   "answered": 1791056545.2181368,
+   "written": 1791056545.218406,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-0:0:3",
+   "client": "100.96.0.15",
+   "received": 1791056543.6202295,
+   "answered": 1791056546.3903384,
+   "written": 1791056546.3906085,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-2:0:3",
+   "client": "100.96.0.9",
+   "received": 1791056544.7907133,
+   "answered": 1791056546.880816,
+   "written": 1791056546.881097,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-3:0:4",
+   "client": "100.96.0.11",
+   "received": 1791056543.6802773,
+   "answered": 1791056546.990367,
+   "written": 1791056546.9906168,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-5:0:3",
+   "client": "100.96.0.21",
+   "received": 1791056544.4387438,
+   "answered": 1791056547.4388268,
+   "written": 1791056547.439083,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-6:0:3",
+   "client": "100.96.0.17",
+   "received": 1791056543.8861306,
+   "answered": 1791056547.646212,
+   "written": 1791056547.6463811,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-7:0:4",
+   "client": "100.96.0.19",
+   "received": 1791056545.4780276,
+   "answered": 1791056547.9981172,
+   "written": 1791056547.9983635,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-4:0:4",
+   "client": "100.96.0.13",
+   "received": 1791056543.7221375,
+   "answered": 1791056548.2322242,
+   "written": 1791056548.2325015,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-1:0:4",
+   "client": "100.96.0.23",
+   "received": 1791056544.729817,
+   "answered": 1791056549.0198808,
+   "written": 1791056549.0201392,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-2:0:4",
+   "client": "100.96.0.9",
+   "received": 1791056547.1910136,
+   "answered": 1791056549.2710986,
+   "written": 1791056549.2713454,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-0:0:4",
+   "client": "100.96.0.15",
+   "received": 1791056546.6102736,
+   "answered": 1791056550.1003652,
+   "written": 1791056550.1006238,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-3:0:5",
+   "client": "100.96.0.11",
+   "received": 1791056547.188703,
+   "answered": 1791056550.678813,
+   "written": 1791056550.6790833,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-1:0:5",
+   "client": "100.96.0.23",
+   "received": 1791056549.3118181,
+   "answered": 1791056551.3218696,
+   "written": 1791056551.3221128,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-5:0:4",
+   "client": "100.96.0.21",
+   "received": 1791056547.6450186,
+   "answered": 1791056551.8051233,
+   "written": 1791056551.805445,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-7:0:5",
+   "client": "100.96.0.19",
+   "received": 1791056548.2020657,
+   "answered": 1791056551.8521647,
+   "written": 1791056551.8524556,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-4:0:5",
+   "client": "100.96.0.13",
+   "received": 1791056548.5122397,
+   "answered": 1791056552.182326,
+   "written": 1791056552.1826005,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-6:0:4",
+   "client": "100.96.0.17",
+   "received": 1791056547.866755,
+   "answered": 1791056552.5168514,
+   "written": 1791056552.5171056,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-2:0:5",
+   "client": "100.96.0.9",
+   "received": 1791056549.4936142,
+   "answered": 1791056553.1137106,
+   "written": 1791056553.1139927,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-3:0:6",
+   "client": "100.96.0.11",
+   "received": 1791056550.9801607,
+   "answered": 1791056553.6802788,
+   "written": 1791056553.6805298,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-0:0:5",
+   "client": "100.96.0.15",
+   "received": 1791056550.410284,
+   "answered": 1791056553.7603757,
+   "written": 1791056553.7606401,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-1:0:6",
+   "client": "100.96.0.23",
+   "received": 1791056551.5245907,
+   "answered": 1791056554.8647006,
+   "written": 1791056554.8649676,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-5:0:5",
+   "client": "100.96.0.21",
+   "received": 1791056552.0385742,
+   "answered": 1791056556.1686664,
+   "written": 1791056556.1689515,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-7:0:6",
+   "client": "100.96.0.19",
+   "received": 1791056552.094587,
+   "answered": 1791056556.2046793,
+   "written": 1791056556.2049322,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-4:0:6",
+   "client": "100.96.0.13",
+   "received": 1791056552.4122775,
+   "answered": 1791056556.3423693,
+   "written": 1791056556.3426383,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-3:0:7",
+   "client": "100.96.0.11",
+   "received": 1791056553.889126,
+   "answered": 1791056556.5792172,
+   "written": 1791056556.5794542,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-6:0:5",
+   "client": "100.96.0.17",
+   "received": 1791056552.7650502,
+   "answered": 1791056557.3051696,
+   "written": 1791056557.3054338,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-0:0:6",
+   "client": "100.96.0.15",
+   "received": 1791056554.0104065,
+   "answered": 1791056557.960501,
+   "written": 1791056557.960748,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-2:0:6",
+   "client": "100.96.0.9",
+   "received": 1791056553.3813214,
+   "answered": 1791056558.2014172,
+   "written": 1791056558.2017102,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-4:0:7",
+   "client": "100.96.0.13",
+   "received": 1791056556.6121833,
+   "answered": 1791056559.172294,
+   "written": 1791056559.172551,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-1:0:7",
+   "client": "100.96.0.23",
+   "received": 1791056555.1120372,
+   "answered": 1791056559.2721295,
+   "written": 1791056559.2723877,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-7:0:7",
+   "client": "100.96.0.19",
+   "received": 1791056556.4779325,
+   "answered": 1791056560.4980204,
+   "written": 1791056560.4982653,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-6:0:6",
+   "client": "100.96.0.17",
+   "received": 1791056557.5650432,
+   "answered": 1791056561.085136,
+   "written": 1791056561.0853813,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-5:0:6",
+   "client": "100.96.0.21",
+   "received": 1791056556.538666,
+   "answered": 1791056561.348762,
+   "written": 1791056561.3490872,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-2:0:7",
+   "client": "100.96.0.9",
+   "received": 1791056558.4812825,
+   "answered": 1791056561.6214075,
+   "written": 1791056561.6216652,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-0:0:7",
+   "client": "100.96.0.15",
+   "received": 1791056558.2102385,
+   "answered": 1791056562.580351,
+   "written": 1791056562.580589,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-5:0:7",
+   "client": "100.96.0.21",
+   "received": 1791056561.5610313,
+   "answered": 1791056564.8311267,
+   "written": 1791056564.831378,
+   "size": 2048
+  },
+  {
+   "id": "wake-observe-2743ef-6:0:7",
+   "client": "100.96.0.17",
+   "received": 1791056561.2892025,
+   "answered": 1791056565.0593054,
+   "written": 1791056565.059557,
+   "size": 2048
+  }
+ ],
+ "agents": {
+  "wake-observe-2743ef-0": {
+   "job": {
+    "sandbox_id": "wake-observe-2743ef-0",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "ed287f0b0642e5ce056e20ab21a3d61316f6daff44cfc293d6efb8748f1963f1",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:42:10.232285084Z",
+    "completed_at": "2026-10-03T19:42:42.597189372Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 893,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:42:48.554716+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056531.609724,
+     "recv": 1791056534.0494535,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056534.309629,
+     "recv": 1791056538.8518574,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056539.1131139,
+     "recv": 1791056543.4052577,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056543.619495,
+     "recv": 1791056546.3914187,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056546.6095722,
+     "recv": 1791056550.1013706,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056550.409554,
+     "recv": 1791056553.761358,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791056554.0095973,
+     "recv": 1791056557.961493,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791056558.209523,
+     "recv": 1791056562.5813186,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791056562.582906
+    }
+   ]
+  },
+  "wake-observe-2743ef-1": {
+   "job": {
+    "sandbox_id": "wake-observe-2743ef-1",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "7fb430d26dbd335bd91f7d731e1681e513a17f910ba3d82c45e56ffc8ea52d47",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:42:10.26322444Z",
+    "completed_at": "2026-10-03T19:42:39.286146965Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 896,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:42:48.589998+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056531.6111865,
+     "recv": 1791056533.9370165,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056534.2111104,
+     "recv": 1791056536.3029494,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056536.511146,
+     "recv": 1791056541.0229936,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056541.2199035,
+     "recv": 1791056544.521698,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056544.729156,
+     "recv": 1791056549.0208182,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056549.3111641,
+     "recv": 1791056551.322877,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791056551.5239186,
+     "recv": 1791056554.865716,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791056555.1112442,
+     "recv": 1791056559.2730813,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791056559.2746034
+    }
+   ]
+  },
+  "wake-observe-2743ef-2": {
+   "job": {
+    "sandbox_id": "wake-observe-2743ef-2",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "94c98c06c2794da763649fdd814a738e7bcc84dac99a6dc6693b1a6830c07fb8",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:42:10.298136936Z",
+    "completed_at": "2026-10-03T19:42:41.636707055Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 895,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:42:48.622513+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056531.6805053,
+     "recv": 1791056534.412747,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056534.780471,
+     "recv": 1791056539.6223826,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056539.8805146,
+     "recv": 1791056544.582491,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056544.7898965,
+     "recv": 1791056546.8818927,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056547.1905615,
+     "recv": 1791056549.2720752,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056549.492942,
+     "recv": 1791056553.114773,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791056553.3805985,
+     "recv": 1791056558.202407,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791056558.4805741,
+     "recv": 1791056561.6224365,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791056561.6240501
+    }
+   ]
+  },
+  "wake-observe-2743ef-3": {
+   "job": {
+    "sandbox_id": "wake-observe-2743ef-3",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "428acbf6c543daf3d8fe96bdce6be64b0bdc17edbadd9e7f6ec35f4c3bc73a52",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:42:10.326906117Z",
+    "completed_at": "2026-10-03T19:42:36.596175214Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 895,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:42:48.662503+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056531.692344,
+     "recv": 1791056534.4393747,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056534.6795123,
+     "recv": 1791056537.9615998,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056538.2902102,
+     "recv": 1791056540.3821173,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056540.6793947,
+     "recv": 1791056543.351241,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056543.6794474,
+     "recv": 1791056546.9915605,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056547.187975,
+     "recv": 1791056550.679918,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791056550.979459,
+     "recv": 1791056553.6812901,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791056553.888432,
+     "recv": 1791056556.5802093,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791056556.5819786
+    }
+   ]
+  },
+  "wake-observe-2743ef-4": {
+   "job": {
+    "sandbox_id": "wake-observe-2743ef-4",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "13bd5d40fafeb74afccced61e36b95f352bf04ead0d508072a57c265757fbd7b",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:42:10.358202561Z",
+    "completed_at": "2026-10-03T19:42:39.187288559Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 898,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:42:48.695613+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056531.7114897,
+     "recv": 1791056534.3965077,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056534.611527,
+     "recv": 1791056537.9934287,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056538.2214243,
+     "recv": 1791056541.0955648,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056541.4115603,
+     "recv": 1791056543.473356,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056543.7214396,
+     "recv": 1791056548.2332644,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056548.5115047,
+     "recv": 1791056552.1834154,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791056552.411572,
+     "recv": 1791056556.3433862,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791056556.6114922,
+     "recv": 1791056559.1736746,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791056559.1751518
+    }
+   ]
+  },
+  "wake-observe-2743ef-5": {
+   "job": {
+    "sandbox_id": "wake-observe-2743ef-5",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "8ca058b0c6665249b846db8e22b4377141c8acf2e706c34878e57aa74b7f5f63",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:42:10.400990677Z",
+    "completed_at": "2026-10-03T19:42:44.845739456Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 896,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:42:48.735769+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056531.555148,
+     "recv": 1791056536.6443079,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056536.9379725,
+     "recv": 1791056541.519797,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056541.7578607,
+     "recv": 1791056544.1197617,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056544.4380572,
+     "recv": 1791056547.4398818,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056547.6443565,
+     "recv": 1791056551.8062582,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056552.037913,
+     "recv": 1791056556.1697478,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791056556.537955,
+     "recv": 1791056561.3500051,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791056561.559366,
+     "recv": 1791056564.8321111,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791056564.8336122
+    }
+   ]
+  },
+  "wake-observe-2743ef-6": {
+   "job": {
+    "sandbox_id": "wake-observe-2743ef-6",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "91c2c8d1a9fb928d73e6c1bbfee9b7baa1a72f0e3a51ade5ad9d7a0d8bccc124",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:42:10.466055052Z",
+    "completed_at": "2026-10-03T19:42:45.073792194Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 896,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:42:48.773264+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056531.7643137,
+     "recv": 1791056536.2852798,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056536.564283,
+     "recv": 1791056540.5761635,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056540.7730064,
+     "recv": 1791056543.6846669,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056543.8854506,
+     "recv": 1791056547.6470008,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056547.866134,
+     "recv": 1791056552.51781,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056552.7643335,
+     "recv": 1791056557.306166,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791056557.5642977,
+     "recv": 1791056561.0860636,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791056561.2884507,
+     "recv": 1791056565.0603027,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791056565.0618742
+    }
+   ]
+  },
+  "wake-observe-2743ef-7": {
+   "job": {
+    "sandbox_id": "wake-observe-2743ef-7",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "8ebcd6c9094c2448fbdfb029ca781e591014174134a3dace7db83d7dbfd83144",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T19:42:10.504509796Z",
+    "completed_at": "2026-10-03T19:42:40.512685643Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 898,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T19:42:48.807851+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791056531.877298,
+     "recv": 1791056534.0028055,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791056534.2788956,
+     "recv": 1791056537.0108209,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791056537.2771976,
+     "recv": 1791056541.6690893,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791056541.9773045,
+     "recv": 1791056545.2192101,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791056545.4773357,
+     "recv": 1791056547.9992042,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791056548.2014203,
+     "recv": 1791056551.853213,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791056552.0939293,
+     "recv": 1791056556.2055714,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791056556.4772234,
+     "recv": 1791056560.4989855,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791056560.500492
+    }
+   ]
+  }
+ },
+ "summary": {
+  "calls": 64,
+  "expected": 64,
+  "answer_latency_s": {
+   "n": 64,
+   "p50": 0.0008,
+   "p95": 0.0009,
+   "max": 0.0109
+  },
+  "pauses": 0,
+  "pauses_outside_a_wait": 0,
+  "paused_share_of_wait": 0.0,
+  "pause_runsc_ms": null,
+  "pause_after_last_send_ms": null,
+  "thaw_since_packet_ms": null,
+  "thaw_runsc_ms": null,
+  "tick_late_s": null,
+  "nstat": {
+   "TcpRetransSegs": 0,
+   "TcpExtTCPLostRetransmit": 0,
+   "TcpExtTCPTimeouts": 0
+  },
+  "errors": 0
+ }
+}

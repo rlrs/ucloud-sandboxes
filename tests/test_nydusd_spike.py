@@ -102,6 +102,21 @@ class NydusdDeviceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "real Linux NBD device"):
                 NydusdDevice(path, image, None, trusted_keys={})
 
+    def test_a_shared_cache_keeps_a_blob_until_its_last_image_detaches(self):
+        from ucloud_sandboxes.environment_nydusd import NydusdFactory
+        with TemporaryDirectory() as directory:
+            factory = NydusdFactory("nydusd", "http://store", "token", Path(directory, "nydusd"), shared_cache=True)
+            base, top = "a" * 64, "b" * 64
+            for blob in (base, top):
+                for suffix in (".blob.data", ".blob.meta"):
+                    (factory.cache / (blob + suffix)).write_bytes(b"x")
+            factory.acquire((base, top))
+            factory.acquire((base,))
+            factory.release((base, top))
+            self.assertEqual(sorted(path.name[:1] for path in factory.cache.iterdir()), ["a", "a"])
+            factory.release((base,))
+            self.assertEqual(list(factory.cache.iterdir()), [])
+
 
 @unittest.skipUnless(NYDUS or shutil.which("nydus-image"), "needs nydus-image v2.4.5 (UCLOUD_TEST_NYDUS_IMAGE)")
 class RealVirtualBlobTests(VirtualBlobTests):

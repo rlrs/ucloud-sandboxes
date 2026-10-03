@@ -548,7 +548,9 @@ def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetc
         nydusd = os.environ.get("UCLOUD_ENVIRONMENT_NYDUSD")
         if nydusd and chunk_store_url:
             from .environment_nydusd import NydusdFactory
-            factory = {"device_factory": NydusdFactory(nydusd, chunk_store_url, chunk_index[1], Path(root) / "nydusd")}
+            factory = {"device_factory": NydusdFactory(
+                nydusd, chunk_store_url, chunk_index[1], Path(root) / "nydusd",
+                shared_cache=bool(os.environ.get("UCLOUD_ENVIRONMENT_NYDUSD_SHARED_CACHE")))}
             prefetch = False
     traces = None
     if shared_traces:

@@ -35,9 +35,9 @@ from tests.test_package_budget import package_lines
 # +22 exact rollback symlinks (real mkfs.erofs images), +43 the gate's baseline worker,
 # +53 M2 readers (dispatched roots, spec fingerprints, the RAFS flag), +113 the gateway side,
 # +62 the M2 inventory and retention view, +31 the attach-timing diagnostic,
-# +56 shared startup traces, +120 the nydusd spike's virtual blobs (fake and real
+# +56 shared startup traces, +135 the nydusd spike's virtual blobs (fake and real
 # nydus-image, test_nydusd_spike).
-SUITE_LINE_BUDGET = 96_240
+SUITE_LINE_BUDGET = 96_255
 SUITE = Path(__file__).resolve().parent
 
 

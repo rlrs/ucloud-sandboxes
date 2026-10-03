@@ -12,6 +12,7 @@ Everything else (today's EROFS components) keeps the Python export.
 """
 from __future__ import annotations
 
+from contextlib import nullcontext
 import errno
 import fcntl
 import json
@@ -21,6 +22,7 @@ import shutil
 import signal
 import stat
 import subprocess
+import threading
 import time
 from urllib.parse import urlsplit
 
@@ -33,11 +35,34 @@ READY_SECONDS = 30.0
 class NydusdFactory:
     """The backend's device factory: nydusd for RAFS images, else the Python export."""
 
-    def __init__(self, nydusd, store_url, token, root, *, threads=4):
+    def __init__(self, nydusd, store_url, token, root, *, threads=4, shared_cache=False):
         self.nydusd, self.store_url, self.token, self.threads = nydusd, store_url.rstrip("/"), token, threads
         self.root = Path(root)
         shutil.rmtree(self.root, ignore_errors=True)  # No daemon survives a backend restart.
         self.root.mkdir(mode=0o700, parents=True)
+        # One cache for every daemon, so images share layers. nydusd's chunk
+        # bitmap is a shared mmap of atomics and cache hits are re-validated,
+        # but a starting daemon writes a blob's TOC and digests through one
+        # fixed temporary name: daemons start one at a time.
+        self.cache = self.root / "cache" if shared_cache else None
+        self.startup, self._guard, self._users = threading.Lock(), threading.Lock(), {}
+        if self.cache is not None:
+            self.cache.mkdir(mode=0o700)
+
+    def acquire(self, blobs):
+        with self._guard:
+            for blob in blobs:
+                self._users[blob] = self._users.get(blob, 0) + 1
+
+    def release(self, blobs):
+        """Drop a blob's cache files once no attached image uses it."""
+        with self._guard:
+            for blob in blobs:
+                self._users[blob] -= 1
+                if not self._users[blob]:
+                    del self._users[blob]
+                    for path in self.cache.glob(blob + ".*"):
+                        path.unlink(missing_ok=True)
 
     def __call__(self, device, component, cache, workers, *, trusted_keys):
         if not isinstance(component, RafsImage):
@@ -51,6 +76,7 @@ class NydusdDevice:
         if not device.is_absolute() or component.bootstrap.path is None:
             raise ValueError("nydusd needs an absolute NBD device and a bootstrap file")
         self.path, self.process, self._work, self._sysfs = device, None, None, None
+        self._factory, self._blobs = factory, ()
         self._fd = os.open(device, os.O_RDONLY | os.O_NOFOLLOW)
         try:
             info = os.fstat(self._fd)
@@ -66,25 +92,33 @@ class NydusdDevice:
             hexdigest = component.digest[7:]
             self._work = factory.root / f"{hexdigest}-{device.name}"
             shutil.rmtree(self._work, ignore_errors=True)
-            (self._work / "cache").mkdir(mode=0o700, parents=True)
+            self._work.mkdir(mode=0o700, parents=True)
+            cache = factory.cache
+            if cache is None:
+                cache = self._work / "cache"
+                cache.mkdir(mode=0o700)
+            else:  # Held before the daemon starts: a closing image never deletes what this one reads.
+                self._blobs = tuple(region[0] for region in component.map.regions)
+                factory.acquire(self._blobs)
             url = urlsplit(factory.store_url)
             config = {"type": "bootstrap", "id": hexdigest[:16], "domain_id": "block-nbd", "config_v2": {
                 "version": 2, "id": hexdigest[:16],
                 "backend": {"type": "registry", "registry": {
                     "scheme": url.scheme, "host": url.netloc, "repo": f"virtual/{hexdigest}",
                     "registry_token": factory.token, "timeout": 30, "connect_timeout": 5, "retry_limit": 2}},
-                "cache": {"type": "filecache", "validate": True, "filecache": {"work_dir": str(self._work / "cache")}},
+                "cache": {"type": "filecache", "validate": True, "filecache": {"work_dir": str(cache)}},
                 "metadata_path": str(component.bootstrap.path)}}
             descriptor = os.open(self._work / "config.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                                  0o600)
             with os.fdopen(descriptor, "w") as stream:  # Holds the read token.
                 json.dump(config, stream)
-            with open(self._work / "nydusd.log", "ab") as log:
+            with open(self._work / "nydusd.log", "ab") as log, \
+                    factory.startup if factory.cache is not None else nullcontext():
                 self.process = subprocess.Popen(
                     [factory.nydusd, "nbd", str(device), "--config", str(self._work / "config.json"),
                      "--threads", str(factory.threads), "--log-level", "warn"],
                     stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
-            self._await_ready(component.image_size)
+                self._await_ready(component.image_size)
         except BaseException:
             self.close()
             raise
@@ -136,3 +170,6 @@ class NydusdDevice:
         if self._work is not None:
             shutil.rmtree(self._work, ignore_errors=True)
             self._work = None
+        if self._blobs:
+            self._factory.release(self._blobs)
+            self._blobs = ()

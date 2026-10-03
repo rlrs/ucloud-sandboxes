@@ -14,6 +14,7 @@ Needs /opt/m1-gate/chunk_store_gate_remote.py (staged by the gate) and, for
 nydusd, /opt/m1-gate/nydusd (v2.4.5 built with --features block-nbd).
 """
 import argparse
+import functools
 import json
 import os
 from pathlib import Path
@@ -33,13 +34,26 @@ DROP_IN = Path("/etc/systemd/system/ucloud-environment-io.service.d/nydusd-spike
 TICK = os.sysconf("SC_CLK_TCK")
 
 
-def set_mode(mode):
-    if mode == "nydusd":
-        DROP_IN.parent.mkdir(parents=True, exist_ok=True)
-        DROP_IN.write_text(f"[Service]\nEnvironment=UCLOUD_ENVIRONMENT_NYDUSD={NYDUSD}\n")
+ATTACH = DROP_IN.with_name("attach-concurrency.conf")
+
+
+def set_mode(mode, attach=1):
+    """python, nydusd or nydusd-shared (one cache for every daemon); attach
+    concurrency through an ExecStart override like the attach spike's."""
+    DROP_IN.parent.mkdir(parents=True, exist_ok=True)
+    if mode.startswith("nydusd"):
+        shared = "\nEnvironment=UCLOUD_ENVIRONMENT_NYDUSD_SHARED_CACHE=1" if mode == "nydusd-shared" else ""
+        DROP_IN.write_text(f"[Service]\nEnvironment=UCLOUD_ENVIRONMENT_NYDUSD={NYDUSD}{shared}\n")
     else:
         DROP_IN.unlink(missing_ok=True)
-    subprocess.run(["systemctl", "daemon-reload"], check=True)  # The bench's reset restarts the service.
+    ATTACH.unlink(missing_ok=True)
+    subprocess.run(["systemctl", "daemon-reload"], check=True)
+    if attach != 1:
+        base = subprocess.run(["systemctl", "show", "-p", "ExecStart", "--value", "ucloud-environment-io.service"],
+                              capture_output=True, text=True, check=True).stdout
+        argv = re.search(r"argv\[\]=([^;]*);", base).group(1).strip()
+        ATTACH.write_text(f"[Service]\nExecStart=\nExecStart={argv} --attach-concurrency {attach}\n")
+        subprocess.run(["systemctl", "daemon-reload"], check=True)  # The bench's reset restarts the service.
 
 
 def cpu_ticks(pid):
@@ -110,25 +124,34 @@ def store_metrics(args):
     return {key: counters[key] for key in ("requests", "bytes_served", "misses", "fills") if key in counters}
 
 
+def cache_bytes():
+    """Allocated bytes of the nydusd caches (sparse data files count what was filled)."""
+    found = subprocess.run(["du", "-sb", "--apparent-size", "/work/ucloud-sandboxes/state/environment-io/nydusd"],
+                           capture_output=True, text=True).stdout.split()
+    used = subprocess.run(["du", "-sB1", "/work/ucloud-sandboxes/state/environment-io/nydusd"],
+                          capture_output=True, text=True).stdout.split()
+    return {"apparent": int(found[0]) if found else 0, "allocated": int(used[0]) if used else 0}
+
+
 def cmd_arm(args):
-    set_mode(args.mode)
+    set_mode(args.mode, args.attach)
     out = Path(args.out)
     result = json.loads(out.read_text()) if out.exists() else {}
     for mode in ("demand", "traced"):  # nydusd keeps no traces: "traced" is a second cold demand run.
         if mode in result:
             continue
         gate.Node().reset(clear_traces=mode == "demand")  # Restarts environment-io: sample after it.
-        before_store, main, sampler = store_metrics(args), io_pid(), Sampler()
+        before_store, main, sampler, holder = store_metrics(args), io_pid(), Sampler(), {}
         sampler.start()
         partial = Path(f"{out}.{mode}")
         try:
             _one_mode(argparse.Namespace(images=args.images, run=f"{args.run}-{args.mode[0]}{args.n}", n=args.n,
-                                         out=str(partial)), mode)
+                                         out=str(partial)), mode, peak=lambda: holder.update(cache=cache_bytes()))
         finally:
             sampler.stop.set()
             sampler.join()
         record = json.loads(partial.read_text())[mode]
-        record["host"] = sampler.result(main)
+        record["host"] = {**sampler.result(main), **holder}
         after_store = store_metrics(args)
         record["store"] = {key: after_store[key] - before_store.get(key, 0) for key in after_store}
         result[mode] = record
@@ -138,7 +161,7 @@ def cmd_arm(args):
     return 0
 
 
-def _one_mode(bench, mode):
+def _one_mode(bench, mode, peak=lambda: None):
     """gate.cmd_bench's burst for one mode, on a node already reset."""
     node, images = gate.Node(), json.loads(Path(bench.images).read_text())
     before, started = node.environment_io(), time.monotonic()
@@ -155,6 +178,7 @@ def _one_mode(bench, mode):
     with ThreadPoolExecutor(len(images)) as pool:
         rows = list(pool.map(sandbox, list(images.items())[:bench.n]))
     wall = max(row["done"] for row in rows)
+    peak()  # Everything still attached: the caches at their largest.
     for row in rows:
         node.delete(f"m1-{bench.run}-b{row['index']}-{mode[0]}")
     Path(bench.out).write_text(json.dumps({mode: {"wall": wall, "n": len(rows), "rows": rows,
@@ -183,7 +207,7 @@ READ_TREE = ["sh", "-c", "find /usr /opt /lib -xdev -type f 2>/dev/null | head -
 
 
 def cmd_kill(args):
-    set_mode("nydusd")
+    set_mode(args.mode, args.attach)
     node, images = gate.Node(), json.loads(Path(args.images).read_text())
     node.reset(clear_traces=True)
     chosen = list(images.items())[:args.n]
@@ -213,7 +237,9 @@ def cmd_kill(args):
     for index, _ in chosen:
         rc, output, wall = run_output(node, names[index], ["sh", "-c", "cat /usr/bin/* > /dev/null; echo again-rc=$?"])
         after[index] = {"rc": rc, "eio": "Input/output error" in output, "tail": output[-200:]}
-    # A new create of every image, while the dead mounts are still in use.
+    # A new create of every image, while the dead mounts are still in use;
+    # a refused one is not retried (the bench retries 503s for two minutes).
+    node.call = functools.partial(node.call, retry_seconds=0)
     recreate = {}
     for index, image in chosen[:args.recreate]:
         name = f"{names[index]}-again"
@@ -226,6 +252,7 @@ def cmd_kill(args):
             recreate[index] = {"created": False, "error": str(exc)[:300]}
     journal = subprocess.run(["journalctl", "-u", "ucloud-environment-io.service", "--since", "-10min", "-o", "cat"],
                              capture_output=True, text=True).stdout.splitlines()
+    del node.call
     for index, _ in chosen:
         try:
             node.delete(names[index])
@@ -336,8 +363,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
     arm = commands.add_parser("arm")
-    arm.add_argument("--mode", choices=("python", "nydusd"), required=True)
     kill = commands.add_parser("kill")
+    for command in (arm, kill):
+        command.add_argument("--mode", choices=("python", "nydusd", "nydusd-shared"),
+                             default="nydusd" if command is kill else None, required=command is arm)
+        command.add_argument("--attach", type=int, default=1, help="attach concurrency")
     split = commands.add_parser("split")
     split.add_argument("--warm", type=int, default=3)
     for command in (arm, kill, split):

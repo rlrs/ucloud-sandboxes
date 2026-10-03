@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.9.0 - 2026-10-03
+
+The production chunk store's release (docs/rollout-0.8.0.md, "0.9.0"). It changes no image path. Every sandbox still mounts its EROFS root until a wave is switched, and `dispatch_roots` stays off.
+
+- **nydusd in the sandbox bundle.** It is built by `runtime/nydusd/build_pinned.sh`: v2.4.5 `e3190057`, `block-nbd`, Rust 1.94.0, Apache-2.0. VM init verifies and installs it at `/usr/local/libexec/ucloud-sandboxes/nydusd`. `chunk_store.nydusd` naming that path is checked against the bundle's pin.
+- **Stored locators and blob layouts.** Registration writes each component's locator and each nydusd blob's layout to the store. Workers and the store node then read them, not the index. M1 gate run 3 stalled for 4.5 minutes while one index process computed locators per attach.
+- **nydusd's shared cache stays within `immutable_environments.cache_bytes`.** Idle images are detached, least recently used first.
 - **M2 waves (C2.13):** `chunk-migrate convert` converts a wave's images with full-tree verification, one process per image. Rerunning it resumes. `record`, `switch`, `revert` and `status` run on the gateway, and a switch re-points the image's durable owners to the new closure. Retention keeps a reverted root. Release is not built yet ([chunk-store-m2-plan.md §5.1](docs/chunk-store-m2-plan.md)).
 
 ## 0.8.8 - 2026-10-03 (gateway only)

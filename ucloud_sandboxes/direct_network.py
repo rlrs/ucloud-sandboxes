@@ -478,6 +478,16 @@ class DirectNetworkManager:
             return None
         return self._lease(sandbox_id, sandbox_generation, int(raw_slot))
 
+    def leases(self) -> dict[tuple[str, int], DirectNetworkLease]:
+        """Every current lease, from one state read."""
+        with self._locked():
+            state = self._load()
+        result = {}
+        for key, slot in state["leases"].items():
+            sandbox_id, _, generation = key.rpartition("\0")
+            result[(sandbox_id, int(generation))] = self._lease(sandbox_id, int(generation), int(slot))
+        return result
+
     def validate_policy(self, policy: SandboxNetworkPolicy) -> None:
         if not isinstance(policy, SandboxNetworkPolicy):
             raise ValueError("network policy must be a SandboxNetworkPolicy")

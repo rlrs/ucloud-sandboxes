@@ -3,11 +3,15 @@ from __future__ import annotations
 import asyncio
 import base64
 from dataclasses import dataclass, field
+import fcntl
 import hashlib
+import ipaddress
 import json
 import logging
 from pathlib import Path
 import re
+import struct
+import termios
 from typing import Any, Awaitable, Callable, TYPE_CHECKING, TypeVar
 
 from aiohttp import web
@@ -155,6 +159,9 @@ class RelayRequest:
     parked_transport_epoch: str | None = None
     reattachable: bool = False
     delivery_pending: bool = False
+    # A direct private caller on a node that pauses and thaws its own model
+    # waits (sandbox.direct_local_model_waits): no park; wake only if unacknowledged.
+    local_wait: bool = False
     durable_lifecycle: bool = True
     # Refreshed from the current registration when dispatching a park; never
     # persisted in a request or interpreted as execution authority.
@@ -217,6 +224,7 @@ def create_model_relay_app(
     ]
     | None = None,
     telemetry: Telemetry | None = None,
+    local_model_waits: bool = False,
 ) -> web.Application:
     # Base64 expands worker response bodies by 4/3 inside the JSON control API.
     resolved_telemetry = telemetry or Telemetry.disabled("model-relay")
@@ -243,6 +251,7 @@ def create_model_relay_app(
         storage_budget_bytes=postgres_storage_budget_bytes,
         accepted_notifier=accepted_notifier,
         result_notifier=result_notifier,
+        local_model_waits=local_model_waits,
     )
     app[SANDBOX_TOKEN_KEY] = sandbox_bearer_token
     app[WORKER_TOKEN_KEY] = worker_bearer_token
@@ -749,6 +758,7 @@ async def _openai_proxy(request: web.Request, *, endpoint: str) -> web.Response:
             )
         ),
         defer_idempotency_until_disconnect=explicit_request_id is None,
+        local_wait=_direct_caller(request),
     )
     response = await _wait_for_worker_response(
         request,
@@ -766,11 +776,65 @@ async def _openai_proxy(request: web.Request, *, endpoint: str) -> web.Response:
             response = RelayWorkerResponse(502, response_body)
     else:
         response_body = response.body
+    if relay_request.local_wait:
+        return await _deliver_local_wait(request, relay_request, response_body, response)
     return web.json_response(
         response_body,
         status=response.status,
         headers=_safe_response_headers(response.headers),
     )
+
+
+def _direct_caller(request: web.Request) -> bool:
+    """A sandbox on the private plaintext path, not the TLS ingress's loopback proxy."""
+    try:
+        return not ipaddress.ip_address(request.remote or "127.0.0.1").is_loopback
+    except ValueError:
+        return False
+
+
+async def _deliver_local_wait(request, relay_request, body, response) -> web.StreamResponse:
+    """Answer a node-local wait, then wait for the guest's TCP acknowledgment.
+
+    A paused guest is thawed by the answer's first packet and acknowledges it
+    within milliseconds (docs/benchmarks/node-local-wake-2026-10-03). One that
+    was hibernated while its call was out never does: its request becomes
+    reattachable before the delayed wake restores it, so the agent's retry
+    gets this answer instead of a second sample.
+    """
+    from .shared_control.relay import LOCAL_WAKE_GRACE
+    payload = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    stream = web.StreamResponse(status=response.status, headers=_safe_response_headers(response.headers))
+    stream.content_type = "application/json"
+    stream.content_length = len(payload)
+    await stream.prepare(request)
+    await stream.write(payload)
+    await stream.write_eof()
+    if await _acknowledged(request.transport, LOCAL_WAKE_GRACE - 1.0):
+        await _state(request).confirm_local_delivery(relay_request.request_id)
+    else:
+        await _state(request).mark_caller_detached(relay_request.request_id)
+    return stream
+
+
+async def _acknowledged(transport, timeout: float) -> bool:
+    """Every byte written to this TCP connection is acknowledged by its peer."""
+    sock = transport.get_extra_info("socket") if transport is not None else None
+    if sock is None:
+        return False
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        if transport.get_write_buffer_size() == 0:
+            try:
+                unacked = struct.unpack("i", fcntl.ioctl(sock.fileno(), termios.TIOCOUTQ, b"\0" * 4))[0]
+            except OSError:
+                return False
+            if unacked == 0:
+                return True
+        if loop.time() >= deadline:
+            return False
+        await asyncio.sleep(0.005)
 
 
 async def _wait_for_worker_response(

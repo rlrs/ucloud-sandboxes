@@ -43,8 +43,10 @@ from tests.test_package_budget import package_lines
 # +22 net chunk reservations (a waiting converter, a dead builder's lapse),
 # less the deleted attach-timing test, +46 nydusd as config (schema, unit flags,
 # the sha256 pin, the gate installing it on canaries only), +25 blob-tail
-# liveness (real nydus-image: a whiteout-hidden chunk blocks registration).
-SUITE_LINE_BUDGET = 96_491
+# liveness (real nydus-image: a whiteout-hidden chunk blocks registration),
+# +322 node-local model waits (packet and netlink parsing, the scheduler on a
+# fake clock, runtime glue, the relay's no-park and acknowledged delivery).
+SUITE_LINE_BUDGET = 96_813
 SUITE = Path(__file__).resolve().parent
 
 

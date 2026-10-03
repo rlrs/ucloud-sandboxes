@@ -79,6 +79,13 @@ class ConfigTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaisesRegex(
                     ValueError, "direct_pause_tier_zswap"):
                 DeploymentConfig.from_dict({**raw, "sandbox": {**raw["sandbox"], **invalid}})
+        # Node-local model waits: off by default, only with the pause tier.
+        self.assertFalse(DeploymentConfig.from_dict(raw).sandbox.direct_local_model_waits)
+        local = {**raw, "sandbox": {**raw["sandbox"], "direct_local_model_waits": True}}
+        self.assertTrue(DeploymentConfig.from_dict(local).sandbox.direct_local_model_waits)
+        with self.assertRaisesRegex(ValueError, "direct_local_model_waits requires the pause tier"):
+            DeploymentConfig.from_dict({**local, "sandbox": {**local["sandbox"], "direct_pause_tier": False,
+                                                            "direct_pause_tier_zswap": False}})
         raw["sandbox"]["direct_pause_tier"] = "yes"
         with self.assertRaises(ValueError):
             DeploymentConfig.from_dict(raw)

@@ -34,6 +34,9 @@ LOGGER = logging.getLogger(__name__)
 # budget, not an execution/concurrency limit. Completion cannot exhaust admission.
 RESPONSE_RESERVATION = api.MAX_WORKER_RESPONSE_BYTES + 65536
 DEFAULT_STORAGE_BUDGET = 64 * 1024**3
+# A local wait's wake runs only if the guest has not acknowledged its answer
+# by then: longer than a thaw with its bounded prefetch (pause_tier, 2 s).
+LOCAL_WAKE_GRACE = 5.0
 
 
 async def _wait_cancellable(awaitable, timeout):
@@ -71,6 +74,7 @@ class PostgresRelayState:
         result_notifier=None,
         telemetry=None,
         lifecycle_connections=4,
+        local_model_waits=False,
     ):
         if (
             storage_budget_bytes < RESPONSE_RESERVATION
@@ -95,6 +99,7 @@ class PostgresRelayState:
         self._active_parks = {}
         self.claim_seconds = lifecycle_lease_seconds
         self.notifiers = {"park": accepted_notifier, "wake": result_notifier}
+        self.local_model_waits = local_model_waits
         self.channel = (
             "relay_"
             + hashlib.sha256(
@@ -623,7 +628,9 @@ class PostgresRelayState:
         idempotency_key=None,
         defer_idempotency_until_disconnect=False,
         expected_registration_token=None,
+        local_wait=False,
     ):
+        """``local_wait``: a direct private caller whose node handles its waits."""
         api.validate_rollout_id(rollout_id)
         method = method.upper()
         if method not in api.TUNNEL_HTTP_METHODS:
@@ -689,10 +696,13 @@ class PostgresRelayState:
             now = await self._now(conn)
             request_id = uuid4().hex
             sandbox_id = api._registration_sandbox_id(reg)
+            local = bool(local_wait and self.local_model_waits and sandbox_id)
+            park = bool(sandbox_id and self.notifiers["park"] and not local)
             await conn.execute(
                 """INSERT INTO relay_requests(deployment_id,request_id,rollout_id,registration_token,endpoint,method,
-                created_at,expires_at,payload_bytes,reserved_bytes,state,idempotency_key,request_digest,reattachable,sandbox_id,sandbox_generation)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending',%s,%s,%s,%s,%s)""",
+                created_at,expires_at,payload_bytes,reserved_bytes,state,idempotency_key,request_digest,reattachable,sandbox_id,sandbox_generation,
+                local_wait)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending',%s,%s,%s,%s,%s,%s)""",
                 (
                     self.deployment,
                     request_id,
@@ -710,21 +720,19 @@ class PostgresRelayState:
                     and not defer_idempotency_until_disconnect,
                     sandbox_id,
                     api._registration_sandbox_generation(reg),
+                    local,
                 ),
             )
             await conn.execute(
                 "INSERT INTO relay_payloads VALUES (%s,%s,%s,%s,%s)",
                 (self.deployment, request_id, raw, encoded["encoding"], Jsonb(headers)),
             )
-            if sandbox_id and self.notifiers["park"]:
+            if park:
                 await conn.execute(
                     "INSERT INTO relay_lifecycle(deployment_id,request_id,action) VALUES (%s,%s,'park')",
                     (self.deployment, request_id),
                 )
-            await self._notify(
-                conn, "q:" + rollout_id,
-                *(("l:park",) if sandbox_id and self.notifiers["park"] else ()),
-            )
+            await self._notify(conn, "q:" + rollout_id, *(("l:park",) if park else ()))
             request = await self._load(conn, request_id)
             # Take the byte-accounting lock LAST; never serialize payload writes
             # and lifecycle setup behind a deployment-wide quota row.
@@ -1030,7 +1038,12 @@ class PostgresRelayState:
 
     async def _complete(self, conn, row, response, now, *, defer, parts=None):
         raw, encoding, digest = parts or self._response_parts(response)
-        pending = bool(defer and row["sandbox_id"] and self.notifiers["wake"])
+        wake = bool(defer and row["sandbox_id"] and self.notifiers["wake"])
+        # A local wait is delivered at once; its wake waits LOCAL_WAKE_GRACE
+        # for the guest's TCP acknowledgment (confirm_local_delivery) and runs
+        # only without it: a sandbox hibernated while its call was out.
+        local = wake and bool(row.get("local_wait"))
+        pending = wake and not local
         # One round trip after validation/locking. Bodies never travel back from
         # PostgreSQL merely to construct the worker's acknowledgment object.
         completed = await (
@@ -1040,8 +1053,9 @@ class PostgresRelayState:
             UPDATE relay_requests SET state='completed',completed_at=%s,completed_bytes=%s,delivery_pending=%s,
             payload_bytes=0 WHERE deployment_id=%s AND request_id=%s RETURNING *), payload AS (
             DELETE FROM relay_payloads WHERE deployment_id=%s AND request_id=%s), wake AS (
-            INSERT INTO relay_lifecycle(deployment_id,request_id,action)
-            SELECT deployment_id,request_id,'wake' FROM changed WHERE delivery_pending ON CONFLICT DO NOTHING),
+            INSERT INTO relay_lifecycle(deployment_id,request_id,action,next_attempt_at)
+            SELECT deployment_id,request_id,'wake',clock_timestamp()+%s*interval '1 second'
+            FROM changed WHERE delivery_pending OR %s ON CONFLICT DO NOTHING),
             obsolete_parks AS (
             UPDATE relay_lifecycle l SET done=true
             FROM changed r WHERE (l.deployment_id,l.request_id)=(r.deployment_id,r.request_id)
@@ -1062,6 +1076,8 @@ class PostgresRelayState:
                     row["request_id"],
                     self.deployment,
                     row["request_id"],
+                    LOCAL_WAKE_GRACE if local else 0,
+                    local,
                 ),
             )
         ).fetchone()
@@ -1069,6 +1085,15 @@ class PostgresRelayState:
             conn, "r:" + row["request_id"], *(("l:wake",) if pending else ()),
         )
         return completed
+
+    async def confirm_local_delivery(self, request_id):
+        """The guest acknowledged a local wait's answer: its delayed wake is moot."""
+        async with self.store.transaction("relay_local_delivered") as conn:
+            await conn.execute(
+                "UPDATE relay_lifecycle SET done=true WHERE deployment_id=%s AND request_id=%s AND action='wake' "
+                "AND NOT done AND claim_token IS NULL",
+                (self.deployment, request_id),
+            )
 
     async def retry_worker_failure(self, *, request_id, registration_token, lease_id):
         api.validate_registration_token(registration_token)

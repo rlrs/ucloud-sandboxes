@@ -370,6 +370,12 @@ else:
             render_vm_init_script(self._options(**ram, swap_gb=0, direct_pause_tier=True))
         with self.assertRaisesRegex(ValueError, "zswap requires the pause tier"):
             render_vm_init_script(self._options(**ram, swap_gb=8, direct_pause_tier_zswap=True))
+        # Node-local model waits ride on the pause tier.
+        self.assertNotIn("--local-model-waits", on)
+        self.assertIn(" --pause-tier --local-model-waits", render_vm_init_script(self._options(
+            **ram, swap_gb=8, direct_pause_tier=True, direct_local_model_waits=True)))
+        with self.assertRaisesRegex(ValueError, "local model waits require the pause tier"):
+            render_vm_init_script(self._options(**ram, swap_gb=8, direct_local_model_waits=True))
 
     def test_split_checkpoint_rejects_s3_before_rendering_worker(self):
         with self.assertRaisesRegex(ValueError, "requires registry checkpoint"):

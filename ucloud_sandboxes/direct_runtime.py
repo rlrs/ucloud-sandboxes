@@ -48,6 +48,7 @@ def build_direct_runtime_service(
     split_memory_backing: bool = False,
     reflink_memory_restore: bool = False,
     pause_tier: bool = False,
+    local_model_waits: bool = False,
     workspace_initial_grant_mb: int = 0,
     application_memory_root: Path | None = None,
     memory_backing_hard_capacity_bytes: int = 0,
@@ -75,6 +76,8 @@ def build_direct_runtime_service(
             raise ValueError(f"{label} must be absolute")
     if network_relays and network != "sandbox":
         raise ValueError("network_relays requires sandbox networking")
+    if local_model_waits and not pause_tier:
+        raise ValueError("node-local model waits require the pause tier")
     if network not in {"none", "sandbox"}:
         raise ValueError("direct runtime network must be none or sandbox")
     if not storage_native_socket.is_absolute():
@@ -227,6 +230,7 @@ def build_direct_runtime_service(
             application_memory_root=application_memory_root,
             reflink_memory_restore=reflink_memory_restore,
             pause_tier=pause_tier,
+            local_model_waits=local_model_waits,
             bundle_root=state_root / "bundles",
             journal_root=state_root / "journals",
             runtime_fingerprint=fingerprint,

@@ -289,6 +289,11 @@ class SandboxPoolConfig:
     direct_pause_tier: bool = False
     # zswap ahead of the pause tier's swap: only for measured compressible heaps.
     direct_pause_tier_zswap: bool = False
+    # Node-local model waits (docs/node-local-model-waits.md): nodes pause on a
+    # sandbox's outstanding plaintext call to a private relay endpoint and thaw
+    # on its answer; the relay sends no park and wakes only an unacknowledged
+    # answer. Needs the pause tier.
+    direct_local_model_waits: bool = False
     # Split workspaces start with an XFS filesystem this large and grow online
     # toward disk_mb (docs/disk-density.md). 0 formats full-size workspaces.
     direct_workspace_initial_grant_mb: int = 512
@@ -316,6 +321,7 @@ class SandboxPoolConfig:
                    "direct_ram_memory_backing": False,
                    "direct_reflink_memory_restore": False,
                    "direct_pause_tier": False, "direct_pause_tier_zswap": False,
+                   "direct_local_model_waits": False,
                    "direct_workspace_initial_grant_mb": cls.direct_workspace_initial_grant_mb,
                    **raw}
         values = _exact_dataclass_values("sandbox", raw, cls())
@@ -389,6 +395,10 @@ class SandboxPoolConfig:
             raise ValueError("sandbox.direct_pause_tier_zswap must be a boolean")
         if result.direct_pause_tier_zswap and not result.direct_pause_tier:
             raise ValueError("sandbox.direct_pause_tier_zswap requires the pause tier")
+        if not isinstance(result.direct_local_model_waits, bool):
+            raise ValueError("sandbox.direct_local_model_waits must be a boolean")
+        if result.direct_local_model_waits and not result.direct_pause_tier:
+            raise ValueError("sandbox.direct_local_model_waits requires the pause tier")
         grant = result.direct_workspace_initial_grant_mb
         if isinstance(grant, bool) or not isinstance(grant, int) or (grant and grant < 512):
             raise ValueError("sandbox.direct_workspace_initial_grant_mb must be 0 or at least 512")

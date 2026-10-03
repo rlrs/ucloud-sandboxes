@@ -65,8 +65,12 @@ import unittest
 # by sha256; the spike's environment switches deleted). The Python RAFS reader,
 # its cache and trace prefetch go once nydusd is the only RAFS path (M2).
 # +28 blob-tail chunks live with their root (registration reads the tails).
-# Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 112_131
+# +517 node-local model waits (local_wait.py: nftables NFLOG of private relay
+# flows, pause on an outstanding call, thaw on its answer; the relay's
+# acknowledged delivery and delayed wake). When every trainer uses the private
+# relay, the relay-driven park, the gateway's per-wait park and warm_park.py's
+# relay role go. Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 112_648
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

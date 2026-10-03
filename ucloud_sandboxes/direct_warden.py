@@ -317,6 +317,8 @@ class DirectRunscWardenConfig:
     reflink_memory_restore: bool = False
     # C1.1: idle and model-wait parks may `runsc pause` in place.
     pause_tier: bool = False
+    # Node-local model waits (local_wait.py); needs the pause tier.
+    local_model_waits: bool = False
     proc_root: Path = Path("/proc")
     network: str = "none"
     command_timeout_seconds: float = 60.0

@@ -326,9 +326,12 @@ class DirectNodeRuntime:
         self._relay_park_workers = max(1, os.cpu_count() or 1)
         self._relay_park_executor = None
         self._relay_park_tasks = {}
+        self._local_waits = None
+        self._cpu_stat_paths = {}
 
     def start(self) -> None:
         self._background_stop.clear()
+        self._start_local_waits()
         if self._relay_parking_thread is None or not self._relay_parking_thread.is_alive():
             self._relay_parking_thread = Thread(
                 target=self._relay_parking_loop,
@@ -349,8 +352,75 @@ class DirectNodeRuntime:
         )
         self._idle_parking_thread.start()
 
+    def _start_local_waits(self) -> None:
+        """Node-local model waits (docs/node-local-model-waits.md): pause tier only."""
+        if self._local_waits is not None or self._paused is None:
+            return
+        network = getattr(self.service.provisioner, "network_manager", None)
+        if network is None or not getattr(self.service.warden.config, "local_model_waits", False):
+            return
+        from .direct_network import NETWORK_CIDR
+        from .local_wait import LocalWaitScheduler, relay_endpoints
+        endpoints = relay_endpoints(network.relays)
+        if not endpoints:
+            return
+        self._local_waits = LocalWaitScheduler(
+            endpoints=endpoints, network=NETWORK_CIDR, candidates=self._local_wait_candidates,
+            pause=self.pause_model_wait, thaw=self._thaw_model_wait,
+            is_paused=lambda key: self.service.warden.is_paused(*key),
+            executor=ThreadPoolExecutor(max_workers=8, thread_name_prefix="local-wait"),
+        ).start()
+
+    def _local_wait_candidates(self):
+        """Owned parkable managed sandboxes with a network lease (relay agents)."""
+        from .local_wait import WaitCandidate
+        leases = self.service.provisioner.network_manager.leases()
+        candidates, paths = [], {}
+        for item in self.service.provisioner.registry.snapshot().records:
+            key = (item.sandbox_id, item.sandbox_generation)
+            if item.phase != "owned" or not item.spec.parkable or not item.spec.managed_process:
+                continue
+            lease = leases.get(key)
+            path = self._cpu_stat_paths.get(key)
+            if path is None:
+                try:
+                    config = json.loads((item.to_direct_sandbox().bundle / "config.json").read_text())
+                    path = "/sys/fs/cgroup/" + config["linux"]["cgroupsPath"].strip("/") + "/cpu.stat"
+                except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                    continue
+            if lease is not None:
+                paths[key] = path
+                candidates.append(WaitCandidate(key, str(lease.guest_ip), path))
+        self._cpu_stat_paths = paths
+        return candidates
+
+    def pause_model_wait(self, key) -> None:
+        """Pause a sandbox whose relay call is outstanding; fails fast on any activity.
+
+        The pause tier's marker makes it a paused wait like a relay-driven
+        one: reclaim, escalation and thaw prefetch all apply.
+        """
+        sandbox_id, generation = key
+        with self.lifecycle.exclusive(sandbox_id):
+            if self.service.warden.is_paused(sandbox_id, generation):
+                return
+            registration = self.service.provisioner.registry.get(sandbox_id)
+            if registration is None or registration.sandbox_generation != generation:
+                return
+            self.service.park(sandbox_id, operation_id=f"local-wait-{uuid4().hex}", pause=True)
+            if self.service.warden.is_paused(sandbox_id, generation):
+                with self._relay_parking_guard:
+                    self._paused[key] = PausedWait(time.monotonic())
+            self.service.advance_lifecycle_activity_revision()
+
+    def _thaw_model_wait(self, key) -> None:
+        self.wake_with_activity_revision(key[0], generation=key[1], operation_id=f"local-wake-{uuid4().hex}")
+
     def stop(self) -> None:
         self._background_stop.set()
+        local_waits, self._local_waits = self._local_waits, None
+        if local_waits is not None:
+            local_waits.stop()
         thread = self._idle_parking_thread
         if thread is not None:
             thread.join(timeout=max(2.0, self.service.idle_park_seconds * 2))

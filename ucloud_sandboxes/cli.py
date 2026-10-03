@@ -398,6 +398,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Pause idle and model-wait sandboxes in place instead of hibernating (C1.1).",
     )
     direct_node_agent.add_argument(
+        "--local-model-waits", action="store_true",
+        help="Pause on outstanding plaintext private-relay calls, thaw on their answers (needs --pause-tier).",
+    )
+    direct_node_agent.add_argument(
         "--workspace-initial-grant-mb", type=int, default=0,
         help="Format split workspaces at this size and grow them online toward disk_mb (0: full size).",
     )
@@ -1333,6 +1337,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         split_memory_backing=args.split_memory_backing,
         reflink_memory_restore=args.reflink_memory_restore,
         pause_tier=args.pause_tier,
+        local_model_waits=args.local_model_waits,
         workspace_initial_grant_mb=args.workspace_initial_grant_mb,
         application_memory_root=(args.application_memory_root.absolute()
                                  if args.application_memory_root is not None else None),
@@ -1447,6 +1452,7 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         result_notifier=result_notifier,
         unavailable_callers=unavailable_callers,
         telemetry=telemetry,
+        local_model_waits=config.sandbox.direct_local_model_waits,
     )
 
     async def shutdown_telemetry(_app: object) -> None:
@@ -7082,6 +7088,7 @@ def vm_init_options_for_job(
         ),
         direct_pause_tier=role == "sandbox" and config.sandbox.direct_pause_tier,
         direct_pause_tier_zswap=role == "sandbox" and config.sandbox.direct_pause_tier_zswap,
+        direct_local_model_waits=role == "sandbox" and config.sandbox.direct_local_model_waits,
         direct_workspace_initial_grant_mb=(
             config.sandbox.direct_workspace_initial_grant_mb if role == "sandbox" else 0
         ),
@@ -7138,6 +7145,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "directReflinkMemoryRestore": options.direct_reflink_memory_restore,
         "directPauseTier": options.direct_pause_tier,
         "directPauseTierZswap": options.direct_pause_tier_zswap,
+        "directLocalModelWaits": options.direct_local_model_waits,
         "directWorkspaceInitialGrantMb": options.direct_workspace_initial_grant_mb,
         "storageNativeRegistryUrl": options.storage_native_registry_url,
         "storageNativeRepository": options.storage_native_repository,

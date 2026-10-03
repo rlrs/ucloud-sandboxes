@@ -232,6 +232,7 @@ class VmInitOptions:
     direct_reflink_memory_restore: bool = False
     direct_pause_tier: bool = False
     direct_pause_tier_zswap: bool = False
+    direct_local_model_waits: bool = False
     direct_workspace_initial_grant_mb: int = 0
     environment_registry_url: str = ""
     environment_repository: str = ""
@@ -566,6 +567,8 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             split_memory_flags += " --reflink-memory-restore"
         if options.direct_pause_tier:
             split_memory_flags += " --pause-tier"
+        if options.direct_local_model_waits:
+            split_memory_flags += " --local-model-waits"
         if options.direct_split_memory_backing and options.direct_workspace_initial_grant_mb:
             split_memory_flags += (
                 f" --workspace-initial-grant-mb {options.direct_workspace_initial_grant_mb}"
@@ -2048,6 +2051,8 @@ def _validate_pause_tier(options: VmInitOptions) -> None:
         raise ValueError("the pause tier requires a swapfile (swap_gb).")
     if options.direct_pause_tier_zswap and not options.direct_pause_tier:
         raise ValueError("pause-tier zswap requires the pause tier.")
+    if options.direct_local_model_waits and not options.direct_pause_tier:
+        raise ValueError("node-local model waits require the pause tier.")
 
 
 def validate_vm_init_options(options: VmInitOptions) -> None:

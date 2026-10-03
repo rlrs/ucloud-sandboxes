@@ -25,6 +25,7 @@ CREATE TABLE relay_requests (
  delivery_pending boolean NOT NULL DEFAULT false,
  accepted_notified_at double precision, parked_transport_epoch text, wake_notified_at double precision,
  wake_transport_epoch text, delivery_released_at double precision,
+ local_wait boolean NOT NULL DEFAULT false,
  PRIMARY KEY(deployment_id, request_id),
  FOREIGN KEY(deployment_id, rollout_id) REFERENCES relay_rollouts
 );

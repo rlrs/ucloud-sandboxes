@@ -68,6 +68,8 @@ class PostgresDatabase:
     additive_ddl: tuple[str, ...] = (
         "CREATE INDEX IF NOT EXISTS relay_compaction ON relay_requests(deployment_id, request_id) WHERE state='completed' AND reserved_bytes>completed_bytes+65536",
         "CREATE INDEX IF NOT EXISTS relay_outstanding_callers ON relay_requests(deployment_id, sandbox_id, sandbox_generation) WHERE state!='completed' OR delivery_pending",
+        # Node-local model waits: the node pauses and thaws; the relay wakes only unacknowledged answers.
+        "ALTER TABLE relay_requests ADD COLUMN IF NOT EXISTS local_wait boolean NOT NULL DEFAULT false",
     )
 
     def __init__(

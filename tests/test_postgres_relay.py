@@ -13,6 +13,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from tests.support import requires_sdk
 from ucloud_sandboxes import model_relay as api
+from ucloud_sandboxes.shared_control import relay
 from ucloud_sandboxes.shared_control.model import cancel_until_done
 
 TEST_TIER = "contract"
@@ -678,6 +679,76 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
             release.set()
             await asyncio.gather(*occupants, return_exceptions=True)
             await cancel_until_done(waiter)
+
+    async def test_a_local_wait_sends_no_park_and_wakes_only_without_an_acknowledgment(self):
+        notified = []
+
+        async def notify(request):
+            notified.append(request.request_id)
+            return "epoch"
+        state = await self.bound_state(accepted_notifier=notify, result_notifier=notify, local_model_waits=True)
+
+        async def rows(request):
+            async with state.store.transaction("test") as conn:
+                return await (await conn.execute(
+                    "SELECT action,done,next_attempt_at-clock_timestamp() AS due FROM relay_lifecycle "
+                    "WHERE request_id=%s ORDER BY action", (request.request_id,))).fetchall()
+        ingress = await self.enqueue(state)  # The TLS ingress (loopback): today's park.
+        self.assertFalse(ingress.local_wait)
+        self.assertEqual([row["action"] for row in await rows(ingress)], ["park"])
+        local = await self.enqueue(state, local_wait=True, idempotency_key="call-1")
+        self.assertTrue(local.local_wait)
+        self.assertEqual(await rows(local), [])  # The node pauses; nobody parks.
+        leased = []
+        while not any(item.request_id == local.request_id for item in leased):
+            leased = await self.poll(state)
+        await self.respond(next(item for item in leased if item.request_id == local.request_id), state,
+                           defer_delivery=True)
+        # Delivered at once, with a wake held back for the guest's acknowledgment.
+        self.assertEqual((await state.wait_for_response(local, timeout_seconds=2)).body, b"answer")
+        (wake,) = await rows(local)
+        self.assertEqual((wake["action"], wake["done"]), ("wake", False))
+        self.assertGreater(wake["due"].total_seconds(), relay.LOCAL_WAKE_GRACE - 1)
+        await state.confirm_local_delivery(local.request_id)
+        self.assertEqual([(row["action"], row["done"]) for row in await rows(local)], [("wake", True)])
+        self.assertNotIn(local.request_id, notified)
+        # Without the switch a caller's own claim changes nothing.
+        plain = await self.bound_state(accepted_notifier=notify, result_notifier=notify)
+        self.assertFalse((await self.enqueue(plain, local_wait=True)).local_wait)
+
+    async def test_an_unacknowledged_local_answer_is_reattachable(self):
+        state = await self.bound_state(result_notifier=AsyncMock(return_value="epoch"), local_model_waits=True)
+        local = await self.enqueue(state, local_wait=True, idempotency_key="auto/x",
+                                   defer_idempotency_until_disconnect=True)
+        (leased,) = await self.poll(state)
+        await self.respond(leased, state, defer_delivery=True)
+        await state.mark_caller_detached(local.request_id)  # No acknowledgment by the grace.
+        again = await self.enqueue(state, local_wait=True, idempotency_key="auto/x",
+                                   defer_idempotency_until_disconnect=True)
+        self.assertEqual((again.request_id, again.completed_response.body), (local.request_id, b"answer"))
+
+    async def test_acknowledgment_is_every_written_byte_acked(self):
+        server_sockets = []
+
+        async def accept(reader, writer):
+            server_sockets.append(writer)
+        server = await asyncio.start_server(accept, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        reader, writer = await asyncio.open_connection("127.0.0.1", port)
+        for _ in range(100):
+            if server_sockets:
+                break
+            await asyncio.sleep(0.01)
+        peer = server_sockets[0]
+        peer.write(b"x" * 100_000)  # The client's kernel acknowledges it unread.
+        self.assertTrue(await api._acknowledged(peer.transport, 2.0))
+        with patch.object(api.fcntl, "ioctl", return_value=(17).to_bytes(4, "little")):
+            self.assertFalse(await api._acknowledged(peer.transport, 0.05))  # Still unacked.
+        self.assertFalse(await api._acknowledged(None, 0.05))
+        writer.close()
+        peer.close()
+        server.close()
+        await server.wait_closed()
 
     async def bound_state(self, **kwargs):
         self.deployment = "bound"

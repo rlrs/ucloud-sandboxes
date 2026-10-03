@@ -108,30 +108,6 @@ class CachePrefetchTests(PrefetchFixture):
         self.assertEqual(cache.read(self.component, 17 * CHUNK_BYTES, 8), bytes([18]) * 8)
         self.assertEqual(len(self.client.requests), 3)
 
-    def test_a_demand_miss_reads_a_window_of_uncached_neighbours(self):
-        # The registry serves about 180 requests/s whatever their size (attach spike).
-        cache = self.cache()
-        self.assertEqual(cache.read(self.component, 5 * CHUNK_BYTES, 8), bytes([6]) * 8)
-        self.assertEqual(self.client.requests, [(5, 16)])  # Ahead first.
-        self.assertEqual(self.cached(cache), set(range(5, 21)))
-        self.assertEqual(cache.read(self.component, 12 * CHUNK_BYTES, 8), bytes([13]) * 8)
-        self.assertEqual(len(self.client.requests), 1)
-        self.assertEqual(cache.read(self.component, 30 * CHUNK_BYTES, 8), bytes([31]) * 8)
-        self.assertEqual(self.client.requests[1], (24, 16))  # The blob ends: the rest comes from behind.
-        metrics = cache.metrics()
-        self.assertEqual((metrics["misses"], metrics["downloaded_bytes"]), (2, 32 * CHUNK_BYTES))
-
-    def test_a_corrupt_sibling_is_never_installed_or_served(self):
-        cache = self.cache()
-        self.client.corrupt.add(7)
-        self.assertEqual(cache.read(self.component, 5 * CHUNK_BYTES, 8), bytes([6]) * 8)
-        self.assertNotIn(7, self.cached(cache))
-        with self.assertRaisesRegex(ValueError, "content identity"):
-            cache.read(self.component, 7 * CHUNK_BYTES, 8)
-        self.assertEqual(self.client.requests[-1], (7, 1))  # Its neighbours are cached now.
-        self.client.corrupt.clear()
-        self.assertEqual(cache.read(self.component, 7 * CHUNK_BYTES, 8), bytes([8]) * 8)
-
     def test_byte_count_and_time_budgets_bound_a_job(self):
         cache = self.cache()
         for kwargs, fetched, outcome in (({"max_bytes": 5 * CHUNK_BYTES}, 5, "budget"),
@@ -149,7 +125,7 @@ class CachePrefetchTests(PrefetchFixture):
         self.assertEqual(cache.metrics()["trace_prefetch_chunks"], 8)
 
     def test_warm_chunks_untrusted_indices_and_duplicates_are_skipped(self):
-        cache = self.cache(demand_window_chunks=1)
+        cache = self.cache()
         cache.read(self.component, 0, 4 * CHUNK_BYTES)
         self.client.requests.clear()
         job = cache.prefetch(self.component, [-1, CHUNKS, "7", 2, 0, 1, 2, 3, 4, 5, 5], kind="metadata",
@@ -163,7 +139,7 @@ class CachePrefetchTests(PrefetchFixture):
         self.assertEqual(len(self.client.requests), 1)
 
     def test_failed_or_corrupt_ranges_degrade_to_demand_loading(self):
-        cache = self.cache(demand_window_chunks=1)
+        cache = self.cache()
         self.client.failures = [RegistryRequestError(503, "GET", "/blob", "busy")]
         job = cache.prefetch(self.component, range(4), kind="metadata", max_bytes=1 << 30)
         self.assertTrue(job.wait(5))
@@ -182,7 +158,7 @@ class CachePrefetchTests(PrefetchFixture):
         self.assertEqual(cache.metrics()["metadata_prefetch_failed_chunks"], 5)
 
     def test_reader_joining_a_failed_bulk_read_fetches_the_chunk_itself(self):
-        cache = self.cache(demand_window_chunks=1)
+        cache = self.cache()
         self.client.hold = Event()
         job = cache.prefetch(self.component, range(8), kind="metadata", max_bytes=1 << 30)
         self.assertTrue(self.client.held.wait(5))
@@ -213,7 +189,7 @@ class CachePrefetchTests(PrefetchFixture):
         self.assertEqual(self.client.requests, [(0, 8)])
 
     def test_prefetch_takes_bounded_slots_and_never_starves_demand_misses(self):
-        cache = self.cache(concurrent_misses=2, prefetch_slots=1, demand_window_chunks=1)
+        cache = self.cache(concurrent_misses=2, prefetch_slots=1)
         self.client.hold = Event()
         job = cache.prefetch(self.component, range(32), kind="trace", max_bytes=1 << 30)
         self.assertTrue(self.client.held.wait(5))

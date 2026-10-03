@@ -1,0 +1,559 @@
+{
+ "demand": {
+  "environment_io": {
+   "cached_bytes": 1499398144,
+   "downloaded_bytes": 1499398144,
+   "hits": 11522,
+   "metadata_hint_absent": 39,
+   "misses": 406,
+   "trace_chunks_recorded": 1781,
+   "trace_hint_absent": 39,
+   "trace_recordings_started": 38,
+   "traces_recorded": 38
+  },
+  "n": 20,
+  "rows": [
+   {
+    "create": 3.171,
+    "done": 11.079,
+    "import_sys": {
+     "rc": 0,
+     "wall": 3.731
+    },
+    "index": "0",
+    "pip_version": {
+     "rc": 0,
+     "wall": 4.103
+    }
+   },
+   {
+    "create": 3.106,
+    "done": 9.295,
+    "import_sys": {
+     "rc": 0,
+     "wall": 1.09
+    },
+    "index": "1",
+    "pip_version": {
+     "rc": 0,
+     "wall": 5.023
+    }
+   },
+   {
+    "create": 1.056,
+    "done": 5.647,
+    "import_sys": {
+     "rc": 0,
+     "wall": 1.051
+    },
+    "index": "2",
+    "pip_version": {
+     "rc": 0,
+     "wall": 3.463
+    }
+   },
+   {
+    "create": 4.929,
+    "done": 9.307,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.381
+    },
+    "index": "3",
+    "pip_version": {
+     "rc": 0,
+     "wall": 3.92
+    }
+   },
+   {
+    "create": 0.998,
+    "done": 9.308,
+    "import_sys": {
+     "rc": 0,
+     "wall": 2.327
+    },
+    "index": "4",
+    "pip_version": {
+     "rc": 0,
+     "wall": 5.906
+    }
+   },
+   {
+    "create": 4.503,
+    "done": 11.127,
+    "import_sys": {
+     "rc": 0,
+     "wall": 2.63
+    },
+    "index": "5",
+    "pip_version": {
+     "rc": 0,
+     "wall": 3.916
+    }
+   },
+   {
+    "create": 1.184,
+    "done": 1.606,
+    "import_sys": {
+     "rc": 127,
+     "wall": 0.311
+    },
+    "index": "6",
+    "pip_version": {
+     "rc": 127,
+     "wall": 0.031
+    }
+   },
+   {
+    "create": 1.388,
+    "done": 2.049,
+    "import_sys": {
+     "rc": 127,
+     "wall": 0.554
+    },
+    "index": "7",
+    "pip_version": {
+     "rc": 127,
+     "wall": 0.027
+    }
+   },
+   {
+    "create": 4.397,
+    "done": 5.136,
+    "import_sys": {
+     "rc": 127,
+     "wall": 0.629
+    },
+    "index": "8",
+    "pip_version": {
+     "rc": 127,
+     "wall": 0.029
+    }
+   },
+   {
+    "create": 1.555,
+    "done": 2.193,
+    "import_sys": {
+     "rc": 127,
+     "wall": 0.523
+    },
+    "index": "9",
+    "pip_version": {
+     "rc": 127,
+     "wall": 0.03
+    }
+   },
+   {
+    "create": 2.177,
+    "done": 10.185,
+    "import_sys": {
+     "rc": 0,
+     "wall": 2.529
+    },
+    "index": "10",
+    "pip_version": {
+     "rc": 0,
+     "wall": 5.397
+    }
+   },
+   {
+    "create": 2.859,
+    "done": 9.306,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.67
+    },
+    "index": "11",
+    "pip_version": {
+     "rc": 0,
+     "wall": 5.694
+    }
+   },
+   {
+    "create": 5.494,
+    "done": 11.767,
+    "import_sys": {
+     "rc": 0,
+     "wall": 2.67
+    },
+    "index": "12",
+    "pip_version": {
+     "rc": 0,
+     "wall": 3.518
+    }
+   },
+   {
+    "create": 1.91,
+    "done": 10.742,
+    "import_sys": {
+     "rc": 0,
+     "wall": 2.84
+    },
+    "index": "13",
+    "pip_version": {
+     "rc": 0,
+     "wall": 5.906
+    }
+   },
+   {
+    "create": 1.169,
+    "done": 10.03,
+    "import_sys": {
+     "rc": 0,
+     "wall": 2.88
+    },
+    "index": "14",
+    "pip_version": {
+     "rc": 0,
+     "wall": 5.893
+    }
+   },
+   {
+    "create": 6.907,
+    "done": 9.453,
+    "import_sys": {
+     "rc": 0,
+     "wall": 2.131
+    },
+    "index": "15",
+    "pip_version": {
+     "rc": 127,
+     "wall": 0.329
+    }
+   },
+   {
+    "create": 2.607,
+    "done": 10.552,
+    "import_sys": {
+     "rc": 0,
+     "wall": 2.779
+    },
+    "index": "16",
+    "pip_version": {
+     "rc": 0,
+     "wall": 5.078
+    }
+   },
+   {
+    "create": 2.414,
+    "done": 3.03,
+    "import_sys": {
+     "rc": 127,
+     "wall": 0.493
+    },
+    "index": "17",
+    "pip_version": {
+     "rc": 127,
+     "wall": 0.035
+    }
+   },
+   {
+    "create": 5.06,
+    "done": 10.431,
+    "import_sys": {
+     "rc": 0,
+     "wall": 1.748
+    },
+    "index": "18",
+    "pip_version": {
+     "rc": 0,
+     "wall": 3.533
+    }
+   },
+   {
+    "create": 5.429,
+    "done": 9.305,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.43
+    },
+    "index": "19",
+    "pip_version": {
+     "rc": 0,
+     "wall": 3.356
+    }
+   }
+  ],
+  "wall": 11.767
+ },
+ "traced": {
+  "environment_io": {
+   "cached_bytes": 495960064,
+   "downloaded_bytes": 495960064,
+   "hits": 11856,
+   "metadata_hint_absent": 39,
+   "misses": 23,
+   "prefetch_joined_reads": 16,
+   "trace_hint_present": 39,
+   "trace_prefetch_bytes": 427819008,
+   "trace_prefetch_chunks": 1632,
+   "trace_prefetch_jobs": 39,
+   "trace_prefetch_seconds": 6.997,
+   "trace_prefetch_skipped_chunks": 150
+  },
+  "n": 20,
+  "rows": [
+   {
+    "create": 3.297,
+    "done": 7.439,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.86
+    },
+    "index": "0",
+    "pip_version": {
+     "rc": 0,
+     "wall": 3.281
+    }
+   },
+   {
+    "create": 1.144,
+    "done": 5.115,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.723
+    },
+    "index": "1",
+    "pip_version": {
+     "rc": 0,
+     "wall": 3.247
+    }
+   },
+   {
+    "create": 1.073,
+    "done": 3.6,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.4
+    },
+    "index": "2",
+    "pip_version": {
+     "rc": 0,
+     "wall": 2.125
+    }
+   },
+   {
+    "create": 1.443,
+    "done": 5.106,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.103
+    },
+    "index": "3",
+    "pip_version": {
+     "rc": 0,
+     "wall": 3.556
+    }
+   },
+   {
+    "create": 2.771,
+    "done": 5.114,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.1
+    },
+    "index": "4",
+    "pip_version": {
+     "rc": 0,
+     "wall": 2.237
+    }
+   },
+   {
+    "create": 2.93,
+    "done": 7.067,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.402
+    },
+    "index": "5",
+    "pip_version": {
+     "rc": 0,
+     "wall": 3.728
+    }
+   },
+   {
+    "create": 1.584,
+    "done": 1.658,
+    "import_sys": {
+     "rc": 127,
+     "wall": 0.04
+    },
+    "index": "6",
+    "pip_version": {
+     "rc": 127,
+     "wall": 0.027
+    }
+   },
+   {
+    "create": 0.864,
+    "done": 0.94,
+    "import_sys": {
+     "rc": 127,
+     "wall": 0.039
+    },
+    "index": "7",
+    "pip_version": {
+     "rc": 127,
+     "wall": 0.029
+    }
+   },
+   {
+    "create": 4.034,
+    "done": 4.188,
+    "import_sys": {
+     "rc": 127,
+     "wall": 0.118
+    },
+    "index": "8",
+    "pip_version": {
+     "rc": 127,
+     "wall": 0.025
+    }
+   },
+   {
+    "create": 1.263,
+    "done": 1.376,
+    "import_sys": {
+     "rc": 127,
+     "wall": 0.073
+    },
+    "index": "9",
+    "pip_version": {
+     "rc": 127,
+     "wall": 0.029
+    }
+   },
+   {
+    "create": 1.752,
+    "done": 6.478,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.69
+    },
+    "index": "10",
+    "pip_version": {
+     "rc": 0,
+     "wall": 4.022
+    }
+   },
+   {
+    "create": 2.316,
+    "done": 5.113,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.14
+    },
+    "index": "11",
+    "pip_version": {
+     "rc": 0,
+     "wall": 2.645
+    }
+   },
+   {
+    "create": 3.066,
+    "done": 7.454,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.608
+    },
+    "index": "12",
+    "pip_version": {
+     "rc": 0,
+     "wall": 3.765
+    }
+   },
+   {
+    "create": 1.53,
+    "done": 5.905,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.375
+    },
+    "index": "13",
+    "pip_version": {
+     "rc": 0,
+     "wall": 3.985
+    }
+   },
+   {
+    "create": 3.705,
+    "done": 7.681,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.69
+    },
+    "index": "14",
+    "pip_version": {
+     "rc": 0,
+     "wall": 3.271
+    }
+   },
+   {
+    "create": 5.133,
+    "done": 5.798,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.364
+    },
+    "index": "15",
+    "pip_version": {
+     "rc": 127,
+     "wall": 0.283
+    }
+   },
+   {
+    "create": 3.871,
+    "done": 7.589,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.668
+    },
+    "index": "16",
+    "pip_version": {
+     "rc": 0,
+     "wall": 3.031
+    }
+   },
+   {
+    "create": 1.924,
+    "done": 2.084,
+    "import_sys": {
+     "rc": 127,
+     "wall": 0.109
+    },
+    "index": "17",
+    "pip_version": {
+     "rc": 127,
+     "wall": 0.031
+    }
+   },
+   {
+    "create": 3.574,
+    "done": 6.687,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.61
+    },
+    "index": "18",
+    "pip_version": {
+     "rc": 0,
+     "wall": 2.482
+    }
+   },
+   {
+    "create": 4.189,
+    "done": 6.112,
+    "import_sys": {
+     "rc": 0,
+     "wall": 0.267
+    },
+    "index": "19",
+    "pip_version": {
+     "rc": 0,
+     "wall": 1.633
+    }
+   }
+  ],
+  "wall": 7.681
+ }
+}

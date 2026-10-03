@@ -100,15 +100,56 @@ of production component blobs; MB/s with p50 latency):
 4. **The cap is the registry's per-request cost at 256 KiB per request.** Each
    node gets about 45 MB/s, shared across nodes. The 512 baseline saw about
    90 MB/s across three nodes.
-5. **Fix: fetch larger windows per miss.**
-   - Contiguous uncached chunks of the same component blob go in one range,
-     up to 2–4 MiB. EROFS component blobs are contiguous 256 KiB chunks, so
-     neighbours coalesce trivially.
-   - Trace replay goes in coalesced runs.
-   - The chunk store's RAFS path already does this (1 MiB demand windows, 4 MiB
-     store-node extents).
-   - Expected: several times the per-node rate, bounded by Volume bandwidth
-     (about 400 MB/s cold) and gateway NIC. Fetched bytes rise somewhat, from
-     3% today.
-   - Then re-measure attach concurrency, since the contention behind 0.8.3
-     should shrink with it.
+5. **Tried, then reverted: fetch larger windows per miss.** See the next
+   section.
+
+## Coalesced demand windows (tested and reverted, 2026-10-03)
+
+**What was tried.** Commit `65738e8` read up to N contiguous uncached chunks
+per miss in one range, then installed the verified siblings. It was measured
+on a fresh CCX63 with the same image set and bursts. The size sweep is
+[window_sweep.sh](window_sweep.sh), which patches the spike VM only. Data is
+in [raw-coalesced/](raw-coalesced/).
+
+**64 images, serial attach** (demand mode first, traced second):
+
+| window | wall, s | create p50, s | `import sys` p50 / p95, s | fetched | rate |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 (0.8.4) | 31.2 / 24.6 | 8.0 / 8.5 | 1.05 / 2.3 · 0.43 / 1.6 | 1.27 GB | 41 MB/s |
+| 2 | 32.4 / 26.6 | 10.1 / 8.9 | 1.34 / 5.1 · 0.40 / 1.3 | 1.58 GB | 49 MB/s |
+| 4 | 29.4 / 25.0 | 10.3 / 8.4 | 1.22 / 4.0 · 0.42 / 1.1 | 2.10 GB | 71 MB/s |
+| 16 | 35.5 / 26.6 | 11.5 / 9.2 | 1.59 / 5.2 · 0.49 / 1.2 | 4.31 GB | 121 MB/s |
+
+With 8 attach slots, windows of 4 and 16 gave 33.0 and 37.9 s demand
+against 36.0 s, and `import sys` p50 stayed 11–15 s.
+
+**Why it did not help:**
+- **First commands read sparsely.** Fetched bytes grew 1.2–3.4× while useful
+  bytes did not.
+- **The node, not the registry, capped large windows.** At 16 chunks the node
+  issued about 34 requests/s, each taking about 230 ms on the node against
+  44 ms in the raw probe. The registry can serve 180 requests/s. The node's
+  Python fetch path (hashing, chunk files, thread contention) is the limit.
+
+The change was reverted (`b0f9a9f`). Single-chunk misses stay.
+
+## What this leaves
+
+- **On one node, the burst is bounded by two coupled limits:**
+  1. serial attach at about 170 ms per component (NBD bind 129 ms), which
+     sets the create staircase;
+  2. the Python miss path at about 40–50 MB/s of sparse 256 KiB reads, which
+     sets first-command time.
+
+  Parallel attach trades the first for the second.
+- **Trace replay is the one lever that already works:** about 20% less wall
+  time and 2.5× faster `import sys` (0.43 against 1.05 s). But traces are
+  node-local. A fleet that scales up from zero, as in the 512 baseline, has
+  none, so every burst runs in demand mode.
+- **Next levers, in order:**
+  1. shared startup traces (C2.7), so fresh nodes replay;
+  2. warm caches for scheduled runs (C9.3);
+  3. the native image device (C2.1), to lift the per-node miss path and make
+     parallel attach pay;
+  4. M2's store node, with 4 MiB extents on the private network, which the
+     M1 gate's burst comparison measures.

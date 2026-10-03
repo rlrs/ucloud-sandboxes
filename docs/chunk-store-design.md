@@ -322,6 +322,17 @@ after each pack. Lookups are concurrent WAL reads.
 
 ## 4. Read path on workers
 
+**No index work at run time.** With a store node, registration builds each
+component's locator (`meta/<component>.<epoch>.loc`) and every nydusd blob's
+layout (`meta/<blob>.layout`, its tail-table chunks located) once and stores
+them. The index then only reads a stored locator, and the store node reads a
+blob's layout as an object. Computing them on demand saturated the
+single-process index in M1 gate run 3:
+- 20 cold attaches at once took 44 s, against 0.7 s for one;
+- every worker's reads timed out for about 4.5 minutes while nydusd retried.
+
+Compaction (M4) must rewrite the layouts and locators it bumps.
+
 1. **Resolve.** Today the worker reads the root from the OCI annotation
    (`environment_rootfs.py:171-213` → `environment_artifact.py:717-735`). New:
    the gateway dispatches `(config digest, root digest)` and the worker calls

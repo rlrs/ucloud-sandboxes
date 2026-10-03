@@ -52,12 +52,12 @@ HEDGE_MIN_SECONDS, HEDGE_MAX_SECONDS, MAX_HEDGES = 0.15, 2.0, 2
 READ_BLOCK = 256 * 1024  # Progress granularity of a fill.
 _RETRYABLE = {408, 429, 500, 502, 503, 504}
 # Only the chunk store's content-addressed objects; a read token reads nothing else.
-_KEY = re.compile(r"packs/([0-9a-f]{2})/([0-9a-f]{64})\.pack|meta/([0-9a-f]{64})\.(boot\.zst|map|tail)")
+_KEY = re.compile(r"packs/([0-9a-f]{2})/([0-9a-f]{64})\.pack|meta/([0-9a-f]{64})\.(boot\.zst|map|tail|layout)")
 _KINDS = {"pack": "packs/{0}/{1}.pack", "boot": "meta/{1}.boot.zst", "map": "meta/{1}.map",
-          "tail": "meta/{1}.tail"}
+          "tail": "meta/{1}.tail", "layout": "meta/{1}.layout"}
 # nydusd's registry backend: GET/HEAD /v2/<repository>/blobs/sha256:<blob id>.
 _VIRTUAL = re.compile(r"/v2/virtual/([0-9a-f]{64})/blobs/sha256:([0-9a-f]{64})")
-_FILE = re.compile(r"([0-9a-f]{64})\.(pack|boot|map|tail)\.(\d{1,6})\.(\d{1,12})\.([0-9a-f]{64})")
+_FILE = re.compile(r"([0-9a-f]{64})\.(pack|boot|map|tail|layout)\.(\d{1,6})\.(\d{1,12})\.([0-9a-f]{64})")
 
 
 def object_identity(relative):
@@ -67,7 +67,7 @@ def object_identity(relative):
         raise LookupError("not a chunk store object")
     if match.group(2):
         return match.group(2), "pack"
-    return match.group(3), {"boot.zst": "boot", "map": "map", "tail": "tail"}[match.group(4)]
+    return match.group(3), {"boot.zst": "boot", "map": "map", "tail": "tail", "layout": "layout"}[match.group(4)]
 
 
 def object_key(digest, kind):
@@ -751,12 +751,17 @@ class VirtualBlobs:
             if blob_id in self._layouts:
                 self._layouts.move_to_end(blob_id)
                 return self._layouts[blob_id]
-        from .chunk_store import RAW, TAIL_ENTRY, TAIL_HEADER, ZSTD, decode_tail_table
+        from .chunk_store import Locator, RAW, TAIL_ENTRY, TAIL_HEADER, ZSTD, decode_tail_table
         tail = f"meta/{blob_id}.tail"
         total, header = self._bytes(tail, 0, TAIL_HEADER.size - 1)
         count = TAIL_HEADER.unpack(header)[1]
         chunks, start = decode_tail_table(self._bytes(tail, 0, TAIL_HEADER.size + count * TAIL_ENTRY.size - 1)[1])
-        found = self.index.locate([digest for _, _, digest, _ in chunks])
+        try:  # Built at registration; the index is the fallback for older conversions.
+            found = Locator.decode(self._bytes(object_key(blob_id, "layout"))[1])
+        except NotFound:
+            found = self.index.locate([digest for _, _, digest, _ in chunks])
+        if len(found.entries) != len(chunks):
+            raise ValueError("a blob layout does not match its tail table")
         segments = []
         for (coff, csize, _, compressed), (pack, offset, clen, flags) in zip(chunks, found.entries):
             if clen != csize or flags != (ZSTD if compressed else RAW):

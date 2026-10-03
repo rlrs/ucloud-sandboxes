@@ -365,6 +365,19 @@ def chunk_map_key(prefix, digest):
     return f"{prefix}/meta/{require_hex(digest)}.map"
 
 
+def locator_key(prefix, component_hex, epoch):
+    """A component's worker locator for one epoch, built once at registration
+    (a store node only): attaches read it instead of querying the index."""
+    return f"{prefix}/meta/{require_hex(component_hex)}.{int(epoch)}.loc"
+
+
+def blob_layout_key(prefix, blob_id):
+    """A nydus blob's chunk locations, in its tail table's order (an encoded
+    Locator), built at registration: virtual blob reads never query the index.
+    Compaction (M4) must rewrite it with the locator epochs it bumps."""
+    return f"{prefix}/meta/{require_hex(blob_id)}.layout"
+
+
 def tail_key(prefix, blob_id):
     """A nydus blob's chunk table and tail (encode_tail); only conversions
     for nydusd keep one (spike, docs/benchmarks/nydusd-spike-2026-10-03)."""

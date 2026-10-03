@@ -73,8 +73,9 @@ import unittest
 # logged), and an answered call is never escalated to hibernate. +4 tunnel
 # calls (the relay benchmark's agents) take the local path too, +17 the relay
 # reads acknowledgment from a duplicated socket (a fast reader's close raced it).
-# Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 112_705
+# +36 locators and nydusd blob layouts stored at registration: runtime reads no
+# longer query the index (gate run 3's stall). Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 112_741
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

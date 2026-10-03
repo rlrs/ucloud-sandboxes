@@ -75,6 +75,29 @@ class VirtualBlobTests(unittest.TestCase):
                 for start, length in ((1, 7), (len(expected) // 3, len(expected) // 2), (len(expected) - 50, 50)):
                     self.assertEqual(self.get(component, blob, start, length), expected[start:start + length])
 
+    def test_registration_with_a_store_node_stores_layouts_and_the_locator(self):
+        # Gate run 3: computing locators per attach saturated the index. With
+        # a store node, registration builds them once and reads need no index.
+        service = self.store.index.service
+        service.store_url = "http://store-node"
+        with mock.patch.object(service.index, "locate", wraps=service.index.locate) as locate:
+            for root in self.roots:
+                environment = load_environment(self.store.registry, root)
+                component = self.store.registry.load(environment.components[0])
+                self.store.index.writer.register(environment.components[0], component.bootstrap["digest"],
+                                                 component.chunk_map)
+            built = locate.call_count
+            service._locators.clear()  # A restarted index serves the stored locator.
+            locator = self.store.index.reader.locator(environment.components[0])
+        self.assertGreater(built, 0)
+        self.assertEqual(locate.call_count, built)  # Not recomputed.
+        self.assertTrue(all(url.startswith("http://store-node/") for _, url in locator.packs))
+        self.server.blobs = VirtualBlobs(self.server.blobs.node, None)  # No index at all.
+        for component_hex, blob in self.blobs_kept():
+            expected = (self.kept / blob).read_bytes()
+            with self.subTest(blob=blob):
+                self.assertEqual(self.get(component_hex, blob, 0, len(expected)), expected)
+
     def test_head_sizes_a_blob_larger_than_one_response(self):
         component, blob = max(self.blobs_kept(), key=lambda item: (self.kept / item[1]).stat().st_size)
         with mock.patch("ucloud_sandboxes.chunk_store_node.MAX_RESPONSE_BYTES", 4096):
@@ -104,7 +127,7 @@ class TailLivenessTests(unittest.TestCase):
             store.registry, store.converter.convert(REPOSITORY, "a")["root"]).components[0])
         gone, service = hashlib.sha256(b"x" * 5000).digest(), store.index.service
         self.assertNotIn(gone, service.chunk_map(component.chunk_map["digest"]).ids)
-        self.assertIn(gone, service._tail_ids(component.bootstrap["digest"]))
+        self.assertIn(gone, [chunk for _, ids in service._blob_tails(component.bootstrap["digest"]) for chunk in ids])
         store.index.index._writer.execute("UPDATE chunks SET condemned = 1 WHERE id = ?", (gone,))
         with self.assertRaises(MissingChunks):  # GC must keep it while the root lives.
             service.register({"component": "sha256:" + "c" * 64, "bootstrap": component.bootstrap["digest"],

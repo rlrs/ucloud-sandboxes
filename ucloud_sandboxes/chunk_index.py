@@ -22,8 +22,9 @@ import time
 from urllib.parse import parse_qs, quote, urlsplit
 
 from .chunk_store import (MAX_BOOTSTRAP_BYTES, MAX_MAP_ENTRIES, MAX_PACK_BYTES, ChunkMap, Locator, PACK_TRAILER,
-                          bootstrap_key, chunk_map_key, decode_tail_table, pack_key, parse_bootstrap,
-                          parse_pack_tail, require_hex, tail_key, zstd_content_size, zstd_decompress)
+                          blob_layout_key, bootstrap_key, chunk_map_key, decode_tail_table, locator_key, pack_key,
+                          parse_bootstrap, parse_pack_tail, require_hex, tail_key, zstd_content_size,
+                          zstd_decompress)
 from .environment_artifact import RAFS_MAX_CHUNK_MAP_BYTES, content_digest, require_digest
 from .managed_registry import RegistryRequestError
 
@@ -447,11 +448,21 @@ class ChunkIndexService:
         chunk_map = request["chunk_map"]
         parsed = self.chunk_map(chunk_map["digest"], chunk_map["size"])
         bootstrap = require_digest(request["bootstrap"])
-        return self.index.register(request["component"], chunk_map["digest"], bootstrap, parsed,
-                                   tail_ids=self._tail_ids(bootstrap))
+        tails = self._blob_tails(bootstrap)
+        result = self.index.register(request["component"], chunk_map["digest"], bootstrap, parsed,
+                                     tail_ids=[chunk for _, ids in tails for chunk in ids])
+        if self.store_url is not None:
+            # Runtime reads never query the index (gate run 3: 20 cold attaches
+            # computing locators at once took 44 s and stalled every worker).
+            for blob_id, ids in tails:
+                key = blob_layout_key(self.store.prefix, blob_id)
+                if self.store.size(key) is None:
+                    self.store.put_bytes(key, self.locate(ids, url=self._worker_url).encode())
+            self.locator(request["component"])
+        return result
 
-    def _tail_ids(self, bootstrap_digest):
-        """Every chunk of the bootstrap's blobs that have a tail (nydusd conversions).
+    def _blob_tails(self, bootstrap_digest):
+        """(blob id, chunk ids) of the bootstrap's blobs that have a tail (nydusd conversions).
 
         A merged bootstrap omits chunks only whiteout-hidden files use, but
         nydusd and block readahead read across them, so they live with the
@@ -461,15 +472,15 @@ class ChunkIndexService:
         bootstrap = zstd_decompress(compressed, zstd_content_size(compressed, MAX_BOOTSTRAP_BYTES))
         if content_digest(bootstrap) != bootstrap_digest:
             raise ValueError("bootstrap identity mismatch")
-        ids = []
+        tails = []
         for device in parse_bootstrap(bootstrap).devices:
             key = tail_key(self.store.prefix, device[0])
             size = self.store.size(key)
             if size is not None:  # The table plus nydus's own blob metadata.
                 if size > MAX_TAIL_BYTES:
                     raise ValueError("nydus blob tail exceeds its bound")
-                ids.extend(entry[2] for entry in decode_tail_table(self.store.get(key, size))[0])
-        return ids
+                tails.append((device[0], [entry[2] for entry in decode_tail_table(self.store.get(key, size))[0]]))
+        return tails
 
     def _worker_url(self, key):
         if self.store_url is None:
@@ -499,7 +510,14 @@ class ChunkIndexService:
             return found[1]
         meta = {"bootstrap": self._worker_url(bootstrap_key(self.store.prefix, bootstrap_digest[7:])),
                 "chunk_map": self._worker_url(chunk_map_key(self.store.prefix, chunk_map_digest[7:]))}
-        encoded = self.locate(list(self.chunk_map(chunk_map_digest).ids), meta, epoch, self._worker_url).encode()
+        stored = locator_key(self.store.prefix, component[7:], epoch) if self.store_url else None
+        encoded = None
+        if stored is not None and (size := self.store.size(stored)) is not None:
+            encoded = self.store.get(stored, size)  # Built at registration; never recomputed per attach.
+        if encoded is None:
+            encoded = self.locate(list(self.chunk_map(chunk_map_digest).ids), meta, epoch, self._worker_url).encode()
+            if stored is not None:  # A registration from before stored locators: once.
+                self.store.put_bytes(stored, encoded)
         lifetime = float("inf") if self.store_url else self.store.url_seconds / 2
         self._cached(self._locators, key, (time.monotonic() + lifetime, encoded))
         return encoded

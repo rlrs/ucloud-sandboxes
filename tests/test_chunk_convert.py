@@ -7,7 +7,7 @@ import unittest
 
 from tests.chunk_store_support import REPOSITORY, ChunkStoreFixture, layer, sample_images, signing
 from ucloud_sandboxes.chunk_convert import (STEPS, compare_trees, expected_tree, overlay_whiteouts,
-                                            strip_environment_annotation)
+                                            path_ordered_layer, strip_environment_annotation)
 from ucloud_sandboxes.environment_artifact import (ENVIRONMENT_ANNOTATION, RafsEnvironmentComponent, load_image_environment,
                                                    load_environment)
 
@@ -156,6 +156,21 @@ class TreeTests(unittest.TestCase):
         for name, label in (("lib/y", "lib/y"), ("lib/y2", "lib/y"), ("pkgs/z", "lib/z"), ("lib/z", "lib/z")):
             actual[name] = actual[name][:-1] + (label,)
         self.assertEqual(compare_trees(tree, actual), [])
+
+    def test_a_layer_out_of_path_order_is_rewritten_in_order_with_the_same_tree(self):
+        # OpenSWE's slim layers: whiteouts first, then './' directories, then a return to r/.
+        lower = self.tars(layer([("r/a/X/f", b"x"), ("r/a/Y/g", b"y"), ("t/keep", b"k")]))
+        upper = self.tars(layer([("t/.wh.keep", b""), ("./t", "dir"), ("r/a/.wh.X", b""), ("./r", "dir"),
+                                 ("z/data", b"d"), ("q/link", ("link", "z/data")), ("z/late", ("link", "z/data"))]))[0]
+        ordered = self.root / "ordered.tar"
+        self.assertTrue(path_ordered_layer(upper, ordered))
+        members = read(ordered)
+        self.assertEqual(list(members), ["q/link", "./r", "r/a/.wh.X", "./t", "t/.wh.keep", "z/data", "z/late"])
+        self.assertTrue(members["q/link"].isfile() and members["z/data"].linkname == "q/link")
+        self.assertEqual(members["z/late"].linkname, "q/link")
+        self.assertEqual(expected_tree(lower + [ordered]), expected_tree(lower + [upper]))
+        self.assertFalse(path_ordered_layer(ordered, self.root / "again.tar"))
+        self.assertFalse((self.root / "again.tar").exists())
 
     def test_overlay_whiteouts_for_per_layer_stacking(self):
         source = self.tars(layer([("d/.wh.x", b""), ("e/.wh..wh..opq", b""), ("e/new", b"5")], compress=False))[0]

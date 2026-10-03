@@ -11,12 +11,14 @@ rerun converges on the same root digest.
 from __future__ import annotations
 
 from contextlib import contextmanager
+import copy
 from dataclasses import dataclass, field
 import gzip
 import hashlib
 import json
 import logging
 import os
+import shutil
 from pathlib import Path
 import socket
 import stat
@@ -44,7 +46,7 @@ MAX_LAYERS_PER_ROOT = 33  # The base and 32 toolkits (ImmutableEnvironment).
 def converter_identity(layout):
     """Everything besides the layer that decides a layer bootstrap's bytes."""
     whiteouts = "oci" if layout == "image" else "overlayfs"
-    return f"{RAFS_CONVERTER};fs6;sha256;zstd;0x40000;owners;whiteouts={whiteouts}"  # never --repeatable: it zeroes owners
+    return f"{RAFS_CONVERTER};fs6;sha256;zstd;0x40000;owners;whiteouts={whiteouts};order=path"  # never --repeatable: it zeroes owners
 
 
 def strip_environment_annotation(document):
@@ -54,6 +56,55 @@ def strip_environment_annotation(document):
                    if name != ENVIRONMENT_ANNOTATION}
     stripped = {name: value for name, value in document.items() if name != "annotations"}
     return stripped | ({"annotations": annotations} if annotations else {})
+
+
+def _path_order(member):
+    name = _normal(member.name)
+    return tuple(name.split("/")) if name else ()
+
+
+def path_ordered_layer(source, destination):
+    """Rewrite a layer tar depth-first in path order, unless it already is:
+    nydus-image tar-rafs drops whiteouts of a layer that returns to a
+    directory it left (OpenSWE's slim layers, M1 gate). A hardlink sorted
+    before its target carries the data and the target links to it. Returns
+    False, writing nothing, for a tar already in order (docker, BuildKit)."""
+    with tarfile.open(source, "r:*") as reader:
+        members = reader.getmembers()
+        keys = [_path_order(member) for member in members]
+        if all(left <= right for left, right in zip(keys, keys[1:])):
+            return False
+        plain = Path(destination).with_suffix(".plain")  # Seeking a compressed tar re-reads it.
+        reader.fileobj.seek(0)
+        with open(plain, "wb") as stream:
+            shutil.copyfileobj(reader.fileobj, stream, 1 << 20)
+    try:
+        with tarfile.open(plain, "r:") as reader, tarfile.open(destination, "w", format=tarfile.PAX_FORMAT) as writer:
+            members, latest, target = reader.getmembers(), {}, {}
+            for member in members:  # A hardlink names the file written before it.
+                if member.islnk():
+                    target[id(member)] = latest.get(_normal(member.linkname))
+                elif member.isfile():
+                    latest[_normal(member.name)] = member
+            primary = {}  # id(file member) -> the name its data went out under
+            for member in sorted(members, key=_path_order):
+                source_file = target.get(id(member)) if member.islnk() else member if member.isfile() else None
+                if source_file is not None and id(source_file) in primary:
+                    if member is source_file:
+                        member = copy.copy(member)
+                        member.type, member.size = tarfile.LNKTYPE, 0
+                    member.linkname = primary[id(source_file)]
+                    writer.addfile(member)
+                elif source_file is not None:
+                    primary[id(source_file)] = member.name
+                    data = copy.copy(source_file)
+                    data.name = member.name
+                    writer.addfile(data, reader.extractfile(source_file))
+                else:
+                    writer.addfile(member)
+    finally:
+        plain.unlink()
+    return True
 
 
 def overlay_whiteouts(source, destination):
@@ -194,12 +245,14 @@ class RafsConverter:
             return LayerResult(diff_id, bootstrap, parsed.devices[0][0] if parsed.devices else "", True), tar
         work = scratch / diff_id[7:19]
         (work / "blobs").mkdir(parents=True)
+        layer, gzipped = tar, descriptor.get("mediaType", "").endswith(("gzip", "tar.gzip"))
+        if path_ordered_layer(tar, work / "ordered.tar"):  # The verifier still reads the original.
+            layer, gzipped = work / "ordered.tar", False
         if self.layout == "layer":
             source, kind = work / "overlay.tar", ["-t", "tar-rafs", "--whiteout-spec", "none"]
-            overlay_whiteouts(tar, source)
+            overlay_whiteouts(layer, source)
         else:
-            gzipped = descriptor.get("mediaType", "").endswith(("gzip", "tar.gzip"))
-            source, kind = tar, ["-t", "targz-rafs" if gzipped else "tar-rafs"]
+            source, kind = layer, ["-t", "targz-rafs" if gzipped else "tar-rafs"]
         output = work / "layer.json"
         subprocess.run([self.nydus_image, "create", *kind, "--fs-version", "6", "--digester", "sha256",
                         "--compressor", "zstd", "--chunk-size", "0x40000",
@@ -498,10 +551,17 @@ def mount_verifier(*, devices, trusted_keys, work_root, store_node=None):
         from .environment_rafs import RafsImage, store_access, store_locator
         options = {}
         if store_node is not None:
+            from .chunk_store_node import ChunkStoreClient, locator_objects
             base_url, prefix, token = store_node
             options = {"reader": store_access(base_url, token)[0], "origin": base_url}
             signed = [(component, bootstrap, chunk_map, store_locator(locator, base_url, prefix))
                       for component, bootstrap, chunk_map, locator in signed]
+            # Warm first: a fill retries past S3's tail (p99 12 s, max 58 s with
+            # 12 converters) where a mounted read would hit the NBD timeout.
+            objects = {item["key"]: item for *_, locator in signed for item in locator_objects(locator, base_url)}
+            client = ChunkStoreClient(base_url, token)
+            if objects:
+                client.wait(client.warm(list(objects.values()))["job"], timeout=1800)
         images = [RafsImage(None, component, bootstrap, chunk_map, locator, **options)
                   for component, bootstrap, chunk_map, locator in signed]
         with TemporaryDirectory(dir=work_root) as temporary, \

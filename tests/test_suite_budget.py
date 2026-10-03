@@ -29,8 +29,9 @@ from tests.test_package_budget import package_lines
 # EROFS builder after migration. Then +276 for the M1 gate driver
 # (test_chunk_store_gate: no scenario covers an operator script) and +399 for
 # the C2.6 store node (test_chunk_store_node: needs a store node, not a scenario), +9 adapter, +16 attach knob, +6 gate fixes,
-# +24 verifier fixes from the M1 gate (replaced hardlink members, node locators).
-SUITE_LINE_BUDGET = 95_669
+# +24 verifier fixes from the M1 gate (replaced hardlink members, node locators),
+# +17 path-ordered layers.
+SUITE_LINE_BUDGET = 95_686
 SUITE = Path(__file__).resolve().parent
 
 

@@ -264,6 +264,22 @@ class StoreNodeAdapterTests(unittest.TestCase):
 
 
 class RemoteHelperTests(unittest.TestCase):
+    def test_reset_unmounts_only_image_mounts_overlays_first(self):
+        listing = ("/ x\n/s/environment-io/components/c1 erofs\n/v/ucloud-rootfs-cache/images/i1/rootfs overlay\n"
+                   "/v/ucloud-rootfs-cache/images/i2/rootfs erofs\n/home/other erofs\n")
+        calls = []
+
+        def runner(argv, **_):
+            calls.append(argv)
+            return type("Done", (), {"stdout": listing})()
+        remote.unmount_images(runner)
+        self.assertEqual([argv[1] for argv in calls[1:]], ["/v/ucloud-rootfs-cache/images/i1/rootfs",
+                                                           "/v/ucloud-rootfs-cache/images/i2/rootfs",
+                                                           "/s/environment-io/components/c1"])
+        listing += "/s/direct-runtime/bundles/m1-x.sandbox-1/rootfs overlay\n"
+        with self.assertRaises(SystemExit):
+            remote.unmount_images(runner)
+
     def test_bench_creates_carry_the_operation_a_node_agent_accepts(self):
         from ucloud_sandboxes.sandbox import SandboxOperation, SandboxSpec
         package = Path(sys.modules["ucloud_sandboxes"].__file__).parents[1]

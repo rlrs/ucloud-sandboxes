@@ -526,6 +526,23 @@ def cmd_rollback(args):
 
 # --- Canary workers: the node agent's own API, standard library only ---
 
+IMAGE_MOUNTS = ("/environment-io/components/", "/ucloud-rootfs-cache/images/")
+
+
+def unmount_images(runner=subprocess.run):
+    """With the node's services stopped and no sandbox left: unmount the image
+    mounts the backend keeps for reuse (overlays, then their EROFS lowers), the
+    drain its restart fence asks for. A sandbox bundle still mounted refuses."""
+    listing = runner(["findmnt", "-rn", "-o", "TARGET,FSTYPE"], check=True, capture_output=True, text=True).stdout
+    mounts = [line.rsplit(" ", 1) for line in listing.splitlines() if " " in line]
+    if any("/direct-runtime/bundles/" in target for target, _ in mounts):
+        raise SystemExit("refusing to unmount images under a sandbox bundle mount")
+    for kind in ("overlay", "erofs"):
+        for target in sorted((target for target, fstype in mounts if fstype == kind
+                              and any(part in target for part in IMAGE_MOUNTS)), key=len, reverse=True):
+            runner(["umount", target], check=True)
+
+
 AGENT_CLI = "/work/ucloud-sandboxes/bin/ucloud-sandboxes"
 
 
@@ -570,7 +587,7 @@ class Node:
             heartbeat = self.call("GET", "/v1/heartbeat", timeout=30)
         except OSError:
             return {}
-        found = (heartbeat.get("heartbeat") or heartbeat).get("runtime_metrics", {}).get("environment_io", {})
+        found = ((heartbeat.get("heartbeat") or heartbeat).get("runtime_metrics") or {}).get("environment_io") or {}
         return {key: value for key, value in found.items() if isinstance(value, (int, float))}
 
     def create(self, sandbox_id, image):
@@ -617,6 +634,7 @@ class Node:
         root = Path(self.state) / "environment-io"
         subprocess.run(["systemctl", "stop", "ucloud-sandbox-node.service", "ucloud-environment-io.service"],
                        check=True)
+        unmount_images()
         for name in ("cache", *(("traces",) if clear_traces else ())):
             subprocess.run(["rm", "-rf", "--one-file-system", str(root / name)], check=True)
         os.sync()

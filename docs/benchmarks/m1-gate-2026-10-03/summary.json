@@ -1,0 +1,250 @@
+{
+ "criteria": [
+  {
+   "gate": "181/181 equal (contents, modes, owners, mtimes, xattrs)",
+   "measured": "181/181",
+   "name": "full_tree",
+   "status": "pass"
+  },
+  {
+   "gate": "17.5 GB +-5%",
+   "measured": "22.89 GB",
+   "name": "stored_bytes",
+   "status": "fail"
+  },
+  {
+   "gate": "<= 1.3x S10 (pip: <= 1.3x S12 local, else 2.5 s), trace replayed",
+   "measured": [
+    {
+     "command": "import_sys",
+     "index": 0,
+     "limit": 0.598,
+     "ok": true,
+     "ratio": 0.48,
+     "wall": 0.223
+    },
+    {
+     "command": "git_status",
+     "index": 0,
+     "limit": 0.325,
+     "ok": true,
+     "ratio": 0.16,
+     "wall": 0.041
+    },
+    {
+     "command": "pip_version",
+     "index": 0,
+     "limit": 2.327,
+     "ok": true,
+     "ratio": 0.62,
+     "wall": 1.106
+    },
+    {
+     "command": "import_sys",
+     "index": 60,
+     "limit": 0.559,
+     "ok": true,
+     "ratio": 0.4,
+     "wall": 0.174
+    },
+    {
+     "command": "git_status",
+     "index": 60,
+     "limit": 0.403,
+     "ok": true,
+     "ratio": 0.31,
+     "wall": 0.095
+    },
+    {
+     "command": "pip_version",
+     "index": 60,
+     "limit": 2.327,
+     "ok": true,
+     "ratio": 0.55,
+     "wall": 0.992
+    },
+    {
+     "command": "import_sys",
+     "index": 63,
+     "limit": 0.533,
+     "ok": true,
+     "ratio": 0.41,
+     "wall": 0.169
+    },
+    {
+     "command": "git_status",
+     "index": 63,
+     "limit": 0.65,
+     "ok": true,
+     "ratio": 0.17,
+     "wall": 0.086
+    },
+    {
+     "command": "pip_version",
+     "index": 63,
+     "limit": 2.431,
+     "ok": true,
+     "ratio": 0.56,
+     "wall": 1.056
+    },
+    {
+     "command": "import_sys",
+     "index": 72,
+     "limit": 0.65,
+     "ok": true,
+     "ratio": 0.33,
+     "wall": 0.163
+    },
+    {
+     "command": "git_status",
+     "index": 72,
+     "limit": 0.676,
+     "ok": true,
+     "ratio": 0.16,
+     "wall": 0.083
+    },
+    {
+     "command": "pip_version",
+     "index": 72,
+     "limit": 2.5,
+     "ok": false,
+     "ratio": null,
+     "wall": 0.167
+    },
+    {
+     "command": "import_sys",
+     "index": 90,
+     "limit": 0.468,
+     "ok": true,
+     "ratio": 0.44,
+     "wall": 0.157
+    },
+    {
+     "command": "git_status",
+     "index": 90,
+     "limit": 0.338,
+     "ok": true,
+     "ratio": 0.15,
+     "wall": 0.038
+    },
+    {
+     "command": "pip_version",
+     "index": 90,
+     "limit": 2.5,
+     "ok": true,
+     "ratio": null,
+     "wall": 0.941
+    },
+    {
+     "command": "import_sys",
+     "index": 130,
+     "limit": 0.52,
+     "ok": true,
+     "ratio": 0.38,
+     "wall": 0.154
+    },
+    {
+     "command": "git_status",
+     "index": 130,
+     "limit": 0.338,
+     "ok": true,
+     "ratio": 0.16,
+     "wall": 0.042
+    },
+    {
+     "command": "pip_version",
+     "index": 130,
+     "limit": 2.5,
+     "ok": true,
+     "ratio": null,
+     "wall": 0.72
+    },
+    {
+     "command": "import_sys",
+     "index": 170,
+     "limit": 0.52,
+     "ok": true,
+     "ratio": 0.41,
+     "wall": 0.164
+    },
+    {
+     "command": "git_status",
+     "index": 170,
+     "limit": 0.338,
+     "ok": true,
+     "ratio": 0.18,
+     "wall": 0.046
+    },
+    {
+     "command": "pip_version",
+     "index": 170,
+     "limit": 2.5,
+     "ok": true,
+     "ratio": null,
+     "wall": 0.803
+    }
+   ],
+   "name": "cold_commands",
+   "status": "fail"
+  },
+  {
+   "gate": "<= 5.5 s (S11)",
+   "measured": "8.88 s (20 sandboxes)",
+   "name": "burst_20",
+   "status": "fail"
+  },
+  {
+   "gate": "every write-path step: killed, no visible partial image, rerun converges",
+   "measured": {
+    "failed_steps": [],
+    "steps": 11
+   },
+   "name": "crash_injection",
+   "status": "pass"
+  },
+  {
+   "gate": "10 images unpacked, tree-equal and rebuilt by today's builder",
+   "measured": null,
+   "name": "rollback_10",
+   "status": "not run"
+  }
+ ],
+ "generated": 1791016580.6168325,
+ "pass": false,
+ "prefix": "spike/m1/20261002t2212",
+ "resources": {
+  "eur_estimate": 8.26,
+  "servers": [
+   {
+    "billed_hours": 11,
+    "eur": 5.05,
+    "hours": 10.37,
+    "name": "sandboxes-m1-20261002t2212-converter",
+    "type": "ccx63"
+   },
+   {
+    "billed_hours": 11,
+    "eur": 1.68,
+    "hours": 10.38,
+    "name": "sandboxes-m1-20261002t2212-store",
+    "type": "ccx43"
+   },
+   {
+    "billed_hours": 8,
+    "eur": 1.22,
+    "hours": 7.07,
+    "name": "sandboxes-m1-20261002t2212-w1",
+    "type": "ccx43"
+   },
+   {
+    "billed_hours": 2,
+    "eur": 0.31,
+    "hours": 1.7,
+    "name": "sandboxes-m1-20261002t2212-w2",
+    "type": "ccx43"
+   }
+  ],
+  "vm_hours": 29.52
+ },
+ "run_id": "20261002t2212"
+}

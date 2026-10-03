@@ -178,10 +178,21 @@ journal.
 - **Cache size.** The cache must hold the hot set of a training run: the
   foundations plus the run's task images. 500 tasks × about 300 MB of touched
   extents is about 150 GB. A CCX43's disk caps the cache near 200 GB.
-- **Single point of failure.** After an image is released, a store-node outage
-  fails every cold start of it with EIO. Workers fail closed and never read
-  S3. Running sandboxes and warm workers are unaffected. Options are in §9;
-  the recommendation is a second store node before wave 2's release.
+- **S3 stays the store of record.** Converters write every pack to S3, and
+  the store node is only a read-through cache in front of it. Workers read the
+  store node, not S3: S12 measured S3's tail (1 MiB p99 of 5.5 s) and found
+  that private workers reach it through the gateway's NAT.
+- **Availability, not durability.** Losing the store node loses no data, and a
+  replacement refills from S3. While it is down, workers cannot fetch chunks
+  they lack: cold starts of released images fail with EIO, because workers fail
+  closed and never read S3. Running sandboxes and images already in a worker's
+  cache are unaffected.
+- **Today's exposure is the same.** All cold reads come from the one gateway
+  registry on its Volume today, and that Volume is the only copy of its data.
+  The store node holds only a cache. So M2 needs no second store node for
+  parity. It needs a replacement runbook: a new store node from its snapshot,
+  warmed from S3 with the running training's foundations. The replacement
+  time is measured once before wave 1's release.
 
 ### 4.2 Conversion capacity
 
@@ -301,13 +312,12 @@ holds.
 
 ## 9. Open decisions
 
-1. **Store-node redundancy before release** (§4.1). Options:
-   - **(a)** A second store node: replicated caches, workers fail over by
-     health. About €110/month. Recommended before wave 2's release.
-   - **(b)** Accept the single point of failure, relying on the old roots'
-     fallback until wave 1's release.
-   - **(c)** Workers fall back to S3 when the store is down. Rejected by S12:
-     slow, and through the gateway NAT.
+1. **Store-node redundancy** (§4.1). Recommended: no second node in M2; a
+   replacement runbook with a measured replacement time instead. That matches
+   today's single gateway registry. Add a second node (about €110/month,
+   workers failing over by health) only if the measured replacement time is
+   unacceptable during training runs. A worker fallback to S3 stays rejected
+   (S12: slow, and through the gateway NAT).
 2. **Release at all, given 920 GB free?** Release is what shrinks the Volume
    (decision 4). M2 could switch every wave and defer releases until M3's GC
    exists, leaving rollback trivial for longer. Recommended: switch everything

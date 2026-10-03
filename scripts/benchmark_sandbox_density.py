@@ -45,6 +45,7 @@ root.mkdir(parents=True, exist_ok=True)
 size = int(sys.argv[1]) * 1024 * 1024
 dirty_mb = int(sys.argv[2]) if len(sys.argv) > 2 else int(sys.argv[1])
 dirty_size = dirty_mb * 1024 * 1024
+compressible = len(sys.argv) > 3 and sys.argv[3] == 'compressible'
 if not 0 < dirty_size <= size:
     raise ValueError('dirty working set must be positive and no larger than resident memory')
 page_count = size // 4096
@@ -55,7 +56,10 @@ dirty_start_page = None
 memory = bytearray(size)
 for offset in range(0, size, 1024 * 1024):
     length = min(1024 * 1024, size - offset)
-    memory[offset:offset + length] = os.urandom(length)
+    # Compressible: a random quarter per MiB and zeros, about 4:1 like a
+    # real agent's heaps; otherwise random, the worst case for zswap.
+    memory[offset:offset + length] = (os.urandom(length // 4) + bytes(length - length // 4)
+                                      if compressible else os.urandom(length))
 memory_hash = hashlib.sha256(memory).hexdigest()
 nonce = uuid.uuid4().hex
 counter = 0
@@ -480,7 +484,8 @@ def create_resident(api, args, sandbox_id, *, managed=False, stop=None, retries=
 
     ``managed`` runs WORKLOAD as the sandbox's managed process (the job API),
     like production's relay agents: idle parking never applies to those."""
-    argv = ["python3", "-c", WORKLOAD, str(args.resident_mb), str(args.dirty_mb)]
+    argv = ["python3", "-c", WORKLOAD, str(args.resident_mb), str(args.dirty_mb),
+            *(["compressible"] if getattr(args, "compressible", False) else [])]
     payload = {
         "id": sandbox_id,
         "image": args.image,
@@ -599,7 +604,7 @@ def run_relay(args, api, *, persist=None, sample=host_sample, clock=time.monoton
         "started_at": datetime.now(timezone.utc).isoformat(),
         "configuration": {key: getattr(args, key) for key in (
             "count", "create_concurrency", "cycles", "memory_mb", "resident_mb", "dirty_mb", "cpus",
-            "disk_mb", "cpu_ms", "image", "model_seconds", "model_jitter", "seed")},
+            "disk_mb", "cpu_ms", "image", "model_seconds", "model_jitter", "seed", "compressible")},
         "workload_sha256": hashlib.sha256(WORKLOAD.encode()).hexdigest(),
         "created": [], "creates": {}, "create_errors": {}, "cycles": [], "deaths": {}, "timeline": [],
         "snapshots": {}, "errors": [], "cleanup_errors": [],
@@ -682,10 +687,14 @@ def run_relay(args, api, *, persist=None, sample=host_sample, clock=time.monoton
                 row["think_s"] = think_times[cycle]
                 sleep(think_times[cycle])
                 row["state_before_wake"] = _state(api, sandbox_id)
-                begin = clock()
-                api.call(f"/v1/sandboxes/{sandbox_id}/wake", method="POST", payload={
-                    "operation_id": "wake:" + relay_id, "generation": generation, "relay_request_id": relay_id})
+                begin, retries = clock(), []
+                # Retried like the relay retries a wake the node defers.
+                _retrying(lambda: api.call(f"/v1/sandboxes/{sandbox_id}/wake", method="POST", payload={
+                    "operation_id": "wake:" + relay_id, "generation": generation,
+                    "relay_request_id": relay_id}), deadline_seconds=args.admission_seconds, stop=stop,
+                    attempts=retries)
                 row["wake_ms"] = round((clock() - begin) * 1000, 1)
+                row["wake_retries"] = len(retries)
             except Exception as exc:  # noqa: BLE001 - a dead agent is the measurement
                 row["error"] = str(exc)[:500]
                 with lock:
@@ -997,11 +1006,14 @@ def parse_args(argv=None):
     ):
         parser.add_argument("--" + name, type=float, default=default)
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--compressible", action="store_true",
+                        help="relay mode: heaps about 4:1 compressible instead of random")
     args = parser.parse_args(argv)
     if args.dirty_mb is None:
         args.dirty_mb = args.resident_mb
     for key, value in vars(args).items():
-        if isinstance(value, (int, float)) and (not math.isfinite(value) or value <= 0):
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and (
+                not math.isfinite(value) or value <= 0):
             parser.error(f"{key} must be finite and positive")
     if args.resident_mb + 128 > args.memory_mb:
         parser.error("memory limit needs at least 128 MiB above the resident fixture")

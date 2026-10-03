@@ -55,9 +55,11 @@ import unittest
 # 250), +52 the attach-timing diagnostic (remove after the attach spike or fold
 # into heartbeat metrics), +100 shared startup traces (C2.7), +353 the nydusd
 # spike (C2.1 candidate: blob-toc conversion, the store node's virtual blobs,
-# the opt-in nydusd device; keep or delete with the spike's verdict). Lower it
-# on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 111_964
+# the opt-in nydusd device; keep or delete with the spike's verdict), +75 the
+# C1.1 second pass (zswap bounded per paused cgroup, stall backoff, eviction by
+# expected idle, reclaim stop counters; benchmarks/pause-reclaim-2026-10-03).
+# Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 112_039
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

@@ -25,10 +25,25 @@ TRANSFER_BREAK_EVEN_SECONDS = 300.0
 # One node-wide reclaim budget (qualification: one reclaim moves 225-380 MiB/s
 # with zswap off; eight at once share about 0.85 GiB/s, and with zswap they are
 # CPU-bound at 21 MiB/s each). Two in flight at one shared rate keep a single
-# sandbox's speed and leave disk for captures and pulls. A window is one write.
+# sandbox's speed and leave disk for captures and pulls. A window is one write;
+# 16 MiB windows halved one reclaim's rate (105 against 188 MB/s, benchmarks/
+# pause-reclaim-2026-10-03), so a window is 128 MiB, still cancellable between.
 RECLAIM_CONCURRENCY = 2
 RECLAIM_BYTES_PER_SECOND = 512 * 1024**2
-RECLAIM_WINDOW_BYTES = 16 * 1024**2
+RECLAIM_WINDOW_BYTES = 128 * 1024**2
+# A reclaim freeing less than this (or less than its whole target) made no
+# progress. A wait retries after a doubling backoff and escalates to hibernate
+# only after MAX_STALLS such reclaims in a row: one unlucky window is no proof
+# that swap cannot take the wait (DSec: hibernate is for offload).
+STALL_BYTES = 16 * 1024**2
+STALL_BACKOFF_SECONDS = 10.0
+MAX_STALLS = 2
+# zswap keeps incompressible pages nearly 1:1 in a pool charged to the same
+# cgroup, so a reclaim through it frees nothing (1,568 MB moved, 32 MB freed:
+# benchmarks/pause-reclaim-2026-10-03). When zswap is on, each paused cgroup
+# may hold at most this share of its memory bound there; the kernel sends the
+# rest to swap. A fixed bound, whatever the guest's memory compresses to.
+ZSWAP_SHARE_OF_BOUND = 0.25
 # Free swap below this share is the kernel's: reclaim stops short of it and
 # the rest of the deficit escalates to hibernate.
 SWAP_RESERVE_FRACTION = 0.10
@@ -46,7 +61,7 @@ PREFETCH_MAX_BYTES = 1024**3
 PREFETCH_SECONDS = 2.0
 # Less swap than this is about the Sentry's and gofer's own heaps (15 MiB,
 # which no memory-file read restores): nothing worth a prefetch moved out.
-PREFETCH_MIN_SWAP_BYTES = 2 * RECLAIM_WINDOW_BYTES
+PREFETCH_MIN_SWAP_BYTES = 32 * 1024**2
 
 
 def hibernate_beats_pause(expected_wait_seconds, resident_bytes, footprint_bytes):
@@ -94,9 +109,9 @@ class PausedWait:
     swapped_bytes: int = 0
     reclaiming: int = 0  # The target of its in-flight reclaim, in bytes.
     escalating: bool = False
-    # Its last reclaim raised or freed less than a window (swap full, or
-    # nothing left to evict): never reclaimed again; only a hibernate frees more.
-    stalled: bool = False
+    # Reclaims in a row that made no progress, and when the next may start.
+    stalls: int = 0
+    retry_at: float = 0.0
 
 
 def swap_room_bytes(pressure):
@@ -113,15 +128,20 @@ def swap_room_bytes(pressure):
 def relief_plan(decision, paused, *, now, swap_room):
     """(reclaims, escalations) of paused waits that cover a deficit (pure).
 
-    Only measured pressure (`decide_resident_wait`: headroom or PSI) acts. Rank
-    by expected remaining idle x resident bytes; a wait without a hint is
-    expected to last as long as it already has. A wait swaps out while swap
-    has room above the kernel's reserve. One whose reclaim stalled, or that
-    no longer fits in swap, escalates to a durable hibernate if it holds at
-    least a window resident and more resident than swapped: a capture faults
-    swapped pages back in before it frees anything. In-flight work counts
-    against the deficit (a reclaim its target, a hibernate all it holds) and an
-    in-flight reclaim's target against the room; unmeasured waits carry no credit.
+    Only measured pressure (`decide_resident_wait`: headroom or PSI) acts.
+    Evict the waits that will stay idle longest: hinted waits by expected
+    remaining idle x resident bytes, then the rest by resident bytes, most
+    recently paused first. Without a hint, a long-paused wait is the likeliest
+    to wake next, and evicting it buys a thaw instead of relief.
+
+    A wait swaps out while swap has room above the kernel's reserve; one in
+    its stall backoff waits. One that stalled MAX_STALLS times in a row, or
+    that no longer fits in swap, escalates to a durable hibernate if it holds
+    at least STALL_BYTES resident and more resident than swapped: a capture
+    faults swapped pages back in before it frees anything. In-flight work
+    counts against the deficit (a reclaim its target, a hibernate all it
+    holds) and an in-flight reclaim's target against the room; unmeasured
+    waits carry no credit.
     """
     if not decision.reclaim:
         return (), ()
@@ -131,10 +151,10 @@ def relief_plan(decision, paused, *, now, swap_room):
         wait.resident_bytes or 0 for wait in paused.values() if wait.escalating)
 
     def score(item):
-        wait = item[1]
-        idle = (now - wait.paused_at if wait.expected_until is None
-                else max(0.0, wait.expected_until - now))
-        return idle * (wait.resident_bytes or 0)
+        wait, resident = item[1], item[1].resident_bytes or 0
+        if wait.expected_until is not None:
+            return (1, max(0.0, wait.expected_until - now) * resident)
+        return (0, resident / (1.0 + max(0.0, now - wait.paused_at)))
 
     reclaims, escalations = [], []
     for key, wait in sorted(paused.items(), key=score, reverse=True):
@@ -142,11 +162,14 @@ def relief_plan(decision, paused, *, now, swap_room):
             break
         if wait.reclaiming or wait.escalating or not wait.resident_bytes:
             continue
-        if not wait.stalled and room >= RECLAIM_WINDOW_BYTES:
+        stalled = wait.stalls >= MAX_STALLS
+        if not stalled and room >= STALL_BYTES:
+            if now < wait.retry_at:
+                continue  # Backing off after a stall; others may relieve meanwhile.
             freed = min(wait.resident_bytes, deficit, room)
             reclaims.append((key, freed))
             room -= freed
-        elif wait.resident_bytes >= max(RECLAIM_WINDOW_BYTES, wait.swapped_bytes):
+        elif wait.resident_bytes >= max(STALL_BYTES, wait.swapped_bytes):
             freed = wait.resident_bytes
             escalations.append(key)
         else:
@@ -156,10 +179,41 @@ def relief_plan(decision, paused, *, now, swap_room):
 
 
 def reclaim_stalled(result, target_bytes):
-    """A reclaim that raised, or freed less than one window (or its whole
-    smaller target) without being superseded, cannot make progress."""
+    """A reclaim that raised, or freed less than STALL_BYTES (or its whole
+    smaller target) without being superseded, made no progress."""
     return result is None or (result.reason != "superseded" and result.reclaimed_bytes
-                              < min(target_bytes, RECLAIM_WINDOW_BYTES))
+                              < min(target_bytes, STALL_BYTES))
+
+
+def note_reclaim(wait, stalled, *, now):
+    """Count a stall into its doubling backoff; progress clears both."""
+    if stalled:
+        wait.stalls += 1
+        wait.retry_at = now + STALL_BACKOFF_SECONDS * 2 ** (wait.stalls - 1)
+    else:
+        wait.stalls, wait.retry_at = 0, 0.0
+
+
+def cap_zswap(pid, *, proc_root=Path("/proc"), cgroup_root=Path("/sys/fs/cgroup"),
+              zswap_enabled=Path("/sys/module/zswap/parameters/enabled")):
+    """Bound a process's cgroup's zswap to ZSWAP_SHARE_OF_BOUND of its memory
+    bound, once; the bytes set, or None (zswap off, no bound, already set)."""
+    try:
+        if zswap_enabled.read_text().strip() not in {"Y", "1"}:
+            return None
+        unified = [line[4:] for line in (proc_root / str(pid) / "cgroup").read_text().splitlines()
+                   if line.startswith("0::/")]
+        if len(unified) != 1 or {".", ".."} & set(unified[0].split("/")):
+            return None
+        cgroup = cgroup_root / unified[0]
+        bound = (cgroup / "memory.max").read_text().strip()
+        if bound == "max" or (cgroup / "memory.zswap.max").read_text().strip() != "max":
+            return None
+        cap = int(int(bound) * ZSWAP_SHARE_OF_BOUND)
+        (cgroup / "memory.zswap.max").write_text(str(cap))
+        return cap
+    except (OSError, ValueError):
+        return None  # Optional: without the cap a reclaim only frees less.
 
 
 def _may_raise_priority():
@@ -309,6 +363,11 @@ def prefetch(fd, pieces, *, slots, cancelled, threads=PREFETCH_THREADS):
     return sum(counts)
 
 
+STOP_COUNTERS = {"target_reached": "pause_reclaim_target_reached",
+                 "not_shrinking": "pause_reclaim_not_shrinking",
+                 "partial_reclaim": "pause_reclaim_partial", "raised": "pause_reclaim_errors"}
+
+
 class PauseStats:
     """Monotonic counters; pause and thaw happen in the Warden on any path."""
 
@@ -318,7 +377,8 @@ class PauseStats:
             "pauses", "thaws", "thaw_ms_total", "thaw_ms_max", "pause_reclaims",
             "pause_reclaimed_bytes", "pause_reclaim_ms_total",
             "pause_reclaim_cancellations", "pause_reclaim_stalls", "pause_escalations",
-            "thaw_prefetches", "thaw_prefetched_bytes", "thaw_prefetch_ms_total"), 0)
+            "thaw_prefetches", "thaw_prefetched_bytes", "thaw_prefetch_ms_total",
+            *STOP_COUNTERS.values()), 0)
 
     def add(self, **amounts):
         with self._lock:  # Exact sums; only the reported snapshot rounds.
@@ -326,6 +386,11 @@ class PauseStats:
                 previous = self._values[name]
                 self._values[name] = (max(previous, amount) if name.endswith("_max")
                                       else previous + amount)
+
+    def stopped(self, reason):
+        """Count why a pause reclaim ended (a thaw's is a cancellation)."""
+        if reason != "superseded":
+            self.add(**{STOP_COUNTERS.get(reason, "pause_reclaim_errors"): 1})
 
     def snapshot(self):
         with self._lock:

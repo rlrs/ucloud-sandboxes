@@ -41,6 +41,12 @@ from ucloud_sandboxes.pause_tier import (
     reclaim_stalled,
     relief_plan,
     swap_room_bytes,
+    MAX_STALLS,
+    STALL_BACKOFF_SECONDS,
+    STALL_BYTES,
+    note_reclaim,
+    ZSWAP_SHARE_OF_BOUND,
+    cap_zswap,
 )
 from ucloud_sandboxes.resident_memory import ResidentMemoryReclaimer, ResidentReclaimResult
 from ucloud_sandboxes.sandbox import SandboxConflictError
@@ -83,7 +89,7 @@ class PausePolicyTests(unittest.TestCase):
             {**phase, "expected_remaining_wait_seconds": None}, 110.0))
         self.assertIsNone(advised_wait_seconds(None, 110.0))
 
-    def test_reclaim_runs_only_under_pressure_and_ranks_idle_times_resident(self):
+    def test_reclaim_runs_only_under_pressure_and_evicts_the_longest_expected_idle(self):
         relaxed = decide_resident_wait(
             Pressure(0.9, 0.0, 0.0, 90 * GIB), SimpleNamespace(physical_bytes=0, ram_backing_bytes=0))
         pressed = decide_resident_wait(
@@ -97,7 +103,9 @@ class PausePolicyTests(unittest.TestCase):
         }
         self.assertEqual(relief_plan(relaxed, waits, now=100.0, swap_room=INF), ((), ()))
         plan, escalations = relief_plan(pressed, waits, now=100.0, swap_room=INF)
-        self.assertEqual([key for key, _ in plan][:3], [("hinted", 1), ("long", 1), ("short", 1)])
+        # Hinted waits by expected idle x resident; without a hint the most
+        # recently paused go first: the longest paused is the likeliest to wake.
+        self.assertEqual([key for key, _ in plan][:3], [("hinted", 1), ("short", 1), ("long", 1)])
         self.assertNotIn(("unmeasured", 1), dict(plan))
         self.assertLessEqual(sum(target for _, target in plan), pressed.target_bytes)
         self.assertEqual(escalations, ())  # Swap has room and nothing stalled.
@@ -114,7 +122,7 @@ class PausePolicyTests(unittest.TestCase):
                 ("hinted", 1): PausedWait(paused_at=99.0, expected_until=400.0, resident_bytes=GIB),
                 ("long", 1): PausedWait(paused_at=0.0, resident_bytes=GIB),
                 ("short", 1): PausedWait(paused_at=90.0, resident_bytes=4 * GIB),
-                ("small", 1): PausedWait(paused_at=0.0, resident_bytes=RECLAIM_WINDOW_BYTES - 1),
+                ("small", 1): PausedWait(paused_at=0.0, resident_bytes=STALL_BYTES - 1),
                 ("swapped", 1): PausedWait(paused_at=0.0, resident_bytes=GIB // 8,
                                            swapped_bytes=GIB),
                 ("unmeasured", 1): PausedWait(paused_at=0.0),
@@ -122,20 +130,27 @@ class PausePolicyTests(unittest.TestCase):
 
         # 1.5 GiB of swap room: the best two swap out, the rest hibernates.
         reclaims, escalations = relief_plan(pressed, waits(), now=100.0, swap_room=3 * GIB // 2)
-        self.assertEqual(reclaims, ((("hinted", 1), GIB), (("long", 1), GIB // 2)))
-        self.assertEqual(escalations, (("short", 1),))
+        self.assertEqual(reclaims, ((("hinted", 1), GIB), (("short", 1), GIB // 2)))
+        self.assertEqual(escalations, (("long", 1),))
         # Swap nearly full: every wait worth a hibernate escalates, best first.
         # A capture faults swapped pages in first: a mostly swapped wait, or a
         # tiny one, would take more RAM than it frees.
         self.assertEqual(relief_plan(pressed, waits(), now=100.0, swap_room=0),
-                         ((), (("hinted", 1), ("long", 1), ("short", 1))))
-        # A stalled reclaim escalates even with room; others still swap.
+                         ((), (("hinted", 1), ("short", 1), ("long", 1))))
+        # One stall only backs off: no reclaim and no hibernate until it ends.
+        backing_off = waits()
+        note_reclaim(backing_off[("hinted", 1)], True, now=100.0)
+        reclaims, escalations = relief_plan(pressed, backing_off, now=101.0, swap_room=INF)
+        self.assertNotIn(("hinted", 1), {*dict(reclaims), *escalations})
+        reclaims, _ = relief_plan(pressed, backing_off, now=100.0 + STALL_BACKOFF_SECONDS, swap_room=INF)
+        self.assertIn(("hinted", 1), dict(reclaims))  # Retried after the backoff.
+        # MAX_STALLS in a row escalate even with room; others still swap.
         stalled = waits()
-        stalled[("hinted", 1)].stalled = True
+        stalled[("hinted", 1)].stalls = MAX_STALLS
         reclaims, escalations = relief_plan(pressed, stalled, now=100.0, swap_room=INF)
         self.assertEqual((dict(reclaims).keys(), escalations),
                          ({("long", 1), ("short", 1), ("small", 1), ("swapped", 1)}, (("hinted", 1),)))
-        stalled[("swapped", 1)].stalled = True  # Already reclaimed: left alone.
+        stalled[("swapped", 1)].stalls = MAX_STALLS  # Already reclaimed: left alone.
         self.assertNotIn(("swapped", 1), relief_plan(pressed, stalled, now=100.0, swap_room=0)[1])
         # An in-flight escalation counts against the deficit.
         busy = waits()
@@ -165,7 +180,31 @@ class PausePolicyTests(unittest.TestCase):
             (proc / "meminfo").write_text("MemTotal: 1048576 kB\nMemAvailable: 524288 kB\n")
             self.assertIsNone(PressureSampler(proc).sample().swap_total_bytes)
 
-    def test_a_reclaim_that_frees_less_than_a_window_has_stalled(self):
+    def test_zswap_holds_at_most_a_fixed_share_of_a_paused_cgroups_bound(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "proc/7").mkdir(parents=True)
+            (root / "proc/7/cgroup").write_text("0::/ucloud-sandboxes/abc\n")
+            cgroup = root / "cgroup/ucloud-sandboxes/abc"
+            cgroup.mkdir(parents=True)
+            (cgroup / "memory.max").write_text(f"{2 * GIB}\n")
+            (cgroup / "memory.zswap.max").write_text("max\n")
+            enabled = root / "enabled"
+
+            def cap():
+                return cap_zswap(7, proc_root=root / "proc", cgroup_root=root / "cgroup", zswap_enabled=enabled)
+
+            enabled.write_text("N\n")
+            self.assertIsNone(cap())  # zswap off: swap only, nothing to bound.
+            enabled.write_text("Y\n")
+            self.assertEqual(cap(), int(2 * GIB * ZSWAP_SHARE_OF_BOUND))
+            self.assertEqual((cgroup / "memory.zswap.max").read_text(), str(int(2 * GIB * ZSWAP_SHARE_OF_BOUND)))
+            self.assertIsNone(cap())  # Set once; a later pause leaves it.
+            (cgroup / "memory.zswap.max").write_text("max\n")
+            (cgroup / "memory.max").write_text("max\n")
+            self.assertIsNone(cap())  # No bound to take a share of.
+
+    def test_a_reclaim_that_frees_less_than_stall_bytes_has_stalled(self):
         def result(reason, reclaimed):
             return ResidentReclaimResult(GIB, reclaimed, 1.0, 0, reason)
 
@@ -175,6 +214,13 @@ class PausePolicyTests(unittest.TestCase):
         self.assertFalse(reclaim_stalled(result("superseded", 0), GIB))  # A thaw, not a stall.
         self.assertFalse(reclaim_stalled(result("partial_reclaim", RECLAIM_WINDOW_BYTES), GIB))
         self.assertFalse(reclaim_stalled(result("target_reached", MIB), MIB))  # Small, but whole.
+        self.assertFalse(reclaim_stalled(result("not_shrinking", STALL_BYTES), GIB))  # Some progress.
+        wait = PausedWait(0.0)
+        note_reclaim(wait, True, now=10.0)
+        note_reclaim(wait, True, now=20.0)  # The backoff doubles.
+        self.assertEqual((wait.stalls, wait.retry_at), (2, 20.0 + 2 * STALL_BACKOFF_SECONDS))
+        note_reclaim(wait, False, now=30.0)
+        self.assertEqual((wait.stalls, wait.retry_at), (0, 0.0))
 
     def test_stats_are_monotonic_and_track_maxima(self):
         stats = PauseStats()
@@ -353,7 +399,9 @@ class PauseWardenTests(unittest.TestCase):
 
     def test_pause_keeps_live_authority_and_exec_thaws_first(self):
         running = self.warden.create(self.sandbox, operation_id="create:1")
-        self.assertTrue(self.warden.pause(self.sandbox))
+        with patch.object(pause_tier, "cap_zswap") as cap:
+            self.assertTrue(self.warden.pause(self.sandbox))
+        cap.assert_called_once_with(running.sentry_pid, proc_root=self.warden.config.proc_root)
         self.assertEqual(self.runner.status, "paused")
         self.assertTrue(self._paused())
         # No ownership change: the journal revision and live identity are intact.
@@ -1087,23 +1135,31 @@ class PauseNodeRuntimeTests(unittest.TestCase):
         self.assertFalse(any(wait.escalating for wait in runtime._paused.values()))
         self.assertEqual(runtime.resident_wait_snapshot()["pause_escalations"], ESCALATION_CONCURRENCY)
 
-    def test_a_stalled_or_failed_reclaim_escalates_on_the_next_tick(self):
+    def test_stalled_or_failed_reclaims_back_off_then_escalate_after_max_stalls(self):
         for outcome in (SimpleNamespace(reclaimed_bytes=MIB, elapsed_seconds=1.0, reason="not_shrinking"),
                         DirectWardenError("memory.reclaim is unsupported"), TypeError("a bug")):
             with self.subTest(outcome=outcome):
                 runtime, service, parks = self._runtime(pressure=Pressure(0.01, 0.0, 0.0, GIB))
                 service.warden.paused.add(("agent", 1))
-                service.reclaim_paused.side_effect = [outcome]
-                runtime._reclaim_paused_tick()
-                self._drain(runtime)
-                self.assertTrue(runtime._paused[("agent", 1)].stalled)
-                self.assertEqual(parks, [])
+                service.reclaim_paused.side_effect = [outcome] * MAX_STALLS
+                for stall in range(1, MAX_STALLS + 1):
+                    runtime._reclaim_paused_tick()
+                    self._drain(runtime)
+                    wait = runtime._paused[("agent", 1)]
+                    self.assertEqual((wait.stalls, parks), (stall, []))
+                    runtime._reclaim_paused_tick()  # Backing off: nothing happens.
+                    self._drain(runtime)
+                    self.assertEqual(service.reclaim_paused.call_count, stall)
+                    wait.retry_at = 0.0  # The backoff ends.
                 runtime._reclaim_paused_tick()
                 self._drain(runtime)
                 self.assertEqual(parks, [("pause-escalation", False)])
-                self.assertEqual(service.reclaim_paused.call_count, 1)
                 snapshot = runtime.resident_wait_snapshot()
-                self.assertEqual((snapshot["pause_reclaim_stalls"], snapshot["pause_escalations"]), (1, 1))
+                self.assertEqual((snapshot["pause_reclaim_stalls"], snapshot["pause_escalations"]),
+                                 (MAX_STALLS, 1))
+                stopped = "pause_reclaim_not_shrinking" if isinstance(outcome, SimpleNamespace) \
+                    else "pause_reclaim_errors"
+                self.assertEqual(snapshot[stopped], MAX_STALLS)
 
     def test_escalation_loses_to_activity_and_a_refused_capture_stays_paused(self):
         runtime, service, parks = self._runtime()

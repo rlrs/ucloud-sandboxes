@@ -3050,6 +3050,8 @@ class DirectRunscWarden:
     def _pause_locked(self, sandbox: DirectSandbox, record: HibernationRecord) -> None:
         marker = self._pause_marker(sandbox.sandbox_id, sandbox.sandbox_generation)
         self.artifacts._atomic_write_at(marker.parent, marker.name, sandbox.container_id.encode())
+        # Before any reclaim: zswap may hold only a bounded share of this sandbox.
+        pause_tier.cap_zswap(record.sentry_pid, proc_root=self.config.proc_root)
         result = self.runner.run((*self._state_prefix(), "pause", sandbox.container_id),
                                  timeout=self.config.command_timeout_seconds)
         # A crashed predecessor's pause is success. Anything else must

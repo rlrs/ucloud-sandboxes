@@ -37,8 +37,9 @@ from tests.test_package_budget import package_lines
 # +62 the M2 inventory and retention view, +31 the attach-timing diagnostic,
 # +56 shared startup traces, +135 the nydusd spike's virtual blobs (fake and real
 # nydus-image, test_nydusd_spike), +72 the density benchmark's relay mode
-# (memory-pressure harness; no scenario covers an operator script).
-SUITE_LINE_BUDGET = 96_327
+# (memory-pressure harness; no scenario covers an operator script), +57 the C1.1
+# second pass (zswap cap, stall backoff, eviction order, stop counters).
+SUITE_LINE_BUDGET = 96_384
 SUITE = Path(__file__).resolve().parent
 
 

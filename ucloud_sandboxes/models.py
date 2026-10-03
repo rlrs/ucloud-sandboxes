@@ -377,6 +377,11 @@ class ResidentWaitMetrics:
     thaw_prefetches: int = 0
     thaw_prefetched_bytes: int = 0
     thaw_prefetch_ms_total: int = 0
+    # Why pause reclaims ended (pause_tier.STOP_COUNTERS).
+    pause_reclaim_target_reached: int = 0
+    pause_reclaim_not_shrinking: int = 0
+    pause_reclaim_partial: int = 0
+    pause_reclaim_errors: int = 0
 
     @classmethod
     def from_dict(cls, raw: object) -> "ResidentWaitMetrics | None":

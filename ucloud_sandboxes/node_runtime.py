@@ -17,7 +17,7 @@ from .direct_registry import DirectRegistryConflictError
 from .warm_park import WarmParkDeferred, WarmParkPolicy, decide_resident_wait
 from .pause_tier import (
     ESCALATION_CONCURRENCY, PausedWait, ReclaimBudget, advised_wait_seconds, park_tier,
-    reclaim_stalled, relief_plan, swap_room_bytes,
+    note_reclaim, reclaim_stalled, relief_plan, swap_room_bytes,
 )
 from .transition_admission import MemoryDemand
 from .managed_process import (
@@ -452,14 +452,17 @@ class DirectNodeRuntime:
             with self._relay_parking_guard:
                 wait = self._paused.get(key)
                 if wait is not None:
-                    wait.reclaiming, wait.stalled = 0, stalled
+                    wait.reclaiming = 0
+                    note_reclaim(wait, stalled, now=time.monotonic())
             counts = {"pause_reclaim_stalls": int(stalled)}
             if result is not None:
                 counts.update(
                     pause_reclaims=1, pause_reclaimed_bytes=result.reclaimed_bytes,
                     pause_reclaim_ms_total=result.elapsed_seconds * 1000,
                     pause_reclaim_cancellations=int(result.reason == "superseded"))
-            self.service.warden.pause_stats.add(**counts)
+            stats = self.service.warden.pause_stats
+            stats.add(**counts)
+            stats.stopped("raised" if result is None else result.reason)
 
     def _escalate_paused(self, key) -> None:
         """Hibernate one paused sandbox through the durable park path.

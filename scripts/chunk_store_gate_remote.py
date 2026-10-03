@@ -29,6 +29,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.request
 
 CLI = "import sys; from ucloud_sandboxes.cli import main; sys.exit(main(sys.argv[1:]))"
@@ -555,11 +556,11 @@ class Node:
         self.base = f"http://{'127.0.0.1' if host in ('', '0.0.0.0') else host}:{unquote(values['UCLOUD_NODE_AGENT_PORT'])}"
         self.state = unquote(values["UCLOUD_STATE_DIR"])
 
-    def call(self, method, path, body=None, timeout=600):
+    def call(self, method, path, body=None, timeout=600, headers=None):
         request = urllib.request.Request(self.base + path, method=method,
                                          data=None if body is None else json.dumps(body).encode(),
                                          headers={"Authorization": "Bearer " + self.token,
-                                                  "Content-Type": "application/json"})
+                                                  "Content-Type": "application/json", **(headers or {})})
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = response.read()
         return json.loads(payload) if payload else {}
@@ -592,13 +593,27 @@ class Node:
         return {"wall": round(time.monotonic() - started, 3), "rc": session.get("exit_code")}
 
     def delete(self, sandbox_id):
+        """Delete with the create's operation fence; a sandbox left behind keeps
+        its mounts, and the next reset's backend then refuses to start."""
         try:
-            self.call("DELETE", f"/v1/sandboxes/{sandbox_id}")
-        except OSError:
-            pass
+            self.call("DELETE", f"/v1/sandboxes/{sandbox_id}", headers={
+                "X-UCloud-Sandbox-Generation": "1", "X-UCloud-Sandbox-Operation-Id": "m1-gate-" + sandbox_id})
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
 
     def reset(self, *, clear_traces):
-        """Cold node: fresh backend, empty chunk cache, dropped page cache."""
+        """Cold node: fresh backend, empty chunk cache, dropped page cache.
+
+        Only on a node holding nothing but this bench's sandboxes (canaries can
+        take real placements); those are deleted first, as the restarted
+        backend refuses any mount the old one left (a fence, by design)."""
+        ids = [item.get("id") or (item.get("spec") or {}).get("id")
+               for item in self.call("GET", "/v1/sandboxes")["sandboxes"]]
+        if any(not str(sandbox_id).startswith("m1-") for sandbox_id in ids):
+            raise SystemExit(f"refusing to reset a node with other sandboxes: {sorted(map(str, ids))}")
+        for sandbox_id in ids:
+            self.delete(sandbox_id)
         root = Path(self.state) / "environment-io"
         subprocess.run(["systemctl", "stop", "ucloud-sandbox-node.service", "ucloud-environment-io.service"],
                        check=True)

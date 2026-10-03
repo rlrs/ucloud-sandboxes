@@ -1670,6 +1670,40 @@ worker snapshot, then an autoscaled canary
   4. a deletion schedule tied to M2 waves and C1.3, so the package budget
      falls instead of only being raised.
 
+### 2026-10-03: attach, fetch and the C2.1 decision (nydusd)
+
+- **Attach spike**
+  ([benchmarks/attach-spike-2026-10-03](benchmarks/attach-spike-2026-10-03/README.md)).
+  Per-node creates are metered by serial attach (about 170 ms per component)
+  into a Python miss path of about 45 MB/s. Coalesced windows did not help and
+  were reverted. Shared startup traces (C2.7 groundwork, `2dac20a`) make a
+  fresh node's first commands 2.3× faster. Neither moves the burst.
+- **Gate run 2** (`benchmarks/m1-gate-20261003t0903`). Correctness passes; stored
+  bytes still fail (the convert race residue).
+- **C2.1 decided: stock nydusd, not a Rust daemon of our own**
+  ([benchmarks/nydusd-spike-2026-10-03](benchmarks/nydusd-spike-2026-10-03/README.md)).
+  - **Mode.** nydusd's `nbd` export (v2.4.5 built with `block-nbd`) serves our
+    exact device model. No nydusd mode is newer than fscache.
+  - **Data path.** It reads blobs that the store node rebuilds from packs, with
+    the read token. Every chunk is checked against the TOC that the signed
+    bootstrap pins (`blob-toc` conversion).
+  - **Result on 64 cold images, with one shared nydusd cache and attach 8:**
+    - 10.6 s against 31.5 s on today's path;
+    - median `import sys` 0.09 s and `pip --version` 0.70 s;
+    - 0.79 GB from the store;
+    - `kill -9` fails closed, exactly for the dead daemon's images.
+  - **gVisor's filesystem path.** directfs is on, and warm is about 2× native,
+    about 0.2 s of a cold `pip`. C2.4 (sentry-native EROFS) stays optional.
+  - **Consequences:**
+    - M2 converts with `--nydusd-blobs` (a new converter identity; nothing in
+      production is converted yet).
+    - Retention must keep chunks that only whiteout-hidden files use, while
+      their blob is live.
+    - Attach concurrency 8 becomes the default together with nydusd. It lost
+      only to the Python miss path.
+    - The Python NBD reader, its cache and trace prefetch become deletable
+      once nydusd is the only RAFS path.
+
 ## Appendix: evidence index
 
 - Image path:

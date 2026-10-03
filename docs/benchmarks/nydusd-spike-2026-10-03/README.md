@@ -5,7 +5,9 @@ image device (C2.1) without fscache? It would read "virtual blobs" that the
 store node assembles from our packs. It must verify every chunk, and it must
 fail closed when it dies.
 
-**Answer: yes, and it is the largest burst win so far.**
+**Answer: yes, and it is the largest burst win so far.** Run 2 (below) added
+one shared nydusd cache per node, which halves the bytes and is faster still:
+**10.6 s for 64 cold images, against 31.5 s on today's path.**
 
 Five findings:
 
@@ -20,9 +22,10 @@ Five findings:
 3. **Trusted end to end.** It needs conversion with `nydus-image --features
    blob-toc`. The signed bootstrap then pins a TOC, the TOC pins every chunk
    digest, and nydusd checks each chunk it fetches.
-4. **The cost is bytes and processes.** nydusd fetched 4.2× the bytes of our
-   Python reader (1.50 GB against 0.36 GB for 64 images). It runs one process
-   per image, about 23 MB each.
+4. **The cost is bytes and processes.** With a cache per image, nydusd fetched
+   4.2× the bytes of our Python reader (1.50 GB against 0.36 GB for 64
+   images). The shared cache cuts that to 2.2× (0.79 GB). It runs one process
+   per image, about 21–23 MB each.
 5. **gVisor's filesystem path is the next lever, not the main one.** Warm
    commands in the sandbox take about 2× native. That is about 0.2 s of a
    1.1 s cold `pip --version`. Most of a cold command is still getting the
@@ -243,6 +246,54 @@ all runs.
   instead of EBUSY, so attach stopped probing other devices. The first
   64-image nydusd run failed on this; the numbers above are its rerun.
 
+## Run 2: one shared nydusd cache (2026-10-03, [raw-shared/](raw-shared/))
+
+**Change (`31040c3`).** `UCLOUD_ENVIRONMENT_NYDUSD_SHARED_CACHE` gives every
+daemon one filecache work dir, so images that share a layer share its cache
+files.
+- **Safe across processes:**
+  - nydusd's chunk bitmap is a shared mmap of atomic bytes;
+  - with `validate` on, a cache hit takes the slow path and is checked again;
+  - a torn or foreign write reads as a digest mismatch, never as wrong bytes.
+- **The one cross-process hazard.** A starting daemon writes a blob's TOC and
+  digest file through one fixed temporary name (`.toc_downloading`, opened
+  with truncate), so daemons start one at a time.
+- **Cleanup.** Blobs are reference-counted per attached image; their files go
+  with the last image.
+- **Local check.** An image sharing a base layer fetched 3.8 MB against 10 MB,
+  with every region equal to our reader's.
+
+**Setup.** A second gate stack: run `20261003t1355`, the same 64 images, bundle
+`ce4d5a36`, no baseline worker. Today's path had just repeated within 1%.
+Script: [shared_cache_run.sh](shared_cache_run.sh).
+
+**64 images:**
+
+| nydusd | wall, s | create p50 / max, s | `import sys` p50, s | `pip` p50, s | from store | disk cache at peak | host CPU, s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **shared cache, attach 8** | **10.6 / 10.3** | 5.6 / 9.4 | **0.09** | **0.70** | 0.79 GB | 1.58 GB | 26 |
+| shared cache, serial attach | 17.4 / 17.3 | 8.0 / 16.0 | 0.14 | 0.91 | 0.79 GB | 1.58 GB | 28 |
+| cache per image, attach 8 (same run) | 12.3 / 11.1 | 5.7 / 10.4 | 0.19 | 1.03 | 1.54 GB | 3.44 GB | 36 |
+
+**20 images, serial attach:** 6.4 s with 0.28 GB from the store, against 7.8 s
+and 0.44 GB with a cache per image.
+
+- **Bytes halve, and so do disk and CPU.** Each layer is fetched once per node,
+  not once per image. Startup in single file costs nothing visible: attach 8
+  with the shared cache is the fastest arm.
+- **The remaining 2.2× over our reader** is per-chunk amplification and block
+  readahead (`readaround`, default `read_ahead_kb`). Lowering readahead or
+  `amplify_io` is the next knob, and it trades bytes for requests.
+- **kill -9 with the shared cache**
+  ([raw-shared/kill-shared.json](raw-shared/kill-shared.json)) gave the same
+  result as run 1:
+  - 8 of 64 daemons were killed 3.05 s into the read;
+  - exactly their 8 sandboxes saw EIO;
+  - the other 56 read cleanly;
+  - recreates were refused for exactly those 8 images;
+  - the 47 recreated images that have Python ran, though they share cache
+    files with the killed daemons.
+
 ## What this leaves (before production)
 
 - **Reconversion.** M2 converts with `--nydusd-blobs`, a new converter
@@ -251,10 +302,11 @@ all runs.
 - **Retention.** A blob's tail table names chunks that no root's chunk map
   holds (whiteout-hidden ones). Retention and compaction must keep them alive
   while the blob is live.
-- **Byte amplification:**
-  - one shared nydusd cache across images (one daemon per image is the `nbd`
-    model; a shared `work_dir` needs testing for cross-process safety);
-  - or tune `amplify_io` and the block readahead.
+- **Byte amplification:** the shared cache (run 2) halves it, to 2.2× our
+  reader. Readahead and `amplify_io` tuning are next.
+- **Cache budget.** The shared cache has no eviction in nydusd. Reference
+  counts free a blob's files when its last image detaches. A node holding
+  hundreds of images needs a byte budget, enforced by detaching idle images.
 - **Packaging.** Build and pin nydusd with `block-nbd` ourselves, since no
   release has it, and track that the mode is marked experimental upstream.
   Rust, about 23 MB per image daemon.
@@ -265,9 +317,14 @@ all runs.
 
 ## Resources
 
-- Store node CCX43, converter CCX63, `w1` and `b1` CCX63: about 3.1 VM-hours,
-  EUR 1.53 at list price billed per started hour.
-- Teardown drained the workers, deleted the run's S3 prefix and all four VMs,
-  the gate staging directory and their known_hosts entries.
-- `/work/ucloud-sandboxes/nydusd-spike-20261003` on the gateway (bundle,
+- **Run 1:** store node CCX43, converter CCX63, `w1` and `b1` CCX63. About 3.1
+  VM-hours, EUR 1.53 at list price, billed per started hour.
+- **Run 2:** store node CCX43, converter CCX63, `w1` CCX63. About 1.2
+  VM-hours, EUR 1.07.
+- Both teardowns drained the workers and deleted:
+  - the run's S3 prefix;
+  - every VM;
+  - the gate staging directory;
+  - their known_hosts entries.
+- `/work/ucloud-sandboxes/nydusd-spike-20261003` and `nydusd-spike2-20261003` on the gateway (bundle,
   wheel, nydusd, scripts) remains, like earlier spikes' staging directories.

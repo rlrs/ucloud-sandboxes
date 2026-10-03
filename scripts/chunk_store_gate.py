@@ -671,7 +671,8 @@ class Gate:
             f"--trust {self.staging}/gate-producers.json --out {self.staging}/canary-producers.json --owner ucloud"),
             True)[1])
         sets = [f"--set {shlex.quote(f'{key}={json.dumps(value)}')}" for key, value in {
-            **self.worker_overrides(), "registry_private_ip": self.ip("store"),
+            # Canaries pull from the gate's registry and build nothing: no build cache there.
+            **self.worker_overrides(), "registry_private_ip": self.ip("store"), "builder.buildx_cache_ref": "",
             "immutable_environments.trusted_keys_file": f"{self.staging}/canary-producers.json",
             "immutable_environments.worker_enabled": True}.items()]
         self.step("workers", "canary-config", lambda: (self.gw(

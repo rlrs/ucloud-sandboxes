@@ -8,8 +8,10 @@ import hashlib
 import ipaddress
 import json
 import logging
+import os
 from pathlib import Path
 import re
+import socket
 import struct
 import termios
 from typing import Any, Awaitable, Callable, TYPE_CHECKING, TypeVar
@@ -808,30 +810,45 @@ async def _deliver_local_wait(request, relay_request, status, headers, payload) 
     gets this answer instead of a second sample.
     """
     from .shared_control.relay import LOCAL_WAKE_GRACE
-    stream = web.StreamResponse(status=status, headers=headers)
-    stream.content_length = len(payload)
-    await stream.prepare(request)
-    await stream.write(payload)
-    await stream.write_eof()
-    if await _acknowledged(request.transport, LOCAL_WAKE_GRACE - 1.0):
+    probe = _ack_probe(request.transport)
+    try:
+        stream = web.StreamResponse(status=status, headers=headers)
+        stream.content_length = len(payload)
+        await stream.prepare(request)
+        await stream.write(payload)
+        await stream.write_eof()
+        acknowledged = await _acknowledged(probe, request.transport, LOCAL_WAKE_GRACE - 1.0)
+    finally:
+        if probe is not None:
+            probe.close()
+    if acknowledged:
         await _state(request).confirm_local_delivery(relay_request.request_id)
     else:
         await _state(request).mark_caller_detached(relay_request.request_id)
     return stream
 
 
-async def _acknowledged(transport, timeout: float) -> bool:
-    """Every byte written to this TCP connection is acknowledged by its peer."""
+def _ack_probe(transport) -> socket.socket | None:
+    """A duplicate of the connection's socket: a guest that reads its answer and
+    closes at once must not look unacknowledged once the server's copy is closed."""
     sock = transport.get_extra_info("socket") if transport is not None else None
-    if sock is None:
+    return None if sock is None else socket.socket(fileno=os.dup(sock.fileno()))
+
+
+async def _acknowledged(probe, transport, timeout: float) -> bool:
+    """Every byte written was acknowledged by the peer, which did not reset."""
+    if probe is None:
         return False
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
     while True:
-        if transport.get_write_buffer_size() == 0:
+        if transport is None or transport.is_closing() or transport.get_write_buffer_size() == 0:
             try:
-                unacked = struct.unpack("i", fcntl.ioctl(sock.fileno(), termios.TIOCOUTQ, b"\0" * 4))[0]
+                unacked = struct.unpack("i", fcntl.ioctl(probe.fileno(), termios.TIOCOUTQ, b"\0" * 4))[0]
+                failed = probe.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)  # A reset empties the queue too.
             except OSError:
+                return False
+            if failed:
                 return False
             if unacked == 0:
                 return True

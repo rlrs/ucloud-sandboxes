@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-## 0.8.7 (prepared 2026-10-03, gateway only)
+## 0.8.8 (prepared 2026-10-03, gateway only)
+
+- **The relay reads a local wait's acknowledgment from a duplicated socket.** A guest that was not paused reads its answer and closes at once. The relay then found its own copy of the socket closed and counted the answer unacknowledged: it dispatched a needless wake through the gateway and marked the request reattachable. The 0.8.7 fallback canary showed it after every restore, when the next call is not paused. A reset still counts as unacknowledged.
+- **M1 gate driver:** canaries create the staging directory before nydusd is copied there.
+
+## 0.8.7 - 2026-10-03 (gateway only)
 
 - **Node-local model waits cover the relay's HTTP tunnel too.** 0.8.6 enqueued only OpenAI-route calls (`/rollouts/<id>/v1/chat/completions`) as local waits. Agents using `http_tunnel_url`, such as the relay benchmark's, still got the relay-driven park and wake: correct, but no saving. The canary found it: 456 of 456 calls had `local_wait` false. Gateway only: the relay runs there, and workers keep the 0.8.6 bundle.
 

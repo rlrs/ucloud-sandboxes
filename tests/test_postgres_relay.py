@@ -728,25 +728,39 @@ class PostgresRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((again.request_id, again.completed_response.body), (local.request_id, b"answer"))
 
     async def test_acknowledgment_is_every_written_byte_acked(self):
-        server_sockets = []
+        accepted = asyncio.Queue()
 
         async def accept(reader, writer):
-            server_sockets.append(writer)
+            await accepted.put((reader, writer))
         server = await asyncio.start_server(accept, "127.0.0.1", 0)
         port = server.sockets[0].getsockname()[1]
-        reader, writer = await asyncio.open_connection("127.0.0.1", port)
-        for _ in range(100):
-            if server_sockets:
-                break
-            await asyncio.sleep(0.01)
-        peer = server_sockets[0]
+
+        async def pair():
+            client = await asyncio.open_connection("127.0.0.1", port)
+            return client, await asyncio.wait_for(accepted.get(), 5)
+        (_reader, writer), (_peer_reader, peer) = await pair()
+        probe = api._ack_probe(peer.transport)
         peer.write(b"x" * 100_000)  # The client's kernel acknowledges it unread.
-        self.assertTrue(await api._acknowledged(peer.transport, 2.0))
+        self.assertTrue(await api._acknowledged(probe, peer.transport, 2.0))
         with patch.object(api.fcntl, "ioctl", return_value=(17).to_bytes(4, "little")):
-            self.assertFalse(await api._acknowledged(peer.transport, 0.05))  # Still unacked.
-        self.assertFalse(await api._acknowledged(None, 0.05))
+            self.assertFalse(await api._acknowledged(probe, peer.transport, 0.05))  # Still unacked.
+        probe.close()
+        self.assertFalse(await api._acknowledged(None, peer.transport, 0.05))
         writer.close()
         peer.close()
+        # A guest that reads its answer and closes at once: the server's copy is
+        # gone by the time it checks, the probe still sees the acknowledgment.
+        (reader, writer), (_peer_reader, peer) = await pair()
+        probe = api._ack_probe(peer.transport)
+        peer.write(b"answer")
+        await peer.drain()
+        self.assertEqual(await reader.readexactly(6), b"answer")
+        writer.close()
+        await writer.wait_closed()
+        peer.close()
+        await peer.wait_closed()
+        self.assertTrue(await api._acknowledged(probe, peer.transport, 1.0))
+        probe.close()
         server.close()
         await server.wait_closed()
 

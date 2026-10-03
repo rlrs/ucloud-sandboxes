@@ -421,4 +421,23 @@ under 0.8.6. The design is in `docs/node-local-model-waits.md`.
     - **but all 456 requests had `local_wait` false,** with dispatched park and wake
       rows. The benchmark's agents use the relay's HTTP tunnel, which 0.8.6 did not
       mark local. **Fixed in 0.8.7, a gateway-only upgrade.**
+- **0.8.7, gateway only** (20:58:38Z). The tunnel takes the local path; workers stay
+  on the 0.8.6 bundle.
+  - **Relay benchmark again** (`rlbench-0236f2e80111`):
+    - all 456 requests had `local_wait` true;
+    - no park rows, and 456 wake rows closed without a dispatch;
+    - answer → agent p50 / p95 22 / 30 ms, against 38 / 54 ms;
+    - overhead on turns 0–6 p95 0.141 s;
+    - **the final-turn hold is gone**: turn 7 p50 0.038 s, against 1.3 s;
+    - 57/64 rollouts, 519 pauses, no escalations.
+  - **Hibernation fallback** (`rlbench-96876e590159`, 16 tasks, 20–25 s thinks): four
+    sandboxes were parked (hibernated) mid-call.
+    - All four rollouts finished all 8 turns: each cut call succeeded on its second
+      attempt, about 5.8 s over its think time (the 5 s grace plus the restore).
+    - 13/16 rollouts finished; the 3 failures are images without Python.
+    - **But 8 wakes were dispatched for 4 hibernations.** The call after each restore
+      was not paused (the sandbox was busy after its restore). Its guest read the
+      answer and closed before the relay checked, so the relay found its socket
+      closed and counted the answer unacknowledged. The wakes were harmless no-ops.
+      **Fixed in 0.8.8** by probing a duplicated socket.
 

@@ -223,6 +223,9 @@ class ResumeAndTeardownTests(GateTest):
         self.assertIn("9" * 64 + "  /usr/local/libexec/ucloud-nydusd", installs[0])
         init = next(index for index, call in enumerate(calls) if "init-vm" in call and "deployment-canary" in call)
         self.assertLess(calls.index(installs[0]), init)
+        staged = next(index for index, call in enumerate(calls) if "install -d -m 0700 /opt/m1-gate" in call)
+        self.assertLess(staged, next(index for index, call in enumerate(calls)
+                                     if "scp -q" in call and "/nydusd root@" in call))  # The directory comes first.
         self.assertIn("immutable_environments.attach_concurrency=8", next(
             call for call in calls if "deployment-canary.json" in call and "derive-config" in call))
 

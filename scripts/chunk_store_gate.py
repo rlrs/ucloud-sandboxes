@@ -766,6 +766,8 @@ class Gate:
         pinned = self.nydusd()
         self.gw(f"install -m 0755 {shlex.quote(self.args.nydusd)} {self.staging}/nydusd && echo "
                 f"'{pinned['sha256']}  {self.staging}/nydusd' | sha256sum -c --quiet -")
+        # The staging directory comes later: without it scp would write a file named after it.
+        self.on(role, f"[ -d {HOST} ] || rm -f {HOST}; install -d -m 0700 {HOST}")
         self.to_host(role, ["nydusd"])
         self.on(role, f"install -D -m 0755 {HOST}/nydusd {shlex.quote(pinned['path'])} && "
                       f"echo '{pinned['sha256']}  {pinned['path']}' | sha256sum -c --quiet -")

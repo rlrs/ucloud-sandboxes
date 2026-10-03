@@ -26,7 +26,7 @@ import unittest
 from unittest.mock import patch
 
 from ucloud_sandboxes.environment_builder import FreshEnvironmentBuilder, WHOLE_IMAGE_EXCLUDED
-from ucloud_sandboxes.erofs_metadata import UnsupportedErofs, metadata_ranges, walk
+from ucloud_sandboxes.erofs_metadata import UnsupportedErofs, metadata_ranges, symlink_targets, walk
 
 MKFS = shutil.which("mkfs.erofs")
 DUMP = shutil.which("dump.erofs")
@@ -391,6 +391,25 @@ class ErofsMetadataTests(unittest.TestCase):
             with patch.dict(os.environ, TMPDIR=str(self.root / "missing")):
                 builder_image(self.view, image, preserve_mtimes=True)
         return (("layout-2", image),)
+
+    def test_symlink_targets_are_byte_exact_by_path(self):
+        # Rollback's source of truth: nydus-image unpack's tar drops '.' components.
+        tree = self.root / "links"
+        if not tree.exists():
+            (tree / "share/terminfo/31").mkdir(parents=True)
+            for index in range(300):  # A directory over one block.
+                (tree / "share/terminfo/31" / f"entry-{index:04d}-{'x' * 20}").symlink_to(f".././61/adm{index}")
+            (tree / "dot").symlink_to("./a/./b/../c")
+            (tree / "long").symlink_to("y" * 4000)
+            os.link(tree / "dot", tree / "dot-again", follow_symlinks=False)
+        for view, image in ((tree, self.root / "links.erofs"), (self.view, self.image)):
+            if not image.exists():
+                subprocess.run([MKFS, "-T", "0", str(image), str(view)], check=True, capture_output=True)
+            expected = {os.path.relpath(os.path.join(directory, name), view): os.readlink(os.path.join(directory, name))
+                        for directory, names, files in os.walk(view) for name in names + files
+                        if os.path.islink(os.path.join(directory, name))}
+            with self.subTest(image=image.name):
+                self.assertEqual(symlink_targets(image.read_bytes()), expected)
 
     def test_walk_reaches_every_inode_and_records_never_overlap(self):
         expected = {(info.st_dev, info.st_ino) for info in map(os.lstat, _source_paths(self.view))}

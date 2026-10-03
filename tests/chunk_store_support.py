@@ -191,6 +191,7 @@ def sample_images(client):
     base = layer([("etc", "dir"), ("etc/hosts", b"127.0.0.1 localhost\n"), ("etc/gone", b"x" * 5000),
                   ("usr", "dir"), ("usr/lib", "dir"), ("usr/lib/text", b"lorem ipsum " * 90_000),
                   ("usr/lib/noise", pseudo_random("noise", 700_000)), ("usr/lib/link", ("symlink", "text")),
+                  ("usr/lib/dotted", ("symlink", ".././lib/text")),  # Rollback keeps '.' (M1 gate).
                   ("usr/lib/hard", ("link", "usr/lib/text")), ("home", "dir"), ("home/user", "dir"), ("home/user/.p", b"x")])
     top_a = layer([("etc/.wh.gone", b""), ("opt", "dir"), ("opt/a", shared), ("opt/a-only", pseudo_random("a", 9000))])
     top_b = layer([("opt", "dir"), ("opt/b", shared), ("opt/b-only", pseudo_random("b", 70_000))])

@@ -33,6 +33,7 @@ from .chunk_store import (BLOCK, MAX_BOOTSTRAP_BYTES, Locator, PackWriter, boots
 from .environment_artifact import (EMPTY_LAYER_DIFF_ID, ENVIRONMENT_ANNOTATION, OCI_IMAGE, RAFS_CONVERTER,
                                    RafsEnvironmentComponent, canonical_bytes, content_digest, load_environment,
                                    publish_environment, require_digest, sign_rafs_component)
+from .erofs_metadata import symlink_targets
 
 _LOG = logging.getLogger(__name__)
 DOCKER_MANIFEST = "application/vnd.docker.distribution.manifest.v2+json"
@@ -592,6 +593,24 @@ def mount_verifier(*, devices, trusted_keys, work_root, store_node=None):
 
 # --- Rollback: chunk store -> tar -> OCI push (design §7) ---
 
+def exact_symlinks(source, destination, targets):
+    """``source`` with each symlink's target as the image has it (``targets``,
+    by path): ``nydus-image unpack``'s tar writer drops '.' components
+    (``.././61/adm1178`` becomes ``../61/adm1178``; M1 gate rollback). Returns
+    ``source`` when nothing differs."""
+    with tarfile.open(source, "r:") as reader:
+        members = reader.getmembers()
+        if all(not member.issym() or targets.get(_normal(member.name), member.linkname) == member.linkname
+               for member in members):
+            return source
+        with tarfile.open(destination, "w", format=tarfile.PAX_FORMAT) as writer:
+            for member in members:
+                if member.issym():
+                    member.linkname = targets.get(_normal(member.name), member.linkname)
+                writer.addfile(member, reader.extractfile(member) if member.isfile() else None)
+    return destination
+
+
 def unpack_environment(registry, index, root, *, repository, tag, work_root, nydus_image="nydus-image",
                        reader=None, access=None):
     """Regenerate a single-layer OCI image from a converted root.
@@ -613,11 +632,13 @@ def unpack_environment(registry, index, root, *, repository, tag, work_root, nyd
         blobs = scratch / "blobs"
         blobs.mkdir()
         _rebuild_blobs(image, blobs)
+        bootstrap = image.bootstrap.read(0, image.bootstrap.size)
         patched = scratch / "patched.boot"
-        patched.write_bytes(_uncompressed_chunk_table(image.bootstrap.read(0, image.bootstrap.size)))
+        patched.write_bytes(_uncompressed_chunk_table(bootstrap))
         subprocess.run([nydus_image, "unpack", "--bootstrap", str(patched), "--blob-dir", str(blobs),
                         "--output", str(scratch / "layer.tar")], check=True, capture_output=True, timeout=3600)
-        diff_id, layer_digest, layer_size = _gzip_layer(scratch / "layer.tar", scratch / "layer.tar.gz")
+        layer = exact_symlinks(scratch / "layer.tar", scratch / "exact.tar", symlink_targets(bootstrap))
+        diff_id, layer_digest, layer_size = _gzip_layer(layer, scratch / "layer.tar.gz")
         client = registry.client
         if not client.blob_exists(repository, layer_digest):
             client.upload_blob_file(repository, scratch / "layer.tar.gz", layer_digest, layer_size)

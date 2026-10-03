@@ -24,6 +24,8 @@ _ZERO_PADDING, _COMPR_CFGS, _CHUNKED_FILE = 0x1, 0x2, 0x4  # COMPR_CFGS is also 
 # DEVICE_TABLE/COMPR_HEAD2, ZTAILPACKING, FRAGMENTS/DEDUPE, XATTR_PREFIXES,
 # 48BIT and METABOX add or move metadata that no qualified image exercises.
 _INCOMPAT_KNOWN = _ZERO_PADDING | _COMPR_CFGS | _CHUNKED_FILE
+_DEVICE_TABLE, _COMPAT_RAFS_V6 = 0x8, 0x40000000  # RAFS v6 blob devices and marker: symlink_targets only.
+_FT_DIR, _FT_SYMLINK = 2, 7
 FLAT_PLAIN, COMPRESSED_FULL, FLAT_INLINE, COMPRESSED_COMPACT, CHUNK_BASED = range(5)
 _COMPACTED_2B, _BIG_PCLUSTER = 0x1, 0x2 | 0x4
 _CHUNK_FORMAT_KNOWN, _CHUNK_INDEXES = 0x3F, 0x20
@@ -114,7 +116,7 @@ class _Walker:
         self.need(offset, struct.calcsize(layout), "field")
         return struct.unpack_from(layout, self.view, offset)
 
-    def superblock(self):
+    def superblock(self, devices=False):
         self.need(SUPER_OFFSET, 128, "superblock")
         (magic, _checksum, compat, blkszbits, extslots, root_nid, inos, _epoch, _nsec, blocks,
          meta_blkaddr, xattr_blkaddr) = _SUPER.unpack_from(self.view, SUPER_OFFSET)
@@ -123,14 +125,18 @@ class _Walker:
         (packed_nid,) = self.unpack("<Q", SUPER_OFFSET + 96)
         if magic != MAGIC:
             raise UnsupportedErofs("not an EROFS image")
-        if compat & ~_COMPAT_KNOWN or incompat & ~_INCOMPAT_KNOWN:
+        known = _INCOMPAT_KNOWN | (_DEVICE_TABLE if devices else 0)
+        if compat & ~(_COMPAT_KNOWN | (_COMPAT_RAFS_V6 if devices else 0)) or incompat & ~known:
             raise UnsupportedErofs(f"EROFS features compat={compat:#x} incompat={incompat:#x} are not qualified")
-        if blkszbits != 12 or extra_devices or dirblkbits or prefix_count or packed_nid:
+        if blkszbits != 12 or (extra_devices and not devices) or dirblkbits or prefix_count or packed_nid:
             raise UnsupportedErofs("EROFS block size, extra devices or packed metadata are not qualified")
         self.blkszbits, self.blksz = blkszbits, 1 << blkszbits
-        if not 0 < blocks * self.blksz <= self.size:
+        if devices:
+            pass  # A RAFS bootstrap counts its blob devices' blocks too; reads stay within ``size``.
+        elif not 0 < blocks * self.blksz <= self.size:
             raise ValueError("EROFS block count exceeds the image")
-        self.size = blocks * self.blksz
+        else:
+            self.size = blocks * self.blksz
         self.meta_base, self.xattr_base = meta_blkaddr * self.blksz, xattr_blkaddr * self.blksz
         self.chunked, self.big_pcluster = bool(incompat & _CHUNKED_FILE), bool(incompat & _COMPR_CFGS)
         self.inos = inos
@@ -273,6 +279,48 @@ class _Walker:
                 if name not in (b".", b".."):
                     self.need(self.meta_base + 32 * nid, 32, "directory entry inode")
                     yield nid
+
+
+def _inline_data(walker, size, tail, i_u, blocks, layout):
+    """A directory's or symlink's bytes: whole blocks at ``i_u``, then the tail."""
+    full = blocks if layout == FLAT_PLAIN else max(blocks - 1, 0)
+    head, data = min(full << walker.blkszbits, size), b""
+    if head:  # Fully inline data leaves i_u unused.
+        walker.need(i_u << walker.blkszbits, head, "metadata block")
+        data = bytes(walker.view[i_u << walker.blkszbits:(i_u << walker.blkszbits) + head])
+    if layout == FLAT_INLINE and size > head:
+        walker.need(tail, size - head, "inline data")
+        data += bytes(walker.view[tail:tail + size - head])
+    return data
+
+
+def symlink_targets(view):
+    """{path: target} for every symlink, byte-exact, by a name walk from the
+    root. It reads only directory and symlink inodes, so a RAFS v6 bootstrap's
+    blob devices are allowed: rollback restores the targets ``nydus-image
+    unpack``'s tar writer normalizes (``.././x`` becomes ``../x``)."""
+    walker = _Walker(view, len(view))
+    pending, targets, seen = [(walker.superblock(devices=True), "")], {}, set()
+    while pending:
+        nid, path = pending.pop()
+        kind, layout, size, tail, i_u, blocks, _ = walker.inode(nid)
+        if layout not in (FLAT_PLAIN, FLAT_INLINE):
+            raise UnsupportedErofs(f"EROFS layout {layout} for a directory or symlink is not qualified")
+        data = _inline_data(walker, size, tail, i_u, blocks, layout)
+        if kind == stat.S_IFLNK:
+            targets[path] = data.decode("utf-8", "surrogateescape")
+            continue
+        for start in range(0, len(data), walker.blksz):
+            block = data[start:start + walker.blksz]
+            (first,) = struct.unpack_from("<H", block, 8)
+            entries = [struct.unpack_from("<QHB", block, 12 * index) for index in range(first // 12)]
+            for index, (child, offset, file_type) in enumerate(entries):
+                end = entries[index + 1][1] if index + 1 < len(entries) else len(block)
+                name = bytes(block[offset:end]).split(b"\0", 1)[0].decode("utf-8", "surrogateescape")
+                if name not in (".", "..") and (file_type == _FT_SYMLINK or file_type == _FT_DIR and child not in seen):
+                    seen.add(child)  # A symlink's hardlinks each need their path.
+                    pending.append((child, f"{path}/{name}" if path else name))
+    return targets
 
 
 def walk(view, size=None, *, check=lambda: None, on_inode=None):

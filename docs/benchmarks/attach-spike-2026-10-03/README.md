@@ -153,3 +153,35 @@ The change was reverted (`b0f9a9f`). Single-chunk misses stay.
      parallel attach pay;
   4. M2's store node, with 4 MiB extents on the private network, which the
      M1 gate's burst comparison measures.
+
+## Shared startup traces (C2.7 groundwork, 2026-10-03)
+
+**What was tried.** `2dac20a` makes workers push the startup traces they
+record into the managed registry (`environment-traces`, tag
+`trace-<component>`, trace inline as an annotation). A worker with no local
+trace fetches the shared one: one bounded GET, validated like its own. The
+measurement used a fresh CCX63 with the production config, `--shared-traces`
+added by a drop-in ([traces_run.sh](traces_run.sh)), the same 64 images and
+serial attach.
+- **Round 1** records and shares.
+- **Round 2** starts each mode with no local traces or cache, like a new node.
+
+Data is in [raw-shared-traces/](raw-shared-traces/).
+
+| 64 images, serial attach | wall, s | create p50 / max, s | `import sys` p50 / p95, s | `pip` p50, s | demand misses |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| fresh node, no traces (r1 demand) | 28.8 | 9.2 / 24.7 | 0.94 / 2.2 | 3.5 | 4,847 |
+| fresh node, shared traces (r2 demand) | 27.9 | 11.7 / 25.2 | 0.41 / 1.7 | 2.8 | 235 |
+| own traces (r1 traced) | 25.5 | 9.2 / 23.1 | 0.56 / 1.6 | 2.8 | 234 |
+
+- **It works across nodes.** All 115 components found a shared trace
+  (`trace_hint_present` 115), and none of the 105 pushes failed: workers may
+  write the repository.
+- **A fresh node starts like a warm-traced one.** First commands ran 2.3×
+  faster, and demand misses fell 20×.
+- **Burst wall time hardly moves.** The same 1.27 GB still comes through the
+  node's fetch path at about 50 MB/s. Traces take it off first commands' path,
+  not out of the burst.
+- **Production state left behind:** 105 shared traces (a few KB each) in the
+  production registry's `environment-traces` repository. They are harmless,
+  and used only once `immutable_environments.shared_traces` is turned on.

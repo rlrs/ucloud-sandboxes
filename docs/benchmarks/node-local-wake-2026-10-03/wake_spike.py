@@ -44,6 +44,7 @@ AGENT = r'''
 import hashlib, http.client, json, os, ssl, sys, threading, time
 host, port, name, compute_ms, ticker, plans = (sys.argv[1], int(sys.argv[2]), sys.argv[3], int(sys.argv[4]),
                                                float(sys.argv[5]), json.loads(sys.argv[6]))
+plain = len(sys.argv) > 7 and sys.argv[7] == "plain"
 lock = threading.Lock()
 def out(row):
     with lock:
@@ -58,9 +59,12 @@ def tick():  # Background work during the waits: how late does a pause make it?
         hashlib.sha256(b"x" * 100000).digest()
         expected += ticker
 def caller(lane, plan):
-    context = ssl.create_default_context()
-    context.check_hostname, context.verify_mode = False, ssl.CERT_NONE
-    connection = http.client.HTTPSConnection(host, port, context=context, timeout=600)
+    if plain:
+        connection = http.client.HTTPConnection(host, port, timeout=600)
+    else:
+        context = ssl.create_default_context()
+        context.check_hostname, context.verify_mode = False, ssl.CERT_NONE
+        connection = http.client.HTTPSConnection(host, port, context=context, timeout=600)
     for index, (think, size) in enumerate(plan):
         end = time.process_time() + compute_ms / 1000
         while time.process_time() < end:
@@ -93,7 +97,7 @@ def log_line(path, row):
 def relay(args):
     OUT.mkdir(parents=True, exist_ok=True)
     key, cert = OUT / "relay.key", OUT / "relay.crt"
-    if not cert.exists():
+    if not args.plain and not cert.exists():
         subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=wake-spike",
                         "-days", "2", "-keyout", str(key), "-out", str(cert)], check=True, capture_output=True)
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -119,11 +123,12 @@ def relay(args):
         def log_message(self, *_):
             pass
 
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.load_cert_chain(str(cert), str(key))
     server = ThreadingHTTPServer((args.listen, args.port), Handler)
     server.daemon_threads = True
-    server.socket = context.wrap_socket(server.socket, server_side=True)
+    if not args.plain:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(str(cert), str(key))
+        server.socket = context.wrap_socket(server.socket, server_side=True)
     server.serve_forever()
 
 
@@ -276,6 +281,29 @@ class Daemon:
                     self.event(item, "thawed_at_close")
 
 
+class MarkerWatcher:
+    """mode node: the node pauses and thaws by itself (sandbox.direct_local_model_waits);
+    its pause tier's markers record when (written before ``runsc pause``, removed after resume)."""
+
+    def __init__(self, directory, ids, events):
+        self.directory, self.ids, self.events = Path(directory), set(ids), events
+        self.stop, self.paused = threading.Event(), set()
+
+    def run(self):
+        while not self.stop.is_set():
+            try:
+                names = {name.rpartition(".sandbox-")[0] for name in os.listdir(self.directory)}
+            except FileNotFoundError:
+                names = set()
+            now, current = time.time(), names & self.ids
+            for sandbox_id in current - self.paused:
+                self.events.append({"t": now, "id": sandbox_id, "event": "paused", "rc": 0})
+            for sandbox_id in self.paused - current:
+                self.events.append({"t": now, "id": sandbox_id, "event": "thawed"})
+            self.paused = current
+            time.sleep(0.002)
+
+
 # --- One arm ---
 
 class NodeApi:
@@ -324,32 +352,45 @@ def arm(args):
         records = dict(zip(ids, pool.map(create, ids)))
     found = sentries()
     watched = []
-    for sandbox_id, record in records.items():
+    for sandbox_id, record in records.items() if args.mode != "node" else ():
         leaf = hashlib.sha256(f"{sandbox_id}:{record['generation']}".encode()).hexdigest()
         runsc, root, container, pid = found[leaf]
         watched.append(Watched(sandbox_id, runsc, root, container, pid, host_veth(pid), leaf))
-    daemon = Daemon(watched, args.relay_port, args.mode, evidence["events"], delay=args.delay)
-    threads = [threading.Thread(target=daemon.sniff, daemon=True), threading.Thread(target=daemon.policy, daemon=True)]
+    if args.mode == "node":
+        daemon = MarkerWatcher(args.marker_dir, ids, evidence["events"])
+        daemon.close = daemon.stop.set
+        threads = [threading.Thread(target=daemon.run, daemon=True)]
+    else:
+        daemon = Daemon(watched, args.relay_port, args.mode, evidence["events"], delay=args.delay)
+        threads = [threading.Thread(target=daemon.sniff, daemon=True),
+                   threading.Thread(target=daemon.policy, daemon=True)]
     for thread in threads:
         thread.start()
     before = nstat("TcpRetransSegs", "TcpExtTCPLostRetransmit", "TcpExtTCPTimeouts")
     started = time.time()
     for sandbox_id in ids:
         argv = ["python3", "-c", AGENT, args.relay_host, str(args.relay_port), sandbox_id, str(args.compute_ms),
-                str(args.ticker), json.dumps(plans[sandbox_id])]
+                str(args.ticker), json.dumps(plans[sandbox_id]), "plain" if args.plain else "tls"]
         api.call(f"/v1/sandboxes/{sandbox_id}/jobs", method="POST", payload={"job_id": JOB, "argv": argv})
     # Never read the job while the daemon may hold a pause it owns: wait on the relay's log.
     expected = args.count * args.lanes * args.cycles
     deadline = started + args.cycles * (args.think_max + args.compute_ms / 1000 + args.delay + 5) + 120
+    relay_log = Path(args.relay_log) if args.relay_log else OUT / "relay.jsonl"
     while time.time() < deadline:
-        done = [row for row in read_jsonl(OUT / "relay.jsonl") if row["id"].split(":")[0] in records]
+        if args.mode == "node":  # The node's own pauses keep job reads safe; the relay's log is remote.
+            states = [api.call(f"/v1/sandboxes/{sandbox_id}/jobs/{JOB}")["job"]["state"] for sandbox_id in ids]
+            if all(state not in ("starting", "running") for state in states):
+                break
+            time.sleep(2)
+            continue
+        done = [row for row in read_jsonl(relay_log) if row["id"].split(":")[0] in records]
         if len(done) >= expected:
             break
         time.sleep(1)
     time.sleep(3)
     daemon.close()
     evidence["nstat"] = {key: value - before[key] for key, value in nstat(*before).items()}
-    evidence["relay"] = [row for row in read_jsonl(OUT / "relay.jsonl") if row["id"].split(":")[0] in records]
+    evidence["relay"] = [row for row in read_jsonl(relay_log) if row["id"].split(":")[0] in records]
     evidence["agents"] = {}
     for sandbox_id in ids:
         try:
@@ -421,23 +462,40 @@ def summarize(evidence):
         "calls": len(calls), "expected": len(evidence["ids"]) * evidence["args"]["lanes"] * evidence["args"]["cycles"],
         "answer_latency_s": quantiles(latency), "pauses": len(pauses), "pauses_outside_a_wait": wrong,
         "paused_share_of_wait": round(paused_ms / think_ms, 4) if think_ms else None,
-        "pause_runsc_ms": quantiles([event["runsc_ms"] for event in pauses]),
-        "pause_after_last_send_ms": quantiles([event["waited_ms"] for event in pauses]),
-        "thaw_since_packet_ms": quantiles([event["since_packet_ms"] for event in thaws]),
-        "thaw_runsc_ms": quantiles([event["runsc_ms"] for event in thaws]),
+        "pause_runsc_ms": quantiles([event["runsc_ms"] for event in pauses if "runsc_ms" in event]),
+        "pause_after_last_send_ms": quantiles([event["waited_ms"] for event in pauses if "waited_ms" in event]),
+        "thaw_since_packet_ms": quantiles([event["since_packet_ms"] for event in thaws if "since_packet_ms" in event]),
+        "thaw_runsc_ms": quantiles([event["runsc_ms"] for event in thaws if "runsc_ms" in event]),
         "tick_late_s": quantiles(ticks), "nstat": evidence["nstat"], "errors": len(evidence["errors"]),
     }
+
+
+def merge(args):
+    """Summarize an arm's evidence with a relay log fetched from the relay host."""
+    evidence = json.loads(Path(args.evidence).read_text())
+    evidence["relay"] = [row for row in read_jsonl(args.relay_log) if row["id"].split(":")[0] in set(evidence["ids"])]
+    evidence["summary"] = summarize(evidence)
+    Path(args.evidence).write_text(json.dumps(evidence, indent=1))
+    print(json.dumps({"arm": evidence["arm"], **evidence["summary"]}, indent=1))
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    summary = commands.add_parser("summarize")
+    summary.add_argument("--evidence", required=True)
+    summary.add_argument("--relay-log", required=True)
     serve = commands.add_parser("relay")
     serve.add_argument("--listen", default="0.0.0.0")
     serve.add_argument("--port", type=int, default=8443)
+    serve.add_argument("--plain", action="store_true", help="HTTP/1.1 without TLS (the private relay path)")
     run = commands.add_parser("arm")
     run.add_argument("--name", required=True)
-    run.add_argument("--mode", choices=("observe", "local", "delayed"), required=True)
+    run.add_argument("--mode", choices=("observe", "local", "delayed", "node"), required=True)
+    run.add_argument("--plain", action="store_true", help="agents call the relay without TLS")
+    run.add_argument("--marker-dir", default="/work/ucloud-sandboxes/state/direct-runtime/runsc/warden-paused",
+                     help="mode node: the pause tier's marker directory")
+    run.add_argument("--relay-log", default="", help="the relay's log when it runs on another host")
     run.add_argument("--node-url", required=True)
     run.add_argument("--node-token-file", required=True)
     run.add_argument("--image", required=True)
@@ -456,6 +514,8 @@ def main(argv=None):
     run.add_argument("--memory-mb", type=int, default=512)
     run.add_argument("--seed", type=int, default=1)
     args = parser.parse_args(argv)
+    if args.command == "summarize":
+        return merge(args)
     OUT.mkdir(parents=True, exist_ok=True)
     relay(args) if args.command == "relay" else arm(args)
 

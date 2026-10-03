@@ -1,0 +1,9757 @@
+{
+ "arm": "node3-ticker",
+ "mode": "node",
+ "args": {
+  "command": "arm",
+  "name": "node3-ticker",
+  "mode": "node",
+  "plain": true,
+  "marker_dir": "/work/ucloud-sandboxes/state/direct-runtime/runsc/warden-paused",
+  "relay_log": "",
+  "node_url": "http://127.0.0.1:8090",
+  "node_token_file": "/var/lib/ucloud-sandboxes/state/node-control-token",
+  "image": "10.42.0.2:5000/ucloud-managed/shared-task-9db2bebb1e964a67a1cc4e4fd55f-247362126efd@sha256:8249b386d6a9de39c1ad7d048bd72b160565b4021b782be6ec46f03e5b69391a",
+  "relay_host": "10.42.0.43",
+  "relay_port": 8092,
+  "count": 8,
+  "lanes": 1,
+  "cycles": 12,
+  "think_min": 2.0,
+  "think_max": 5.0,
+  "compute_ms": 200,
+  "sizes": "2048",
+  "ticker": 0.25,
+  "delay": 2.0,
+  "cpus": 0.5,
+  "memory_mb": 512,
+  "seed": 1
+ },
+ "ids": [
+  "wake-node3-ticker-2b83ac-0",
+  "wake-node3-ticker-2b83ac-1",
+  "wake-node3-ticker-2b83ac-2",
+  "wake-node3-ticker-2b83ac-3",
+  "wake-node3-ticker-2b83ac-4",
+  "wake-node3-ticker-2b83ac-5",
+  "wake-node3-ticker-2b83ac-6",
+  "wake-node3-ticker-2b83ac-7"
+ ],
+ "plans": {
+  "wake-node3-ticker-2b83ac-0": [
+   [
+    [
+     2.4,
+     2048
+    ],
+    [
+     4.54,
+     2048
+    ],
+    [
+     4.29,
+     2048
+    ],
+    [
+     2.77,
+     2048
+    ],
+    [
+     3.49,
+     2048
+    ],
+    [
+     3.35,
+     2048
+    ],
+    [
+     3.95,
+     2048
+    ],
+    [
+     4.37,
+     2048
+    ],
+    [
+     2.28,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ],
+    [
+     4.51,
+     2048
+    ],
+    [
+     3.3,
+     2048
+    ]
+   ]
+  ],
+  "wake-node3-ticker-2b83ac-1": [
+   [
+    [
+     4.29,
+     2048
+    ],
+    [
+     2.01,
+     2048
+    ],
+    [
+     3.34,
+     2048
+    ],
+    [
+     4.16,
+     2048
+    ],
+    [
+     2.69,
+     2048
+    ],
+    [
+     4.84,
+     2048
+    ],
+    [
+     4.7,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ],
+    [
+     2.08,
+     2048
+    ],
+    [
+     3.62,
+     2048
+    ],
+    [
+     4.82,
+     2048
+    ],
+    [
+     3.14,
+     2048
+    ]
+   ]
+  ],
+  "wake-node3-ticker-2b83ac-2": [
+   [
+    [
+     2.65,
+     2048
+    ],
+    [
+     3.27,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ],
+    [
+     2.67,
+     2048
+    ],
+    [
+     3.31,
+     2048
+    ],
+    [
+     3.49,
+     2048
+    ],
+    [
+     2.7,
+     2048
+    ],
+    [
+     2.69,
+     2048
+    ],
+    [
+     2.66,
+     2048
+    ],
+    [
+     3.38,
+     2048
+    ],
+    [
+     2.87,
+     2048
+    ],
+    [
+     2.06,
+     2048
+    ]
+   ]
+  ],
+  "wake-node3-ticker-2b83ac-3": [
+   [
+    [
+     4.51,
+     2048
+    ],
+    [
+     3.67,
+     2048
+    ],
+    [
+     3.93,
+     2048
+    ],
+    [
+     2.56,
+     2048
+    ],
+    [
+     4.98,
+     2048
+    ],
+    [
+     4.58,
+     2048
+    ],
+    [
+     2.36,
+     2048
+    ],
+    [
+     3.0,
+     2048
+    ],
+    [
+     4.16,
+     2048
+    ],
+    [
+     4.13,
+     2048
+    ],
+    [
+     4.81,
+     2048
+    ],
+    [
+     3.27,
+     2048
+    ]
+   ]
+  ],
+  "wake-node3-ticker-2b83ac-4": [
+   [
+    [
+     4.49,
+     2048
+    ],
+    [
+     4.01,
+     2048
+    ],
+    [
+     2.91,
+     2048
+    ],
+    [
+     3.76,
+     2048
+    ],
+    [
+     4.65,
+     2048
+    ],
+    [
+     4.54,
+     2048
+    ],
+    [
+     3.52,
+     2048
+    ],
+    [
+     3.77,
+     2048
+    ],
+    [
+     2.1,
+     2048
+    ],
+    [
+     2.73,
+     2048
+    ],
+    [
+     4.39,
+     2048
+    ],
+    [
+     3.24,
+     2048
+    ]
+   ]
+  ],
+  "wake-node3-ticker-2b83ac-5": [
+   [
+    [
+     2.52,
+     2048
+    ],
+    [
+     3.65,
+     2048
+    ],
+    [
+     4.11,
+     2048
+    ],
+    [
+     4.02,
+     2048
+    ],
+    [
+     3.12,
+     2048
+    ],
+    [
+     3.32,
+     2048
+    ],
+    [
+     3.53,
+     2048
+    ],
+    [
+     4.34,
+     2048
+    ],
+    [
+     3.56,
+     2048
+    ],
+    [
+     3.18,
+     2048
+    ],
+    [
+     3.47,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ]
+   ]
+  ],
+  "wake-node3-ticker-2b83ac-6": [
+   [
+    [
+     2.13,
+     2048
+    ],
+    [
+     4.11,
+     2048
+    ],
+    [
+     4.95,
+     2048
+    ],
+    [
+     3.78,
+     2048
+    ],
+    [
+     3.18,
+     2048
+    ],
+    [
+     2.51,
+     2048
+    ],
+    [
+     3.51,
+     2048
+    ],
+    [
+     4.95,
+     2048
+    ],
+    [
+     4.31,
+     2048
+    ],
+    [
+     3.62,
+     2048
+    ],
+    [
+     4.58,
+     2048
+    ],
+    [
+     2.7,
+     2048
+    ]
+   ]
+  ],
+  "wake-node3-ticker-2b83ac-7": [
+   [
+    [
+     3.54,
+     2048
+    ],
+    [
+     4.86,
+     2048
+    ],
+    [
+     3.73,
+     2048
+    ],
+    [
+     3.38,
+     2048
+    ],
+    [
+     2.81,
+     2048
+    ],
+    [
+     3.64,
+     2048
+    ],
+    [
+     4.87,
+     2048
+    ],
+    [
+     2.02,
+     2048
+    ],
+    [
+     4.35,
+     2048
+    ],
+    [
+     4.46,
+     2048
+    ],
+    [
+     4.66,
+     2048
+    ],
+    [
+     4.22,
+     2048
+    ]
+   ]
+  ]
+ },
+ "events": [
+  {
+   "t": 1791059272.2209363,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059272.22427,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059272.2818959,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059272.3161178,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059272.4032555,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059272.5121994,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059272.693714,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059272.7688918,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059273.652978,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059273.6766477,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059273.7132761,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059273.7392066,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059273.7801917,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059273.8082736,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059273.8426287,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059273.8726661,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059273.9009106,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059273.926482,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059273.9587655,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059273.984663,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059274.0171003,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059274.0408673,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059274.0734777,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059274.107831,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059274.3127117,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059274.6958568,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059274.7626941,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059274.9182863,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059275.0895538,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059275.175197,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059275.294845,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059275.467298,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059276.0041187,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059276.1385298,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059276.1663067,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059276.200477,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059276.2285473,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059276.2606666,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059276.28628,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059276.3143604,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059276.3402598,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059276.3661075,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059276.3941176,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059276.3985035,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059276.4263787,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059276.4542863,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059276.465027,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059276.4800606,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059276.5033739,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059276.5313299,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059276.5588632,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059276.7526443,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059276.7870083,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059277.2128277,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059277.2150035,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059277.5651894,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059278.5238178,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059278.5922835,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059278.6203575,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059278.661282,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059278.6770585,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059278.690183,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059278.7597752,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059278.86159,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059278.880468,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059278.9101422,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059278.9316382,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059278.963704,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059278.9826937,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059278.9997933,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059279.049667,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059279.0690308,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059279.0732243,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059279.088168,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059279.1007612,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059279.3734684,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059279.5553749,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059279.858193,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059280.7729661,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059281.045107,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059281.0494957,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059281.0963004,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059281.1242921,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059281.1574943,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059281.1854234,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059281.2176476,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059281.3514159,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059281.3726058,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059281.4047313,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059281.4442813,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059281.4701862,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059281.500546,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059281.5375066,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059281.539728,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059281.5568194,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059281.603473,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059281.648484,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059281.8653798,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059282.3856611,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059282.696427,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059283.4347792,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059283.6096613,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059283.6331854,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059283.6499548,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059283.674139,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059283.708611,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059283.736819,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059283.7713094,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059283.782141,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059283.8038487,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059283.829753,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059283.8619797,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059283.8896823,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059283.9154675,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059283.9197798,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059283.9623232,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059283.977137,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059284.1053197,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059284.2228563,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059284.3097444,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059284.463587,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059284.605101,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059284.7319522,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059284.9343207,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059284.9663455,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059285.265175,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059285.342301,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059285.5899494,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059286.0039506,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059286.032001,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059286.064549,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059286.0949986,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059286.1250396,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059286.152864,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059286.1916375,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059286.2176268,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059286.2520385,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059286.2799587,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059286.3078058,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059286.3359056,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059286.3703735,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059286.400576,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059286.4353163,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059286.4610684,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059286.8041923,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059287.1007445,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059287.1878052,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059287.4795663,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059287.757105,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059287.8669505,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059287.8669505,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059288.0476327,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059288.1790693,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059288.24325,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059288.2989542,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059288.4517412,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059288.4926307,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059288.5182953,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059288.5485718,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059288.5766196,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059288.6087148,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059288.6326277,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059288.658507,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059288.6846566,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059288.6846566,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059288.827321,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059288.848803,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059288.8828602,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059288.9151213,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059288.9151213,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059289.180563,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059289.1912727,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059289.7499611,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059289.9925125,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059290.925618,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059291.1334515,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059291.1593316,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059291.1893356,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059291.221857,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059291.2413144,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059291.2584834,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059291.2837389,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059291.3201182,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059291.345945,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059291.367645,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059291.5330315,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059291.6545348,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059291.692988,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059291.744485,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059291.766263,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059291.7727349,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059291.7897413,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059291.9487693,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059291.9574,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059292.172908,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059292.420421,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059293.1871738,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059293.464613,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059293.7722914,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059293.81964,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059293.8388786,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059293.864787,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059293.8927538,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059293.929332,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059293.9569917,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059293.9806051,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059294.0064464,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059294.1222458,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059294.152565,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059294.187155,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059294.187155,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059294.2131236,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059294.2411458,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059294.26918,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059294.3888912,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059294.6690884,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059294.716154,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059294.7507885,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059294.7874258,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059294.964902,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059295.0612428,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059295.108625,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059295.1923115,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059295.3656425,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059295.9746258,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059296.2823322,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059296.3038757,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059296.3276126,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059296.3577304,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059296.3923411,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059296.4290633,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059296.454963,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059296.4872663,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059296.5174289,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059296.5520394,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059296.5781612,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059296.6065083,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059296.6368763,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059296.6717885,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059296.695633,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059296.7279282,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059296.7603135,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059297.7444851,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059297.996994,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059298.0998814,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059298.179016,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059298.4676204,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059298.5124407,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059298.5855727,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059298.7911322,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059298.8189998,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059298.847308,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059298.853736,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059298.870861,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059298.8731117,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059298.8944445,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059298.9101264,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059298.9425936,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059298.9663131,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059298.9727077,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059298.9937959,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059299.0291116,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059299.1372662,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059299.1629841,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059299.1995637,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059299.2211668,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059299.2618144,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059299.2747335,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059299.847647,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059300.1976964,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059300.7096348,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059300.7629104,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059301.1020982,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059301.1065168,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059301.1552734,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059301.2489545,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059301.2793014,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059301.311611,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059301.3441646,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059301.3742046,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059301.4021597,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059301.432566,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059301.4629478,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059301.4887984,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059301.4973931,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059301.5231547,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059301.5530841,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059301.5810332,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059301.6222847,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059301.6464438,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059301.6808903,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059301.7111886,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059302.2381618,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059302.353012,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059302.6012816,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059302.7635274,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059303.418061,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059303.456894,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059303.5603805,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059303.5879076,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059303.7752647,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059303.8092923,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059303.9242294,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059303.950001,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059303.9736147,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059303.9867227,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059304.01487,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059304.0516338,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059304.0624495,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059304.0839636,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059304.1335862,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059304.1357467,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059304.1570482,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059304.1853075,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059304.2107716,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059304.2364051,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059304.2641828,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059304.2963395,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059304.3219142,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059304.4380684,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059304.5555718,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059304.6372604,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059304.7928905,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059304.9893403,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059306.294573,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059306.4876428,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059306.5241592,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059306.5431676,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059306.5711985,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059306.6011388,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059306.6334984,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059306.6503398,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059306.6916711,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059306.7302997,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059306.76033,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059306.775928,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059306.797621,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059306.8188877,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059306.8425734,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059306.8683972,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059307.4870064,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059307.6196682,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059307.7652009,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059307.9977503,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059308.0793703,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059308.0881393,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059308.417999,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059308.4525676,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059308.5674274,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059308.672047,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059308.7321265,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059308.8217034,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059308.9068193,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059308.9298263,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059308.948919,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059308.9724069,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059308.9999366,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059309.0915325,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059309.102585,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059309.1562963,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059309.1820583,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059309.2013357,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059309.2186365,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059309.2487993,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059309.285996,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059309.316356,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059310.0124893,
+   "id": "wake-node3-ticker-2b83ac-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059310.902999,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059311.2650971,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059311.3486426,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059311.3790538,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059311.413483,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059311.4394782,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059311.5065348,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059311.5344126,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059311.5644975,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059311.5948179,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059311.6256185,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059311.6514723,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059311.679446,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059311.7099507,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059311.7399826,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059311.763795,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059311.8516488,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059311.986324,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059312.1895099,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059312.3076143,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059312.797693,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059313.1363056,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059313.1787198,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059313.5269547,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059313.5590417,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059313.669021,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059313.8747435,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059313.8833046,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059313.9050453,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059313.9418929,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059313.9655476,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059313.999757,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059314.0299363,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059314.0604942,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059314.0904033,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059314.0926223,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059314.1247764,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059314.1548314,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059314.6937218,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059315.1116655,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059316.1897316,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059316.2110996,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059316.2426584,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059316.2618403,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059316.3169696,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059316.3429103,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059316.3708365,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059316.4027176,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059316.4218993,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059316.4345143,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059316.4576592,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059316.4830341,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059316.5085983,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059316.5255487,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059316.5297482,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059316.8469033,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059316.8747883,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059317.1094143,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059317.1160982,
+   "id": "wake-node3-ticker-2b83ac-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059317.1183298,
+   "id": "wake-node3-ticker-2b83ac-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059317.179363,
+   "id": "wake-node3-ticker-2b83ac-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059317.7952642,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059318.1764646,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059318.3245096,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059318.7278001,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059318.762361,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059318.7732913,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059318.827307,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059318.8575003,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059318.8917608,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059318.9199324,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059319.7681103,
+   "id": "wake-node3-ticker-2b83ac-6",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059320.0613842,
+   "id": "wake-node3-ticker-2b83ac-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059321.043331,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059321.0731246,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059321.20039,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059321.2303233,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791059321.9706278,
+   "id": "wake-node3-ticker-2b83ac-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791059322.3554873,
+   "id": "wake-node3-ticker-2b83ac-7",
+   "event": "thawed"
+  }
+ ],
+ "errors": [],
+ "nstat": {
+  "TcpRetransSegs": 0,
+  "TcpExtTCPLostRetransmit": 0,
+  "TcpExtTCPTimeouts": 0
+ },
+ "relay": [],
+ "agents": {
+  "wake-node3-ticker-2b83ac-0": {
+   "job": {
+    "sandbox_id": "wake-node3-ticker-2b83ac-0",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "7338de0479c83da9e8df0a12c4aa7195d48e404cb80328cd727b3a04393280b0",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T20:27:50.979726366Z",
+    "completed_at": "2026-10-03T20:28:37.133745159Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 9359,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T20:28:46.532730+00:00"
+   },
+   "rows": [
+    {
+     "tick": 1791059272.1967874,
+     "late": 0.0191
+    },
+    {
+     "tick": 1791059273.6499898,
+     "late": 1.2223
+    },
+    {
+     "tick": 1791059273.651368,
+     "late": 0.9737
+    },
+    {
+     "tick": 1791059273.6517863,
+     "late": 0.7241
+    },
+    {
+     "tick": 1791059273.6521242,
+     "late": 0.4745
+    },
+    {
+     "tick": 1791059273.6524582,
+     "late": 0.2248
+    },
+    {
+     "tick": 1791059273.6781206,
+     "late": 0.0005
+    },
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791059272.2995183,
+     "recv": 1791059274.7600057,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059274.7601905,
+     "late": 0.8325
+    },
+    {
+     "tick": 1791059274.7613826,
+     "late": 0.5837
+    },
+    {
+     "tick": 1791059274.7621434,
+     "late": 0.3345
+    },
+    {
+     "tick": 1791059274.7626967,
+     "late": 0.085
+    },
+    {
+     "tick": 1791059274.9968853,
+     "late": 0.0692
+    },
+    {
+     "tick": 1791059276.1355758,
+     "late": 0.9579
+    },
+    {
+     "tick": 1791059276.1360824,
+     "late": 0.7084
+    },
+    {
+     "tick": 1791059276.1364923,
+     "late": 0.4588
+    },
+    {
+     "tick": 1791059276.1368296,
+     "late": 0.2092
+    },
+    {
+     "tick": 1791059276.1780403,
+     "late": 0.0004
+    },
+    {
+     "tick": 1791059278.5899374,
+     "late": 2.1623
+    },
+    {
+     "tick": 1791059278.5903919,
+     "late": 1.9127
+    },
+    {
+     "tick": 1791059278.5906935,
+     "late": 1.663
+    },
+    {
+     "tick": 1791059278.5908906,
+     "late": 1.4132
+    },
+    {
+     "tick": 1791059278.591123,
+     "late": 1.1635
+    },
+    {
+     "tick": 1791059278.5913968,
+     "late": 0.9137
+    },
+    {
+     "tick": 1791059278.5916378,
+     "late": 0.664
+    },
+    {
+     "tick": 1791059278.5918674,
+     "late": 0.4142
+    },
+    {
+     "tick": 1791059278.592081,
+     "late": 0.1644
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791059274.9971294,
+     "recv": 1791059279.554196,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059279.5544953,
+     "late": 0.8768
+    },
+    {
+     "tick": 1791059279.5552473,
+     "late": 0.6276
+    },
+    {
+     "tick": 1791059279.555691,
+     "late": 0.378
+    },
+    {
+     "tick": 1791059279.5559714,
+     "late": 0.1283
+    },
+    {
+     "tick": 1791059279.6968446,
+     "late": 0.0192
+    },
+    {
+     "tick": 1791059281.0943415,
+     "late": 1.1667
+    },
+    {
+     "tick": 1791059281.0948505,
+     "late": 0.9172
+    },
+    {
+     "tick": 1791059281.0952442,
+     "late": 0.6676
+    },
+    {
+     "tick": 1791059281.0955935,
+     "late": 0.4179
+    },
+    {
+     "tick": 1791059281.0959473,
+     "late": 0.1683
+    },
+    {
+     "tick": 1791059283.6070457,
+     "late": 2.4294
+    },
+    {
+     "tick": 1791059283.607773,
+     "late": 2.1801
+    },
+    {
+     "tick": 1791059283.6083603,
+     "late": 1.9307
+    },
+    {
+     "tick": 1791059283.608688,
+     "late": 1.681
+    },
+    {
+     "tick": 1791059283.6090746,
+     "late": 1.4314
+    },
+    {
+     "tick": 1791059283.6095018,
+     "late": 1.1818
+    },
+    {
+     "tick": 1791059283.6098926,
+     "late": 0.9322
+    },
+    {
+     "tick": 1791059283.6104112,
+     "late": 0.6828
+    },
+    {
+     "tick": 1791059283.6107569,
+     "late": 0.4331
+    },
+    {
+     "tick": 1791059283.611109,
+     "late": 0.1834
+    },
+    {
+     "tick": 1791059284.1024182,
+     "late": 0.4248
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791059279.796707,
+     "recv": 1791059284.1030061,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059284.104147,
+     "late": 0.1765
+    },
+    {
+     "tick": 1791059284.196716,
+     "late": 0.0191
+    },
+    {
+     "tick": 1791059284.4282737,
+     "late": 0.0006
+    },
+    {
+     "tick": 1791059286.0010438,
+     "late": 1.3234
+    },
+    {
+     "tick": 1791059286.0014863,
+     "late": 1.0738
+    },
+    {
+     "tick": 1791059286.0018978,
+     "late": 0.8242
+    },
+    {
+     "tick": 1791059286.002302,
+     "late": 0.5746
+    },
+    {
+     "tick": 1791059286.0026321,
+     "late": 0.325
+    },
+    {
+     "tick": 1791059286.0029998,
+     "late": 0.0753
+    },
+    {
+     "tick": 1791059287.1857405,
+     "late": 1.0081
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791059284.3967938,
+     "recv": 1791059287.186464,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059287.1868355,
+     "late": 0.7592
+    },
+    {
+     "tick": 1791059287.187202,
+     "late": 0.5095
+    },
+    {
+     "tick": 1791059287.1877851,
+     "late": 0.2601
+    },
+    {
+     "tick": 1791059287.1881378,
+     "late": 0.0105
+    },
+    {
+     "tick": 1791059287.4281845,
+     "late": 0.0005
+    },
+    {
+     "tick": 1791059288.4886382,
+     "late": 0.811
+    },
+    {
+     "tick": 1791059288.4890926,
+     "late": 0.5614
+    },
+    {
+     "tick": 1791059288.4895165,
+     "late": 0.3119
+    },
+    {
+     "tick": 1791059288.4898102,
+     "late": 0.0622
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791059287.4177315,
+     "recv": 1791059290.9241555,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059290.9242551,
+     "late": 2.2466
+    },
+    {
+     "tick": 1791059290.9253535,
+     "late": 1.9977
+    },
+    {
+     "tick": 1791059290.9257085,
+     "late": 1.748
+    },
+    {
+     "tick": 1791059290.9260633,
+     "late": 1.4984
+    },
+    {
+     "tick": 1791059290.9264648,
+     "late": 1.2488
+    },
+    {
+     "tick": 1791059290.9269073,
+     "late": 0.9992
+    },
+    {
+     "tick": 1791059290.9271822,
+     "late": 0.7495
+    },
+    {
+     "tick": 1791059290.9276237,
+     "late": 0.5
+    },
+    {
+     "tick": 1791059290.9280376,
+     "late": 0.2504
+    },
+    {
+     "tick": 1791059290.9283562,
+     "late": 0.0007
+    },
+    {
+     "tick": 1791059291.196585,
+     "late": 0.0189
+    },
+    {
+     "tick": 1791059293.8160825,
+     "late": 2.3884
+    },
+    {
+     "tick": 1791059293.816555,
+     "late": 2.1389
+    },
+    {
+     "tick": 1791059293.816948,
+     "late": 1.8893
+    },
+    {
+     "tick": 1791059293.8173192,
+     "late": 1.6397
+    },
+    {
+     "tick": 1791059293.817621,
+     "late": 1.39
+    },
+    {
+     "tick": 1791059293.8179328,
+     "late": 1.1403
+    },
+    {
+     "tick": 1791059293.8183973,
+     "late": 0.8907
+    },
+    {
+     "tick": 1791059293.8188145,
+     "late": 0.6412
+    },
+    {
+     "tick": 1791059293.8193388,
+     "late": 0.3917
+    },
+    {
+     "tick": 1791059293.8197255,
+     "late": 0.1421
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791059291.2965686,
+     "recv": 1791059294.6651273,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059294.665356,
+     "late": 0.7377
+    },
+    {
+     "tick": 1791059294.6658888,
+     "late": 0.4882
+    },
+    {
+     "tick": 1791059294.6663563,
+     "late": 0.2387
+    },
+    {
+     "tick": 1791059294.6776824,
+     "late": 0.0
+    },
+    {
+     "tick": 1791059294.9342737,
+     "late": 0.0066
+    },
+    {
+     "tick": 1791059296.3001978,
+     "late": 1.1225
+    },
+    {
+     "tick": 1791059296.3005636,
+     "late": 0.8729
+    },
+    {
+     "tick": 1791059296.300816,
+     "late": 0.6232
+    },
+    {
+     "tick": 1791059296.3010187,
+     "late": 0.3734
+    },
+    {
+     "tick": 1791059296.3012984,
+     "late": 0.1236
+    },
+    {
+     "tick": 1791059298.7882078,
+     "late": 2.3605
+    },
+    {
+     "tick": 1791059298.788632,
+     "late": 2.111
+    },
+    {
+     "tick": 1791059298.789018,
+     "late": 1.8614
+    },
+    {
+     "tick": 1791059298.7893715,
+     "late": 1.6117
+    },
+    {
+     "tick": 1791059298.789637,
+     "late": 1.362
+    },
+    {
+     "tick": 1791059298.7900352,
+     "late": 1.1124
+    },
+    {
+     "tick": 1791059298.7904186,
+     "late": 0.8628
+    },
+    {
+     "tick": 1791059298.790706,
+     "late": 0.613
+    },
+    {
+     "tick": 1791059298.7909524,
+     "late": 0.3633
+    },
+    {
+     "tick": 1791059298.7911363,
+     "late": 0.1135
+    },
+    {
+     "tick": 1791059298.9619956,
+     "late": 0.0343
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791059294.9967182,
+     "recv": 1791059298.9625602,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059299.1966887,
+     "late": 0.019
+    },
+    {
+     "tick": 1791059301.2460225,
+     "late": 1.8184
+    },
+    {
+     "tick": 1791059301.2465153,
+     "late": 1.5689
+    },
+    {
+     "tick": 1791059301.2468262,
+     "late": 1.3192
+    },
+    {
+     "tick": 1791059301.2471445,
+     "late": 1.0695
+    },
+    {
+     "tick": 1791059301.2474148,
+     "late": 0.8198
+    },
+    {
+     "tick": 1791059301.2476494,
+     "late": 0.57
+    },
+    {
+     "tick": 1791059301.247935,
+     "late": 0.3203
+    },
+    {
+     "tick": 1791059301.2482557,
+     "late": 0.0706
+    },
+    {
+     "tick": 1791059303.5859118,
+     "late": 2.1583
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791059299.1979253,
+     "recv": 1791059303.5864165,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059303.5866346,
+     "late": 1.909
+    },
+    {
+     "tick": 1791059303.5867534,
+     "late": 1.6591
+    },
+    {
+     "tick": 1791059303.5873196,
+     "late": 1.4097
+    },
+    {
+     "tick": 1791059303.5876334,
+     "late": 1.16
+    },
+    {
+     "tick": 1791059303.5878952,
+     "late": 0.9102
+    },
+    {
+     "tick": 1791059303.5881479,
+     "late": 0.6605
+    },
+    {
+     "tick": 1791059303.588505,
+     "late": 0.4108
+    },
+    {
+     "tick": 1791059303.5887923,
+     "late": 0.1611
+    },
+    {
+     "tick": 1791059303.6964803,
+     "late": 0.0188
+    },
+    {
+     "tick": 1791059303.9347064,
+     "late": 0.007
+    },
+    {
+     "lane": 0,
+     "call": 8,
+     "sent": 1791059303.9965644,
+     "recv": 1791059306.2914276,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059306.2916057,
+     "late": 2.1139
+    },
+    {
+     "tick": 1791059306.292278,
+     "late": 1.8646
+    },
+    {
+     "tick": 1791059306.292825,
+     "late": 1.6152
+    },
+    {
+     "tick": 1791059306.2931209,
+     "late": 1.3655
+    },
+    {
+     "tick": 1791059306.2939162,
+     "late": 1.1163
+    },
+    {
+     "tick": 1791059306.294337,
+     "late": 0.8667
+    },
+    {
+     "tick": 1791059306.2951143,
+     "late": 0.6175
+    },
+    {
+     "tick": 1791059306.2956002,
+     "late": 0.3679
+    },
+    {
+     "tick": 1791059306.2959874,
+     "late": 0.1183
+    },
+    {
+     "tick": 1791059306.4964464,
+     "late": 0.0688
+    },
+    {
+     "tick": 1791059306.6964228,
+     "late": 0.0188
+    },
+    {
+     "tick": 1791059308.7293699,
+     "late": 1.8017
+    },
+    {
+     "lane": 0,
+     "call": 9,
+     "sent": 1791059306.6213613,
+     "recv": 1791059308.7298658,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059308.730575,
+     "late": 1.5529
+    },
+    {
+     "tick": 1791059308.731153,
+     "late": 1.3035
+    },
+    {
+     "tick": 1791059308.7316515,
+     "late": 1.054
+    },
+    {
+     "tick": 1791059308.7320657,
+     "late": 0.8044
+    },
+    {
+     "tick": 1791059308.7325234,
+     "late": 0.5549
+    },
+    {
+     "tick": 1791059308.7328703,
+     "late": 0.3052
+    },
+    {
+     "tick": 1791059308.7331526,
+     "late": 0.0555
+    },
+    {
+     "tick": 1791059308.9966972,
+     "late": 0.069
+    },
+    {
+     "tick": 1791059311.3463643,
+     "late": 2.1687
+    },
+    {
+     "tick": 1791059311.346879,
+     "late": 1.9192
+    },
+    {
+     "tick": 1791059311.3473043,
+     "late": 1.6696
+    },
+    {
+     "tick": 1791059311.3476431,
+     "late": 1.42
+    },
+    {
+     "tick": 1791059311.3479536,
+     "late": 1.1703
+    },
+    {
+     "tick": 1791059311.3483264,
+     "late": 0.9207
+    },
+    {
+     "tick": 1791059311.348779,
+     "late": 0.6711
+    },
+    {
+     "tick": 1791059311.3491518,
+     "late": 0.4215
+    },
+    {
+     "tick": 1791059311.349562,
+     "late": 0.1719
+    },
+    {
+     "lane": 0,
+     "call": 10,
+     "sent": 1791059308.9968615,
+     "recv": 1791059313.5249176,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059313.5250466,
+     "late": 2.0974
+    },
+    {
+     "tick": 1791059313.525677,
+     "late": 1.848
+    },
+    {
+     "tick": 1791059313.5259466,
+     "late": 1.5983
+    },
+    {
+     "tick": 1791059313.5271199,
+     "late": 1.3495
+    },
+    {
+     "tick": 1791059313.5274704,
+     "late": 1.0998
+    },
+    {
+     "tick": 1791059313.5277019,
+     "late": 0.85
+    },
+    {
+     "tick": 1791059313.5279922,
+     "late": 0.6003
+    },
+    {
+     "tick": 1791059313.528367,
+     "late": 0.3507
+    },
+    {
+     "tick": 1791059313.528688,
+     "late": 0.101
+    },
+    {
+     "tick": 1791059313.6783435,
+     "late": 0.0007
+    },
+    {
+     "tick": 1791059316.186692,
+     "late": 2.259
+    },
+    {
+     "tick": 1791059316.1871428,
+     "late": 2.0095
+    },
+    {
+     "tick": 1791059316.1875029,
+     "late": 1.7598
+    },
+    {
+     "tick": 1791059316.187762,
+     "late": 1.5101
+    },
+    {
+     "tick": 1791059316.1881006,
+     "late": 1.2604
+    },
+    {
+     "tick": 1791059316.188464,
+     "late": 1.0108
+    },
+    {
+     "tick": 1791059316.188722,
+     "late": 0.7611
+    },
+    {
+     "tick": 1791059316.1890028,
+     "late": 0.5113
+    },
+    {
+     "tick": 1791059316.1893227,
+     "late": 0.2617
+    },
+    {
+     "tick": 1791059316.1896253,
+     "late": 0.012
+    },
+    {
+     "tick": 1791059317.11592,
+     "late": 0.6883
+    },
+    {
+     "lane": 0,
+     "call": 11,
+     "sent": 1791059313.7966828,
+     "recv": 1791059317.1161902,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059317.117408,
+     "late": 0.4397
+    },
+    {
+     "tick": 1791059317.1187172,
+     "late": 0.1911
+    },
+    {
+     "done": 1791059317.1189227
+    }
+   ]
+  },
+  "wake-node3-ticker-2b83ac-1": {
+   "job": {
+    "sandbox_id": "wake-node3-ticker-2b83ac-1",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "e3b9636692320e369bc3df1be56226ccc6ca588b605267c989a9c31688005960",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T20:27:51.013177569Z",
+    "completed_at": "2026-10-03T20:28:37.193604136Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 9336,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T20:28:46.589975+00:00"
+   },
+   "rows": [
+    {
+     "tick": 1791059272.127015,
+     "late": 0.0158
+    },
+    {
+     "tick": 1791059273.7094293,
+     "late": 1.3482
+    },
+    {
+     "tick": 1791059273.7100315,
+     "late": 1.0988
+    },
+    {
+     "tick": 1791059273.7104452,
+     "late": 0.8492
+    },
+    {
+     "tick": 1791059273.7107863,
+     "late": 0.5995
+    },
+    {
+     "tick": 1791059273.7110703,
+     "late": 0.3498
+    },
+    {
+     "tick": 1791059273.7114189,
+     "late": 0.1002
+    },
+    {
+     "tick": 1791059276.1968505,
+     "late": 2.3356
+    },
+    {
+     "tick": 1791059276.197293,
+     "late": 2.086
+    },
+    {
+     "tick": 1791059276.1976411,
+     "late": 1.8364
+    },
+    {
+     "tick": 1791059276.1980605,
+     "late": 1.5868
+    },
+    {
+     "tick": 1791059276.198441,
+     "late": 1.3372
+    },
+    {
+     "tick": 1791059276.1988425,
+     "late": 1.0876
+    },
+    {
+     "tick": 1791059276.199243,
+     "late": 0.838
+    },
+    {
+     "tick": 1791059276.199574,
+     "late": 0.5883
+    },
+    {
+     "tick": 1791059276.2000005,
+     "late": 0.3387
+    },
+    {
+     "tick": 1791059276.20048,
+     "late": 0.0892
+    },
+    {
+     "tick": 1791059276.4617758,
+     "late": 0.1005
+    },
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791059272.1267529,
+     "recv": 1791059276.4624639,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059276.6264687,
+     "late": 0.0152
+    },
+    {
+     "tick": 1791059278.6571057,
+     "late": 1.7959
+    },
+    {
+     "tick": 1791059278.6574228,
+     "late": 1.5462
+    },
+    {
+     "tick": 1791059278.6577065,
+     "late": 1.2965
+    },
+    {
+     "tick": 1791059278.6580133,
+     "late": 1.0468
+    },
+    {
+     "tick": 1791059278.658367,
+     "late": 0.7971
+    },
+    {
+     "tick": 1791059278.658752,
+     "late": 0.5475
+    },
+    {
+     "tick": 1791059278.6590235,
+     "late": 0.2978
+    },
+    {
+     "tick": 1791059278.6593347,
+     "late": 0.0481
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791059276.7266972,
+     "recv": 1791059278.7568576,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059278.9266768,
+     "late": 0.0654
+    },
+    {
+     "tick": 1791059281.1555128,
+     "late": 2.0443
+    },
+    {
+     "tick": 1791059281.1558769,
+     "late": 1.7946
+    },
+    {
+     "tick": 1791059281.1561499,
+     "late": 1.5449
+    },
+    {
+     "tick": 1791059281.1564848,
+     "late": 1.2952
+    },
+    {
+     "tick": 1791059281.1568205,
+     "late": 1.0456
+    },
+    {
+     "tick": 1791059281.1570876,
+     "late": 0.7958
+    },
+    {
+     "tick": 1791059281.1573985,
+     "late": 0.5461
+    },
+    {
+     "tick": 1791059281.1577837,
+     "late": 0.2965
+    },
+    {
+     "tick": 1791059281.158082,
+     "late": 0.0468
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791059279.0272381,
+     "recv": 1791059282.3837779,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059282.3840003,
+     "late": 1.0227
+    },
+    {
+     "tick": 1791059282.3854358,
+     "late": 0.7742
+    },
+    {
+     "tick": 1791059282.385828,
+     "late": 0.5246
+    },
+    {
+     "tick": 1791059282.3861296,
+     "late": 0.2749
+    },
+    {
+     "tick": 1791059282.3865063,
+     "late": 0.0253
+    },
+    {
+     "tick": 1791059282.6116326,
+     "late": 0.0004
+    },
+    {
+     "tick": 1791059283.6471815,
+     "late": 0.7859
+    },
+    {
+     "tick": 1791059283.6475906,
+     "late": 0.5363
+    },
+    {
+     "tick": 1791059283.6478817,
+     "late": 0.2866
+    },
+    {
+     "tick": 1791059283.648148,
+     "late": 0.0369
+    },
+    {
+     "tick": 1791059286.0621653,
+     "late": 2.2009
+    },
+    {
+     "tick": 1791059286.0627446,
+     "late": 1.9515
+    },
+    {
+     "tick": 1791059286.06317,
+     "late": 1.7019
+    },
+    {
+     "tick": 1791059286.0635629,
+     "late": 1.4523
+    },
+    {
+     "tick": 1791059286.0640047,
+     "late": 1.2028
+    },
+    {
+     "tick": 1791059286.0644412,
+     "late": 0.9532
+    },
+    {
+     "tick": 1791059286.0648263,
+     "late": 0.7036
+    },
+    {
+     "tick": 1791059286.0652087,
+     "late": 0.454
+    },
+    {
+     "tick": 1791059286.0656328,
+     "late": 0.2044
+    },
+    {
+     "tick": 1791059286.8021042,
+     "late": 0.6909
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791059282.6267164,
+     "recv": 1791059286.802434,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059286.8028655,
+     "late": 0.4416
+    },
+    {
+     "tick": 1791059286.8033118,
+     "late": 0.1921
+    },
+    {
+     "tick": 1791059286.9264438,
+     "late": 0.0652
+    },
+    {
+     "tick": 1791059287.1124249,
+     "late": 0.0012
+    },
+    {
+     "tick": 1791059288.5465765,
+     "late": 1.1853
+    },
+    {
+     "tick": 1791059288.5471013,
+     "late": 0.9358
+    },
+    {
+     "tick": 1791059288.547515,
+     "late": 0.6863
+    },
+    {
+     "tick": 1791059288.547868,
+     "late": 0.4366
+    },
+    {
+     "tick": 1791059288.5482292,
+     "late": 0.187
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791059287.0389462,
+     "recv": 1791059289.746534,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059289.746697,
+     "late": 1.1354
+    },
+    {
+     "tick": 1791059289.7476895,
+     "late": 0.8864
+    },
+    {
+     "tick": 1791059289.748191,
+     "late": 0.6369
+    },
+    {
+     "tick": 1791059289.7485805,
+     "late": 0.3873
+    },
+    {
+     "tick": 1791059289.7488573,
+     "late": 0.1376
+    },
+    {
+     "tick": 1791059289.9266195,
+     "late": 0.0654
+    },
+    {
+     "tick": 1791059291.1307845,
+     "late": 1.0195
+    },
+    {
+     "tick": 1791059291.13133,
+     "late": 0.7701
+    },
+    {
+     "tick": 1791059291.131683,
+     "late": 0.5204
+    },
+    {
+     "tick": 1791059291.1321323,
+     "late": 0.2709
+    },
+    {
+     "tick": 1791059291.132519,
+     "late": 0.0213
+    },
+    {
+     "tick": 1791059293.8614438,
+     "late": 2.5002
+    },
+    {
+     "tick": 1791059293.861813,
+     "late": 2.2506
+    },
+    {
+     "tick": 1791059293.8620768,
+     "late": 2.0008
+    },
+    {
+     "tick": 1791059293.8623722,
+     "late": 1.7511
+    },
+    {
+     "tick": 1791059293.8627348,
+     "late": 1.5015
+    },
+    {
+     "tick": 1791059293.8629973,
+     "late": 1.2517
+    },
+    {
+     "tick": 1791059293.863343,
+     "late": 1.0021
+    },
+    {
+     "tick": 1791059293.8636284,
+     "late": 0.7524
+    },
+    {
+     "tick": 1791059293.8639238,
+     "late": 0.5027
+    },
+    {
+     "tick": 1791059293.864258,
+     "late": 0.253
+    },
+    {
+     "tick": 1791059293.8644874,
+     "late": 0.0032
+    },
+    {
+     "tick": 1791059294.7852871,
+     "late": 0.674
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791059289.9269788,
+     "recv": 1791059294.7856407,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059294.7861032,
+     "late": 0.4249
+    },
+    {
+     "tick": 1791059294.7866132,
+     "late": 0.1754
+    },
+    {
+     "tick": 1791059294.9265666,
+     "late": 0.0653
+    },
+    {
+     "tick": 1791059295.113361,
+     "late": 0.0021
+    },
+    {
+     "tick": 1791059296.3553388,
+     "late": 0.9941
+    },
+    {
+     "tick": 1791059296.3558133,
+     "late": 0.7446
+    },
+    {
+     "tick": 1791059296.35626,
+     "late": 0.495
+    },
+    {
+     "tick": 1791059296.3565555,
+     "late": 0.2453
+    },
+    {
+     "tick": 1791059296.3621712,
+     "late": 0.0009
+    },
+    {
+     "tick": 1791059298.8450742,
+     "late": 2.2338
+    },
+    {
+     "tick": 1791059298.8456511,
+     "late": 1.9844
+    },
+    {
+     "tick": 1791059298.845962,
+     "late": 1.7347
+    },
+    {
+     "tick": 1791059298.846372,
+     "late": 1.4851
+    },
+    {
+     "tick": 1791059298.846769,
+     "late": 1.2355
+    },
+    {
+     "tick": 1791059298.8472657,
+     "late": 0.986
+    },
+    {
+     "tick": 1791059298.8476615,
+     "late": 0.7364
+    },
+    {
+     "tick": 1791059298.8479912,
+     "late": 0.4867
+    },
+    {
+     "tick": 1791059298.8483305,
+     "late": 0.2371
+    },
+    {
+     "tick": 1791059298.8613598,
+     "late": 0.0001
+    },
+    {
+     "tick": 1791059299.8456564,
+     "late": 0.7344
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791059295.1274693,
+     "recv": 1791059299.8462958,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059299.8466754,
+     "late": 0.4854
+    },
+    {
+     "tick": 1791059299.8470008,
+     "late": 0.2357
+    },
+    {
+     "tick": 1791059299.8616333,
+     "late": 0.0004
+    },
+    {
+     "tick": 1791059300.126693,
+     "late": 0.0154
+    },
+    {
+     "tick": 1791059301.309158,
+     "late": 0.9479
+    },
+    {
+     "tick": 1791059301.3096132,
+     "late": 0.6984
+    },
+    {
+     "tick": 1791059301.3100212,
+     "late": 0.4488
+    },
+    {
+     "tick": 1791059301.3104005,
+     "late": 0.1991
+    },
+    {
+     "tick": 1791059302.2347088,
+     "late": 0.8735
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791059300.126877,
+     "recv": 1791059302.2356122,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059302.2358391,
+     "late": 0.6246
+    },
+    {
+     "tick": 1791059302.2363703,
+     "late": 0.3751
+    },
+    {
+     "tick": 1791059302.2368956,
+     "late": 0.1256
+    },
+    {
+     "tick": 1791059302.4266326,
+     "late": 0.0654
+    },
+    {
+     "tick": 1791059303.9226584,
+     "late": 1.3114
+    },
+    {
+     "tick": 1791059303.922996,
+     "late": 1.0617
+    },
+    {
+     "tick": 1791059303.923312,
+     "late": 0.8121
+    },
+    {
+     "tick": 1791059303.9235632,
+     "late": 0.5623
+    },
+    {
+     "tick": 1791059303.9237018,
+     "late": 0.3124
+    },
+    {
+     "tick": 1791059303.9239008,
+     "late": 0.0626
+    },
+    {
+     "lane": 0,
+     "call": 8,
+     "sent": 1791059302.5364835,
+     "recv": 1791059304.6345665,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059304.6348305,
+     "late": 0.5236
+    },
+    {
+     "tick": 1791059304.6363802,
+     "late": 0.2751
+    },
+    {
+     "tick": 1791059304.6372013,
+     "late": 0.0259
+    },
+    {
+     "tick": 1791059304.9266894,
+     "late": 0.0654
+    },
+    {
+     "tick": 1791059306.521715,
+     "late": 1.4105
+    },
+    {
+     "tick": 1791059306.5219948,
+     "late": 1.1607
+    },
+    {
+     "tick": 1791059306.5223472,
+     "late": 0.9111
+    },
+    {
+     "tick": 1791059306.5226893,
+     "late": 0.6614
+    },
+    {
+     "tick": 1791059306.5228906,
+     "late": 0.4116
+    },
+    {
+     "tick": 1791059306.5230985,
+     "late": 0.1618
+    },
+    {
+     "lane": 0,
+     "call": 9,
+     "sent": 1791059304.927282,
+     "recv": 1791059308.5648904,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059308.5654309,
+     "late": 1.9542
+    },
+    {
+     "tick": 1791059308.5658646,
+     "late": 1.7046
+    },
+    {
+     "tick": 1791059308.5663977,
+     "late": 1.4551
+    },
+    {
+     "tick": 1791059308.5666528,
+     "late": 1.2054
+    },
+    {
+     "tick": 1791059308.5681367,
+     "late": 0.9569
+    },
+    {
+     "tick": 1791059308.5689566,
+     "late": 0.7077
+    },
+    {
+     "tick": 1791059308.5694265,
+     "late": 0.4582
+    },
+    {
+     "tick": 1791059308.5697591,
+     "late": 0.2085
+    },
+    {
+     "tick": 1791059308.6265535,
+     "late": 0.0153
+    },
+    {
+     "tick": 1791059308.8620203,
+     "late": 0.0008
+    },
+    {
+     "tick": 1791059311.410387,
+     "late": 2.2991
+    },
+    {
+     "tick": 1791059311.4108536,
+     "late": 2.0496
+    },
+    {
+     "tick": 1791059311.4112015,
+     "late": 1.7999
+    },
+    {
+     "tick": 1791059311.4116826,
+     "late": 1.5504
+    },
+    {
+     "tick": 1791059311.4121633,
+     "late": 1.3009
+    },
+    {
+     "tick": 1791059311.4125428,
+     "late": 1.0513
+    },
+    {
+     "tick": 1791059311.41291,
+     "late": 0.8017
+    },
+    {
+     "tick": 1791059311.4132602,
+     "late": 0.552
+    },
+    {
+     "tick": 1791059311.4135585,
+     "late": 0.3023
+    },
+    {
+     "tick": 1791059311.4139402,
+     "late": 0.0527
+    },
+    {
+     "lane": 0,
+     "call": 10,
+     "sent": 1791059308.8274817,
+     "recv": 1791059313.6659334,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059313.6661313,
+     "late": 2.0549
+    },
+    {
+     "tick": 1791059313.6668673,
+     "late": 1.8056
+    },
+    {
+     "tick": 1791059313.6673167,
+     "late": 1.5561
+    },
+    {
+     "tick": 1791059313.6676219,
+     "late": 1.3064
+    },
+    {
+     "tick": 1791059313.667963,
+     "late": 1.0567
+    },
+    {
+     "tick": 1791059313.6683779,
+     "late": 0.8071
+    },
+    {
+     "tick": 1791059313.670044,
+     "late": 0.5588
+    },
+    {
+     "tick": 1791059313.6708195,
+     "late": 0.3096
+    },
+    {
+     "tick": 1791059313.6711855,
+     "late": 0.0599
+    },
+    {
+     "tick": 1791059313.9267595,
+     "late": 0.0655
+    },
+    {
+     "tick": 1791059316.238913,
+     "late": 2.1277
+    },
+    {
+     "tick": 1791059316.239319,
+     "late": 1.8781
+    },
+    {
+     "tick": 1791059316.2395723,
+     "late": 1.6283
+    },
+    {
+     "tick": 1791059316.2397983,
+     "late": 1.3785
+    },
+    {
+     "tick": 1791059316.2400692,
+     "late": 1.1288
+    },
+    {
+     "tick": 1791059316.24034,
+     "late": 0.8791
+    },
+    {
+     "tick": 1791059316.2406287,
+     "late": 0.6294
+    },
+    {
+     "tick": 1791059316.2409127,
+     "late": 0.3797
+    },
+    {
+     "tick": 1791059316.2411263,
+     "late": 0.1299
+    },
+    {
+     "lane": 0,
+     "call": 11,
+     "sent": 1791059314.0266964,
+     "recv": 1791059317.1766827,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059317.1767828,
+     "late": 0.8155
+    },
+    {
+     "tick": 1791059317.1773882,
+     "late": 0.5661
+    },
+    {
+     "done": 1791059317.1774297
+    }
+   ]
+  },
+  "wake-node3-ticker-2b83ac-2": {
+   "job": {
+    "sandbox_id": "wake-node3-ticker-2b83ac-2",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "112ecff8408e955f366639f168ef01c7a3ddc426ddcefdca277f1f5837dac2eb",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T20:27:51.047323389Z",
+    "completed_at": "2026-10-03T20:28:30.030640187Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 8027,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T20:28:46.645074+00:00"
+   },
+   "rows": [
+    {
+     "tick": 1791059272.1331966,
+     "late": 0.0217
+    },
+    {
+     "tick": 1791059273.7764482,
+     "late": 1.4149
+    },
+    {
+     "tick": 1791059273.7774653,
+     "late": 1.1659
+    },
+    {
+     "tick": 1791059273.777862,
+     "late": 0.9163
+    },
+    {
+     "tick": 1791059273.7781692,
+     "late": 0.6666
+    },
+    {
+     "tick": 1791059273.778502,
+     "late": 0.417
+    },
+    {
+     "tick": 1791059273.7787805,
+     "late": 0.1672
+    },
+    {
+     "tick": 1791059274.9164276,
+     "late": 1.0549
+    },
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791059272.233236,
+     "recv": 1791059274.9169579,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059274.9183884,
+     "late": 0.8069
+    },
+    {
+     "tick": 1791059274.9189167,
+     "late": 0.5574
+    },
+    {
+     "tick": 1791059274.9192536,
+     "late": 0.3077
+    },
+    {
+     "tick": 1791059274.919712,
+     "late": 0.0582
+    },
+    {
+     "tick": 1791059275.1335394,
+     "late": 0.022
+    },
+    {
+     "tick": 1791059276.2569246,
+     "late": 0.8954
+    },
+    {
+     "tick": 1791059276.2573996,
+     "late": 0.6459
+    },
+    {
+     "tick": 1791059276.257737,
+     "late": 0.3962
+    },
+    {
+     "tick": 1791059276.258076,
+     "late": 0.1465
+    },
+    {
+     "tick": 1791059278.5211785,
+     "late": 2.1596
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791059275.2333596,
+     "recv": 1791059278.5221317,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059278.523021,
+     "late": 1.9115
+    },
+    {
+     "tick": 1791059278.5236773,
+     "late": 1.6621
+    },
+    {
+     "tick": 1791059278.5241866,
+     "late": 1.4127
+    },
+    {
+     "tick": 1791059278.5246644,
+     "late": 1.1631
+    },
+    {
+     "tick": 1791059278.5254025,
+     "late": 0.9139
+    },
+    {
+     "tick": 1791059278.5258725,
+     "late": 0.6643
+    },
+    {
+     "tick": 1791059278.526471,
+     "late": 0.4149
+    },
+    {
+     "tick": 1791059278.5269632,
+     "late": 0.1654
+    },
+    {
+     "tick": 1791059278.6335692,
+     "late": 0.022
+    },
+    {
+     "tick": 1791059278.862452,
+     "late": 0.0009
+    },
+    {
+     "tick": 1791059281.0411012,
+     "late": 1.9296
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791059278.9334843,
+     "recv": 1791059281.0415752,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059281.0421226,
+     "late": 1.6806
+    },
+    {
+     "tick": 1791059281.0426424,
+     "late": 1.4311
+    },
+    {
+     "tick": 1791059281.0430906,
+     "late": 1.1816
+    },
+    {
+     "tick": 1791059281.043499,
+     "late": 0.932
+    },
+    {
+     "tick": 1791059281.0439894,
+     "late": 0.6825
+    },
+    {
+     "tick": 1791059281.044597,
+     "late": 0.4331
+    },
+    {
+     "tick": 1791059281.0449076,
+     "late": 0.1834
+    },
+    {
+     "tick": 1791059281.1333716,
+     "late": 0.0218
+    },
+    {
+     "tick": 1791059281.3675575,
+     "late": 0.006
+    },
+    {
+     "tick": 1791059281.6121013,
+     "late": 0.0006
+    },
+    {
+     "tick": 1791059283.7055233,
+     "late": 1.844
+    },
+    {
+     "tick": 1791059283.7059774,
+     "late": 1.5944
+    },
+    {
+     "tick": 1791059283.70643,
+     "late": 1.3449
+    },
+    {
+     "tick": 1791059283.7068272,
+     "late": 1.0953
+    },
+    {
+     "tick": 1791059283.707283,
+     "late": 0.8457
+    },
+    {
+     "tick": 1791059283.707712,
+     "late": 0.5962
+    },
+    {
+     "tick": 1791059283.7081628,
+     "late": 0.3466
+    },
+    {
+     "tick": 1791059283.7086787,
+     "late": 0.0971
+    },
+    {
+     "tick": 1791059284.2201452,
+     "late": 0.3586
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791059281.5334737,
+     "recv": 1791059284.2205343,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059284.2209415,
+     "late": 0.1094
+    },
+    {
+     "tick": 1791059284.4334545,
+     "late": 0.0719
+    },
+    {
+     "tick": 1791059284.6122725,
+     "late": 0.0007
+    },
+    {
+     "tick": 1791059286.1220345,
+     "late": 1.2605
+    },
+    {
+     "tick": 1791059286.1224966,
+     "late": 1.011
+    },
+    {
+     "tick": 1791059286.122802,
+     "late": 0.7613
+    },
+    {
+     "tick": 1791059286.1231482,
+     "late": 0.5116
+    },
+    {
+     "tick": 1791059286.1236432,
+     "late": 0.2621
+    },
+    {
+     "tick": 1791059286.1240232,
+     "late": 0.0125
+    },
+    {
+     "tick": 1791059287.862741,
+     "late": 1.5012
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791059284.5336895,
+     "recv": 1791059287.863256,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059287.8643148,
+     "late": 1.2528
+    },
+    {
+     "tick": 1791059287.8659756,
+     "late": 1.0044
+    },
+    {
+     "tick": 1791059287.866455,
+     "late": 0.7549
+    },
+    {
+     "tick": 1791059287.8667426,
+     "late": 0.5052
+    },
+    {
+     "tick": 1791059287.8672547,
+     "late": 0.2557
+    },
+    {
+     "tick": 1791059287.8688369,
+     "late": 0.0073
+    },
+    {
+     "tick": 1791059288.1332297,
+     "late": 0.0217
+    },
+    {
+     "tick": 1791059288.6058059,
+     "late": 0.2443
+    },
+    {
+     "tick": 1791059288.6116836,
+     "late": 0.0001
+    },
+    {
+     "tick": 1791059291.187392,
+     "late": 2.3259
+    },
+    {
+     "tick": 1791059291.187855,
+     "late": 2.0763
+    },
+    {
+     "tick": 1791059291.1882887,
+     "late": 1.8268
+    },
+    {
+     "tick": 1791059291.1886287,
+     "late": 1.5771
+    },
+    {
+     "tick": 1791059291.189042,
+     "late": 1.3275
+    },
+    {
+     "tick": 1791059291.1894476,
+     "late": 1.0779
+    },
+    {
+     "tick": 1791059291.1898577,
+     "late": 0.8283
+    },
+    {
+     "tick": 1791059291.1902075,
+     "late": 0.5787
+    },
+    {
+     "tick": 1791059291.1906447,
+     "late": 0.3291
+    },
+    {
+     "tick": 1791059291.1909723,
+     "late": 0.0794
+    },
+    {
+     "tick": 1791059291.741314,
+     "late": 0.3798
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791059288.2333205,
+     "recv": 1791059291.7420824,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059291.7425482,
+     "late": 0.131
+    },
+    {
+     "tick": 1791059291.933617,
+     "late": 0.0721
+    },
+    {
+     "tick": 1791059292.1116705,
+     "late": 0.0001
+    },
+    {
+     "tick": 1791059293.925439,
+     "late": 1.5639
+    },
+    {
+     "tick": 1791059293.9258862,
+     "late": 1.3144
+    },
+    {
+     "tick": 1791059293.9262486,
+     "late": 1.0647
+    },
+    {
+     "tick": 1791059293.9265752,
+     "late": 0.815
+    },
+    {
+     "tick": 1791059293.9268587,
+     "late": 0.5653
+    },
+    {
+     "tick": 1791059293.9272053,
+     "late": 0.3157
+    },
+    {
+     "tick": 1791059293.9275415,
+     "late": 0.066
+    },
+    {
+     "tick": 1791059294.74785,
+     "late": 0.6363
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791059292.0334566,
+     "recv": 1791059294.7487488,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059294.7490375,
+     "late": 0.3875
+    },
+    {
+     "tick": 1791059294.749419,
+     "late": 0.1379
+    },
+    {
+     "tick": 1791059294.9334323,
+     "late": 0.0719
+    },
+    {
+     "tick": 1791059295.1135175,
+     "late": 0.002
+    },
+    {
+     "tick": 1791059296.4258835,
+     "late": 1.0643
+    },
+    {
+     "tick": 1791059296.426371,
+     "late": 0.8148
+    },
+    {
+     "tick": 1791059296.4268007,
+     "late": 0.5653
+    },
+    {
+     "tick": 1791059296.427128,
+     "late": 0.3156
+    },
+    {
+     "tick": 1791059296.4275005,
+     "late": 0.066
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791059295.0337331,
+     "recv": 1791059297.7424166,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059297.742638,
+     "late": 1.1311
+    },
+    {
+     "tick": 1791059297.7435746,
+     "late": 0.882
+    },
+    {
+     "tick": 1791059297.745119,
+     "late": 0.6336
+    },
+    {
+     "tick": 1791059297.7459507,
+     "late": 0.3844
+    },
+    {
+     "tick": 1791059297.746278,
+     "late": 0.1347
+    },
+    {
+     "tick": 1791059297.8622718,
+     "late": 0.0007
+    },
+    {
+     "tick": 1791059298.112559,
+     "late": 0.001
+    },
+    {
+     "tick": 1791059298.8918107,
+     "late": 0.5303
+    },
+    {
+     "tick": 1791059298.8921359,
+     "late": 0.2806
+    },
+    {
+     "tick": 1791059298.8924499,
+     "late": 0.0309
+    },
+    {
+     "tick": 1791059300.7076724,
+     "late": 1.5961
+    },
+    {
+     "lane": 0,
+     "call": 8,
+     "sent": 1791059298.0334258,
+     "recv": 1791059300.7084258,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059300.7085292,
+     "late": 1.347
+    },
+    {
+     "tick": 1791059300.708828,
+     "late": 1.0973
+    },
+    {
+     "tick": 1791059300.7091463,
+     "late": 0.8476
+    },
+    {
+     "tick": 1791059300.7094595,
+     "late": 0.5979
+    },
+    {
+     "tick": 1791059300.7097602,
+     "late": 0.3482
+    },
+    {
+     "tick": 1791059300.7101836,
+     "late": 0.0986
+    },
+    {
+     "tick": 1791059300.8618288,
+     "late": 0.0003
+    },
+    {
+     "tick": 1791059301.1117256,
+     "late": 0.0002
+    },
+    {
+     "tick": 1791059301.37161,
+     "late": 0.0101
+    },
+    {
+     "tick": 1791059303.9839382,
+     "late": 2.3724
+    },
+    {
+     "tick": 1791059303.9853995,
+     "late": 2.1239
+    },
+    {
+     "tick": 1791059303.9858792,
+     "late": 1.8743
+    },
+    {
+     "tick": 1791059303.9863327,
+     "late": 1.6248
+    },
+    {
+     "tick": 1791059303.986718,
+     "late": 1.3752
+    },
+    {
+     "tick": 1791059303.9871323,
+     "late": 1.1256
+    },
+    {
+     "tick": 1791059303.9875927,
+     "late": 0.8761
+    },
+    {
+     "tick": 1791059303.9879408,
+     "late": 0.6264
+    },
+    {
+     "tick": 1791059303.988267,
+     "late": 0.3767
+    },
+    {
+     "tick": 1791059303.9886792,
+     "late": 0.1271
+    },
+    {
+     "tick": 1791059304.4350874,
+     "late": 0.3236
+    },
+    {
+     "lane": 0,
+     "call": 9,
+     "sent": 1791059301.0346632,
+     "recv": 1791059304.4357383,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059304.435954,
+     "late": 0.0744
+    },
+    {
+     "tick": 1791059304.6335483,
+     "late": 0.022
+    },
+    {
+     "tick": 1791059306.569389,
+     "late": 1.7079
+    },
+    {
+     "tick": 1791059306.5698783,
+     "late": 1.4583
+    },
+    {
+     "tick": 1791059306.5703893,
+     "late": 1.2089
+    },
+    {
+     "tick": 1791059306.5707264,
+     "late": 0.9592
+    },
+    {
+     "tick": 1791059306.5712023,
+     "late": 0.7097
+    },
+    {
+     "tick": 1791059306.5716093,
+     "late": 0.4601
+    },
+    {
+     "tick": 1791059306.5719197,
+     "late": 0.2104
+    },
+    {
+     "tick": 1791059306.612418,
+     "late": 0.0009
+    },
+    {
+     "lane": 0,
+     "call": 10,
+     "sent": 1791059304.73329,
+     "recv": 1791059307.6180158,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059307.6181874,
+     "late": 0.7567
+    },
+    {
+     "tick": 1791059307.6190257,
+     "late": 0.5075
+    },
+    {
+     "tick": 1791059307.6193483,
+     "late": 0.2578
+    },
+    {
+     "tick": 1791059307.6201327,
+     "late": 0.0086
+    },
+    {
+     "tick": 1791059307.8617432,
+     "late": 0.0002
+    },
+    {
+     "tick": 1791059308.9711118,
+     "late": 0.8596
+    },
+    {
+     "tick": 1791059308.9714627,
+     "late": 0.6099
+    },
+    {
+     "tick": 1791059308.9716964,
+     "late": 0.3602
+    },
+    {
+     "tick": 1791059308.9718966,
+     "late": 0.1104
+    },
+    {
+     "tick": 1791059310.0095463,
+     "late": 0.898
+    },
+    {
+     "lane": 0,
+     "call": 11,
+     "sent": 1791059307.9334266,
+     "recv": 1791059310.0103421,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059310.0106707,
+     "late": 0.6491
+    },
+    {
+     "done": 1791059310.011394
+    }
+   ]
+  },
+  "wake-node3-ticker-2b83ac-3": {
+   "job": {
+    "sandbox_id": "wake-node3-ticker-2b83ac-3",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "0c7f0b58cffe01a061a7c7adda374e06e5a352c9647c151574a9c277cd7cbda7",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T20:27:51.081262636Z",
+    "completed_at": "2026-10-03T20:28:41.988794751Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 10150,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T20:28:46.713175+00:00"
+   },
+   "rows": [
+    {
+     "tick": 1791059272.1900978,
+     "late": 0.0364
+    },
+    {
+     "tick": 1791059273.8390772,
+     "late": 1.4354
+    },
+    {
+     "tick": 1791059273.84,
+     "late": 1.1863
+    },
+    {
+     "tick": 1791059273.8405678,
+     "late": 0.9369
+    },
+    {
+     "tick": 1791059273.8409536,
+     "late": 0.6873
+    },
+    {
+     "tick": 1791059273.8414214,
+     "late": 0.4377
+    },
+    {
+     "tick": 1791059273.8419085,
+     "late": 0.1882
+    },
+    {
+     "tick": 1791059276.31164,
+     "late": 2.4079
+    },
+    {
+     "tick": 1791059276.3120759,
+     "late": 2.1584
+    },
+    {
+     "tick": 1791059276.3124573,
+     "late": 1.9088
+    },
+    {
+     "tick": 1791059276.312799,
+     "late": 1.6591
+    },
+    {
+     "tick": 1791059276.3130925,
+     "late": 1.4094
+    },
+    {
+     "tick": 1791059276.3134167,
+     "late": 1.1597
+    },
+    {
+     "tick": 1791059276.3137817,
+     "late": 0.9101
+    },
+    {
+     "tick": 1791059276.314103,
+     "late": 0.6604
+    },
+    {
+     "tick": 1791059276.3144476,
+     "late": 0.4107
+    },
+    {
+     "tick": 1791059276.3148494,
+     "late": 0.1611
+    },
+    {
+     "tick": 1791059276.7504094,
+     "late": 0.3467
+    },
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791059272.1066377,
+     "recv": 1791059276.7510474,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059276.7518148,
+     "late": 0.0981
+    },
+    {
+     "tick": 1791059276.903732,
+     "late": 0.0
+    },
+    {
+     "tick": 1791059277.1538339,
+     "late": 0.0001
+    },
+    {
+     "tick": 1791059278.8590405,
+     "late": 1.4553
+    },
+    {
+     "tick": 1791059278.8592749,
+     "late": 1.2056
+    },
+    {
+     "tick": 1791059278.8593943,
+     "late": 0.9557
+    },
+    {
+     "tick": 1791059278.8595345,
+     "late": 0.7058
+    },
+    {
+     "tick": 1791059278.8596706,
+     "late": 0.456
+    },
+    {
+     "tick": 1791059278.8598223,
+     "late": 0.2061
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791059277.0820713,
+     "recv": 1791059280.7710738,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059280.7712865,
+     "late": 1.8676
+    },
+    {
+     "tick": 1791059280.7723658,
+     "late": 1.6187
+    },
+    {
+     "tick": 1791059280.7731605,
+     "late": 1.3695
+    },
+    {
+     "tick": 1791059280.7735913,
+     "late": 1.1199
+    },
+    {
+     "tick": 1791059280.7739606,
+     "late": 0.8703
+    },
+    {
+     "tick": 1791059280.7744088,
+     "late": 0.6207
+    },
+    {
+     "tick": 1791059280.7749438,
+     "late": 0.3712
+    },
+    {
+     "tick": 1791059280.7753034,
+     "late": 0.1216
+    },
+    {
+     "tick": 1791059280.9037282,
+     "late": 0.0
+    },
+    {
+     "tick": 1791059281.349252,
+     "late": 0.1956
+    },
+    {
+     "tick": 1791059283.7683382,
+     "late": 2.3646
+    },
+    {
+     "tick": 1791059283.7686896,
+     "late": 2.115
+    },
+    {
+     "tick": 1791059283.7689734,
+     "late": 1.8653
+    },
+    {
+     "tick": 1791059283.7692528,
+     "late": 1.6156
+    },
+    {
+     "tick": 1791059283.769512,
+     "late": 1.3658
+    },
+    {
+     "tick": 1791059283.7698164,
+     "late": 1.1161
+    },
+    {
+     "tick": 1791059283.7700698,
+     "late": 0.8664
+    },
+    {
+     "tick": 1791059283.7705295,
+     "late": 0.6168
+    },
+    {
+     "tick": 1791059283.7708735,
+     "late": 0.3672
+    },
+    {
+     "tick": 1791059283.7712991,
+     "late": 0.1176
+    },
+    {
+     "tick": 1791059284.9302802,
+     "late": 1.0266
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791059280.9819655,
+     "recv": 1791059284.9309108,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059284.931381,
+     "late": 0.7777
+    },
+    {
+     "tick": 1791059284.9321678,
+     "late": 0.5285
+    },
+    {
+     "tick": 1791059284.932904,
+     "late": 0.2792
+    },
+    {
+     "tick": 1791059284.9335566,
+     "late": 0.0299
+    },
+    {
+     "tick": 1791059285.1820643,
+     "late": 0.0284
+    },
+    {
+     "tick": 1791059286.1886141,
+     "late": 0.7849
+    },
+    {
+     "tick": 1791059286.189082,
+     "late": 0.5354
+    },
+    {
+     "tick": 1791059286.1895192,
+     "late": 0.2858
+    },
+    {
+     "tick": 1791059286.189947,
+     "late": 0.0362
+    },
+    {
+     "tick": 1791059287.8617167,
+     "late": 1.458
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791059285.28208,
+     "recv": 1791059287.8623023,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059287.862798,
+     "late": 1.2091
+    },
+    {
+     "tick": 1791059287.8633683,
+     "late": 0.9597
+    },
+    {
+     "tick": 1791059287.864263,
+     "late": 0.7106
+    },
+    {
+     "tick": 1791059287.864689,
+     "late": 0.461
+    },
+    {
+     "tick": 1791059287.8659284,
+     "late": 0.2122
+    },
+    {
+     "tick": 1791059287.9037168,
+     "late": 0.0
+    },
+    {
+     "tick": 1791059288.153851,
+     "late": 0.0002
+    },
+    {
+     "tick": 1791059288.6556897,
+     "late": 0.252
+    },
+    {
+     "tick": 1791059288.6561732,
+     "late": 0.0025
+    },
+    {
+     "tick": 1791059291.2556531,
+     "late": 2.352
+    },
+    {
+     "tick": 1791059291.2560399,
+     "late": 2.1023
+    },
+    {
+     "tick": 1791059291.2563713,
+     "late": 1.8527
+    },
+    {
+     "tick": 1791059291.2566633,
+     "late": 1.603
+    },
+    {
+     "tick": 1791059291.256938,
+     "late": 1.3532
+    },
+    {
+     "tick": 1791059291.2571754,
+     "late": 1.1035
+    },
+    {
+     "tick": 1791059291.2575078,
+     "late": 0.8538
+    },
+    {
+     "tick": 1791059291.2577322,
+     "late": 0.604
+    },
+    {
+     "tick": 1791059291.258089,
+     "late": 0.3544
+    },
+    {
+     "tick": 1791059291.258352,
+     "late": 0.1047
+    },
+    {
+     "tick": 1791059293.1842043,
+     "late": 1.7805
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791059288.182959,
+     "recv": 1791059293.1848884,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059293.1853602,
+     "late": 1.5317
+    },
+    {
+     "tick": 1791059293.186026,
+     "late": 1.2823
+    },
+    {
+     "tick": 1791059293.1864743,
+     "late": 1.0328
+    },
+    {
+     "tick": 1791059293.1870196,
+     "late": 0.7833
+    },
+    {
+     "tick": 1791059293.1873925,
+     "late": 0.5337
+    },
+    {
+     "tick": 1791059293.18778,
+     "late": 0.2841
+    },
+    {
+     "tick": 1791059293.1880965,
+     "late": 0.0344
+    },
+    {
+     "tick": 1791059293.403753,
+     "late": 0.0001
+    },
+    {
+     "tick": 1791059293.9778457,
+     "late": 0.3241
+    },
+    {
+     "tick": 1791059293.9783254,
+     "late": 0.0746
+    },
+    {
+     "tick": 1791059296.4846966,
+     "late": 2.331
+    },
+    {
+     "tick": 1791059296.4852827,
+     "late": 2.0816
+    },
+    {
+     "tick": 1791059296.485759,
+     "late": 1.8321
+    },
+    {
+     "tick": 1791059296.486172,
+     "late": 1.5825
+    },
+    {
+     "tick": 1791059296.4865603,
+     "late": 1.3329
+    },
+    {
+     "tick": 1791059296.4868193,
+     "late": 1.0831
+    },
+    {
+     "tick": 1791059296.487107,
+     "late": 0.8334
+    },
+    {
+     "tick": 1791059296.4874642,
+     "late": 0.5838
+    },
+    {
+     "tick": 1791059296.487968,
+     "late": 0.3343
+    },
+    {
+     "tick": 1791059296.488363,
+     "late": 0.0847
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791059293.396401,
+     "recv": 1791059297.9943979,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059297.994564,
+     "late": 1.3409
+    },
+    {
+     "tick": 1791059297.995202,
+     "late": 1.0915
+    },
+    {
+     "tick": 1791059297.995412,
+     "late": 0.8417
+    },
+    {
+     "tick": 1791059297.9959078,
+     "late": 0.5922
+    },
+    {
+     "tick": 1791059297.9962964,
+     "late": 0.3426
+    },
+    {
+     "tick": 1791059297.996737,
+     "late": 0.093
+    },
+    {
+     "tick": 1791059298.1820252,
+     "late": 0.0283
+    },
+    {
+     "tick": 1791059298.404775,
+     "late": 0.0011
+    },
+    {
+     "tick": 1791059298.940325,
+     "late": 0.2866
+    },
+    {
+     "tick": 1791059298.9407606,
+     "late": 0.0371
+    },
+    {
+     "tick": 1791059300.75901,
+     "late": 1.6053
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791059298.3819609,
+     "recv": 1791059300.7593381,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059300.7599223,
+     "late": 1.3562
+    },
+    {
+     "tick": 1791059300.7603252,
+     "late": 1.1066
+    },
+    {
+     "tick": 1791059300.7606058,
+     "late": 0.8569
+    },
+    {
+     "tick": 1791059300.7608724,
+     "late": 0.6072
+    },
+    {
+     "tick": 1791059300.7612648,
+     "late": 0.3576
+    },
+    {
+     "tick": 1791059300.7615066,
+     "late": 0.1078
+    },
+    {
+     "tick": 1791059300.9040203,
+     "late": 0.0003
+    },
+    {
+     "tick": 1791059301.154355,
+     "late": 0.0007
+    },
+    {
+     "tick": 1791059301.4305592,
+     "late": 0.0269
+    },
+    {
+     "tick": 1791059304.048904,
+     "late": 2.3952
+    },
+    {
+     "tick": 1791059304.049446,
+     "late": 2.1457
+    },
+    {
+     "tick": 1791059304.0497675,
+     "late": 1.8961
+    },
+    {
+     "tick": 1791059304.0501661,
+     "late": 1.6465
+    },
+    {
+     "tick": 1791059304.0505753,
+     "late": 1.3969
+    },
+    {
+     "tick": 1791059304.0509405,
+     "late": 1.1472
+    },
+    {
+     "tick": 1791059304.0513065,
+     "late": 0.8976
+    },
+    {
+     "tick": 1791059304.0516,
+     "late": 0.6479
+    },
+    {
+     "tick": 1791059304.0518837,
+     "late": 0.3982
+    },
+    {
+     "tick": 1791059304.0522485,
+     "late": 0.1485
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791059301.0919168,
+     "recv": 1791059304.094478,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059304.181914,
+     "late": 0.0282
+    },
+    {
+     "tick": 1791059304.4037778,
+     "late": 0.0001
+    },
+    {
+     "tick": 1791059306.631028,
+     "late": 1.9773
+    },
+    {
+     "tick": 1791059306.6313004,
+     "late": 1.7276
+    },
+    {
+     "tick": 1791059306.6315062,
+     "late": 1.4778
+    },
+    {
+     "tick": 1791059306.6317294,
+     "late": 1.228
+    },
+    {
+     "tick": 1791059306.6319613,
+     "late": 0.9783
+    },
+    {
+     "tick": 1791059306.6321516,
+     "late": 0.7285
+    },
+    {
+     "tick": 1791059306.6323931,
+     "late": 0.4787
+    },
+    {
+     "tick": 1791059306.6325903,
+     "late": 0.2289
+    },
+    {
+     "tick": 1791059306.654397,
+     "late": 0.0007
+    },
+    {
+     "lane": 0,
+     "call": 8,
+     "sent": 1791059304.4919777,
+     "recv": 1791059308.6687713,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059308.6689506,
+     "late": 1.7652
+    },
+    {
+     "tick": 1791059308.6709375,
+     "late": 1.5172
+    },
+    {
+     "tick": 1791059308.6712885,
+     "late": 1.2676
+    },
+    {
+     "tick": 1791059308.6716022,
+     "late": 1.0179
+    },
+    {
+     "tick": 1791059308.6718593,
+     "late": 0.7682
+    },
+    {
+     "tick": 1791059308.6722937,
+     "late": 0.5186
+    },
+    {
+     "tick": 1791059308.6726656,
+     "late": 0.269
+    },
+    {
+     "tick": 1791059308.6730509,
+     "late": 0.0194
+    },
+    {
+     "tick": 1791059308.9038064,
+     "late": 0.0001
+    },
+    {
+     "tick": 1791059311.5033176,
+     "late": 2.3496
+    },
+    {
+     "tick": 1791059311.5038395,
+     "late": 2.1001
+    },
+    {
+     "tick": 1791059311.5042,
+     "late": 1.8505
+    },
+    {
+     "tick": 1791059311.5046291,
+     "late": 1.6009
+    },
+    {
+     "tick": 1791059311.5049865,
+     "late": 1.3513
+    },
+    {
+     "tick": 1791059311.505382,
+     "late": 1.1017
+    },
+    {
+     "tick": 1791059311.505646,
+     "late": 0.8519
+    },
+    {
+     "tick": 1791059311.505872,
+     "late": 0.6022
+    },
+    {
+     "tick": 1791059311.5061443,
+     "late": 0.3524
+    },
+    {
+     "tick": 1791059311.5064714,
+     "late": 0.1028
+    },
+    {
+     "tick": 1791059313.1320245,
+     "late": 1.4783
+    },
+    {
+     "lane": 0,
+     "call": 9,
+     "sent": 1791059308.9820619,
+     "recv": 1791059313.1324334,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059313.1334717,
+     "late": 1.2298
+    },
+    {
+     "tick": 1791059313.1339743,
+     "late": 0.9803
+    },
+    {
+     "tick": 1791059313.1352758,
+     "late": 0.7316
+    },
+    {
+     "tick": 1791059313.1357238,
+     "late": 0.482
+    },
+    {
+     "tick": 1791059313.1361809,
+     "late": 0.2325
+    },
+    {
+     "tick": 1791059313.182016,
+     "late": 0.0283
+    },
+    {
+     "tick": 1791059313.4045305,
+     "late": 0.0008
+    },
+    {
+     "tick": 1791059313.8819993,
+     "late": 0.2283
+    },
+    {
+     "tick": 1791059313.904043,
+     "late": 0.0003
+    },
+    {
+     "tick": 1791059316.315282,
+     "late": 2.1616
+    },
+    {
+     "tick": 1791059316.3161504,
+     "late": 1.9124
+    },
+    {
+     "tick": 1791059316.3165286,
+     "late": 1.6628
+    },
+    {
+     "tick": 1791059316.3169174,
+     "late": 1.4132
+    },
+    {
+     "tick": 1791059316.3171563,
+     "late": 1.1635
+    },
+    {
+     "tick": 1791059316.3174677,
+     "late": 0.9138
+    },
+    {
+     "tick": 1791059316.31776,
+     "late": 0.6641
+    },
+    {
+     "tick": 1791059316.3179877,
+     "late": 0.4143
+    },
+    {
+     "tick": 1791059316.3183658,
+     "late": 0.1647
+    },
+    {
+     "lane": 0,
+     "call": 10,
+     "sent": 1791059313.4942682,
+     "recv": 1791059318.3227148,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059318.3231006,
+     "late": 1.9194
+    },
+    {
+     "tick": 1791059318.3235476,
+     "late": 1.6698
+    },
+    {
+     "tick": 1791059318.3238332,
+     "late": 1.4201
+    },
+    {
+     "tick": 1791059318.324061,
+     "late": 1.1704
+    },
+    {
+     "tick": 1791059318.3253686,
+     "late": 0.9217
+    },
+    {
+     "tick": 1791059318.325822,
+     "late": 0.6721
+    },
+    {
+     "tick": 1791059318.3261683,
+     "late": 0.4225
+    },
+    {
+     "tick": 1791059318.327483,
+     "late": 0.1738
+    },
+    {
+     "tick": 1791059318.4045987,
+     "late": 0.0009
+    },
+    {
+     "tick": 1791059318.6583636,
+     "late": 0.0047
+    },
+    {
+     "tick": 1791059321.0417974,
+     "late": 2.1381
+    },
+    {
+     "tick": 1791059321.042346,
+     "late": 1.8886
+    },
+    {
+     "tick": 1791059321.042669,
+     "late": 1.639
+    },
+    {
+     "tick": 1791059321.042994,
+     "late": 1.3893
+    },
+    {
+     "tick": 1791059321.04336,
+     "late": 1.1397
+    },
+    {
+     "tick": 1791059321.0436912,
+     "late": 0.89
+    },
+    {
+     "tick": 1791059321.0439801,
+     "late": 0.6403
+    },
+    {
+     "tick": 1791059321.044267,
+     "late": 0.3906
+    },
+    {
+     "tick": 1791059321.0445333,
+     "late": 0.1408
+    },
+    {
+     "lane": 0,
+     "call": 11,
+     "sent": 1791059318.6820989,
+     "recv": 1791059321.9686565,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059321.9688773,
+     "late": 0.8152
+    },
+    {
+     "tick": 1791059321.9703503,
+     "late": 0.5666
+    },
+    {
+     "done": 1791059321.9705098
+    }
+   ]
+  },
+  "wake-node3-ticker-2b83ac-4": {
+   "job": {
+    "sandbox_id": "wake-node3-ticker-2b83ac-4",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "68e5ecc681d5402d36b31bc7eaad769979df110b617d655a7af3922c74e20edf",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T20:27:51.110724585Z",
+    "completed_at": "2026-10-03T20:28:40.080367222Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 9723,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T20:28:46.771909+00:00"
+   },
+   "rows": [
+    {
+     "tick": 1791059272.4010787,
+     "late": 0.0281
+    },
+    {
+     "tick": 1791059272.6401296,
+     "late": 0.0172
+    },
+    {
+     "tick": 1791059273.89846,
+     "late": 1.0255
+    },
+    {
+     "tick": 1791059273.8989906,
+     "late": 0.776
+    },
+    {
+     "tick": 1791059273.8993673,
+     "late": 0.5264
+    },
+    {
+     "tick": 1791059273.899769,
+     "late": 0.2768
+    },
+    {
+     "tick": 1791059273.900004,
+     "late": 0.027
+    },
+    {
+     "tick": 1791059276.3636642,
+     "late": 2.2407
+    },
+    {
+     "tick": 1791059276.3640416,
+     "late": 1.9911
+    },
+    {
+     "tick": 1791059276.3643847,
+     "late": 1.7414
+    },
+    {
+     "tick": 1791059276.3646607,
+     "late": 1.4917
+    },
+    {
+     "tick": 1791059276.3649235,
+     "late": 1.242
+    },
+    {
+     "tick": 1791059276.3653011,
+     "late": 0.9923
+    },
+    {
+     "tick": 1791059276.3655727,
+     "late": 0.7426
+    },
+    {
+     "tick": 1791059276.3658457,
+     "late": 0.4929
+    },
+    {
+     "tick": 1791059276.3660684,
+     "late": 0.2431
+    },
+    {
+     "tick": 1791059276.3737936,
+     "late": 0.0008
+    },
+    {
+     "tick": 1791059277.2105155,
+     "late": 0.5876
+    },
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791059272.6013386,
+     "recv": 1791059277.2110825,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059277.2121272,
+     "late": 0.3392
+    },
+    {
+     "tick": 1791059277.212833,
+     "late": 0.0899
+    },
+    {
+     "tick": 1791059277.4009142,
+     "late": 0.0279
+    },
+    {
+     "tick": 1791059278.9071422,
+     "late": 1.2842
+    },
+    {
+     "tick": 1791059278.9075694,
+     "late": 1.0346
+    },
+    {
+     "tick": 1791059278.9078448,
+     "late": 0.7849
+    },
+    {
+     "tick": 1791059278.9081213,
+     "late": 0.5352
+    },
+    {
+     "tick": 1791059278.9084318,
+     "late": 0.2855
+    },
+    {
+     "tick": 1791059278.9086826,
+     "late": 0.0357
+    },
+    {
+     "tick": 1791059281.4018464,
+     "late": 2.2789
+    },
+    {
+     "tick": 1791059281.4022794,
+     "late": 2.0293
+    },
+    {
+     "tick": 1791059281.4025557,
+     "late": 1.7796
+    },
+    {
+     "tick": 1791059281.402883,
+     "late": 1.5299
+    },
+    {
+     "tick": 1791059281.403254,
+     "late": 1.2803
+    },
+    {
+     "tick": 1791059281.4036121,
+     "late": 1.0306
+    },
+    {
+     "tick": 1791059281.4039583,
+     "late": 0.781
+    },
+    {
+     "tick": 1791059281.4042876,
+     "late": 0.5313
+    },
+    {
+     "tick": 1791059281.4047692,
+     "late": 0.2818
+    },
+    {
+     "tick": 1791059281.4050875,
+     "late": 0.0321
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791059277.5043807,
+     "recv": 1791059281.5376666,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059281.6230211,
+     "late": 0.0001
+    },
+    {
+     "tick": 1791059281.8735826,
+     "late": 0.0006
+    },
+    {
+     "tick": 1791059283.8267028,
+     "late": 1.7037
+    },
+    {
+     "tick": 1791059283.8272655,
+     "late": 1.4543
+    },
+    {
+     "tick": 1791059283.827649,
+     "late": 1.2047
+    },
+    {
+     "tick": 1791059283.8280108,
+     "late": 0.955
+    },
+    {
+     "tick": 1791059283.8283844,
+     "late": 0.7054
+    },
+    {
+     "tick": 1791059283.8288267,
+     "late": 0.4559
+    },
+    {
+     "tick": 1791059283.8291528,
+     "late": 0.2062
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791059281.8011553,
+     "recv": 1791059284.7282815,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059284.7284384,
+     "late": 0.8555
+    },
+    {
+     "tick": 1791059284.7290065,
+     "late": 0.606
+    },
+    {
+     "tick": 1791059284.729355,
+     "late": 0.3564
+    },
+    {
+     "tick": 1791059284.7298403,
+     "late": 0.1069
+    },
+    {
+     "tick": 1791059284.9014273,
+     "late": 0.0285
+    },
+    {
+     "tick": 1791059286.2490337,
+     "late": 1.1261
+    },
+    {
+     "tick": 1791059286.2496438,
+     "late": 0.8767
+    },
+    {
+     "tick": 1791059286.250119,
+     "late": 0.6272
+    },
+    {
+     "tick": 1791059286.2505395,
+     "late": 0.3776
+    },
+    {
+     "tick": 1791059286.2509596,
+     "late": 0.128
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791059284.9016266,
+     "recv": 1791059288.6821902,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059288.6823516,
+     "late": 2.3094
+    },
+    {
+     "tick": 1791059288.6835606,
+     "late": 2.0606
+    },
+    {
+     "tick": 1791059288.6843557,
+     "late": 1.8114
+    },
+    {
+     "tick": 1791059288.684582,
+     "late": 1.5616
+    },
+    {
+     "tick": 1791059288.6849442,
+     "late": 1.312
+    },
+    {
+     "tick": 1791059288.685311,
+     "late": 1.0623
+    },
+    {
+     "tick": 1791059288.685625,
+     "late": 0.8127
+    },
+    {
+     "tick": 1791059288.685949,
+     "late": 0.563
+    },
+    {
+     "tick": 1791059288.6865127,
+     "late": 0.3135
+    },
+    {
+     "tick": 1791059288.6866953,
+     "late": 0.0637
+    },
+    {
+     "tick": 1791059288.9010842,
+     "late": 0.0281
+    },
+    {
+     "tick": 1791059289.1236246,
+     "late": 0.0007
+    },
+    {
+     "tick": 1791059291.317746,
+     "late": 1.9448
+    },
+    {
+     "tick": 1791059291.3181758,
+     "late": 1.6952
+    },
+    {
+     "tick": 1791059291.318519,
+     "late": 1.4456
+    },
+    {
+     "tick": 1791059291.3189287,
+     "late": 1.196
+    },
+    {
+     "tick": 1791059291.3192043,
+     "late": 0.9462
+    },
+    {
+     "tick": 1791059291.319509,
+     "late": 0.6965
+    },
+    {
+     "tick": 1791059291.319846,
+     "late": 0.4469
+    },
+    {
+     "tick": 1791059291.3202527,
+     "late": 0.1973
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791059289.1011128,
+     "recv": 1791059293.7690654,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059293.7692664,
+     "late": 2.3963
+    },
+    {
+     "tick": 1791059293.7701728,
+     "late": 2.1472
+    },
+    {
+     "tick": 1791059293.7707314,
+     "late": 1.8978
+    },
+    {
+     "tick": 1791059293.7720962,
+     "late": 1.6491
+    },
+    {
+     "tick": 1791059293.7725492,
+     "late": 1.3996
+    },
+    {
+     "tick": 1791059293.7729661,
+     "late": 1.15
+    },
+    {
+     "tick": 1791059293.7734585,
+     "late": 0.9005
+    },
+    {
+     "tick": 1791059293.7739139,
+     "late": 0.6509
+    },
+    {
+     "tick": 1791059293.7742693,
+     "late": 0.4013
+    },
+    {
+     "tick": 1791059293.7746441,
+     "late": 0.1517
+    },
+    {
+     "tick": 1791059293.9010155,
+     "late": 0.0281
+    },
+    {
+     "tick": 1791059294.123089,
+     "late": 0.0001
+    },
+    {
+     "tick": 1791059296.5494006,
+     "late": 2.1764
+    },
+    {
+     "tick": 1791059296.5499375,
+     "late": 1.927
+    },
+    {
+     "tick": 1791059296.5503385,
+     "late": 1.6774
+    },
+    {
+     "tick": 1791059296.5506518,
+     "late": 1.4277
+    },
+    {
+     "tick": 1791059296.5509777,
+     "late": 1.178
+    },
+    {
+     "tick": 1791059296.551386,
+     "late": 0.9284
+    },
+    {
+     "tick": 1791059296.5517235,
+     "late": 0.6788
+    },
+    {
+     "tick": 1791059296.5521257,
+     "late": 0.4292
+    },
+    {
+     "tick": 1791059296.5525174,
+     "late": 0.1796
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791059294.0234137,
+     "recv": 1791059298.5832791,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059298.5835164,
+     "late": 1.9606
+    },
+    {
+     "tick": 1791059298.58432,
+     "late": 1.7114
+    },
+    {
+     "tick": 1791059298.5846417,
+     "late": 1.4617
+    },
+    {
+     "tick": 1791059298.585092,
+     "late": 1.2121
+    },
+    {
+     "tick": 1791059298.585637,
+     "late": 0.9627
+    },
+    {
+     "tick": 1791059298.585919,
+     "late": 0.713
+    },
+    {
+     "tick": 1791059298.5863519,
+     "late": 0.4634
+    },
+    {
+     "tick": 1791059298.5867004,
+     "late": 0.2137
+    },
+    {
+     "tick": 1791059298.6231756,
+     "late": 0.0002
+    },
+    {
+     "tick": 1791059298.8736665,
+     "late": 0.0007
+    },
+    {
+     "tick": 1791059301.4944336,
+     "late": 2.3715
+    },
+    {
+     "tick": 1791059301.494819,
+     "late": 2.1219
+    },
+    {
+     "tick": 1791059301.495104,
+     "late": 1.8721
+    },
+    {
+     "tick": 1791059301.4956949,
+     "late": 1.6227
+    },
+    {
+     "tick": 1791059301.4962485,
+     "late": 1.3733
+    },
+    {
+     "tick": 1791059301.4964826,
+     "late": 1.1235
+    },
+    {
+     "tick": 1791059301.4967344,
+     "late": 0.8738
+    },
+    {
+     "tick": 1791059301.4969604,
+     "late": 0.624
+    },
+    {
+     "tick": 1791059301.4973028,
+     "late": 0.3743
+    },
+    {
+     "tick": 1791059301.497536,
+     "late": 0.1246
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791059298.811001,
+     "recv": 1791059302.3497286,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059302.3499405,
+     "late": 0.727
+    },
+    {
+     "tick": 1791059302.350859,
+     "late": 0.4779
+    },
+    {
+     "tick": 1791059302.3514266,
+     "late": 0.2285
+    },
+    {
+     "tick": 1791059302.401052,
+     "late": 0.0281
+    },
+    {
+     "tick": 1791059302.6230536,
+     "late": 0.0001
+    },
+    {
+     "tick": 1791059304.1324816,
+     "late": 1.2595
+    },
+    {
+     "tick": 1791059304.1329474,
+     "late": 1.01
+    },
+    {
+     "tick": 1791059304.1333196,
+     "late": 0.7604
+    },
+    {
+     "tick": 1791059304.1336818,
+     "late": 0.5107
+    },
+    {
+     "tick": 1791059304.134147,
+     "late": 0.2612
+    },
+    {
+     "tick": 1791059304.1345904,
+     "late": 0.0116
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791059302.7010672,
+     "recv": 1791059306.4857843,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059306.4859579,
+     "late": 2.113
+    },
+    {
+     "tick": 1791059306.486719,
+     "late": 1.8638
+    },
+    {
+     "tick": 1791059306.487121,
+     "late": 1.6142
+    },
+    {
+     "tick": 1791059306.4875975,
+     "late": 1.3646
+    },
+    {
+     "tick": 1791059306.4879708,
+     "late": 1.115
+    },
+    {
+     "tick": 1791059306.488314,
+     "late": 0.8653
+    },
+    {
+     "tick": 1791059306.4885998,
+     "late": 0.6156
+    },
+    {
+     "tick": 1791059306.4893303,
+     "late": 0.3664
+    },
+    {
+     "tick": 1791059306.489721,
+     "late": 0.1168
+    },
+    {
+     "tick": 1791059306.6229966,
+     "late": 0.0
+    },
+    {
+     "tick": 1791059308.8176765,
+     "late": 1.9447
+    },
+    {
+     "lane": 0,
+     "call": 8,
+     "sent": 1791059306.7018692,
+     "recv": 1791059308.8179598,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059308.8183596,
+     "late": 1.6954
+    },
+    {
+     "tick": 1791059308.8184881,
+     "late": 1.4455
+    },
+    {
+     "tick": 1791059308.8185766,
+     "late": 1.1956
+    },
+    {
+     "tick": 1791059308.8187785,
+     "late": 0.9458
+    },
+    {
+     "tick": 1791059308.819043,
+     "late": 0.6961
+    },
+    {
+     "tick": 1791059308.820472,
+     "late": 0.4475
+    },
+    {
+     "tick": 1791059308.8208368,
+     "late": 0.1979
+    },
+    {
+     "tick": 1791059308.901598,
+     "late": 0.0286
+    },
+    {
+     "tick": 1791059309.1231346,
+     "late": 0.0002
+    },
+    {
+     "tick": 1791059311.5626626,
+     "late": 2.1897
+    },
+    {
+     "tick": 1791059311.5631053,
+     "late": 1.9401
+    },
+    {
+     "tick": 1791059311.5633898,
+     "late": 1.6904
+    },
+    {
+     "tick": 1791059311.5636399,
+     "late": 1.4407
+    },
+    {
+     "tick": 1791059311.5638428,
+     "late": 1.1909
+    },
+    {
+     "tick": 1791059311.5640874,
+     "late": 0.9411
+    },
+    {
+     "tick": 1791059311.5645354,
+     "late": 0.6916
+    },
+    {
+     "tick": 1791059311.564802,
+     "late": 0.4418
+    },
+    {
+     "tick": 1791059311.5651658,
+     "late": 0.1922
+    },
+    {
+     "lane": 0,
+     "call": 9,
+     "sent": 1791059309.1011884,
+     "recv": 1791059311.848587,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059311.8487747,
+     "late": 0.2258
+    },
+    {
+     "tick": 1791059311.8735375,
+     "late": 0.0006
+    },
+    {
+     "tick": 1791059312.1232805,
+     "late": 0.0003
+    },
+    {
+     "tick": 1791059313.9385047,
+     "late": 1.5655
+    },
+    {
+     "tick": 1791059313.9389324,
+     "late": 1.316
+    },
+    {
+     "tick": 1791059313.9394908,
+     "late": 1.0665
+    },
+    {
+     "tick": 1791059313.9398112,
+     "late": 0.8168
+    },
+    {
+     "tick": 1791059313.9401944,
+     "late": 0.5672
+    },
+    {
+     "tick": 1791059313.9406624,
+     "late": 0.3177
+    },
+    {
+     "tick": 1791059313.9410257,
+     "late": 0.0681
+    },
+    {
+     "tick": 1791059316.3691657,
+     "late": 2.2462
+    },
+    {
+     "tick": 1791059316.3695552,
+     "late": 1.9966
+    },
+    {
+     "tick": 1791059316.3698614,
+     "late": 1.7469
+    },
+    {
+     "tick": 1791059316.370271,
+     "late": 1.4973
+    },
+    {
+     "tick": 1791059316.3704083,
+     "late": 1.2474
+    },
+    {
+     "tick": 1791059316.3707051,
+     "late": 0.9977
+    },
+    {
+     "tick": 1791059316.3708804,
+     "late": 0.7479
+    },
+    {
+     "tick": 1791059316.371261,
+     "late": 0.4983
+    },
+    {
+     "tick": 1791059316.3716373,
+     "late": 0.2487
+    },
+    {
+     "tick": 1791059316.3730457,
+     "late": 0.0001
+    },
+    {
+     "lane": 0,
+     "call": 10,
+     "sent": 1791059312.121091,
+     "recv": 1791059316.5223203,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059316.6230226,
+     "late": 0.0001
+    },
+    {
+     "tick": 1791059316.8733764,
+     "late": 0.0004
+    },
+    {
+     "tick": 1791059318.725431,
+     "late": 1.6025
+    },
+    {
+     "tick": 1791059318.7259908,
+     "late": 1.353
+    },
+    {
+     "tick": 1791059318.7264519,
+     "late": 1.1035
+    },
+    {
+     "tick": 1791059318.7267802,
+     "late": 0.8538
+    },
+    {
+     "tick": 1791059318.7271237,
+     "late": 0.6042
+    },
+    {
+     "tick": 1791059318.7275555,
+     "late": 0.3546
+    },
+    {
+     "tick": 1791059318.7279031,
+     "late": 0.1049
+    },
+    {
+     "tick": 1791059320.058922,
+     "late": 1.186
+    },
+    {
+     "lane": 0,
+     "call": 11,
+     "sent": 1791059316.8013005,
+     "recv": 1791059320.059352,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059320.0597975,
+     "late": 0.9368
+    },
+    {
+     "done": 1791059320.06045
+    }
+   ]
+  },
+  "wake-node3-ticker-2b83ac-5": {
+   "job": {
+    "sandbox_id": "wake-node3-ticker-2b83ac-5",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "37f2d52fed331f1d396fbd3e5a8755d1085d27b3407921c9a793aec3887797f6",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T20:27:51.140237356Z",
+    "completed_at": "2026-10-03T20:28:37.135433537Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 9309,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T20:28:46.827140+00:00"
+   },
+   "rows": [
+    {
+     "tick": 1791059272.3029807,
+     "late": 0.0045
+    },
+    {
+     "tick": 1791059272.5495107,
+     "late": 0.001
+    },
+    {
+     "tick": 1791059273.9556603,
+     "late": 1.1571
+    },
+    {
+     "tick": 1791059273.9561574,
+     "late": 0.9076
+    },
+    {
+     "tick": 1791059273.9565628,
+     "late": 0.658
+    },
+    {
+     "tick": 1791059273.9569535,
+     "late": 0.4084
+    },
+    {
+     "tick": 1791059273.9574213,
+     "late": 0.1589
+    },
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791059272.5231323,
+     "recv": 1791059275.1714158,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059275.1716592,
+     "late": 1.1231
+    },
+    {
+     "tick": 1791059275.1736684,
+     "late": 0.8752
+    },
+    {
+     "tick": 1791059275.174029,
+     "late": 0.6255
+    },
+    {
+     "tick": 1791059275.1743505,
+     "late": 0.3758
+    },
+    {
+     "tick": 1791059275.1747835,
+     "late": 0.1263
+    },
+    {
+     "tick": 1791059275.30307,
+     "late": 0.0046
+    },
+    {
+     "tick": 1791059276.4238203,
+     "late": 0.8753
+    },
+    {
+     "tick": 1791059276.4243193,
+     "late": 0.6258
+    },
+    {
+     "tick": 1791059276.4246871,
+     "late": 0.3762
+    },
+    {
+     "tick": 1791059276.4250908,
+     "late": 0.1266
+    },
+    {
+     "tick": 1791059278.9607127,
+     "late": 2.4122
+    },
+    {
+     "tick": 1791059278.9610336,
+     "late": 2.1625
+    },
+    {
+     "tick": 1791059278.9612982,
+     "late": 1.9128
+    },
+    {
+     "tick": 1791059278.9614995,
+     "late": 1.663
+    },
+    {
+     "tick": 1791059278.9617877,
+     "late": 1.4133
+    },
+    {
+     "tick": 1791059278.9619737,
+     "late": 1.1635
+    },
+    {
+     "tick": 1791059278.96211,
+     "late": 0.9136
+    },
+    {
+     "tick": 1791059278.9622014,
+     "late": 0.6637
+    },
+    {
+     "tick": 1791059278.9624314,
+     "late": 0.4139
+    },
+    {
+     "tick": 1791059278.9627097,
+     "late": 0.1642
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791059275.403257,
+     "recv": 1791059279.0708675,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059279.0709498,
+     "late": 0.0224
+    },
+    {
+     "tick": 1791059279.298792,
+     "late": 0.0003
+    },
+    {
+     "tick": 1791059281.4674077,
+     "late": 1.9189
+    },
+    {
+     "tick": 1791059281.4678776,
+     "late": 1.6694
+    },
+    {
+     "tick": 1791059281.4681969,
+     "late": 1.4197
+    },
+    {
+     "tick": 1791059281.4685352,
+     "late": 1.17
+    },
+    {
+     "tick": 1791059281.468791,
+     "late": 0.9203
+    },
+    {
+     "tick": 1791059281.4690146,
+     "late": 0.6705
+    },
+    {
+     "tick": 1791059281.4693336,
+     "late": 0.4208
+    },
+    {
+     "tick": 1791059281.4695663,
+     "late": 0.1711
+    },
+    {
+     "tick": 1791059283.4315934,
+     "late": 1.8831
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791059279.303148,
+     "recv": 1791059283.432158,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059283.4327834,
+     "late": 1.6343
+    },
+    {
+     "tick": 1791059283.4330409,
+     "late": 1.3845
+    },
+    {
+     "tick": 1791059283.433461,
+     "late": 1.1349
+    },
+    {
+     "tick": 1791059283.4337769,
+     "late": 0.8853
+    },
+    {
+     "tick": 1791059283.4339857,
+     "late": 0.6355
+    },
+    {
+     "tick": 1791059283.4342506,
+     "late": 0.3857
+    },
+    {
+     "tick": 1791059283.43443,
+     "late": 0.1359
+    },
+    {
+     "tick": 1791059283.6030993,
+     "late": 0.0546
+    },
+    {
+     "tick": 1791059283.886652,
+     "late": 0.0881
+    },
+    {
+     "tick": 1791059286.3042986,
+     "late": 2.2558
+    },
+    {
+     "tick": 1791059286.3047807,
+     "late": 2.0063
+    },
+    {
+     "tick": 1791059286.3051925,
+     "late": 1.7567
+    },
+    {
+     "tick": 1791059286.305599,
+     "late": 1.5071
+    },
+    {
+     "tick": 1791059286.3060048,
+     "late": 1.2575
+    },
+    {
+     "tick": 1791059286.3063936,
+     "late": 1.0079
+    },
+    {
+     "tick": 1791059286.3066995,
+     "late": 0.7582
+    },
+    {
+     "tick": 1791059286.3070107,
+     "late": 0.5085
+    },
+    {
+     "tick": 1791059286.307409,
+     "late": 0.2589
+    },
+    {
+     "tick": 1791059286.3076918,
+     "late": 0.0092
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791059283.7169678,
+     "recv": 1791059287.754945,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059287.7550988,
+     "late": 1.2066
+    },
+    {
+     "tick": 1791059287.7556515,
+     "late": 0.9571
+    },
+    {
+     "tick": 1791059287.7560158,
+     "late": 0.7075
+    },
+    {
+     "tick": 1791059287.7562728,
+     "late": 0.4578
+    },
+    {
+     "tick": 1791059287.7567015,
+     "late": 0.2082
+    },
+    {
+     "tick": 1791059287.802971,
+     "late": 0.0045
+    },
+    {
+     "tick": 1791059288.103661,
+     "late": 0.0551
+    },
+    {
+     "tick": 1791059288.8248084,
+     "late": 0.5263
+    },
+    {
+     "tick": 1791059288.8251984,
+     "late": 0.2767
+    },
+    {
+     "tick": 1791059288.825518,
+     "late": 0.027
+    },
+    {
+     "tick": 1791059291.238021,
+     "late": 2.1895
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791059288.1034222,
+     "recv": 1791059291.2385573,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059291.2389383,
+     "late": 1.9404
+    },
+    {
+     "tick": 1791059291.2393682,
+     "late": 1.6909
+    },
+    {
+     "tick": 1791059291.239786,
+     "late": 1.4413
+    },
+    {
+     "tick": 1791059291.2400172,
+     "late": 1.1915
+    },
+    {
+     "tick": 1791059291.2403173,
+     "late": 0.9418
+    },
+    {
+     "tick": 1791059291.2405214,
+     "late": 0.692
+    },
+    {
+     "tick": 1791059291.240961,
+     "late": 0.4424
+    },
+    {
+     "tick": 1791059291.2414951,
+     "late": 0.193
+    },
+    {
+     "tick": 1791059291.303188,
+     "late": 0.0047
+    },
+    {
+     "tick": 1791059291.6030705,
+     "late": 0.0546
+    },
+    {
+     "tick": 1791059294.1204183,
+     "late": 2.3219
+    },
+    {
+     "tick": 1791059294.1209118,
+     "late": 2.0724
+    },
+    {
+     "tick": 1791059294.1212938,
+     "late": 1.8228
+    },
+    {
+     "tick": 1791059294.1216302,
+     "late": 1.5731
+    },
+    {
+     "tick": 1791059294.1219738,
+     "late": 1.3235
+    },
+    {
+     "tick": 1791059294.1223075,
+     "late": 1.0738
+    },
+    {
+     "tick": 1791059294.1225893,
+     "late": 0.8241
+    },
+    {
+     "tick": 1791059294.1229382,
+     "late": 0.5744
+    },
+    {
+     "tick": 1791059294.1232743,
+     "late": 0.3248
+    },
+    {
+     "tick": 1791059294.1236362,
+     "late": 0.0751
+    },
+    {
+     "tick": 1791059294.9624453,
+     "late": 0.6639
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791059291.623495,
+     "recv": 1791059294.9627888,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059294.963249,
+     "late": 0.4147
+    },
+    {
+     "tick": 1791059294.9635189,
+     "late": 0.165
+    },
+    {
+     "tick": 1791059295.0491052,
+     "late": 0.0006
+    },
+    {
+     "tick": 1791059295.3033154,
+     "late": 0.0048
+    },
+    {
+     "tick": 1791059296.6038566,
+     "late": 1.0553
+    },
+    {
+     "tick": 1791059296.6043923,
+     "late": 0.8059
+    },
+    {
+     "tick": 1791059296.6048088,
+     "late": 0.5563
+    },
+    {
+     "tick": 1791059296.6052492,
+     "late": 0.3067
+    },
+    {
+     "tick": 1791059296.6056662,
+     "late": 0.0572
+    },
+    {
+     "tick": 1791059298.8510385,
+     "late": 2.0525
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791059295.302981,
+     "recv": 1791059298.851543,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059298.8523648,
+     "late": 1.8039
+    },
+    {
+     "tick": 1791059298.8528333,
+     "late": 1.5543
+    },
+    {
+     "tick": 1791059298.8533468,
+     "late": 1.3048
+    },
+    {
+     "tick": 1791059298.853732,
+     "late": 1.0552
+    },
+    {
+     "tick": 1791059298.853957,
+     "late": 0.8054
+    },
+    {
+     "tick": 1791059298.854274,
+     "late": 0.5558
+    },
+    {
+     "tick": 1791059298.8547,
+     "late": 0.3062
+    },
+    {
+     "tick": 1791059298.8550475,
+     "late": 0.0565
+    },
+    {
+     "tick": 1791059299.1034596,
+     "late": 0.0549
+    },
+    {
+     "tick": 1791059301.5503874,
+     "late": 2.2519
+    },
+    {
+     "tick": 1791059301.5509427,
+     "late": 2.0024
+    },
+    {
+     "tick": 1791059301.5514205,
+     "late": 1.7529
+    },
+    {
+     "tick": 1791059301.5517259,
+     "late": 1.5032
+    },
+    {
+     "tick": 1791059301.5520031,
+     "late": 1.2535
+    },
+    {
+     "tick": 1791059301.5523841,
+     "late": 1.0039
+    },
+    {
+     "tick": 1791059301.5527017,
+     "late": 0.7542
+    },
+    {
+     "tick": 1791059301.553025,
+     "late": 0.5045
+    },
+    {
+     "tick": 1791059301.5534575,
+     "late": 0.2549
+    },
+    {
+     "tick": 1791059301.5537722,
+     "late": 0.0053
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791059299.203324,
+     "recv": 1791059303.557203,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059303.557422,
+     "late": 1.7589
+    },
+    {
+     "tick": 1791059303.5591137,
+     "late": 1.5106
+    },
+    {
+     "tick": 1791059303.5593705,
+     "late": 1.2609
+    },
+    {
+     "tick": 1791059303.5595672,
+     "late": 1.0111
+    },
+    {
+     "tick": 1791059303.5602574,
+     "late": 0.7617
+    },
+    {
+     "tick": 1791059303.5605283,
+     "late": 0.512
+    },
+    {
+     "tick": 1791059303.5608642,
+     "late": 0.2623
+    },
+    {
+     "tick": 1791059303.5612397,
+     "late": 0.0127
+    },
+    {
+     "tick": 1791059303.80293,
+     "late": 0.0044
+    },
+    {
+     "tick": 1791059304.1821837,
+     "late": 0.1337
+    },
+    {
+     "tick": 1791059306.7268,
+     "late": 2.4283
+    },
+    {
+     "tick": 1791059306.7273872,
+     "late": 2.1789
+    },
+    {
+     "tick": 1791059306.727788,
+     "late": 1.9293
+    },
+    {
+     "tick": 1791059306.728181,
+     "late": 1.6797
+    },
+    {
+     "tick": 1791059306.728527,
+     "late": 1.43
+    },
+    {
+     "tick": 1791059306.728825,
+     "late": 1.1803
+    },
+    {
+     "tick": 1791059306.7291863,
+     "late": 0.9307
+    },
+    {
+     "tick": 1791059306.729576,
+     "late": 0.6811
+    },
+    {
+     "tick": 1791059306.7298064,
+     "late": 0.4313
+    },
+    {
+     "tick": 1791059306.7301123,
+     "late": 0.1816
+    },
+    {
+     "tick": 1791059307.4834857,
+     "late": 0.685
+    },
+    {
+     "lane": 0,
+     "call": 8,
+     "sent": 1791059303.903792,
+     "recv": 1791059307.483883,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059307.484577,
+     "late": 0.4361
+    },
+    {
+     "tick": 1791059307.485396,
+     "late": 0.1869
+    },
+    {
+     "tick": 1791059307.5494773,
+     "late": 0.001
+    },
+    {
+     "tick": 1791059309.152797,
+     "late": 1.3543
+    },
+    {
+     "tick": 1791059309.1532629,
+     "late": 1.1047
+    },
+    {
+     "tick": 1791059309.153596,
+     "late": 0.8551
+    },
+    {
+     "tick": 1791059309.1538997,
+     "late": 0.6054
+    },
+    {
+     "tick": 1791059309.1543334,
+     "late": 0.3558
+    },
+    {
+     "tick": 1791059309.1546755,
+     "late": 0.1062
+    },
+    {
+     "tick": 1791059310.899197,
+     "late": 1.6007
+    },
+    {
+     "lane": 0,
+     "call": 9,
+     "sent": 1791059307.7031121,
+     "recv": 1791059310.8995843,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059310.9007108,
+     "late": 1.3522
+    },
+    {
+     "tick": 1791059310.9009848,
+     "late": 1.1025
+    },
+    {
+     "tick": 1791059310.9013584,
+     "late": 0.8528
+    },
+    {
+     "tick": 1791059310.9016368,
+     "late": 0.6031
+    },
+    {
+     "tick": 1791059310.901941,
+     "late": 0.3534
+    },
+    {
+     "tick": 1791059310.9023178,
+     "late": 0.1038
+    },
+    {
+     "tick": 1791059311.1034021,
+     "late": 0.0549
+    },
+    {
+     "tick": 1791059311.623722,
+     "late": 0.3252
+    },
+    {
+     "tick": 1791059311.6242023,
+     "late": 0.0757
+    },
+    {
+     "tick": 1791059313.9972517,
+     "late": 2.1987
+    },
+    {
+     "tick": 1791059313.9977615,
+     "late": 1.9492
+    },
+    {
+     "tick": 1791059313.998165,
+     "late": 1.6997
+    },
+    {
+     "tick": 1791059313.998676,
+     "late": 1.4502
+    },
+    {
+     "tick": 1791059313.9990597,
+     "late": 1.2005
+    },
+    {
+     "tick": 1791059313.9994621,
+     "late": 0.9509
+    },
+    {
+     "tick": 1791059313.999807,
+     "late": 0.7013
+    },
+    {
+     "tick": 1791059314.0000973,
+     "late": 0.4516
+    },
+    {
+     "tick": 1791059314.0004976,
+     "late": 0.202
+    },
+    {
+     "tick": 1791059314.690522,
+     "late": 0.642
+    },
+    {
+     "lane": 0,
+     "call": 10,
+     "sent": 1791059311.2033105,
+     "recv": 1791059314.6909988,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059314.6914992,
+     "late": 0.393
+    },
+    {
+     "tick": 1791059314.691766,
+     "late": 0.1433
+    },
+    {
+     "tick": 1791059314.8031,
+     "late": 0.0046
+    },
+    {
+     "tick": 1791059315.0495198,
+     "late": 0.001
+    },
+    {
+     "tick": 1791059316.4194365,
+     "late": 1.1209
+    },
+    {
+     "tick": 1791059316.4196532,
+     "late": 0.8711
+    },
+    {
+     "tick": 1791059316.4198058,
+     "late": 0.6213
+    },
+    {
+     "tick": 1791059316.4199312,
+     "late": 0.3714
+    },
+    {
+     "tick": 1791059316.420056,
+     "late": 0.1215
+    },
+    {
+     "lane": 0,
+     "call": 11,
+     "sent": 1791059315.0032818,
+     "recv": 1791059317.1129997,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059317.1135619,
+     "late": 0.565
+    },
+    {
+     "tick": 1791059317.1149213,
+     "late": 0.3164
+    },
+    {
+     "done": 1791059317.1156957
+    }
+   ]
+  },
+  "wake-node3-ticker-2b83ac-6": {
+   "job": {
+    "sandbox_id": "wake-node3-ticker-2b83ac-6",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "7882babc3c9f275ec0e84fff0f2764bf37777b123a2bdb835ff160c84f040763",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T20:27:51.168457554Z",
+    "completed_at": "2026-10-03T20:28:39.786838479Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 9762,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T20:28:46.890952+00:00"
+   },
+   "rows": [
+    {
+     "tick": 1791059272.146206,
+     "late": 0.0125
+    },
+    {
+     "tick": 1791059274.0149317,
+     "late": 1.6312
+    },
+    {
+     "tick": 1791059274.015942,
+     "late": 1.3823
+    },
+    {
+     "tick": 1791059274.0163996,
+     "late": 1.1327
+    },
+    {
+     "tick": 1791059274.016838,
+     "late": 0.8832
+    },
+    {
+     "tick": 1791059274.017319,
+     "late": 0.6336
+    },
+    {
+     "tick": 1791059274.0177097,
+     "late": 0.384
+    },
+    {
+     "tick": 1791059274.018047,
+     "late": 0.1344
+    },
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791059272.1459968,
+     "recv": 1791059274.3092482,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059274.3094695,
+     "late": 0.1758
+    },
+    {
+     "tick": 1791059274.3847725,
+     "late": 0.0011
+    },
+    {
+     "tick": 1791059274.634108,
+     "late": 0.0004
+    },
+    {
+     "tick": 1791059276.4766598,
+     "late": 1.593
+    },
+    {
+     "tick": 1791059276.477161,
+     "late": 1.3435
+    },
+    {
+     "tick": 1791059276.477523,
+     "late": 1.0938
+    },
+    {
+     "tick": 1791059276.477852,
+     "late": 0.8442
+    },
+    {
+     "tick": 1791059276.4781399,
+     "late": 0.5945
+    },
+    {
+     "tick": 1791059276.4784346,
+     "late": 0.3448
+    },
+    {
+     "tick": 1791059276.4786952,
+     "late": 0.095
+    },
+    {
+     "tick": 1791059278.674585,
+     "late": 2.0409
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791059274.5462024,
+     "recv": 1791059278.6751142,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059278.6755555,
+     "late": 1.7919
+    },
+    {
+     "tick": 1791059278.6758373,
+     "late": 1.5422
+    },
+    {
+     "tick": 1791059278.6761193,
+     "late": 1.2924
+    },
+    {
+     "tick": 1791059278.6766672,
+     "late": 1.043
+    },
+    {
+     "tick": 1791059278.677062,
+     "late": 0.7934
+    },
+    {
+     "tick": 1791059278.6777308,
+     "late": 0.544
+    },
+    {
+     "tick": 1791059278.6781297,
+     "late": 0.2944
+    },
+    {
+     "tick": 1791059278.678506,
+     "late": 0.0448
+    },
+    {
+     "tick": 1791059278.9469433,
+     "late": 0.0633
+    },
+    {
+     "tick": 1791059281.5348172,
+     "late": 2.4011
+    },
+    {
+     "tick": 1791059281.535472,
+     "late": 2.1518
+    },
+    {
+     "tick": 1791059281.5360026,
+     "late": 1.9023
+    },
+    {
+     "tick": 1791059281.5364816,
+     "late": 1.6528
+    },
+    {
+     "tick": 1791059281.5370243,
+     "late": 1.4033
+    },
+    {
+     "tick": 1791059281.5375762,
+     "late": 1.1539
+    },
+    {
+     "tick": 1791059281.5378194,
+     "late": 0.9041
+    },
+    {
+     "tick": 1791059281.538076,
+     "late": 0.6544
+    },
+    {
+     "tick": 1791059281.5384276,
+     "late": 0.4047
+    },
+    {
+     "tick": 1791059281.5389733,
+     "late": 0.1553
+    },
+    {
+     "tick": 1791059283.9178452,
+     "late": 2.2842
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791059278.8900855,
+     "recv": 1791059283.9184132,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059283.9190307,
+     "late": 2.0353
+    },
+    {
+     "tick": 1791059283.9197786,
+     "late": 1.7861
+    },
+    {
+     "tick": 1791059283.920515,
+     "late": 1.5368
+    },
+    {
+     "tick": 1791059283.921462,
+     "late": 1.2878
+    },
+    {
+     "tick": 1791059283.9220655,
+     "late": 1.0384
+    },
+    {
+     "tick": 1791059283.9227152,
+     "late": 0.789
+    },
+    {
+     "tick": 1791059283.923191,
+     "late": 0.5395
+    },
+    {
+     "tick": 1791059283.9244242,
+     "late": 0.2907
+    },
+    {
+     "tick": 1791059283.92477,
+     "late": 0.0411
+    },
+    {
+     "tick": 1791059284.1459134,
+     "late": 0.0122
+    },
+    {
+     "tick": 1791059286.3673005,
+     "late": 1.9836
+    },
+    {
+     "tick": 1791059286.367821,
+     "late": 1.7341
+    },
+    {
+     "tick": 1791059286.36836,
+     "late": 1.4847
+    },
+    {
+     "tick": 1791059286.3687842,
+     "late": 1.2351
+    },
+    {
+     "tick": 1791059286.369177,
+     "late": 0.9855
+    },
+    {
+     "tick": 1791059286.3696647,
+     "late": 0.736
+    },
+    {
+     "tick": 1791059286.370086,
+     "late": 0.4864
+    },
+    {
+     "tick": 1791059286.3705916,
+     "late": 0.2369
+    },
+    {
+     "tick": 1791059286.3837926,
+     "late": 0.0001
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791059284.2460854,
+     "recv": 1791059288.0451574,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059288.045324,
+     "late": 1.4116
+    },
+    {
+     "tick": 1791059288.0473812,
+     "late": 1.1637
+    },
+    {
+     "tick": 1791059288.0488074,
+     "late": 0.9151
+    },
+    {
+     "tick": 1791059288.0490944,
+     "late": 0.6654
+    },
+    {
+     "tick": 1791059288.0494862,
+     "late": 0.4158
+    },
+    {
+     "tick": 1791059288.0498416,
+     "late": 0.1662
+    },
+    {
+     "tick": 1791059288.1461422,
+     "late": 0.0125
+    },
+    {
+     "tick": 1791059288.3845527,
+     "late": 0.0009
+    },
+    {
+     "tick": 1791059288.8798788,
+     "late": 0.2462
+    },
+    {
+     "tick": 1791059288.8847542,
+     "late": 0.0011
+    },
+    {
+     "tick": 1791059291.5275545,
+     "late": 2.3939
+    },
+    {
+     "tick": 1791059291.5280495,
+     "late": 2.1444
+    },
+    {
+     "tick": 1791059291.528739,
+     "late": 1.8951
+    },
+    {
+     "tick": 1791059291.529008,
+     "late": 1.6453
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791059288.346054,
+     "recv": 1791059291.5293162,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059291.5295255,
+     "late": 1.3958
+    },
+    {
+     "tick": 1791059291.5310462,
+     "late": 1.1474
+    },
+    {
+     "tick": 1791059291.5314257,
+     "late": 0.8977
+    },
+    {
+     "tick": 1791059291.531663,
+     "late": 0.648
+    },
+    {
+     "tick": 1791059291.5319314,
+     "late": 0.3982
+    },
+    {
+     "tick": 1791059291.532519,
+     "late": 0.1488
+    },
+    {
+     "tick": 1791059291.646328,
+     "late": 0.0126
+    },
+    {
+     "tick": 1791059291.8846009,
+     "late": 0.0009
+    },
+    {
+     "tick": 1791059294.1845374,
+     "late": 2.0509
+    },
+    {
+     "tick": 1791059294.1849751,
+     "late": 1.8013
+    },
+    {
+     "tick": 1791059294.185315,
+     "late": 1.5516
+    },
+    {
+     "tick": 1791059294.185673,
+     "late": 1.302
+    },
+    {
+     "tick": 1791059294.185965,
+     "late": 1.0523
+    },
+    {
+     "tick": 1791059294.1862605,
+     "late": 0.8026
+    },
+    {
+     "tick": 1791059294.186477,
+     "late": 0.5528
+    },
+    {
+     "tick": 1791059294.1867564,
+     "late": 0.3031
+    },
+    {
+     "tick": 1791059294.1870508,
+     "late": 0.0534
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791059291.8595047,
+     "recv": 1791059294.386723,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059294.386937,
+     "late": 0.0033
+    },
+    {
+     "tick": 1791059294.6463873,
+     "late": 0.0127
+    },
+    {
+     "tick": 1791059296.6677108,
+     "late": 1.784
+    },
+    {
+     "tick": 1791059296.6682813,
+     "late": 1.5346
+    },
+    {
+     "tick": 1791059296.6687593,
+     "late": 1.2851
+    },
+    {
+     "tick": 1791059296.669234,
+     "late": 1.0356
+    },
+    {
+     "tick": 1791059296.6697004,
+     "late": 0.786
+    },
+    {
+     "tick": 1791059296.6701152,
+     "late": 0.5364
+    },
+    {
+     "tick": 1791059296.6705465,
+     "late": 0.2869
+    },
+    {
+     "tick": 1791059296.6709797,
+     "late": 0.0373
+    },
+    {
+     "tick": 1791059298.1747067,
+     "late": 1.291
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791059294.645894,
+     "recv": 1791059298.1754322,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059298.175771,
+     "late": 1.0421
+    },
+    {
+     "tick": 1791059298.1762357,
+     "late": 0.7926
+    },
+    {
+     "tick": 1791059298.1766233,
+     "late": 0.5429
+    },
+    {
+     "tick": 1791059298.1769774,
+     "late": 0.2933
+    },
+    {
+     "tick": 1791059298.1774814,
+     "late": 0.0438
+    },
+    {
+     "tick": 1791059298.4463272,
+     "late": 0.0626
+    },
+    {
+     "tick": 1791059299.135189,
+     "late": 0.5015
+    },
+    {
+     "tick": 1791059299.1356392,
+     "late": 0.252
+    },
+    {
+     "tick": 1791059299.136021,
+     "late": 0.0023
+    },
+    {
+     "tick": 1791059301.6188571,
+     "late": 2.2352
+    },
+    {
+     "tick": 1791059301.6193664,
+     "late": 1.9857
+    },
+    {
+     "tick": 1791059301.6198447,
+     "late": 1.7362
+    },
+    {
+     "tick": 1791059301.620386,
+     "late": 1.4867
+    },
+    {
+     "tick": 1791059301.620736,
+     "late": 1.2371
+    },
+    {
+     "tick": 1791059301.6211743,
+     "late": 0.9875
+    },
+    {
+     "tick": 1791059301.6215637,
+     "late": 0.7379
+    },
+    {
+     "tick": 1791059301.6218815,
+     "late": 0.4882
+    },
+    {
+     "tick": 1791059301.6223185,
+     "late": 0.2386
+    },
+    {
+     "tick": 1791059301.6347747,
+     "late": 0.0011
+    },
+    {
+     "tick": 1791059303.4148722,
+     "late": 1.5312
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791059298.4465127,
+     "recv": 1791059303.4155462,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059303.4164228,
+     "late": 1.2827
+    },
+    {
+     "tick": 1791059303.4169211,
+     "late": 1.0332
+    },
+    {
+     "tick": 1791059303.4181798,
+     "late": 0.7845
+    },
+    {
+     "tick": 1791059303.4186566,
+     "late": 0.535
+    },
+    {
+     "tick": 1791059303.419125,
+     "late": 0.2854
+    },
+    {
+     "tick": 1791059303.4196064,
+     "late": 0.0359
+    },
+    {
+     "tick": 1791059303.6459725,
+     "late": 0.0123
+    },
+    {
+     "tick": 1791059304.234777,
+     "late": 0.3511
+    },
+    {
+     "tick": 1791059304.235202,
+     "late": 0.1015
+    },
+    {
+     "tick": 1791059306.7951567,
+     "late": 2.4115
+    },
+    {
+     "tick": 1791059306.7954662,
+     "late": 2.1618
+    },
+    {
+     "tick": 1791059306.7960582,
+     "late": 1.9124
+    },
+    {
+     "tick": 1791059306.796285,
+     "late": 1.6626
+    },
+    {
+     "tick": 1791059306.796596,
+     "late": 1.4129
+    },
+    {
+     "tick": 1791059306.7968783,
+     "late": 1.1632
+    },
+    {
+     "tick": 1791059306.7970133,
+     "late": 0.9133
+    },
+    {
+     "tick": 1791059306.7971394,
+     "late": 0.6635
+    },
+    {
+     "tick": 1791059306.7973096,
+     "late": 0.4136
+    },
+    {
+     "tick": 1791059306.7974951,
+     "late": 0.1638
+    },
+    {
+     "lane": 0,
+     "call": 8,
+     "sent": 1791059303.7460518,
+     "recv": 1791059308.0769236,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059308.0771503,
+     "late": 1.1935
+    },
+    {
+     "tick": 1791059308.0781007,
+     "late": 0.9444
+    },
+    {
+     "tick": 1791059308.078725,
+     "late": 0.695
+    },
+    {
+     "tick": 1791059308.0790887,
+     "late": 0.4454
+    },
+    {
+     "tick": 1791059308.0795836,
+     "late": 0.1959
+    },
+    {
+     "tick": 1791059308.1458697,
+     "late": 0.0122
+    },
+    {
+     "tick": 1791059308.384271,
+     "late": 0.0006
+    },
+    {
+     "tick": 1791059309.2165778,
+     "late": 0.5829
+    },
+    {
+     "tick": 1791059309.2169533,
+     "late": 0.3333
+    },
+    {
+     "tick": 1791059309.2172644,
+     "late": 0.0836
+    },
+    {
+     "tick": 1791059311.677152,
+     "late": 2.2935
+    },
+    {
+     "tick": 1791059311.6777256,
+     "late": 2.044
+    },
+    {
+     "tick": 1791059311.678108,
+     "late": 1.7944
+    },
+    {
+     "tick": 1791059311.6785233,
+     "late": 1.5448
+    },
+    {
+     "tick": 1791059311.678846,
+     "late": 1.2952
+    },
+    {
+     "tick": 1791059311.6792758,
+     "late": 1.0456
+    },
+    {
+     "tick": 1791059311.6795547,
+     "late": 0.7959
+    },
+    {
+     "tick": 1791059311.679893,
+     "late": 0.5462
+    },
+    {
+     "tick": 1791059311.6802974,
+     "late": 0.2966
+    },
+    {
+     "tick": 1791059311.6806784,
+     "late": 0.047
+    },
+    {
+     "tick": 1791059311.9834993,
+     "late": 0.0998
+    },
+    {
+     "lane": 0,
+     "call": 9,
+     "sent": 1791059308.3463063,
+     "recv": 1791059311.9839332,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059312.1347275,
+     "late": 0.001
+    },
+    {
+     "tick": 1791059314.0587132,
+     "late": 1.675
+    },
+    {
+     "tick": 1791059314.0594254,
+     "late": 1.4257
+    },
+    {
+     "tick": 1791059314.0597472,
+     "late": 1.1761
+    },
+    {
+     "tick": 1791059314.0600646,
+     "late": 0.9264
+    },
+    {
+     "tick": 1791059314.0604656,
+     "late": 0.6768
+    },
+    {
+     "tick": 1791059314.0609295,
+     "late": 0.4272
+    },
+    {
+     "tick": 1791059314.061344,
+     "late": 0.1777
+    },
+    {
+     "tick": 1791059316.456138,
+     "late": 2.3225
+    },
+    {
+     "tick": 1791059316.4563963,
+     "late": 2.0727
+    },
+    {
+     "tick": 1791059316.4565325,
+     "late": 1.8228
+    },
+    {
+     "tick": 1791059316.456852,
+     "late": 1.5732
+    },
+    {
+     "tick": 1791059316.457101,
+     "late": 1.3234
+    },
+    {
+     "tick": 1791059316.4573328,
+     "late": 1.0736
+    },
+    {
+     "tick": 1791059316.4575195,
+     "late": 0.8238
+    },
+    {
+     "tick": 1791059316.457772,
+     "late": 0.5741
+    },
+    {
+     "tick": 1791059316.4580042,
+     "late": 0.3243
+    },
+    {
+     "tick": 1791059316.4582973,
+     "late": 0.0746
+    },
+    {
+     "lane": 0,
+     "call": 10,
+     "sent": 1791059312.2461324,
+     "recv": 1791059316.8449867,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059316.8452423,
+     "late": 0.2116
+    },
+    {
+     "tick": 1791059316.9462423,
+     "late": 0.0626
+    },
+    {
+     "tick": 1791059318.8246455,
+     "late": 1.691
+    },
+    {
+     "tick": 1791059318.8251514,
+     "late": 1.4415
+    },
+    {
+     "tick": 1791059318.825562,
+     "late": 1.1919
+    },
+    {
+     "tick": 1791059318.8259032,
+     "late": 0.9422
+    },
+    {
+     "tick": 1791059318.8261917,
+     "late": 0.6925
+    },
+    {
+     "tick": 1791059318.8265178,
+     "late": 0.4428
+    },
+    {
+     "tick": 1791059318.826865,
+     "late": 0.1932
+    },
+    {
+     "tick": 1791059319.7651129,
+     "late": 0.8814
+    },
+    {
+     "lane": 0,
+     "call": 11,
+     "sent": 1791059317.0461252,
+     "recv": 1791059319.7657354,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059319.7661033,
+     "late": 0.6324
+    },
+    {
+     "done": 1791059319.7666898
+    }
+   ]
+  },
+  "wake-node3-ticker-2b83ac-7": {
+   "job": {
+    "sandbox_id": "wake-node3-ticker-2b83ac-7",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "3d8c7e72072af3b8e8f226e2f603e55a35cafc509ed4c6b4ffdae3564d8328b6",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T20:27:51.195313526Z",
+    "completed_at": "2026-10-03T20:28:42.375137907Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 10139,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T20:28:46.980938+00:00"
+   },
+   "rows": [
+    {
+     "tick": 1791059272.3153965,
+     "late": 0.0319
+    },
+    {
+     "tick": 1791059274.07037,
+     "late": 1.5369
+    },
+    {
+     "tick": 1791059274.0714526,
+     "late": 1.288
+    },
+    {
+     "tick": 1791059274.0718908,
+     "late": 1.0384
+    },
+    {
+     "tick": 1791059274.0723574,
+     "late": 0.7889
+    },
+    {
+     "tick": 1791059274.0727372,
+     "late": 0.5393
+    },
+    {
+     "tick": 1791059274.0731597,
+     "late": 0.2897
+    },
+    {
+     "tick": 1791059274.0736415,
+     "late": 0.0402
+    },
+    {
+     "tick": 1791059276.0016215,
+     "late": 1.7182
+    },
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791059272.4251297,
+     "recv": 1791059276.002259,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059276.0029655,
+     "late": 1.4695
+    },
+    {
+     "tick": 1791059276.0044942,
+     "late": 1.221
+    },
+    {
+     "tick": 1791059276.0053427,
+     "late": 0.9719
+    },
+    {
+     "tick": 1791059276.005826,
+     "late": 0.7224
+    },
+    {
+     "tick": 1791059276.0061646,
+     "late": 0.4727
+    },
+    {
+     "tick": 1791059276.006789,
+     "late": 0.2233
+    },
+    {
+     "tick": 1791059276.0340261,
+     "late": 0.0006
+    },
+    {
+     "tick": 1791059276.315079,
+     "late": 0.0316
+    },
+    {
+     "tick": 1791059276.5345287,
+     "late": 0.0011
+    },
+    {
+     "tick": 1791059279.0475793,
+     "late": 2.2641
+    },
+    {
+     "tick": 1791059279.0478387,
+     "late": 2.0144
+    },
+    {
+     "tick": 1791059279.0480464,
+     "late": 1.7646
+    },
+    {
+     "tick": 1791059279.0482574,
+     "late": 1.5148
+    },
+    {
+     "tick": 1791059279.0484982,
+     "late": 1.265
+    },
+    {
+     "tick": 1791059279.0488944,
+     "late": 1.0154
+    },
+    {
+     "tick": 1791059279.0493228,
+     "late": 0.7659
+    },
+    {
+     "tick": 1791059279.049686,
+     "late": 0.5162
+    },
+    {
+     "tick": 1791059279.050003,
+     "late": 0.2666
+    },
+    {
+     "tick": 1791059279.0503314,
+     "late": 0.0169
+    },
+    {
+     "tick": 1791059281.2149785,
+     "late": 1.9315
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791059276.336409,
+     "recv": 1791059281.215296,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059281.2157676,
+     "late": 1.6823
+    },
+    {
+     "tick": 1791059281.2164388,
+     "late": 1.433
+    },
+    {
+     "tick": 1791059281.2169213,
+     "late": 1.1835
+    },
+    {
+     "tick": 1791059281.2171273,
+     "late": 0.9337
+    },
+    {
+     "tick": 1791059281.2172635,
+     "late": 0.6838
+    },
+    {
+     "tick": 1791059281.217466,
+     "late": 0.434
+    },
+    {
+     "tick": 1791059281.217597,
+     "late": 0.1841
+    },
+    {
+     "tick": 1791059281.315097,
+     "late": 0.0316
+    },
+    {
+     "tick": 1791059281.5342774,
+     "late": 0.0008
+    },
+    {
+     "tick": 1791059283.958799,
+     "late": 2.1753
+    },
+    {
+     "tick": 1791059283.9593,
+     "late": 1.9259
+    },
+    {
+     "tick": 1791059283.9595065,
+     "late": 1.6761
+    },
+    {
+     "tick": 1791059283.959663,
+     "late": 1.4262
+    },
+    {
+     "tick": 1791059283.9597857,
+     "late": 1.1763
+    },
+    {
+     "tick": 1791059283.959905,
+     "late": 0.9265
+    },
+    {
+     "tick": 1791059283.9600472,
+     "late": 0.6766
+    },
+    {
+     "tick": 1791059283.960374,
+     "late": 0.4269
+    },
+    {
+     "tick": 1791059283.960565,
+     "late": 0.1771
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791059281.515289,
+     "recv": 1791059285.2625155,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059285.2628262,
+     "late": 1.2294
+    },
+    {
+     "tick": 1791059285.2638612,
+     "late": 0.9804
+    },
+    {
+     "tick": 1791059285.2648995,
+     "late": 0.7315
+    },
+    {
+     "tick": 1791059285.265344,
+     "late": 0.4819
+    },
+    {
+     "tick": 1791059285.2657058,
+     "late": 0.2323
+    },
+    {
+     "tick": 1791059285.315192,
+     "late": 0.0317
+    },
+    {
+     "tick": 1791059285.5341969,
+     "late": 0.0007
+    },
+    {
+     "tick": 1791059286.432485,
+     "late": 0.649
+    },
+    {
+     "tick": 1791059286.4329407,
+     "late": 0.3995
+    },
+    {
+     "tick": 1791059286.4333906,
+     "late": 0.1499
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791059285.5153093,
+     "recv": 1791059288.914,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059288.9141822,
+     "late": 2.3807
+    },
+    {
+     "tick": 1791059288.915088,
+     "late": 2.1316
+    },
+    {
+     "tick": 1791059288.9154139,
+     "late": 1.882
+    },
+    {
+     "tick": 1791059288.91694,
+     "late": 1.6335
+    },
+    {
+     "tick": 1791059288.918186,
+     "late": 1.3847
+    },
+    {
+     "tick": 1791059288.918453,
+     "late": 1.135
+    },
+    {
+     "tick": 1791059288.9187486,
+     "late": 0.8853
+    },
+    {
+     "tick": 1791059288.9189868,
+     "late": 0.6355
+    },
+    {
+     "tick": 1791059288.919391,
+     "late": 0.3859
+    },
+    {
+     "tick": 1791059288.9197161,
+     "late": 0.1363
+    },
+    {
+     "tick": 1791059289.0344877,
+     "late": 0.001
+    },
+    {
+     "tick": 1791059291.7639318,
+     "late": 2.4805
+    },
+    {
+     "tick": 1791059291.7644026,
+     "late": 2.231
+    },
+    {
+     "tick": 1791059291.764719,
+     "late": 1.9813
+    },
+    {
+     "tick": 1791059291.7651734,
+     "late": 1.7317
+    },
+    {
+     "tick": 1791059291.7656658,
+     "late": 1.4822
+    },
+    {
+     "tick": 1791059291.76614,
+     "late": 1.2327
+    },
+    {
+     "tick": 1791059291.7665918,
+     "late": 0.9831
+    },
+    {
+     "tick": 1791059291.766913,
+     "late": 0.7335
+    },
+    {
+     "tick": 1791059291.7674406,
+     "late": 0.484
+    },
+    {
+     "tick": 1791059291.7678216,
+     "late": 0.2344
+    },
+    {
+     "tick": 1791059291.7835162,
+     "late": 0.0001
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791059289.1173148,
+     "recv": 1791059291.945274,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059292.0335493,
+     "late": 0.0001
+    },
+    {
+     "tick": 1791059292.3155305,
+     "late": 0.0321
+    },
+    {
+     "tick": 1791059294.2378914,
+     "late": 1.7044
+    },
+    {
+     "tick": 1791059294.2383885,
+     "late": 1.4549
+    },
+    {
+     "tick": 1791059294.238785,
+     "late": 1.2053
+    },
+    {
+     "tick": 1791059294.2391174,
+     "late": 0.9557
+    },
+    {
+     "tick": 1791059294.239466,
+     "late": 0.706
+    },
+    {
+     "tick": 1791059294.2398093,
+     "late": 0.4564
+    },
+    {
+     "tick": 1791059294.240119,
+     "late": 0.2067
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791059292.3152695,
+     "recv": 1791059295.9722962,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059295.9725182,
+     "late": 1.6891
+    },
+    {
+     "tick": 1791059295.9731066,
+     "late": 1.4397
+    },
+    {
+     "tick": 1791059295.9735243,
+     "late": 1.1901
+    },
+    {
+     "tick": 1791059295.9739335,
+     "late": 0.9405
+    },
+    {
+     "tick": 1791059295.9742773,
+     "late": 0.6908
+    },
+    {
+     "tick": 1791059295.974834,
+     "late": 0.4414
+    },
+    {
+     "tick": 1791059295.9754121,
+     "late": 0.192
+    },
+    {
+     "tick": 1791059296.0338614,
+     "late": 0.0004
+    },
+    {
+     "tick": 1791059296.2841477,
+     "late": 0.0007
+    },
+    {
+     "tick": 1791059296.7262003,
+     "late": 0.1928
+    },
+    {
+     "tick": 1791059299.1960158,
+     "late": 2.4126
+    },
+    {
+     "tick": 1791059299.1965663,
+     "late": 2.1631
+    },
+    {
+     "tick": 1791059299.1968539,
+     "late": 1.9134
+    },
+    {
+     "tick": 1791059299.1971598,
+     "late": 1.6637
+    },
+    {
+     "tick": 1791059299.1976204,
+     "late": 1.4142
+    },
+    {
+     "tick": 1791059299.198061,
+     "late": 1.1646
+    },
+    {
+     "tick": 1791059299.1984153,
+     "late": 0.915
+    },
+    {
+     "tick": 1791059299.1987922,
+     "late": 0.6653
+    },
+    {
+     "tick": 1791059299.1993182,
+     "late": 0.4159
+    },
+    {
+     "tick": 1791059299.1997895,
+     "late": 0.1663
+    },
+    {
+     "tick": 1791059301.103679,
+     "late": 1.8202
+    },
+    {
+     "lane": 0,
+     "call": 6,
+     "sent": 1791059296.2153013,
+     "recv": 1791059301.104252,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059301.104592,
+     "late": 1.5711
+    },
+    {
+     "tick": 1791059301.105053,
+     "late": 1.3216
+    },
+    {
+     "tick": 1791059301.1055133,
+     "late": 1.0721
+    },
+    {
+     "tick": 1791059301.1060152,
+     "late": 0.8226
+    },
+    {
+     "tick": 1791059301.106515,
+     "late": 0.5731
+    },
+    {
+     "tick": 1791059301.107799,
+     "late": 0.3244
+    },
+    {
+     "tick": 1791059301.108309,
+     "late": 0.0749
+    },
+    {
+     "tick": 1791059301.2844503,
+     "late": 0.001
+    },
+    {
+     "tick": 1791059301.6797364,
+     "late": 0.1463
+    },
+    {
+     "tick": 1791059303.4538171,
+     "late": 1.6704
+    },
+    {
+     "lane": 0,
+     "call": 7,
+     "sent": 1791059301.415311,
+     "recv": 1791059303.454398,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059303.4557822,
+     "late": 1.4223
+    },
+    {
+     "tick": 1791059303.4564443,
+     "late": 1.173
+    },
+    {
+     "tick": 1791059303.4567406,
+     "late": 0.9233
+    },
+    {
+     "tick": 1791059303.4572537,
+     "late": 0.6738
+    },
+    {
+     "tick": 1791059303.4585881,
+     "late": 0.4251
+    },
+    {
+     "tick": 1791059303.4590275,
+     "late": 0.1756
+    },
+    {
+     "tick": 1791059303.5334866,
+     "late": 0.0
+    },
+    {
+     "tick": 1791059304.2936733,
+     "late": 0.5102
+    },
+    {
+     "tick": 1791059304.2941754,
+     "late": 0.2607
+    },
+    {
+     "tick": 1791059304.2946608,
+     "late": 0.0112
+    },
+    {
+     "tick": 1791059306.839996,
+     "late": 2.3065
+    },
+    {
+     "tick": 1791059306.8404834,
+     "late": 2.057
+    },
+    {
+     "tick": 1791059306.8408463,
+     "late": 1.8074
+    },
+    {
+     "tick": 1791059306.8412864,
+     "late": 1.5578
+    },
+    {
+     "tick": 1791059306.841569,
+     "late": 1.3081
+    },
+    {
+     "tick": 1791059306.8418422,
+     "late": 1.0584
+    },
+    {
+     "tick": 1791059306.8421845,
+     "late": 0.8087
+    },
+    {
+     "tick": 1791059306.8426306,
+     "late": 0.5592
+    },
+    {
+     "tick": 1791059306.842939,
+     "late": 0.3095
+    },
+    {
+     "tick": 1791059306.8433585,
+     "late": 0.0599
+    },
+    {
+     "tick": 1791059308.0841885,
+     "late": 1.0507
+    },
+    {
+     "lane": 0,
+     "call": 8,
+     "sent": 1791059303.7152796,
+     "recv": 1791059308.084852,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059308.085032,
+     "late": 0.8016
+    },
+    {
+     "tick": 1791059308.0858684,
+     "late": 0.5524
+    },
+    {
+     "tick": 1791059308.0864527,
+     "late": 0.303
+    },
+    {
+     "tick": 1791059308.0867124,
+     "late": 0.0533
+    },
+    {
+     "tick": 1791059308.284604,
+     "late": 0.0012
+    },
+    {
+     "tick": 1791059309.282549,
+     "late": 0.7491
+    },
+    {
+     "tick": 1791059309.2830255,
+     "late": 0.4996
+    },
+    {
+     "tick": 1791059309.2834635,
+     "late": 0.25
+    },
+    {
+     "tick": 1791059309.2838295,
+     "late": 0.0004
+    },
+    {
+     "tick": 1791059311.7369108,
+     "late": 2.2035
+    },
+    {
+     "tick": 1791059311.737289,
+     "late": 1.9538
+    },
+    {
+     "tick": 1791059311.737557,
+     "late": 1.7041
+    },
+    {
+     "tick": 1791059311.7377977,
+     "late": 1.4543
+    },
+    {
+     "tick": 1791059311.7380633,
+     "late": 1.2046
+    },
+    {
+     "tick": 1791059311.738338,
+     "late": 0.9549
+    },
+    {
+     "tick": 1791059311.7385895,
+     "late": 0.7051
+    },
+    {
+     "tick": 1791059311.7390053,
+     "late": 0.4556
+    },
+    {
+     "tick": 1791059311.7394516,
+     "late": 0.206
+    },
+    {
+     "lane": 0,
+     "call": 9,
+     "sent": 1791059308.3155868,
+     "recv": 1791059312.79511,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059312.795489,
+     "late": 1.012
+    },
+    {
+     "tick": 1791059312.7964284,
+     "late": 0.763
+    },
+    {
+     "tick": 1791059312.7969396,
+     "late": 0.5135
+    },
+    {
+     "tick": 1791059312.7975707,
+     "late": 0.2641
+    },
+    {
+     "tick": 1791059312.797951,
+     "late": 0.0145
+    },
+    {
+     "tick": 1791059313.0335724,
+     "late": 0.0001
+    },
+    {
+     "tick": 1791059314.1219518,
+     "late": 0.8385
+    },
+    {
+     "tick": 1791059314.122436,
+     "late": 0.589
+    },
+    {
+     "tick": 1791059314.1227274,
+     "late": 0.3393
+    },
+    {
+     "tick": 1791059314.1229732,
+     "late": 0.0895
+    },
+    {
+     "tick": 1791059316.5054781,
+     "late": 2.222
+    },
+    {
+     "tick": 1791059316.50578,
+     "late": 1.9723
+    },
+    {
+     "tick": 1791059316.5060062,
+     "late": 1.7226
+    },
+    {
+     "tick": 1791059316.506359,
+     "late": 1.4729
+    },
+    {
+     "tick": 1791059316.5066164,
+     "late": 1.2232
+    },
+    {
+     "tick": 1791059316.506859,
+     "late": 0.9734
+    },
+    {
+     "tick": 1791059316.5069952,
+     "late": 0.7235
+    },
+    {
+     "tick": 1791059316.5071106,
+     "late": 0.4737
+    },
+    {
+     "tick": 1791059316.5073135,
+     "late": 0.2239
+    },
+    {
+     "tick": 1791059316.5345058,
+     "late": 0.0011
+    },
+    {
+     "tick": 1791059317.7924893,
+     "late": 1.009
+    },
+    {
+     "lane": 0,
+     "call": 10,
+     "sent": 1791059313.115408,
+     "recv": 1791059317.7930615,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059317.7934835,
+     "late": 0.76
+    },
+    {
+     "tick": 1791059317.7938817,
+     "late": 0.5104
+    },
+    {
+     "tick": 1791059317.7941632,
+     "late": 0.2607
+    },
+    {
+     "tick": 1791059317.7946162,
+     "late": 0.0112
+    },
+    {
+     "tick": 1791059318.0335793,
+     "late": 0.0001
+    },
+    {
+     "tick": 1791059318.888034,
+     "late": 0.6046
+    },
+    {
+     "tick": 1791059318.8885064,
+     "late": 0.3551
+    },
+    {
+     "tick": 1791059318.8887947,
+     "late": 0.1053
+    },
+    {
+     "tick": 1791059321.1979713,
+     "late": 2.1645
+    },
+    {
+     "tick": 1791059321.1985319,
+     "late": 1.9151
+    },
+    {
+     "tick": 1791059321.1988661,
+     "late": 1.6654
+    },
+    {
+     "tick": 1791059321.1992722,
+     "late": 1.4158
+    },
+    {
+     "tick": 1791059321.1996708,
+     "late": 1.1662
+    },
+    {
+     "tick": 1791059321.200074,
+     "late": 0.9166
+    },
+    {
+     "tick": 1791059321.2006059,
+     "late": 0.6672
+    },
+    {
+     "tick": 1791059321.2009764,
+     "late": 0.4175
+    },
+    {
+     "tick": 1791059321.2013927,
+     "late": 0.1679
+    },
+    {
+     "tick": 1791059322.352636,
+     "late": 1.0692
+    },
+    {
+     "lane": 0,
+     "call": 11,
+     "sent": 1791059318.1153853,
+     "recv": 1791059322.3530889,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "tick": 1791059322.35364,
+     "late": 0.8202
+    },
+    {
+     "done": 1791059322.3543289
+    }
+   ]
+  }
+ },
+ "summary": {
+  "calls": 0,
+  "expected": 96,
+  "answer_latency_s": null,
+  "pauses": 223,
+  "pauses_outside_a_wait": 223,
+  "paused_share_of_wait": null,
+  "pause_runsc_ms": null,
+  "pause_after_last_send_ms": null,
+  "thaw_since_packet_ms": null,
+  "thaw_runsc_ms": null,
+  "tick_late_s": {
+   "n": 1461,
+   "p50": 0.7335,
+   "p95": 2.1139,
+   "max": 2.5002
+  },
+  "nstat": {
+   "TcpRetransSegs": 0,
+   "TcpExtTCPLostRetransmit": 0,
+   "TcpExtTCPTimeouts": 0
+  },
+  "errors": 0
+ }
+}

@@ -1,0 +1,2977 @@
+{
+ "arm": "node-lanes2",
+ "mode": "node",
+ "args": {
+  "command": "arm",
+  "name": "node-lanes2",
+  "mode": "node",
+  "plain": true,
+  "marker_dir": "/work/ucloud-sandboxes/state/direct-runtime/runsc/warden-paused",
+  "relay_log": "",
+  "node_url": "http://127.0.0.1:8090",
+  "node_token_file": "/var/lib/ucloud-sandboxes/state/node-control-token",
+  "image": "10.42.0.2:5000/ucloud-managed/shared-task-9db2bebb1e964a67a1cc4e4fd55f-247362126efd@sha256:8249b386d6a9de39c1ad7d048bd72b160565b4021b782be6ec46f03e5b69391a",
+  "relay_host": "10.42.0.43",
+  "relay_port": 8092,
+  "count": 6,
+  "lanes": 2,
+  "cycles": 6,
+  "think_min": 2.0,
+  "think_max": 5.0,
+  "compute_ms": 200,
+  "sizes": "2048",
+  "ticker": 0.0,
+  "delay": 2.0,
+  "cpus": 0.5,
+  "memory_mb": 512,
+  "seed": 1
+ },
+ "ids": [
+  "wake-node-lanes2-f0518a-0",
+  "wake-node-lanes2-f0518a-1",
+  "wake-node-lanes2-f0518a-2",
+  "wake-node-lanes2-f0518a-3",
+  "wake-node-lanes2-f0518a-4",
+  "wake-node-lanes2-f0518a-5"
+ ],
+ "plans": {
+  "wake-node-lanes2-f0518a-0": [
+   [
+    [
+     2.4,
+     2048
+    ],
+    [
+     4.54,
+     2048
+    ],
+    [
+     4.29,
+     2048
+    ],
+    [
+     2.77,
+     2048
+    ],
+    [
+     3.49,
+     2048
+    ],
+    [
+     3.35,
+     2048
+    ]
+   ],
+   [
+    [
+     3.95,
+     2048
+    ],
+    [
+     4.37,
+     2048
+    ],
+    [
+     2.28,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ],
+    [
+     4.51,
+     2048
+    ],
+    [
+     3.3,
+     2048
+    ]
+   ]
+  ],
+  "wake-node-lanes2-f0518a-1": [
+   [
+    [
+     4.29,
+     2048
+    ],
+    [
+     2.01,
+     2048
+    ],
+    [
+     3.34,
+     2048
+    ],
+    [
+     4.16,
+     2048
+    ],
+    [
+     2.69,
+     2048
+    ],
+    [
+     4.84,
+     2048
+    ]
+   ],
+   [
+    [
+     4.7,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ],
+    [
+     2.08,
+     2048
+    ],
+    [
+     3.62,
+     2048
+    ],
+    [
+     4.82,
+     2048
+    ],
+    [
+     3.14,
+     2048
+    ]
+   ]
+  ],
+  "wake-node-lanes2-f0518a-2": [
+   [
+    [
+     2.65,
+     2048
+    ],
+    [
+     3.27,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ],
+    [
+     2.67,
+     2048
+    ],
+    [
+     3.31,
+     2048
+    ],
+    [
+     3.49,
+     2048
+    ]
+   ],
+   [
+    [
+     2.7,
+     2048
+    ],
+    [
+     2.69,
+     2048
+    ],
+    [
+     2.66,
+     2048
+    ],
+    [
+     3.38,
+     2048
+    ],
+    [
+     2.87,
+     2048
+    ],
+    [
+     2.06,
+     2048
+    ]
+   ]
+  ],
+  "wake-node-lanes2-f0518a-3": [
+   [
+    [
+     4.51,
+     2048
+    ],
+    [
+     3.67,
+     2048
+    ],
+    [
+     3.93,
+     2048
+    ],
+    [
+     2.56,
+     2048
+    ],
+    [
+     4.98,
+     2048
+    ],
+    [
+     4.58,
+     2048
+    ]
+   ],
+   [
+    [
+     2.36,
+     2048
+    ],
+    [
+     3.0,
+     2048
+    ],
+    [
+     4.16,
+     2048
+    ],
+    [
+     4.13,
+     2048
+    ],
+    [
+     4.81,
+     2048
+    ],
+    [
+     3.27,
+     2048
+    ]
+   ]
+  ],
+  "wake-node-lanes2-f0518a-4": [
+   [
+    [
+     4.49,
+     2048
+    ],
+    [
+     4.01,
+     2048
+    ],
+    [
+     2.91,
+     2048
+    ],
+    [
+     3.76,
+     2048
+    ],
+    [
+     4.65,
+     2048
+    ],
+    [
+     4.54,
+     2048
+    ]
+   ],
+   [
+    [
+     3.52,
+     2048
+    ],
+    [
+     3.77,
+     2048
+    ],
+    [
+     2.1,
+     2048
+    ],
+    [
+     2.73,
+     2048
+    ],
+    [
+     4.39,
+     2048
+    ],
+    [
+     3.24,
+     2048
+    ]
+   ]
+  ],
+  "wake-node-lanes2-f0518a-5": [
+   [
+    [
+     2.52,
+     2048
+    ],
+    [
+     3.65,
+     2048
+    ],
+    [
+     4.11,
+     2048
+    ],
+    [
+     4.02,
+     2048
+    ],
+    [
+     3.12,
+     2048
+    ],
+    [
+     3.32,
+     2048
+    ]
+   ],
+   [
+    [
+     3.53,
+     2048
+    ],
+    [
+     4.34,
+     2048
+    ],
+    [
+     3.56,
+     2048
+    ],
+    [
+     3.18,
+     2048
+    ],
+    [
+     3.47,
+     2048
+    ],
+    [
+     2.09,
+     2048
+    ]
+   ]
+  ]
+ },
+ "events": [
+  {
+   "t": 1791058651.1864462,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058651.1864462,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058651.3838074,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058651.4667034,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058651.6252964,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058651.7429254,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058652.490773,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058652.5207267,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058652.5549762,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058652.5829751,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058652.6173959,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058652.6454372,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058652.6777458,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058652.705769,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058652.7383542,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058652.76639,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058652.8028717,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058652.832923,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058653.7875166,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058653.7983081,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058653.9761364,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058654.0553012,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058654.1872714,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058654.2148688,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058654.3244338,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058654.5262046,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058654.673047,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058654.8616798,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058654.887595,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058654.9198658,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058654.93687,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058654.960269,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058655.0112834,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058655.043601,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058655.0628705,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058655.0670524,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058655.0904522,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058655.122703,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058655.15284,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058655.1741433,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058655.218894,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058655.531305,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058655.5589592,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058655.6296592,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058655.6405582,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058655.917875,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058655.9349184,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058655.9604359,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058655.962569,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058656.041302,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058656.260632,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058656.4527974,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058657.0177193,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058657.2067077,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058657.232047,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058657.255444,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058657.2833886,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058657.3156898,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058657.345857,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058657.4013124,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058657.4056075,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058657.4247394,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058657.4459844,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058657.4481974,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058657.4718666,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058657.6737835,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058657.7251499,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058657.9251251,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058657.9717088,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058658.135276,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058658.2548752,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058658.5062873,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058658.5363164,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058658.770492,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058658.785652,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058658.813274,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058659.0536673,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058659.1306546,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058659.5099268,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058659.5351253,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058659.566909,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058659.5878203,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058659.6176407,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058659.6455877,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058659.6802459,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058659.712461,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058659.7146354,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058659.742293,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058659.757126,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058659.7869117,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058659.812704,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058659.8894475,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058659.9283283,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058660.1645136,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058660.1645136,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058660.2481713,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058660.2611141,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058660.5909548,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058660.6185195,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058660.80152,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058660.8676074,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058661.0679913,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058661.1127336,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058661.3729272,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058661.4773853,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058661.5538037,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058661.7642972,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058661.8600368,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058661.8876667,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058661.9156532,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058661.9476376,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058661.971292,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058661.9973185,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058662.0250752,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058662.0569694,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058662.0850487,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058662.1192722,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058662.144984,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058662.1792672,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058662.2854433,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058662.5966163,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058662.7927566,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058662.851171,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058662.8532643,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058663.128982,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058663.2190042,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058663.27253,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058663.37945,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058663.454164,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058663.7199342,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058664.0528553,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058664.063605,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058664.204303,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058664.3896494,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058664.4194674,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058664.4514503,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058664.4579377,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058664.4601083,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058664.477104,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058664.5374348,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058664.5611372,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058664.5785937,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058664.5999596,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058664.6298254,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058664.6386144,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058664.6559541,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058664.6751397,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058664.953498,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058665.2675102,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058665.5372014,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058665.8483002,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058665.967611,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058666.1813228,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058666.2457788,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058666.2564337,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058666.4490573,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058666.5342963,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058666.5428853,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058666.7942874,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058666.826328,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058666.8865263,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058666.9167495,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058666.938104,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058666.938104,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058666.95567,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058666.9727728,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058666.9770782,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058666.9940732,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058667.0109904,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058667.1741369,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058667.3614287,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058667.3893595,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058667.4787831,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058667.7855148,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058668.6956298,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058668.8043187,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058668.9027784,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058669.0367348,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058669.041086,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058669.064918,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058669.079788,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058669.2187066,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058669.2487612,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058669.2725275,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058669.283144,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058669.3110695,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058669.3430882,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058669.3645554,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058669.3987834,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058669.4244084,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058669.665255,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058669.7313461,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058669.8062797,
+   "id": "wake-node-lanes2-f0518a-2",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058669.9978814,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058670.0340605,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058670.0557606,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058670.3209274,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058670.3765054,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058670.7186193,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058670.94795,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058671.2812333,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058671.455663,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058671.477069,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058671.5092666,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058671.539253,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058671.6100109,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058671.6356423,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058671.6767628,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058671.7090895,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058671.737086,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058671.7650797,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058672.0865774,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058672.108106,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058672.3040202,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058672.4518008,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058672.46239,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058672.566857,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058673.1588483,
+   "id": "wake-node-lanes2-f0518a-1",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058673.4597058,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058673.579448,
+   "id": "wake-node-lanes2-f0518a-0",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058673.734907,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058673.8849916,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058673.9129155,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058673.9495397,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058673.9754658,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058674.0141609,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058674.039923,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058674.505806,
+   "id": "wake-node-lanes2-f0518a-3",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058675.7286632,
+   "id": "wake-node-lanes2-f0518a-5",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058676.19185,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  },
+  {
+   "t": 1791058676.2195146,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "paused",
+   "rc": 0
+  },
+  {
+   "t": 1791058676.9639559,
+   "id": "wake-node-lanes2-f0518a-4",
+   "event": "thawed"
+  }
+ ],
+ "errors": [],
+ "nstat": {
+  "TcpRetransSegs": 0,
+  "TcpExtTCPLostRetransmit": 0,
+  "TcpExtTCPTimeouts": 0
+ },
+ "relay": [
+  {
+   "id": "wake-node-lanes2-f0518a-3:1:0",
+   "client": "10.42.0.41",
+   "received": 1791058651.7556334,
+   "answered": 1791058654.1157696,
+   "written": 1791058654.1161752,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-2:0:0",
+   "client": "10.42.0.41",
+   "received": 1791058651.4816382,
+   "answered": 1791058654.1317997,
+   "written": 1791058654.1320522,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-2:1:0",
+   "client": "10.42.0.41",
+   "received": 1791058651.4810216,
+   "answered": 1791058654.1811533,
+   "written": 1791058654.1813378,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-0:0:0",
+   "client": "10.42.0.41",
+   "received": 1791058651.9102151,
+   "answered": 1791058654.3103902,
+   "written": 1791058654.3106897,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-5:0:0",
+   "client": "10.42.0.41",
+   "received": 1791058652.0258327,
+   "answered": 1791058654.5459843,
+   "written": 1791058654.5462224,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-4:1:0",
+   "client": "10.42.0.41",
+   "received": 1791058651.4797854,
+   "answered": 1791058654.9999437,
+   "written": 1791058655.0000913,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-5:1:0",
+   "client": "10.42.0.41",
+   "received": 1791058652.0265634,
+   "answered": 1791058655.5567164,
+   "written": 1791058655.5569656,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-0:1:0",
+   "client": "10.42.0.41",
+   "received": 1791058651.9108279,
+   "answered": 1791058655.86102,
+   "written": 1791058655.8612204,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-1:0:0",
+   "client": "10.42.0.41",
+   "received": 1791058651.669278,
+   "answered": 1791058655.9594543,
+   "written": 1791058655.95967,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-4:0:0",
+   "client": "10.42.0.41",
+   "received": 1791058651.4804192,
+   "answered": 1791058655.9705598,
+   "written": 1791058655.9707427,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-3:0:0",
+   "client": "10.42.0.41",
+   "received": 1791058651.7549007,
+   "answered": 1791058656.2650397,
+   "written": 1791058656.2652318,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-1:1:0",
+   "client": "10.42.0.41",
+   "received": 1791058651.6686914,
+   "answered": 1791058656.3688064,
+   "written": 1791058656.368978,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-3:1:1",
+   "client": "10.42.0.41",
+   "received": 1791058654.3477612,
+   "answered": 1791058657.3479548,
+   "written": 1791058657.34816,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-2:0:1",
+   "client": "10.42.0.41",
+   "received": 1791058654.4641411,
+   "answered": 1791058657.7343225,
+   "written": 1791058657.734535,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-2:1:1",
+   "client": "10.42.0.41",
+   "received": 1791058655.327019,
+   "answered": 1791058658.0172002,
+   "written": 1791058658.0174034,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-1:0:1",
+   "client": "10.42.0.41",
+   "received": 1791058656.2449338,
+   "answered": 1791058658.2551324,
+   "written": 1791058658.2553763,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-5:0:1",
+   "client": "10.42.0.41",
+   "received": 1791058654.8171914,
+   "answered": 1791058658.4673643,
+   "written": 1791058658.467608,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-1:1:1",
+   "client": "10.42.0.41",
+   "received": 1791058656.7447152,
+   "answered": 1791058658.8348963,
+   "written": 1791058658.8351457,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-4:1:1",
+   "client": "10.42.0.41",
+   "received": 1791058655.344806,
+   "answered": 1791058659.1149557,
+   "written": 1791058659.1151266,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-0:0:1",
+   "client": "10.42.0.41",
+   "received": 1791058654.608749,
+   "answered": 1791058659.1489682,
+   "written": 1791058659.1491778,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-2:0:2",
+   "client": "10.42.0.41",
+   "received": 1791058657.9554074,
+   "answered": 1791058660.0455883,
+   "written": 1791058660.0458024,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-5:1:1",
+   "client": "10.42.0.41",
+   "received": 1791058655.8170438,
+   "answered": 1791058660.1572137,
+   "written": 1791058660.157439,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-3:0:1",
+   "client": "10.42.0.41",
+   "received": 1791058656.547821,
+   "answered": 1791058660.2179906,
+   "written": 1791058660.2181995,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-4:0:1",
+   "client": "10.42.0.41",
+   "received": 1791058656.2450588,
+   "answered": 1791058660.2552624,
+   "written": 1791058660.2555473,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-0:1:1",
+   "client": "10.42.0.41",
+   "received": 1791058656.208392,
+   "answered": 1791058660.5785449,
+   "written": 1791058660.578753,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-2:1:2",
+   "client": "10.42.0.41",
+   "received": 1791058658.2620826,
+   "answered": 1791058660.9222584,
+   "written": 1791058660.9225278,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-1:1:2",
+   "client": "10.42.0.41",
+   "received": 1791058659.0502574,
+   "answered": 1791058661.1304555,
+   "written": 1791058661.1306667,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-4:1:2",
+   "client": "10.42.0.41",
+   "received": 1791058659.345147,
+   "answered": 1791058661.4453259,
+   "written": 1791058661.4455578,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-3:1:2",
+   "client": "10.42.0.41",
+   "received": 1791058657.6476793,
+   "answered": 1791058661.8077786,
+   "written": 1791058661.8079298,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-1:0:2",
+   "client": "10.42.0.41",
+   "received": 1791058658.544565,
+   "answered": 1791058661.8847027,
+   "written": 1791058661.8849428,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-5:0:2",
+   "client": "10.42.0.41",
+   "received": 1791058658.8170948,
+   "answered": 1791058662.9272418,
+   "written": 1791058662.9275784,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-2:0:3",
+   "client": "10.42.0.41",
+   "received": 1791058660.4549298,
+   "answered": 1791058663.1250515,
+   "written": 1791058663.1252112,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-0:1:2",
+   "client": "10.42.0.41",
+   "received": 1791058660.9083288,
+   "answered": 1791058663.1885545,
+   "written": 1791058663.188766,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-4:0:2",
+   "client": "10.42.0.41",
+   "received": 1791058660.5450456,
+   "answered": 1791058663.4552233,
+   "written": 1791058663.45552,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-0:0:2",
+   "client": "10.42.0.41",
+   "received": 1791058659.4210272,
+   "answered": 1791058663.7111745,
+   "written": 1791058663.7113807,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-3:0:2",
+   "client": "10.42.0.41",
+   "received": 1791058660.4552846,
+   "answered": 1791058664.385542,
+   "written": 1791058664.385823,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-4:1:3",
+   "client": "10.42.0.41",
+   "received": 1791058661.6635318,
+   "answered": 1791058664.3936546,
+   "written": 1791058664.3937938,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-2:1:3",
+   "client": "10.42.0.41",
+   "received": 1791058661.154222,
+   "answered": 1791058664.5343463,
+   "written": 1791058664.5344956,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-1:1:3",
+   "client": "10.42.0.41",
+   "received": 1791058661.351252,
+   "answered": 1791058664.9713953,
+   "written": 1791058664.9716523,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-0:1:3",
+   "client": "10.42.0.41",
+   "received": 1791058663.508237,
+   "answered": 1791058665.5984006,
+   "written": 1791058665.5986612,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-3:1:3",
+   "client": "10.42.0.41",
+   "received": 1791058662.047668,
+   "answered": 1791058666.1778314,
+   "written": 1791058666.1780932,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-1:0:3",
+   "client": "10.42.0.41",
+   "received": 1791058662.1446216,
+   "answered": 1791058666.3047774,
+   "written": 1791058666.3050332,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-5:1:2",
+   "client": "10.42.0.41",
+   "received": 1791058663.017146,
+   "answered": 1791058666.577296,
+   "written": 1791058666.5775502,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-0:0:3",
+   "client": "10.42.0.41",
+   "received": 1791058664.008494,
+   "answered": 1791058666.7786484,
+   "written": 1791058666.7788587,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-2:0:4",
+   "client": "10.42.0.41",
+   "received": 1791058663.5541902,
+   "answered": 1791058666.8643124,
+   "written": 1791058666.8644617,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-3:0:3",
+   "client": "10.42.0.41",
+   "received": 1791058664.7472298,
+   "answered": 1791058667.3073854,
+   "written": 1791058667.3076484,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-4:0:3",
+   "client": "10.42.0.41",
+   "received": 1791058663.7450244,
+   "answered": 1791058667.5051801,
+   "written": 1791058667.5053992,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-2:1:4",
+   "client": "10.42.0.41",
+   "received": 1791058664.854145,
+   "answered": 1791058667.7243044,
+   "written": 1791058667.7245297,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-5:0:3",
+   "client": "10.42.0.41",
+   "received": 1791058665.007161,
+   "answered": 1791058669.0273259,
+   "written": 1791058669.0275645,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-4:1:4",
+   "client": "10.42.0.41",
+   "received": 1791058664.7449548,
+   "answered": 1791058669.1351178,
+   "written": 1791058669.1353428,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-1:0:4",
+   "client": "10.42.0.41",
+   "received": 1791058666.5446124,
+   "answered": 1791058669.2347922,
+   "written": 1791058669.2350454,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-5:1:3",
+   "client": "10.42.0.41",
+   "received": 1791058666.8168697,
+   "answered": 1791058669.9969993,
+   "written": 1791058669.9972062,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-1:1:4",
+   "client": "10.42.0.41",
+   "received": 1791058665.2445276,
+   "answered": 1791058670.0646968,
+   "written": 1791058670.0650098,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-2:1:5",
+   "client": "10.42.0.41",
+   "received": 1791058668.0759788,
+   "answered": 1791058670.1361327,
+   "written": 1791058670.1363413,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-0:1:4",
+   "client": "10.42.0.41",
+   "received": 1791058665.8193023,
+   "answered": 1791058670.3294756,
+   "written": 1791058670.329679,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-2:0:5",
+   "client": "10.42.0.41",
+   "received": 1791058667.1541364,
+   "answered": 1791058670.6442955,
+   "written": 1791058670.6445186,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-0:0:4",
+   "client": "10.42.0.41",
+   "received": 1791058667.218222,
+   "answered": 1791058670.7083907,
+   "written": 1791058670.708681,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-3:1:4",
+   "client": "10.42.0.41",
+   "received": 1791058666.467693,
+   "answered": 1791058671.277854,
+   "written": 1791058671.2781112,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-4:0:4",
+   "client": "10.42.0.41",
+   "received": 1791058667.76629,
+   "answered": 1791058672.4164848,
+   "written": 1791058672.4167056,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-5:0:4",
+   "client": "10.42.0.41",
+   "received": 1791058669.3168075,
+   "answered": 1791058672.436954,
+   "written": 1791058672.43713,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-4:1:5",
+   "client": "10.42.0.41",
+   "received": 1791058669.3610187,
+   "answered": 1791058672.601187,
+   "written": 1791058672.601471,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-3:0:4",
+   "client": "10.42.0.41",
+   "received": 1791058667.649829,
+   "answered": 1791058672.6299694,
+   "written": 1791058672.6301413,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-1:1:5",
+   "client": "10.42.0.41",
+   "received": 1791058670.3478477,
+   "answered": 1791058673.4879963,
+   "written": 1791058673.4882073,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-5:1:4",
+   "client": "10.42.0.41",
+   "received": 1791058670.3167675,
+   "answered": 1791058673.7869737,
+   "written": 1791058673.7871828,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-0:1:5",
+   "client": "10.42.0.41",
+   "received": 1791058670.6084971,
+   "answered": 1791058673.9086292,
+   "written": 1791058673.9087954,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-0:0:5",
+   "client": "10.42.0.41",
+   "received": 1791058671.008317,
+   "answered": 1791058674.3585193,
+   "written": 1791058674.3587306,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-1:0:5",
+   "client": "10.42.0.41",
+   "received": 1791058669.5552955,
+   "answered": 1791058674.3954446,
+   "written": 1791058674.3956332,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-3:1:5",
+   "client": "10.42.0.41",
+   "received": 1791058671.5679007,
+   "answered": 1791058674.8380582,
+   "written": 1791058674.8382723,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-5:0:5",
+   "client": "10.42.0.41",
+   "received": 1791058672.738708,
+   "answered": 1791058676.0588572,
+   "written": 1791058676.059153,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-5:1:5",
+   "client": "10.42.0.41",
+   "received": 1791058674.0187383,
+   "answered": 1791058676.1088822,
+   "written": 1791058676.1091077,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-4:0:5",
+   "client": "10.42.0.41",
+   "received": 1791058672.7544448,
+   "answered": 1791058677.294608,
+   "written": 1791058677.29485,
+   "size": 2048
+  },
+  {
+   "id": "wake-node-lanes2-f0518a-3:0:5",
+   "client": "10.42.0.41",
+   "received": 1791058672.8558035,
+   "answered": 1791058677.4359822,
+   "written": 1791058677.4362197,
+   "size": 2048
+  }
+ ],
+ "agents": {
+  "wake-node-lanes2-f0518a-0": {
+   "job": {
+    "sandbox_id": "wake-node-lanes2-f0518a-0",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "867a431a84f4c4339f18669bf0c91dfe393c115a695befee74bae89a663cacdb",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T20:17:29.860933963Z",
+    "completed_at": "2026-10-03T20:17:54.033811297Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 1332,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T20:18:01.489122+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791058651.4580483,
+     "recv": 1791058653.9740996,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 0,
+     "sent": 1791058651.4586346,
+     "recv": 1791058655.5290248,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791058654.2578294,
+     "recv": 1791058658.8124475,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 1,
+     "sent": 1791058655.857821,
+     "recv": 1791058660.2460883,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 2,
+     "sent": 1791058660.5578458,
+     "recv": 1791058662.8516402,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791058659.0703242,
+     "recv": 1791058663.377419,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 3,
+     "sent": 1791058663.1578093,
+     "recv": 1791058665.2647552,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791058663.6578944,
+     "recv": 1791058666.4464612,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 4,
+     "sent": 1791058665.468936,
+     "recv": 1791058669.996517,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791058666.8677394,
+     "recv": 1791058670.3744736,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 5,
+     "sent": 1791058670.2580419,
+     "recv": 1791058673.577417,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791058670.6578894,
+     "recv": 1791058674.0109725,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791058674.0121093
+    }
+   ]
+  },
+  "wake-node-lanes2-f0518a-1": {
+   "job": {
+    "sandbox_id": "wake-node-lanes2-f0518a-1",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "addb20a13969806374f62673c848c8267c31a5cbfe55cfd58be000fda40d5daa",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T20:17:29.893579527Z",
+    "completed_at": "2026-10-03T20:17:54.069205669Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 1330,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T20:18:01.549330+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791058651.2941885,
+     "recv": 1791058655.6265433,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 0,
+     "sent": 1791058651.293909,
+     "recv": 1791058656.0389166,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791058655.8941212,
+     "recv": 1791058657.922646,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 1,
+     "sent": 1791058656.3939934,
+     "recv": 1791058658.5033028,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 2,
+     "sent": 1791058658.6996155,
+     "recv": 1791058660.7983317,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791058658.1939526,
+     "recv": 1791058661.5509336,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 3,
+     "sent": 1791058661.000868,
+     "recv": 1791058664.6351075,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791058661.7940192,
+     "recv": 1791058665.9653893,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791058666.194088,
+     "recv": 1791058668.90066,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 4,
+     "sent": 1791058664.8940325,
+     "recv": 1791058669.7290308,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 5,
+     "sent": 1791058669.9975035,
+     "recv": 1791058673.1558702,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791058669.2049167,
+     "recv": 1791058674.047573,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791058674.0487254
+    }
+   ]
+  },
+  "wake-node-lanes2-f0518a-2": {
+   "job": {
+    "sandbox_id": "wake-node-lanes2-f0518a-2",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "8da2c5a1b92763d415613a52d1913b1a8b2af85fbebe8f9dd85099b6868b0055",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T20:17:29.922881845Z",
+    "completed_at": "2026-10-03T20:17:50.316347196Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 1329,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T20:18:01.611686+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791058651.1070795,
+     "recv": 1791058653.7969944,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 0,
+     "sent": 1791058651.106478,
+     "recv": 1791058653.904487,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791058654.1135004,
+     "recv": 1791058657.4025383,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 1,
+     "sent": 1791058654.976356,
+     "recv": 1791058657.6692576,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791058657.6047955,
+     "recv": 1791058659.712423,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 2,
+     "sent": 1791058657.9115489,
+     "recv": 1791058660.588186,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791058660.1044087,
+     "recv": 1791058662.7907002,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 3,
+     "sent": 1791058660.8036509,
+     "recv": 1791058664.2018614,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791058663.2036903,
+     "recv": 1791058666.532265,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 4,
+     "sent": 1791058664.5035176,
+     "recv": 1791058667.3873062,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 5,
+     "sent": 1791058667.7254918,
+     "recv": 1791058669.80364,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791058666.8036308,
+     "recv": 1791058670.2963612,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791058670.2973704
+    }
+   ]
+  },
+  "wake-node-lanes2-f0518a-3": {
+   "job": {
+    "sandbox_id": "wake-node-lanes2-f0518a-3",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "fa20e24623cf1bdd20ed60a6b18d463bc0c4c314daeddd5c97809d15647237e9",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T20:17:29.955476498Z",
+    "completed_at": "2026-10-03T20:17:57.109474974Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 1330,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T20:18:01.673620+00:00"
+   },
+   "rows": [
+    {
+     "lane": 1,
+     "call": 0,
+     "sent": 1791058651.3071258,
+     "recv": 1791058653.7849271,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791058651.3074055,
+     "recv": 1791058655.9327526,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 1,
+     "sent": 1791058653.9970467,
+     "recv": 1791058657.015149,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791058656.1971707,
+     "recv": 1791058659.887037,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 2,
+     "sent": 1791058657.2970674,
+     "recv": 1791058661.4743147,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791058660.1049037,
+     "recv": 1791058664.050603,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 3,
+     "sent": 1791058661.6970506,
+     "recv": 1791058665.8455787,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791058664.3970232,
+     "recv": 1791058666.9712515,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 4,
+     "sent": 1791058666.1173084,
+     "recv": 1791058670.9451795,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791058667.2993808,
+     "recv": 1791058672.300765,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 5,
+     "sent": 1791058671.2176192,
+     "recv": 1791058674.5047286,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791058672.505534,
+     "recv": 1791058677.088423,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791058677.089424
+    }
+   ]
+  },
+  "wake-node-lanes2-f0518a-4": {
+   "job": {
+    "sandbox_id": "wake-node-lanes2-f0518a-4",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "1f96d369433116ba91b6fa70a3b317a28d79ff5f6dfbfd76cb8656ee6ee7d8b0",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T20:17:29.985515874Z",
+    "completed_at": "2026-10-03T20:17:56.980511186Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 1330,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T20:18:01.735678+00:00"
+   },
+   "rows": [
+    {
+     "lane": 1,
+     "call": 0,
+     "sent": 1791058651.094559,
+     "recv": 1791058654.670991,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791058651.095305,
+     "recv": 1791058655.6384387,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 1,
+     "sent": 1791058654.9943895,
+     "recv": 1791058658.7831564,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791058655.8944228,
+     "recv": 1791058659.9234705,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 2,
+     "sent": 1791058658.9944603,
+     "recv": 1791058661.1107593,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791058660.1945632,
+     "recv": 1791058663.1273544,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 3,
+     "sent": 1791058661.3129103,
+     "recv": 1791058664.0603478,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791058663.394453,
+     "recv": 1791058667.1719863,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 4,
+     "sent": 1791058664.3944535,
+     "recv": 1791058668.8016748,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791058667.4143999,
+     "recv": 1791058672.084975,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 5,
+     "sent": 1791058669.0108638,
+     "recv": 1791058672.3051429,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791058672.404338,
+     "recv": 1791058676.9612796,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791058676.962417
+    }
+   ]
+  },
+  "wake-node-lanes2-f0518a-5": {
+   "job": {
+    "sandbox_id": "wake-node-lanes2-f0518a-5",
+    "sandbox_generation": 1,
+    "job_id": "agent",
+    "spec_sha256": "939dc70a6286acc891856b61ada222e84b0563afc5a4edcf6814af1c3f8a1ce6",
+    "state": "exited",
+    "pid": 0,
+    "started_at": "2026-10-03T20:17:30.017893295Z",
+    "completed_at": "2026-10-03T20:17:55.782876138Z",
+    "exit_code": 0,
+    "signal": 0,
+    "stdout_bytes": 1332,
+    "stderr_bytes": 0,
+    "stdout_truncated": false,
+    "stderr_truncated": false,
+    "sequence": 3,
+    "updated_at": "2026-10-03T20:18:01.783555+00:00"
+   },
+   "rows": [
+    {
+     "lane": 0,
+     "call": 0,
+     "sent": 1791058651.5669749,
+     "recv": 1791058654.2127962,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 0,
+     "sent": 1791058651.5674577,
+     "recv": 1791058655.216545,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 1,
+     "sent": 1791058654.4665241,
+     "recv": 1791058658.133388,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 1,
+     "sent": 1791058655.466388,
+     "recv": 1791058659.8089025,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 2,
+     "sent": 1791058658.4664235,
+     "recv": 1791058662.5947819,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 2,
+     "sent": 1791058662.6664538,
+     "recv": 1791058666.2428794,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 3,
+     "sent": 1791058664.656547,
+     "recv": 1791058668.6935909,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 3,
+     "sent": 1791058666.4665062,
+     "recv": 1791058669.6637707,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 4,
+     "sent": 1791058668.966485,
+     "recv": 1791058672.1065118,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 4,
+     "sent": 1791058669.9663591,
+     "recv": 1791058673.4568772,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 0,
+     "call": 5,
+     "sent": 1791058672.3884013,
+     "recv": 1791058675.7254772,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "lane": 1,
+     "call": 5,
+     "sent": 1791058673.6685243,
+     "recv": 1791058675.7611356,
+     "bytes": 2048,
+     "status": 200
+    },
+    {
+     "done": 1791058675.7618895
+    }
+   ]
+  }
+ },
+ "summary": {
+  "calls": 72,
+  "expected": 72,
+  "answer_latency_s": {
+   "n": 72,
+   "p50": -0.3334,
+   "p95": -0.3291,
+   "max": -0.2769
+  },
+  "pauses": 116,
+  "pauses_outside_a_wait": 0,
+  "paused_share_of_wait": 0.9795,
+  "pause_runsc_ms": null,
+  "pause_after_last_send_ms": null,
+  "thaw_since_packet_ms": null,
+  "thaw_runsc_ms": null,
+  "tick_late_s": null,
+  "nstat": {
+   "TcpRetransSegs": 0,
+   "TcpExtTCPLostRetransmit": 0,
+   "TcpExtTCPTimeouts": 0
+  },
+  "errors": 0
+ }
+}

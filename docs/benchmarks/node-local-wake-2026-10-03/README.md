@@ -122,8 +122,67 @@ Option 3 is feasible. The packet trigger is exact. Detection only infers
 - HTTP/2 clients (their PINGs would cause extra thaw and pause cycles);
 - many sandboxes per node: the packet watcher's cost at 500 sandboxes.
 
+## Part 2: the node's own path, over plaintext (`f59109e`, `2c803e2`)
+
+**Setup.**
+- **Fake relay:** `wake_spike.py relay --plain`, HTTP/1.1 on 10.42.0.43:8092,
+  on its own CPX32. Traffic crosses the worker's forward path, as it does to
+  the real relay at 10.42.0.2:8092.
+- **Worker:** one CCX33 with:
+  - the 0.8.5 bundle repacked with this branch (`0.8.6.dev0+localwait`,
+    bundle `8913326f`);
+  - the pause tier, 64 GiB of swap and `sandbox.direct_local_model_waits`;
+  - `network_relays` set to the fake relay;
+  - `gateway_port: 1`, so it never registered.
+- **Harness:** `--mode node` runs no spike daemon. It records the node's own
+  pauses and thaws from the pause tier's marker files, and waits on job
+  state.
+- **Clocks:** the two hosts' clocks differ by about 350 ms. Latencies use a
+  skew estimated from request timing (relay receive minus agent send).
+- **Analysis:** [raw/node-analysis.json](raw/node-analysis.json).
+
+| arm | calls | paused calls | answer → agent p50 / p95 / max | first pause after the request p50 / p95 | answer → next request max |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| plain, 8 × 8 (first build) | 64 | 64 | 17 / 20 / 21 ms | 66 / 151 ms | **7.6 s** |
+| background ticker (first build) | 36 | 36 | 18 / 20 / 20 ms | 65 / 192 ms | **7.6 s** |
+| 64 KB and 1 MB answers | 36 | 36 | 19 / 26 / 26 ms | 66 / 171 ms | 0.41 s |
+| two calls per agent | 72 | 72 | 17 / 22 / 74 ms | 66 / 167 ms | 2.1 s |
+| plain, 8 × 12 (fixed, `2c803e2`) | 96 | 96 | 17 / 20 / 21 ms | 67 / 129 ms | 0.61 s |
+| background ticker, 8 × 12 (fixed) | 96 | 96 | 18 / 20 / 23 ms | 68 / 164 ms | 0.49 s |
+
+**Reading it:**
+- **Plaintext pauses every call.** That is 400 of 400 across the arms,
+  against 87% over TLS: there is no session ticket to mistake for a reply.
+- **The node's thaw costs about 8 ms more than a bare `runsc resume`:** 17 ms
+  against 9 ms from answer to agent. The extra is the lifecycle lock, the
+  request lock, the prefetch check and bookkeeping.
+- **The first build had a stall bug, fixed in `2c803e2`.**
+  - A job-status read thaws a paused sandbox and pauses it again afterwards
+    (`keep_paused`). If the answer arrived during that read, the sandbox was
+    re-paused with its answer inside, and nothing thawed it until the next
+    read: stalls of up to 7.6 s here, and unbounded where nothing polls.
+  - **The fix:** every answered call is watched until its next request, and
+    any pause that lands on it is undone, retried each tick. A paused wait
+    whose call is answered is never escalated to hibernate.
+  - Both arms were rerun on the patched worker. The slowest gap from answer
+    to next request is now 0.61 s, where the agent itself computes for about
+    0.25 s.
+- **Most pause markers are the harness's own.** The markers (229 for 96
+  calls) are mostly status reads cycling thaw and pause, as in the 0.8.5
+  canary. At most one marker per arm falls just outside a call, which is the
+  re-pause the fix then undoes.
+- **Pauses come later when the sandbox is busy.** The first pause comes 66 ms
+  after the request at the median, and later at p95 (130–190 ms): status reads
+  run inside the sandbox, so its CPU window is not idle.
+
+**Not covered here:** escalation to hibernation and the relay's unacknowledged
+answer path. Both need the real relay and gateway, so they go in the
+production canary.
+
 ## Resources
 
-- One CCX33 for about 25 minutes, deleted afterwards, with its known_hosts
-  entries cleared. It never registered with the gateway.
+- **Part 1:** one CCX33 for about 25 minutes.
+- **Part 2:** one CCX33 and one CPX32 for about 30 minutes.
+- **Common to both:** all VMs were deleted afterwards and their known_hosts
+  entries cleared. None registered with the gateway.
 - Staging on the gateway: `/work/ucloud-sandboxes/wake-spike-20261003`.

@@ -1,0 +1,49 @@
+{
+ "node3": {
+  "calls": 96,
+  "paused_calls": 96,
+  "pause_markers": 229,
+  "pauses_outside_a_call": 1,
+  "answer_to_agent_s": {
+   "p50": 0.0173,
+   "p95": 0.0198,
+   "max": 0.021
+  },
+  "first_pause_after_send_ms": {
+   "p50": 66.978,
+   "p95": 128.6159
+  },
+  "answer_to_next_request_s": {
+   "p50": 0.2705,
+   "p95": 0.3922,
+   "max": 0.61,
+   "over_1s": 0
+  },
+  "tick_late_s": null
+ },
+ "node3-ticker": {
+  "calls": 96,
+  "paused_calls": 96,
+  "pause_markers": 223,
+  "pauses_outside_a_call": 1,
+  "answer_to_agent_s": {
+   "p50": 0.0179,
+   "p95": 0.0201,
+   "max": 0.0226
+  },
+  "first_pause_after_send_ms": {
+   "p50": 68.212,
+   "p95": 163.7414
+  },
+  "answer_to_next_request_s": {
+   "p50": 0.2938,
+   "p95": 0.3975,
+   "max": 0.492,
+   "over_1s": 0
+  },
+  "tick_late_s": {
+   "p50": 0.7335,
+   "p95": 2.1139
+  }
+ }
+}

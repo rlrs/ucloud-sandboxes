@@ -148,6 +148,7 @@ class EnvironmentBackend:
         self._released = Condition(self._guard)
         self._active = {}
         self._components = {}  # Attached digest -> authenticated component.
+        self._used = {}  # Attached digest -> last ensure (monotonic): the cache budget's LRU order.
         # Attached digest -> (metadata job, ready deadline). Every caller of
         # ensure, not only the attaching one, waits until that deadline.
         self._warming = {}
@@ -180,7 +181,9 @@ class EnvironmentBackend:
         """
         target = self._attach(digest)
         with self._guard:
+            self._used[digest] = time.monotonic()
             job, ready_by = self._warming.get(digest, (None, 0.0))
+        self._enforce_cache_budget(digest)
         remaining = ready_by - time.monotonic()
         # Outside the guard: the threaded RPC server lets other components'
         # attach, liveness checks and drops proceed meanwhile.
@@ -331,6 +334,25 @@ class EnvironmentBackend:
                 if not isinstance(exc, OSError) or exc.errno != errno.EBUSY:
                     raise
                 tried.add(device)
+
+    def _enforce_cache_budget(self, keep):
+        """A device cache with no eviction of its own (nydusd's shared filecache)
+        stays within ``cache_bytes``: detach the least recently used components
+        no sandbox uses, never ``keep``. Their blob files go with the last image
+        that shares them; a dropped image attaches again on its next use."""
+        usage = getattr(self._factory, "cache_bytes", None)
+        if usage is None or usage() <= self.cache.max_bytes:
+            return
+        with self._guard:
+            order = sorted((digest for digest in self._active if digest != keep), key=lambda d: self._used.get(d, 0.0))
+        for digest in order:
+            with self._guard:
+                if digest in self._attaching or not self._drop(digest):
+                    continue  # In use: an overlay still holds it.
+                self._used.pop(digest, None)
+            if usage() <= self.cache.max_bytes:
+                return
+        _LOG.warning("device cache stays over its budget: every attached component is in use")
 
     def drop(self, digest):
         require_digest(digest)

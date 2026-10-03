@@ -163,8 +163,10 @@ class NydusdDeviceTests(unittest.TestCase):
             factory.acquire((base,))
             factory.release((base, top))
             self.assertEqual(sorted(path.name[:1] for path in factory.cache.iterdir()), ["a", "a"])
+            self.assertGreater(factory.cache_bytes(), 0)  # Allocated blocks, for the backend's budget.
             factory.release((base,))
             self.assertEqual(list(factory.cache.iterdir()), [])
+            self.assertEqual(factory.cache_bytes(), 0)
 
 
 @unittest.skipUnless(NYDUS or shutil.which("nydus-image"), "needs nydus-image v2.4.5 (UCLOUD_TEST_NYDUS_IMAGE)")

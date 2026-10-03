@@ -60,6 +60,16 @@ class NydusdFactory:
             for blob in blobs:
                 self._users[blob] = self._users.get(blob, 0) + 1
 
+    def cache_bytes(self):
+        """Bytes the shared cache holds on disk (its files are sparse)."""
+        total = 0
+        for entry in os.scandir(self.cache):
+            try:
+                total += entry.stat(follow_symlinks=False).st_blocks * 512
+            except FileNotFoundError:
+                pass  # Released meanwhile.
+        return total
+
     def release(self, blobs):
         """Drop a blob's cache files once no attached image uses it."""
         with self._guard:

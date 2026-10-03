@@ -75,8 +75,9 @@ import unittest
 # reads acknowledgment from a duplicated socket (a fast reader's close raced it).
 # +36 locators and nydusd blob layouts stored at registration: runtime reads no
 # longer query the index (gate run 3's stall), +37 nydusd in the node bundle
-# (pins, VM init's verification and install). Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 112_778
+# (pins, VM init's verification and install), +32 nydusd's cache within
+# cache_bytes (LRU detach of idle components). Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 112_810
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

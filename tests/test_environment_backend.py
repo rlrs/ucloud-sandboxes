@@ -145,6 +145,48 @@ class EnvironmentBackendTests(artifact_fixtures.EnvironmentArtifactTests):
         self.assertTrue(replacement.drop(self.digest))
         self.assertTrue(devices[0].closed)
 
+    def test_a_device_cache_over_budget_detaches_the_least_recently_used_idle_components(self):
+        # nydusd's shared filecache has no eviction of its own: cache_bytes bounds it.
+        from tests.test_environment_artifact import sign_component
+        digests = [self.digest]
+        for index in (1, 2):
+            image = self.root / f"image-{index}.erofs"
+            image.write_bytes(bytes([index]) * 8192)
+            digests.append(self.registry.publish(
+                image, sign_component(image, source_image="sha256:" + str(index) * 64, signing_key=self.key),
+                tag=f"fixture-{index}"))
+        mounts, busy, closed, held, MIB = set(), set(), [], {"bytes": 0}, 1024 ** 2
+
+        class Device:
+            def __init__(self, path, component, *args, **kwargs):
+                self.path, self.component = path, component
+
+            def close(self):
+                closed.append(self.path)
+                held["bytes"] -= MIB
+
+        class Factory:
+            def __call__(self, path, component, *args, **kwargs):
+                held["bytes"] += MIB
+                return Device(path, component)
+
+            def cache_bytes(self):
+                return held["bytes"]
+        backend = EnvironmentBackend(self.root / "budget", self.registry, cache_bytes=5 * MIB // 2,
+                                     devices=[Path(f"/dev/nbd-test{n}") for n in range(4)], device_factory=Factory(),
+                                     mount=lambda device, target: mounts.add(target), unmount=mounts.discard,
+                                     mounted=lambda path: path in mounts, referenced=lambda path: path in busy)
+        self.addCleanup(backend.close)
+        first = Path(backend.ensure(digests[0]))
+        backend.ensure(digests[1])
+        busy.add(first)  # A sandbox's overlay holds the oldest one.
+        backend.ensure(digests[2])  # 3 MiB > 2.5 MiB: the oldest idle one goes.
+        self.assertIn(first, mounts)
+        self.assertEqual(sorted(backend._active), sorted([digests[0], digests[2]]))
+        self.assertEqual(held["bytes"], 2 * MIB)
+        busy.clear()
+        self.assertTrue(backend.ensure(digests[1]))  # Detached images attach again.
+
     def test_a_create_burst_is_queued_not_refused_with_eagain(self):
         # The server is not accepting yet: every call must wait in its backlog.
         endpoint = self.root / "burst.sock"

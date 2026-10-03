@@ -521,7 +521,7 @@ class EnvironmentBackendClient:
 
 
 def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetch=True, chunk_index=None,
-                  concurrent_misses=32, chunk_store_url=None, attach_concurrency=1):
+                  concurrent_misses=32, chunk_store_url=None, attach_concurrency=1, shared_traces=False):
     """``chunk_index`` is (URL, read token) when chunk-store images are enabled;
     ``chunk_store_url`` makes the store node, with that token, the only source."""
     if os.geteuid() != 0 or registry is None:
@@ -542,8 +542,13 @@ def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetc
                                                          **access)
         # S3 demand misses wait 30-100 ms, not the registry's 3 ms.
         cache_options = {"concurrent_misses": concurrent_misses}
+    traces = None
+    if shared_traces:
+        from .environment_trace import RegistryTraceStore
+        traces = RegistryTraceStore(LocalTraceStore(Path(root) / "traces"), registry.client)
     backend = EnvironmentBackend(root, registry, cache_bytes=cache_bytes, prefetch=PrefetchPolicy(enabled=prefetch),
-                                 rafs=rafs, cache_options=cache_options, attach_concurrency=attach_concurrency)
+                                 rafs=rafs, cache_options=cache_options, attach_concurrency=attach_concurrency,
+                                 traces=traces)
     try:
         with EnvironmentBackendServer(socket_path, backend) as server:
             server.serve_forever()

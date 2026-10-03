@@ -281,6 +281,8 @@ class RegistryClient:
         self,
         repository: str,
         reference: str,
+        *,
+        timeout_seconds: float | None = None,
     ) -> tuple[dict[str, Any], dict[str, str]]:
         return self._json_request(
             (
@@ -288,6 +290,7 @@ class RegistryClient:
                 f"{quote(reference, safe=':')}"
             ),
             headers={"Accept": MANIFEST_ACCEPT},
+            timeout_seconds=timeout_seconds,
         )
 
     def open_blob(self, repository: str, digest: str):
@@ -692,8 +695,9 @@ class RegistryClient:
         path: str,
         *,
         headers: dict[str, str] | None = None,
+        timeout_seconds: float | None = None,
     ) -> tuple[dict[str, Any], Any]:
-        response = self._request(path, headers=headers)
+        response = self._request(path, headers=headers, timeout_seconds=timeout_seconds)
         try:
             body = _read_response_bytes(response, MAX_REGISTRY_JSON_RESPONSE_BYTES + 1, deadline=None)
             response_headers = _CaseInsensitiveHeaders(response.headers.items())

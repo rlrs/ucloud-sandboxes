@@ -242,6 +242,7 @@ class VmInitOptions:
     environment_preserve_mtimes: bool = False
     environment_prefetch_enabled: bool = True
     environment_attach_concurrency: int = 1
+    environment_shared_traces: bool = False
     # immutable_environments.chunk_store: workers read RAFS images through
     # presigned URLs from ucloud-chunk-index, with its read token only.
     environment_chunk_index_url: str = ""

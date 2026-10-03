@@ -317,6 +317,8 @@ def build_parser() -> argparse.ArgumentParser:
     environment_io.add_argument("--chunk-index-token-file", type=Path)
     environment_io.add_argument("--chunk-concurrent-misses", type=int, default=32)
     environment_io.add_argument("--attach-concurrency", type=int, default=1, help="concurrent component attaches")
+    environment_io.add_argument("--shared-traces", action="store_true",
+                                help="share startup traces through the managed registry (plan C2.7)")
     environment_io.add_argument("--chunk-store-url", default="",
                                 help="read RAFS images only from this store node, with the index read token")
     add_environment_registry_args(environment_io)
@@ -1037,7 +1039,7 @@ def cmd_serve_environment_io(args: argparse.Namespace) -> int:
     serve_backend(environment_registry_from_args(args), root=args.root, socket_path=args.socket,
                   cache_bytes=args.cache_bytes, prefetch=not args.disable_prefetch, chunk_index=chunk_index,
                   concurrent_misses=args.chunk_concurrent_misses, chunk_store_url=args.chunk_store_url or None,
-                  attach_concurrency=args.attach_concurrency)
+                  attach_concurrency=args.attach_concurrency, shared_traces=args.shared_traces)
     return 0
 
 
@@ -1806,7 +1808,10 @@ def run_registry_prune(
     usage_records = usage_snapshot.records
     reference_repositories = _reference_retained_repositories(config)
     cache_policy = None
-    excluded_repositories = list(reference_repositories.values())
+    from .environment_trace import TRACE_REPOSITORY
+    # Startup traces are small hint manifests, one per component: never pruned
+    # by count or age, never evicted (plan C2.7).
+    excluded_repositories = [*reference_repositories.values(), TRACE_REPOSITORY]
     if config.builder.buildx_cache_ref:
         from .build_cache import RegistryBuildCache
         cache_policy = RegistryBuildCache(
@@ -6905,6 +6910,7 @@ def vm_init_options_for_job(
             "environment_cache_bytes": selected_environment.cache_bytes,
             "environment_prefetch_enabled": selected_environment.prefetch_enabled,
             "environment_attach_concurrency": selected_environment.attach_concurrency,
+            "environment_shared_traces": selected_environment.shared_traces,
             "environment_allow_paths": selected_environment.allow_paths,
         }
         chunk_store = selected_environment.chunk_store

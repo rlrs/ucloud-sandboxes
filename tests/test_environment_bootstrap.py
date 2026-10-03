@@ -242,6 +242,10 @@ class EnvironmentBootstrapTests(unittest.TestCase):
             # The node agent advertises RAFS (M2 dispatch) only with a store node behind it.
             self.assertIn(" --environment-backend-socket /run/ucloud-environment/io.sock --environment-rafs", node)
             self.assertNotIn("--environment-rafs", reader)
+            # Shared startup traces (C2.7) are opt-in.
+            self.assertNotIn("--shared-traces", reader)
+            self.assertIn(" --shared-traces", render_vm_init_script(vm_fixtures.VmInitTests._options(
+                **common, environment_shared_traces=True)))
             with self.assertRaisesRegex(ValueError, "store node"):
                 render_vm_init_script(vm_fixtures.VmInitTests._options(
                     **common, environment_chunk_store_url="http://10.42.0.200:5091"))

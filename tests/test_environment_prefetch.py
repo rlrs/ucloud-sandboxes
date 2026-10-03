@@ -26,7 +26,8 @@ from ucloud_sandboxes.environment_backend import (
 from ucloud_sandboxes.environment_cache import VerifiedEnvironmentCache
 from ucloud_sandboxes.environment_metadata import sign_hint, sign_metadata_hint
 from ucloud_sandboxes.environment_rootfs import EnvironmentRootfsStore
-from ucloud_sandboxes.environment_trace import LocalTraceStore, trace_order
+from ucloud_sandboxes.environment_trace import (TRACE_ANNOTATION, LocalTraceStore, RegistryTraceStore,
+                                                trace_order)
 from ucloud_sandboxes.managed_registry import RegistryRequestError
 from ucloud_sandboxes.models import ENVIRONMENT_IO_METRICS, NodeRuntimeMetrics, utc_now
 
@@ -500,6 +501,55 @@ class BackendPrefetchTests(PrefetchFixture):
             later.cache.read(self.component, index * CHUNK_BYTES, 512)
         self.assertEqual(len(self.client.requests), 3)
         self.assertEqual(later.metrics()["misses"], 0)
+
+    def test_a_fresh_node_replays_a_trace_another_node_shared(self):
+        # Plan C2.7: traces travel through the managed registry, so a node that
+        # never attached the component starts in traced mode.
+        policy = PrefetchPolicy(trace_window_seconds=.1)
+        shared = RegistryTraceStore(LocalTraceStore(self.root / "node-a-traces"), self.client)
+        first = self.backend("first", policy=policy, traces=shared)
+        first.ensure(self.digest)
+        for index in (7, 8, 9, 20, 3):
+            first.cache.read(self.component, index * CHUNK_BYTES, 512)
+        wait_until(lambda: "trace-" + self.component.image_digest[7:] in self.client.tags)
+        first.drop(self.digest)
+        self.client.requests.clear()
+        fresh = RegistryTraceStore(LocalTraceStore(self.root / "node-b-traces"), self.client)
+        later = self.backend("later", policy=policy, traces=fresh)
+        later.ensure(self.digest)
+        wait_until(lambda: later.metrics()["trace_prefetch_chunks"] == 5)
+        self.assertEqual(self.client.requests, [(7, 3), (20, 1), (3, 1)])
+        self.assertEqual((later.metrics()["trace_hint_present"], later.metrics()["trace_recordings_started"]), (1, 0))
+        self.assertEqual(fresh.local.load(self.component), ("present", (7, 8, 9, 20, 3)))  # Kept locally.
+
+    def test_a_shared_trace_is_untrusted_bounded_and_optional(self):
+        calls = []
+        real = self.client.manifest_document
+
+        def counting(*args, **kwargs):
+            calls.append(kwargs.get("timeout_seconds"))
+            return real(*args, **kwargs)
+        store = RegistryTraceStore(LocalTraceStore(self.root / "traces"), self.client, timeout_seconds=1.5)
+        with patch.object(self.client, "manifest_document", side_effect=counting):
+            self.assertEqual(store.load(self.component), ("absent", None))  # Nobody shared one.
+            self.assertEqual(calls, [1.5])
+            tag = store.tag(self.component)
+            for bad in ("not json", json.dumps({"schema": "x"}), json.dumps({
+                    "schema": "ucloud-environment-startup-trace-v1", "image_digest": self.component.image_digest,
+                    "chunk_count": len(self.component.chunks), "chunks": [CHUNKS + 5]})):
+                self.client.put_manifest("environment-traces", tag, json.dumps(
+                    {"schemaVersion": 2, "annotations": {TRACE_ANNOTATION: bad}}).encode(), media_type="x")
+                self.assertEqual(store.load(self.component)[0], "invalid")
+                self.assertEqual(store.local.load(self.component), ("absent", None))  # Never kept.
+            store.local.save(self.component, [4, 2])
+            calls.clear()
+            self.assertEqual(store.load(self.component), ("present", (4, 2)))
+            self.assertEqual(calls, [])  # The node's own trace wins, with no request.
+        with patch.object(self.client, "manifest_document", side_effect=OSError("registry down")):
+            store.local.save(self.component, [])
+            (store.local.root / (self.component.image_digest[7:] + ".json")).unlink()
+            self.assertEqual(store.load(self.component), ("absent", None))
+        store.close()
 
     def test_a_detach_inside_the_window_saves_what_the_guest_read(self):
         # Production: a sandbox is created, used and deleted inside the default

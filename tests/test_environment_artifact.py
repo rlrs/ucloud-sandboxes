@@ -52,7 +52,7 @@ class MemoryRegistry:
         self.manifests[content_digest(payload)] = payload
         self.tags[tag] = content_digest(payload)
 
-    def manifest_document(self, repository, digest):
+    def manifest_document(self, repository, digest, *, timeout_seconds=None):
         digest = self.tags.get(digest, digest) if digest not in self.manifests else digest
         if digest not in self.manifests:
             raise RegistryRequestError(404, "GET", digest, "MANIFEST_UNKNOWN")

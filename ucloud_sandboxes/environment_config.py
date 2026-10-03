@@ -273,6 +273,9 @@ class EnvironmentDeploymentConfig:
     # image-roots.sqlite3, else the annotation). Only once every worker runs
     # 0.9.0 with a chunk store: a dispatched root needs both capabilities.
     dispatch_roots: bool = False
+    # Workers share startup traces through the managed registry (plan C2.7),
+    # so a node that never attached a component replays another's trace.
+    shared_traces: bool = False
     # Chunk-store (RAFS) images, off by default (C2.13, design §9 M1).
     chunk_store: ChunkStoreConfig | None = None
 
@@ -296,7 +299,8 @@ class EnvironmentDeploymentConfig:
         import re
         if not isinstance(result.repository, str) or not re.fullmatch(r"[a-z0-9]+(?:[._/-][a-z0-9]+)*", result.repository):
             raise ValueError("invalid immutable environment repository")
-        for name in ("worker_enabled", "builder_enabled", "preserve_mtimes", "prefetch_enabled", "dispatch_roots"):
+        for name in ("worker_enabled", "builder_enabled", "preserve_mtimes", "prefetch_enabled", "dispatch_roots",
+                     "shared_traces"):
             if not isinstance(getattr(result, name), bool):
                 raise ValueError(f"immutable environment {name} must be boolean")
         if type(result.attach_concurrency) is not int or not 1 <= result.attach_concurrency <= 256:

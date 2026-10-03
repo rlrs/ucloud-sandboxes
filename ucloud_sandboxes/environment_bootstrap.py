@@ -76,7 +76,7 @@ Group=root
 PrivateMounts=no
 RuntimeDirectory=ucloud-environment
 RuntimeDirectoryMode=0700
-ExecStart=$UCLOUD_AGENT_BIN serve-environment-io --root $UCLOUD_STATE_DIR/environment-io --socket {SOCKET} --cache-bytes {options.environment_cache_bytes}{"" if options.environment_prefetch_enabled else " --disable-prefetch"}{"" if options.environment_attach_concurrency == 1 else f" --attach-concurrency {int(options.environment_attach_concurrency)}"}{chunk_flags}{registry_flags}
+ExecStart=$UCLOUD_AGENT_BIN serve-environment-io --root $UCLOUD_STATE_DIR/environment-io --socket {SOCKET} --cache-bytes {options.environment_cache_bytes}{"" if options.environment_prefetch_enabled else " --disable-prefetch"}{"" if options.environment_attach_concurrency == 1 else f" --attach-concurrency {int(options.environment_attach_concurrency)}"}{" --shared-traces" if options.environment_shared_traces else ""}{chunk_flags}{registry_flags}
 Restart=no
 
 [Install]
@@ -105,6 +105,7 @@ def validate(options):
         "builder_enabled": options.role == "builder", "allow_paths": options.environment_allow_paths,
         "cache_bytes": options.environment_cache_bytes, "preserve_mtimes": options.environment_preserve_mtimes,
         "prefetch_enabled": options.environment_prefetch_enabled,
+        "shared_traces": options.environment_shared_traces,
     })
     from .environment_artifact import content_digest
     raw = json.loads(options.environment_trusted_keys_json)

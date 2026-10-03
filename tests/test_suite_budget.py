@@ -34,8 +34,9 @@ from tests.test_package_budget import package_lines
 # (operation, unmount; test_chunk_store_gate: no scenario covers an operator script),
 # +22 exact rollback symlinks (real mkfs.erofs images), +43 the gate's baseline worker,
 # +53 M2 readers (dispatched roots, spec fingerprints, the RAFS flag), +113 the gateway side,
-# +62 the M2 inventory and retention view, +31 the attach-timing diagnostic.
-SUITE_LINE_BUDGET = 96_064
+# +62 the M2 inventory and retention view, +31 the attach-timing diagnostic,
+# +25 coalesced demand windows.
+SUITE_LINE_BUDGET = 96_090
 SUITE = Path(__file__).resolve().parent
 
 

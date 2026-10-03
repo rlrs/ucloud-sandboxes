@@ -20,6 +20,11 @@ from .managed_registry import RegistryRequestError
 _LOG = logging.getLogger(__name__)
 # One bulk prefetch request covers at most this many adjacent chunks (4 MiB).
 PREFETCH_RANGE_CHUNKS = 16
+# A demand miss on a whole-image component reads up to this many contiguous
+# uncached chunks in one range: the gateway registry serves about 180 requests/s
+# whatever their size (attach spike 2026-10-03: 49 MB/s at 256 KiB, about
+# 740 MB/s at 4 MiB), and a 4 MiB range costs about the latency of one chunk.
+DEMAND_WINDOW_CHUNKS = 16
 _PREFETCH_KINDS = ("metadata", "trace")  # Scheduling priority, first wins.
 
 
@@ -78,10 +83,48 @@ class _Recording:
     chunks: dict = field(default_factory=dict)
 
 
+class _ImageWindow:
+    """A demand miss on a whole-image component: one range over the missed
+    chunk and its uncached neighbours (ahead first, then behind), which are
+    contiguous in the image blob. Every chunk is verified against its id;
+    siblings are installed and answer readers that joined them."""
+
+    def __init__(self, component, index, limit):
+        self.component, self.index, self.limit = component, index, limit
+
+    def fetch_window(self, cache, chunk, timeout):
+        chunks, low, high = self.component.chunks, self.index, self.index
+        while high + 1 < len(chunks) and high - low + 1 < self.limit and not cache.contains(chunks[high + 1]):
+            high += 1
+        while low > 0 and high - low + 1 < self.limit and not cache.contains(chunks[low - 1]):
+            low -= 1
+        members = range(low, high + 1)
+        futures = cache.join_window([chunks[index] for index in members if index != self.index])
+        verified = {}
+        try:
+            total = sum(chunks[index].size for index in members)
+            payload = cache.registry.client.blob_range(cache.registry.repository, self.component.image_digest,
+                                                       low * CHUNK_BYTES, total, timeout_seconds=timeout)
+            if len(payload) != total:
+                raise ValueError("environment chunk content identity mismatch: the window range has the "
+                                 "wrong length")
+            offset = 0
+            for index in members:
+                piece = payload[offset:offset + chunks[index].size]
+                offset += chunks[index].size
+                if content_digest(piece) == chunks[index].digest:
+                    verified[chunks[index].digest] = piece
+        finally:
+            cache.finish_window(futures, verified)
+        if chunk.digest not in verified:
+            raise ValueError("environment chunk content identity mismatch")
+        return verified[chunk.digest]
+
+
 class VerifiedEnvironmentCache:
     timing = None  # Diagnostic sink for per-job timings (EnvironmentBackend sets it).
     def __init__(self, root: Path, registry, *, max_bytes=1024 ** 3, concurrent_misses=8,
-                 fetch_timeout_seconds=30.0, prefetch_slots=None):
+                 fetch_timeout_seconds=30.0, prefetch_slots=None, demand_window_chunks=DEMAND_WINDOW_CHUNKS):
         if not root.is_absolute() or max_bytes < CHUNK_BYTES or concurrent_misses < 1:
             raise ValueError("invalid environment cache bounds")
         if not math.isfinite(fetch_timeout_seconds) or fetch_timeout_seconds <= 0:
@@ -93,6 +136,9 @@ class VerifiedEnvironmentCache:
         self.root, self.registry, self.max_bytes = root, registry, max_bytes
         self._guard = Condition()
         self._concurrent_misses = concurrent_misses
+        if type(demand_window_chunks) is not int or demand_window_chunks < 1:
+            raise ValueError("invalid environment demand window")
+        self._demand_window_chunks = demand_window_chunks
         # Prefetch shares the miss pool but never takes more than these slots,
         # and never starts while a demand miss waits for one.
         self._prefetch_slots = max(1, concurrent_misses // 4) if prefetch_slots is None else prefetch_slots
@@ -696,7 +742,8 @@ class VerifiedEnvironmentCache:
             if self._recordings:
                 self._observe(component, index)
             whole = getattr(self.registry, "whole_image", None)
-            source = (component.image_digest, index * CHUNK_BYTES) if whole and whole(component) else None
+            source = (_ImageWindow(component, index, self._demand_window_chunks)
+                      if whole and whole(component) else None)
             data = self.chunk(component.chunks[index], cancel=cancel, source=source)
             take = min(len(data) - within, end - offset)
             result.append(data[within:within + take])

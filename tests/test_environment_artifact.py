@@ -119,7 +119,7 @@ class EnvironmentArtifactTests(unittest.TestCase):
         self.assertEqual(len(self.client.manifests), 1)
 
     def test_only_demanded_chunks_download_and_corruption_never_reaches_reader(self):
-        cache = self.cache(max_bytes=CHUNK_BYTES)
+        cache = self.cache(max_bytes=CHUNK_BYTES, demand_window_chunks=1)  # One chunk per miss.
         self.client.reads.clear()
         self.assertEqual(cache.read(self.component, CHUNK_BYTES - 5, 10), b"a" * 5 + b"b" * 5)
         self.assertEqual(self.client.reads, [c.digest for c in self.component.chunks[:2]])
@@ -140,7 +140,7 @@ class EnvironmentArtifactTests(unittest.TestCase):
             cache.read(self.component, len(self.bytes) - 1, 2)
 
     def test_shared_miss_survives_one_reader_cancellation(self):
-        cache = self.cache(concurrent_misses=1)
+        cache = self.cache(concurrent_misses=1, demand_window_chunks=1)
         self.client.reads.clear()
         self.client.entered.clear()
         self.client.gate = Event()

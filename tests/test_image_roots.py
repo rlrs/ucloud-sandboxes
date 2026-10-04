@@ -182,6 +182,9 @@ class WaveTests(artifact_fixtures.EnvironmentArtifactTests):
         calls.clear()
         convert_wave(rows, "1", convert=convert, results=results, parallel=2)
         self.assertEqual(sorted(name for name, _ in calls), ["managed/b", "managed/d"])  # Failures retry.
+        shares = [convert_wave(rows, "1", convert=convert, results=self.root / f"shard{i}.jsonl", parallel=2,
+                               shard=(i, 2))["pending"] for i in range(2)]
+        self.assertEqual(sum(shares), 3)  # Two converters split a wave, each image once.
 
     def test_record_switch_and_revert_repoint_durable_owners(self):
         digest, roots = self.annotated_image(), ImageRootsStore(self.root / "image-roots.sqlite3")

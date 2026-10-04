@@ -198,13 +198,19 @@ def read_jsonl(path):
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()] if path.exists() else []
 
 
-def convert_wave(rows, wave, *, convert, results, parallel):
+def shard_of(row, count):
+    """A stable converter for each image: sha256 of repository@digest, mod ``count``."""
+    import hashlib
+    return int(hashlib.sha256(f"{row['repository']}@{row['manifest_digest']}".encode()).hexdigest(), 16) % count
+
+
+def convert_wave(rows, wave, *, convert, results, parallel, shard=(0, 1)):
     """Step 2: convert a wave's images, ``parallel`` at once. ``convert``
     (repository, manifest digest, slot) returns the converter's result after
     its full-tree verification, or raises. A rerun skips converted images."""
     done = {(row["repository"], row["manifest_digest"]) for row in read_jsonl(results) if row.get("new_root")}
     pending = [row for row in rows if row.get("environment_root") and wave_of(row["family"]) == wave
-               and (row["repository"], row["manifest_digest"]) not in done]
+               and shard_of(row, shard[1]) == shard[0] and (row["repository"], row["manifest_digest"]) not in done]
     guard, slots = threading.Lock(), list(range(parallel))
 
     def one(row):
@@ -370,8 +376,11 @@ def convert_command(args):
         if completed.returncode:
             raise RuntimeError(" | ".join(completed.stderr.strip().splitlines()[-3:]))
         return json.loads(completed.stdout.strip().splitlines()[-1])
+    index, _, count = args.shard.partition("/")
+    if not (index.isdigit() and count.isdigit() and int(index) < int(count)):
+        raise ValueError("--shard is I/N with 0 <= I < N")
     summary = convert_wave(read_jsonl(args.rows), args.wave, convert=convert, results=args.results,
-                           parallel=args.parallel)
+                           parallel=args.parallel, shard=(int(index), int(count)))
     print(json.dumps(summary, sort_keys=True))
     return 0 if not summary["failed"] else 1
 
@@ -450,6 +459,7 @@ def add_commands(subparsers):
     convert.add_argument("--environment-signing-key", type=Path, required=True)
     convert.add_argument("--verify-device", action="append", default=[], help="NBD device; split across slots")
     convert.add_argument("--parallel", type=int, default=12)
+    convert.add_argument("--shard", default="0/1", help="I/N: this converter's share of the wave")
     convert.set_defaults(func=convert_command)
     for name, text in (("record", "Record verified conversions as converted rows (gateway)."),
                        ("switch", "Dispatch a wave's new roots and re-point its durable owners (step 3)."),

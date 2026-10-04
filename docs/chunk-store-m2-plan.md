@@ -492,6 +492,29 @@ snapshot `439378718`): 40/40 again, and no NBD timeouts or I/O errors.
     mostly metadata is republished.
   - **Runbook:** record each converter's results at least every few hours,
     and always within 72 h.
+- **Store node as a full replica (0.9.8).** The replica mirror filled 22,122
+  objects in its first round. The batched switch then hit two problems:
+  - **A half-switched image.** One image had lost a component in the
+    incident; it was reverted. 0.9.9 verifies the whole closure first.
+  - **Stalled locator reads.** Batches stalled on index locators read from S3
+    (56 s for one). 0.9.9 keeps stored locators in the index database, and
+    3,729 were backfilled.
+- **Switched: 3,572/3,584**, in batches of 100 (the last 99 took 9 s).
+- **Still to convert, with wave 3:**
+  - one image reverted for its lost component;
+  - 11 large `foundation-terminal-prefix` images whose registration failed
+    twice.
+- **Canary, 20 per family from a cold fleet:** 40/40, with no NBD timeouts or
+  I/O errors on the worker.
+
+  | Family | First command p50 / p95 (s) | Same family in this morning's 512 bursts (EROFS) |
+  | --- | ---: | ---: |
+  | TMax | 1.84 / 2.63 | 4.57–5.20 / 8.52–9.05 |
+  | Terminal-Lego | 0.56 / 1.23 | 0.60–0.77 / 3.42–4.23 |
+
+  Each run's ready spread was 4.0–4.7 s, against 15–20 s in wave 1's early
+  canaries. The comparison is indicative: the bursts ran under more
+  contention than these canaries.
 
 ## 6. Gates
 

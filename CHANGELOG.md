@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.9.17 - 2026-10-04 (gateway only)
+
+- **Awaited environment attaches are no longer capped at 32 per gateway process.** The cap (`MAX_BACKGROUND_CREATE_IMAGE_PULLS`) bounds pulls that outlive their 2 s callers. An awaited attach always has a waiting create, so creates in flight bound it. With 96 creates in flight (0.9.16), the cap turned away 579 creates in 10 s as `image_warmup_pending`.
+
 ## 0.9.16 - 2026-10-04 (gateway only)
 
 - **The placement worker allows every node's startup slots in flight:** `create_target_concurrency_per_node × max_nodes` creates (96 in production), not a fixed 32. With 0.9.15's awaited attaches a create takes ~5-6 s, so 32 in flight capped a 3-node burst near 6 creates/s while nodes had 32 slots each. A stopgap on today's create path; C4.3 replaces the queue-side bound.

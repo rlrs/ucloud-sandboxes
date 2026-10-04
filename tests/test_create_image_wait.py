@@ -32,12 +32,13 @@ class CreateImageWaitTests(unittest.TestCase):
         # Immutable-environment workers attach in seconds: creates for one
         # image share the attach and wait for it, instead of a 2 s answer
         # that sends them back to the durable queue.
-        tasks = cp.CreateImagePullTasks(cp.ENVIRONMENT_ATTACH_WAIT_SECONDS)
+        tasks = cp.CreateImagePullTasks(cp.ENVIRONMENT_ATTACH_WAIT_SECONDS, bounded=False)
         result = cp.ProxiedResponse(201, {}, b"{}")
         pull = Mock(side_effect=lambda: time.sleep(.3) or result)
-        with patch.object(cp, "SANDBOX_IMAGE_WAIT_SECONDS", 0.02), ThreadPoolExecutor(max_workers=8) as executor:
-            responses = list(executor.map(lambda _: tasks.run(("same",), pull), range(8)))
-        self.assertEqual((pull.call_count, {id(r) for r in responses}), (1, {id(result)}))
+        with (patch.object(cp, "SANDBOX_IMAGE_WAIT_SECONDS", 0.02),  # Nor turned away past the 2 s pulls' cap.
+              patch.object(cp, "MAX_BACKGROUND_CREATE_IMAGE_PULLS", 2), ThreadPoolExecutor(max_workers=8) as executor):
+            responses = list(executor.map(lambda i: tasks.run((f"image-{i % 4}",), pull), range(8)))
+        self.assertEqual((pull.call_count, {id(r) for r in responses}), (4, {id(result)}))
         self.assertGreater(cp.ENVIRONMENT_ATTACH_WAIT_SECONDS, cp.SANDBOX_IMAGE_WAIT_SECONDS)
 
     def test_shared_pull_has_bounded_wait_and_bounded_background_capacity(self):

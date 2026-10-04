@@ -69,8 +69,8 @@ from tests.test_package_budget import package_lines
 # converted blobs (reads, errors, a miss passed through), its store init and repack.
 # +31 placement deferrals are counted by status, code and message gist.
 # +13 an environment attach is awaited, not polled, +7 creates in flight cover
-# every node's startup slots.
-SUITE_LINE_BUDGET = 97_721
+# every node's startup slots, +2 and are not capped like 2 s pulls.
+SUITE_LINE_BUDGET = 97_724
 SUITE = Path(__file__).resolve().parent
 
 

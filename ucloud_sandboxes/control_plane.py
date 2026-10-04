@@ -310,10 +310,13 @@ class ImageBuildLookupUnavailableError(RuntimeError):
 class CreateImagePullTasks:
     """Share cold pulls without retaining HTTP admission slots indefinitely."""
 
-    def __init__(self, wait_seconds: float | None = None) -> None:
+    def __init__(self, wait_seconds: float | None = None, *, bounded: bool = True) -> None:
         self.lock = RLock()
         self.tasks: dict[tuple[str, ...], Future[ProxiedResponse | None]] = {}
         self.wait_seconds = wait_seconds
+        # Awaited attaches always have a waiting create, so creates in flight
+        # bound them; only pulls that outlive their 2 s callers need a cap.
+        self.bounded = bounded
 
     def run(
         self, key: tuple[str, ...], pull: Callable[[], ProxiedResponse | None]
@@ -324,7 +327,7 @@ class CreateImagePullTasks:
                 # Completed results need no durable cache: the node inventory
                 # is authoritative, including after eviction or a node restart.
                 self.tasks = {k: v for k, v in self.tasks.items() if not v.done()}
-                if len(self.tasks) >= MAX_BACKGROUND_CREATE_IMAGE_PULLS:
+                if self.bounded and len(self.tasks) >= MAX_BACKGROUND_CREATE_IMAGE_PULLS:
                     return _create_image_pull_pending_response()
                 task = Future()
                 self.tasks[key] = task
@@ -5744,8 +5747,9 @@ def build_server(
         max(1, DEFAULT_MAX_PROXY_BODY_BYTES // max(1, process_count))
     )
     BoundHandler.sandbox_create_busy_sampler = GatewayBusySampler(metrics_store)
-    BoundHandler.create_image_pull_tasks = CreateImagePullTasks(
-        ENVIRONMENT_ATTACH_WAIT_SECONDS if import_external_images else None)
+    BoundHandler.create_image_pull_tasks = (
+        CreateImagePullTasks(ENVIRONMENT_ATTACH_WAIT_SECONDS, bounded=False) if import_external_images
+        else CreateImagePullTasks())
     BoundHandler.telemetry = resolved_telemetry
     from .gateway_response_proxy import AsyncGatewayResponses
     async_responses = (AsyncGatewayResponses(

@@ -589,6 +589,21 @@ snapshot `439378718`): 40/40 again, and no NBD timeouts or I/O errors.
 - **Wave 4** (1,455 `unknown`-family images) converts on both converters,
   started 16:05Z and 17:12Z.
 
+### 5.3c Wave 4 (2026-10-04, partly switched 20:00Z)
+
+- **Switched:** 725 images, conv-2's shard, recorded and switched in 71 s,
+  none `not_warm`. No canary: the `unknown` family is outside the benchmark
+  selection.
+- **Not recorded:** conv-1's shard (~614 converted, ~120 not started). Its
+  results file was lost: a `pkill -f` pattern matched the operator command
+  itself, so the stop-copy-record step never ran before the server was
+  deleted. The chunks are in S3 and the roots in the registry (72 h hold), but
+  without the results file nothing maps images to roots. **To do:** rerun
+  `convert_wave.sh <ip> 4 12 0/2` on a new converter; it dedups against S3.
+- **Failed, not retried:** 3 (two S3 read timeouts, one `ucloud-qual-*`
+  image whose converted tree differs from its OCI layers).
+- Both converters are deleted. The fleet is at zero.
+
 ### 5.4 After the waves: retire the registry Volume (decided 2026-10-04)
 
 The goal is **no registry Volume**. Environments live in the chunk store:

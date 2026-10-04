@@ -75,7 +75,10 @@ from tests.test_package_budget import package_lines
 # +352 C4.3 phase 1: two gateways over shared state in both create modes, the
 # power-of-k create loop's outcomes, the admission-wait header and the route
 # intent's fences on SQLite and PostgreSQL.
-SUITE_LINE_BUDGET = 98_126
+# +257 C3.2 group create: packing, overflow, one attach per worker, re-planned
+# rejects, pending leftovers, member deletes, and the group intents' fences and
+# command claim on SQLite and PostgreSQL, and a group through the durable queue.
+SUITE_LINE_BUDGET = 98_383
 SUITE = Path(__file__).resolve().parent
 
 

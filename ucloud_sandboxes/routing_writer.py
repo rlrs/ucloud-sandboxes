@@ -16,6 +16,7 @@ _METHODS = frozenset({
     'reconcile_sandboxes_for_node', 'allocate_sandbox_create_with_pending',
     'upsert_sandbox', 'confirm_sandbox_observation', 'reserve_sandbox_wakes',
     'reserve_create_intent', 'retarget_create_intent', 'confirm_create',
+    'reserve_create_intents', 'retarget_create_intents', 'confirm_creates',
 })
 _store = None
 _identity = None
@@ -182,6 +183,15 @@ class RoutingWriteProcess:
 
     def confirm_create(self, *args, **kwargs):
         return self._write('confirm_create', *args, **kwargs)
+
+    def reserve_create_intents(self, *args, **kwargs):
+        return self._write('reserve_create_intents', *args, **kwargs)
+
+    def retarget_create_intents(self, *args, **kwargs):
+        return self._write('retarget_create_intents', *args, **kwargs)
+
+    def confirm_creates(self, *args, **kwargs):
+        return self._write('confirm_creates', *args, **kwargs)
 
     def reserve_sandbox_wakes(self, requests):
         return self._write('reserve_sandbox_wakes', list(requests))

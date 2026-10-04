@@ -141,14 +141,16 @@ class PlacementQueueHTTPTests(TestCase):
             return response.status, json.loads(response.read())
 
     @contextmanager
-    def pipeline(self, *, create_concurrency=1):
+    def pipeline(self, *, create_concurrency=1, create_placement="ranked"):
         with _running_server(self.node) as node_url:
             public = _gateway_server(
-                self.root, routing_file=self.routing_file, queue_placement=True
+                self.root, routing_file=self.routing_file, queue_placement=True,
+                create_placement=create_placement,
             )
             self.public_queue = public.RequestHandlerClass.placement_queue.client
             private = _gateway_server(
-                self.root, routing_file=self.routing_file, placement_worker=True
+                self.root, routing_file=self.routing_file, placement_worker=True,
+                create_placement=create_placement,
             )
             with (
                 _running_server(public) as public_url,
@@ -253,6 +255,19 @@ class PlacementQueueHTTPTests(TestCase):
                 ).fetchone()
             self.assertEqual(command["state"], "done")
             self.assertEqual(command["generation"], route.generation)
+
+    def test_a_group_is_one_durable_command_of_the_placement_process(self):
+        self.release.set()
+        template = {key: value for key, value in self.spec("x").items() if key != "id"}
+        with self.pipeline(create_placement="power_of_k") as public:
+            status, body = self.request(
+                public + "/v1/sandboxes:batch", {"group_id": "q", "count": 3, "spec": template})
+        self.assertEqual((status, body["counts"]), (201, {"running": 3}), body)
+        self.assertEqual(sorted(call["generation"] for call in self.create_calls), [1, 1, 1])
+        with self.routing.pool.connection() as conn:
+            command = conn.execute("SELECT kind,state,generation FROM gateway_commands").fetchone()
+        self.assertEqual((command["kind"], command["state"], command["generation"]), ("group", "done", None))
+        self.assertEqual(self.routing.sandbox_group("q").placed, {"q-0000", "q-0001", "q-0002"})
 
     def test_wake_lane_progresses_while_create_lane_is_occupied(self):
         with self.pipeline() as public, ThreadPoolExecutor(1) as requests:

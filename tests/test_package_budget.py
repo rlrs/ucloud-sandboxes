@@ -115,8 +115,12 @@ import unittest
 # +467 C4.3 phase 1: power-of-k creates behind gateway_create_placement
 # (gateway/create.py, READ COMMITTED route intents, the node's admission-wait
 # header); phase 3 deletes the ranked create path (plan: about -960).
+# +757 C3.2 group create on power-of-k (gateway/groups.py: /v1/sandboxes:batch,
+# per-worker multi-row intents and receipts, the sandbox_groups tables on both
+# stores, the durable queue's group command); no node batch endpoint. Over the
+# plan's ~420: the group row's replay fence and member-level outcomes.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 114_105
+PACKAGE_LINE_BUDGET = 114_862
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

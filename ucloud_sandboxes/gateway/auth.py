@@ -37,6 +37,7 @@ def _is_sdk_api_request(method: str, path: str) -> bool:
         ("GET", "/v1/images/builds"),
         ("POST", "/v1/images/build"),
         ("POST", "/v1/images/pull"),
+        ("POST", "/v1/sandboxes:batch"),
     }
     if (method, path) in exact_routes:
         return True
@@ -45,6 +46,7 @@ def _is_sdk_api_request(method: str, path: str) -> bool:
         ("/v1/builders/prepare/", {"DELETE"}),
         ("/v1/images/builds/", {"GET"}),
         ("/v1/image-contexts/", {"GET", "PUT"}),
+        ("/v1/sandboxes:batch/", {"GET", "DELETE"}),
     ):
         if method in methods and _single_encoded_path_segment(path, prefix):
             return True

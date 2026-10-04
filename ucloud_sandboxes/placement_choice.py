@@ -250,17 +250,26 @@ class PowerOfKChooser:
         self.overlay, self._rng, self._k = overlay, rng, k
         self._target, self._processes = target_creates_per_node, api_processes
 
-    def choose(self, fleet: FleetView, request: PlacementRequest) -> tuple[NodeHeartbeat, ...]:
+    def choose(
+        self, fleet: FleetView, request: PlacementRequest, *, include_job_ids: frozenset[str] = frozenset(),
+    ) -> tuple[NodeHeartbeat, ...]:
         """Up to k eligible workers, best first. Soft-drained workers are
-        emptying: they fill the list only when fewer than k others are."""
+        emptying: they fill the list only when fewer than k others are.
+        Eligible ``include_job_ids`` (workers already holding the image) join
+        the k sampled ones."""
 
-        nodes = list(fleet.nodes)
+        nodes = [node for node in fleet.nodes if node.job_id not in include_job_ids]
         preferred: list[tuple[float, NodeHeartbeat]] = []
         drained: list[tuple[float, NodeHeartbeat]] = []
+        for node in fleet.nodes:
+            score = self._score(fleet, node, request) if node.job_id in include_job_ids else None
+            if score is not None:
+                (drained if is_soft_drained(node) else preferred).append((score, node))
+        limit = self._k + len(preferred)
         # The eligible members of a lazily drawn uniform permutation's prefix
         # are a uniform sample of every eligible worker.
         for index in range(len(nodes)):
-            if len(preferred) == self._k:
+            if len(preferred) == limit:
                 break
             swap = self._rng.randrange(index, len(nodes))
             nodes[index], nodes[swap] = nodes[swap], nodes[index]
@@ -276,6 +285,7 @@ class PowerOfKChooser:
 
     def pack(
         self, fleet: FleetView, request: PlacementRequest, count: int, *, per_node_budget: int,
+        include_job_ids: frozenset[str] = frozenset(),
     ) -> tuple[GroupSlice, ...]:
         """C3.2 ``pack``: fill the best sampled worker with up to
         ``per_node_budget`` of the group, then overflow to the next. A total
@@ -288,7 +298,10 @@ class PowerOfKChooser:
         slices: list[GroupSlice] = []
         excluded = set(request.excluded_job_ids)
         while count > 0:
-            ranked = self.choose(fleet, replace(request, excluded_job_ids=frozenset(excluded)))
+            ranked = self.choose(
+                fleet, replace(request, excluded_job_ids=frozenset(excluded)),
+                include_job_ids=include_job_ids,
+            )
             if not ranked:
                 break
             excluded.add(ranked[0].job_id)
@@ -301,6 +314,21 @@ class PowerOfKChooser:
                 slices.append(GroupSlice(ranked[0], placed))
                 count -= placed
         return tuple(slices)
+
+    def plan_group(
+        self, fleet: FleetView, request: PlacementRequest, count: int, *, per_node_budget: int,
+        policy: str = "pack", include_job_ids: frozenset[str] = frozenset(),
+    ) -> tuple[GroupSlice, ...]:
+        """C3.2: ``pack`` fills few workers so each attaches the image once;
+        ``spread`` caps each worker at an even share of the view."""
+
+        if policy == "spread":
+            per_node_budget = min(per_node_budget, -(-count // max(1, len(fleet.nodes))))
+        elif policy != "pack":
+            raise ValueError("group placement policy must be pack or spread")
+        return self.pack(
+            fleet, request, count, per_node_budget=per_node_budget, include_job_ids=include_job_ids,
+        )
 
     def _score(
         self, fleet: FleetView, heartbeat: NodeHeartbeat, request: PlacementRequest,

@@ -285,7 +285,7 @@ class CreatePlacement:
             self._abandon(spec, route, "registry_lease_unavailable")
             raise
 
-    def _abandon(self, spec: SandboxSpec, route: SandboxRoute, reason: str) -> None:
+    def _abandon(self, spec: SandboxSpec, route: SandboxRoute, reason: str) -> SandboxRoute | None:
         self.overlay.release(route.job_id, _incarnation(route))
         removed = self.routing_store.delete_sandbox_if_current(
             spec.id, generation=route.generation, create_operation_id=route.create_operation_id,
@@ -297,6 +297,7 @@ class CreatePlacement:
                 operation_id=route.create_operation_id, spec_hash=route.spec_hash,
                 failure_reason=reason,
             )
+        return removed
 
 
 def _incarnation(route: SandboxRoute) -> SandboxIncarnation:

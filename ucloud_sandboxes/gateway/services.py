@@ -14,6 +14,7 @@ from ..routing import RoutingStore
 from ..telemetry import Telemetry
 from .create import CreatePlacement
 from .fleet import FleetView
+from .groups import GroupCreate
 from .heartbeats import HeartbeatIngest, RebootReaper, WorkerDelete
 from .image_resolution import (
     REGISTRY_LAYER_METADATA_CACHE_MAX_ENTRIES, ImageResolution, RegistryLayerMetadataCache,
@@ -35,6 +36,7 @@ class GatewayServices:
     heartbeats: HeartbeatIngest
     placement: Placement
     creates: CreatePlacement
+    groups: GroupCreate
     images: ImageResolution
 
 
@@ -61,6 +63,12 @@ def build_services(
         registry_url, registry_worker_url=registry_worker_url,
         max_entries=REGISTRY_LAYER_METADATA_CACHE_MAX_ENTRIES,
     ) if registry_url else None
+    creates = CreatePlacement(
+        routing_store, store, heartbeat_ttl_seconds=heartbeat_ttl_seconds,
+        registry_refs=registry_refs, metrics_store=metrics_store, telemetry=telemetry,
+        target_creates_per_node=create_target_concurrency_per_node,
+        api_processes=api_processes,
+    )
     return GatewayServices(
         registry_refs=registry_refs,
         fleet=fleet,
@@ -77,12 +85,8 @@ def build_services(
             create_target_concurrency=create_target_concurrency_per_node,
             layer_cache=layer_cache, inflight=InflightCreatePlacements(),
         ),
-        creates=CreatePlacement(
-            routing_store, store, heartbeat_ttl_seconds=heartbeat_ttl_seconds,
-            registry_refs=registry_refs, metrics_store=metrics_store, telemetry=telemetry,
-            target_creates_per_node=create_target_concurrency_per_node,
-            api_processes=api_processes,
-        ),
+        creates=creates,
+        groups=GroupCreate(creates, target_creates_per_node=create_target_concurrency_per_node),
         images=ImageResolution(
             image_manager=image_manager, registry_url=registry_url,
             registry_worker_url=registry_worker_url, disk_monitor=registry_disk_monitor,

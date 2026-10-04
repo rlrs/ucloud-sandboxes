@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.9.8 - 2026-10-04 (gateway and store node)
+
+- **The store node is a full replica of its S3 prefix** (`store_node.replica`).
+  - S3 is the permanent store, and the deduplicated corpus is small: 76 GB after waves 1 and 2, about 150–220 GB projected.
+  - The node never evicts. A fill past `cache_bytes` is refused and counted (`full_refusals`), so the operator grows the disk.
+  - A mirror lists the prefix every `mirror_seconds` and fills whatever is not resident. A fresh node refills itself the same way.
+  - `POST /v1/resident` returns the keys that are not wholly resident.
+- **`chunk-migrate switch` works in batches.** Per batch of 100 images it makes one residency check, one fill of whatever is missing, and one recheck. Before, it warmed about 3 s per image.
+- **Removed:** 0.9.4 and 0.9.5's first-to-evict placement of builder reads and `keep=false` warms. They existed only to protect a warm set in an undersized cache.
+
 ## 0.9.7 - 2026-10-04 (gateway only)
 
 - **Retention gives a converter's roots 72 hours to be recorded.**

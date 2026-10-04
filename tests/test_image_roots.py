@@ -276,7 +276,8 @@ class GatewayDispatchTests(unittest.TestCase):
         handler = SimpleNamespace(
             services=SimpleNamespace(registry_refs=SimpleNamespace(
                 dependency_resolver=SimpleNamespace(image_roots=roots), requires_digest_identity=lambda image: False)),
-            create_image_pull_tasks=SimpleNamespace(run=lambda key, pull: pulls.append(key)))
+            create_image_pull_tasks=SimpleNamespace(run=lambda key, pull: pulls.append(key)),
+            dispatch_environment_roots=True)
         handler._dispatched_root = lambda image: ControlPlaneHandler._dispatched_root(handler, image)
         heartbeat = SimpleNamespace(job_id="j", node_epoch="e", node_url="http://n", images=[], image_cache=None)
         image = "10.42.0.2:5000/managed/a@" + D["1"]

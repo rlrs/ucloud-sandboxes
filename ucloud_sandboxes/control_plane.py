@@ -5268,13 +5268,6 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return None
             return self._pull_image_on_node(heartbeat, image, environment_root=environment_root)
 
-    def _dispatched_root(self, image: str) -> str | None:
-        resolver = getattr(self.services.registry_refs, "dependency_resolver", None)
-        roots = getattr(resolver, "image_roots", None)
-        coordinates = registry_repository_tag_from_image_ref(image)
-        digest = manifest_digest_from_image_ref(image)
-        return roots.dispatch_root(coordinates[0], digest) if roots and coordinates and digest else None
-
     def _warm_image_on_ready_nodes(
         self,
         image: str,

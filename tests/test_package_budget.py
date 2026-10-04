@@ -114,10 +114,10 @@ import unittest
 # design sized the migration tool at ~400 with release).
 # +467 C4.3 phase 1: power-of-k creates behind gateway_create_placement
 # (gateway/create.py, READ COMMITTED route intents, the node's admission-wait
-# header); phase 3 deletes the ranked create path (plan: about -960), +13 a
+# header); phase 3 deletes the ranked create path (plan: about -960), +4 a
 # create pinned to its dispatched root skips the node pull (it resolved the
 # released old root).
-# header); phase 3 deletes the ranked create path (plan: about -960), +13 a
+# header); phase 3 deletes the ranked create path (plan: about -960), +4 a
 # create pinned to its dispatched root skips the node pull (it resolved the
 # released old root).
 # +240 M2 OCI release (plan §5.4): chunk-migrate release-oci (+118: released,
@@ -127,7 +127,7 @@ import unittest
 # dispatched root (a released image's manifest and old root may be gone). It
 # retires the OCI half of the registry Volume (~1.3 TB), not code.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 114_358
+PACKAGE_LINE_BUDGET = 114_349
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

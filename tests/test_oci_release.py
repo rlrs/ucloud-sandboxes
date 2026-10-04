@@ -237,5 +237,5 @@ class OciReleaseTests(unittest.TestCase):
                 spec = fleet.route(sandbox_id).spec
                 self.assertEqual((spec["image"].rpartition("@")[2], spec["environment_root"]), (digest, self.new))
                 self.assertEqual(node.registration(sandbox_id).spec.environment_root, self.new)
-            self.assertEqual(pulled, [self.new])  # The node's one pull attached the dispatched root.
+            self.assertEqual(pulled, [])  # A create pinned to its dispatched root attaches it itself (0.9.20).
             self.assertEqual(self.oci.manifests, {})  # No protection tag restored the manifest.

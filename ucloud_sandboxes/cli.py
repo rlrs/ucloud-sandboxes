@@ -1137,8 +1137,10 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         routing=server.RequestHandlerClass.routing_store
         placement_store=PlacementQueue(routing.pool.conninfo,config.deployment_id,schema=routing.schema)
         placement_stop=asyncio.Event()
+        from .shared_control.placement_queue import create_concurrency
         worker=PlacementQueueWorker(placement_store,origin=f'http://127.0.0.1:{port}',
-            token=server.RequestHandlerClass.gateway_bearer_token)
+            token=server.RequestHandlerClass.gateway_bearer_token,
+            create_concurrency=create_concurrency(config.policy))
         placement_task=node_http_pool.submit(worker.run(placement_stop))
     try:
         server.serve_forever()

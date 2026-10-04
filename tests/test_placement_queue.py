@@ -447,6 +447,12 @@ class PlacementDeferralTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((store.defer.await_count, store.complete.await_count), (4, 1))
 
 
+class PlacementConcurrencyTests(unittest.TestCase):
+    def test_creates_in_flight_cover_every_nodes_startup_slots(self):
+        self.assertEqual(placement_queue.create_concurrency(Mock(create_target_concurrency_per_node=32, max_nodes=3)), 96)
+        self.assertEqual(placement_queue.create_concurrency(Mock(create_target_concurrency_per_node=8, max_nodes=2)), 32)
+
+
 async def _chunks(body):
     yield body
 

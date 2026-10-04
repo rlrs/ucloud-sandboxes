@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.9.16 - 2026-10-04 (gateway only)
+
+- **The placement worker allows every node's startup slots in flight:** `create_target_concurrency_per_node × max_nodes` creates (96 in production), not a fixed 32. With 0.9.15's awaited attaches a create takes ~5-6 s, so 32 in flight capped a 3-node burst near 6 creates/s while nodes had 32 slots each. A stopgap on today's create path; C4.3 replaces the queue-side bound.
+
 ## 0.9.15 - 2026-10-04 (gateway only)
 
 - **On immutable-environment workers, a create waits for its image's attach** (up to 30 s) instead of getting a 503 `image_warmup_pending` after 2 s.

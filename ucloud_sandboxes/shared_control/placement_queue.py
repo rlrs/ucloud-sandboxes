@@ -557,6 +557,12 @@ class IsolatedPlacementResponses:
 DEFERRAL_LOG_SECONDS = 10
 
 
+def create_concurrency(policy):
+    """Creates in flight fleet-wide: every node's startup slots, so the queue
+    is never the bound (a fixed 32 capped a 3-node burst near 6 creates/s)."""
+    return max(32, policy.create_target_concurrency_per_node * policy.max_nodes)
+
+
 def _error_code(body):
     """A deferred answer's error code (or transport ``code``) and the gist of
     its message, digits elided: node_active_admission_deferred covers both

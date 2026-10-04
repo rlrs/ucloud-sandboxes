@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.9.5 - 2026-10-04 (store node and converters)
+
+- **A converter's verification no longer warms hot.**
+  - Warm requests take `keep: false`: extents fill first-to-evict and nothing is promoted. The converter's mount verifier uses it.
+  - Why: the verifier warms each image's objects before mounting it, so M2 wave 2 would have evicted wave 1's warm set.
+- **`chunk-migrate convert --shard I/N`:** converters split a wave, each image once.
+
 ## 0.9.4 - 2026-10-04
 
 - **A converter's store-node reads never evict the warm set.**

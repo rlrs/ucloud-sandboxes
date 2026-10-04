@@ -205,6 +205,11 @@ IMAGE_PULL_PROXY_TIMEOUT_SECONDS = 30 * 60
 IMAGE_PULL_RETRY_ATTEMPTS = 3
 IMAGE_PULL_RETRY_BASE_DELAY_SECONDS = 0.25
 SANDBOX_IMAGE_WAIT_SECONDS = 2.0
+# On immutable-environment workers a create's "pull" is the image's attach
+# (resolve and mount its components): seconds, not an OCI pull's minutes. A
+# create waits for it, up to the admission wait, instead of polling the
+# durable queue every 2 s (a warm 512 burst deferred ~100 creates/10 s so).
+ENVIRONMENT_ATTACH_WAIT_SECONDS = 30.0
 MAX_BACKGROUND_CREATE_IMAGE_PULLS = 32
 # Creation includes quota allocation, rootfs preparation, networking, and
 # runsc startup. Those idempotent lifecycle operations can legitimately queue
@@ -305,9 +310,10 @@ class ImageBuildLookupUnavailableError(RuntimeError):
 class CreateImagePullTasks:
     """Share cold pulls without retaining HTTP admission slots indefinitely."""
 
-    def __init__(self) -> None:
+    def __init__(self, wait_seconds: float | None = None) -> None:
         self.lock = RLock()
         self.tasks: dict[tuple[str, ...], Future[ProxiedResponse | None]] = {}
+        self.wait_seconds = wait_seconds
 
     def run(
         self, key: tuple[str, ...], pull: Callable[[], ProxiedResponse | None]
@@ -335,7 +341,7 @@ class CreateImagePullTasks:
                     del self.tasks[key]
                     raise
         try:
-            return task.result(timeout=SANDBOX_IMAGE_WAIT_SECONDS)
+            return task.result(timeout=self.wait_seconds or SANDBOX_IMAGE_WAIT_SECONDS)
         except FutureTimeoutError:
             if task.done():
                 return task.result()
@@ -5738,7 +5744,8 @@ def build_server(
         max(1, DEFAULT_MAX_PROXY_BODY_BYTES // max(1, process_count))
     )
     BoundHandler.sandbox_create_busy_sampler = GatewayBusySampler(metrics_store)
-    BoundHandler.create_image_pull_tasks = CreateImagePullTasks()
+    BoundHandler.create_image_pull_tasks = CreateImagePullTasks(
+        ENVIRONMENT_ATTACH_WAIT_SECONDS if import_external_images else None)
     BoundHandler.telemetry = resolved_telemetry
     from .gateway_response_proxy import AsyncGatewayResponses
     async_responses = (AsyncGatewayResponses(

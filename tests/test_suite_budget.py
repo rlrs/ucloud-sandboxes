@@ -68,7 +68,8 @@ from tests.test_package_budget import package_lines
 # +228 ucloud-chunk-serve: byte-for-byte parity with the Python node over real
 # converted blobs (reads, errors, a miss passed through), its store init and repack.
 # +31 placement deferrals are counted by status, code and message gist.
-SUITE_LINE_BUDGET = 97_699
+# +13 an environment attach is awaited, not polled.
+SUITE_LINE_BUDGET = 97_713
 SUITE = Path(__file__).resolve().parent
 
 

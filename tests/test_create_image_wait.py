@@ -28,6 +28,18 @@ TEST_TIER = "contract"
 class CreateImageWaitTests(unittest.TestCase):
     _json_request = helpers.ControlPlaneTests._json_request
 
+    def test_an_environment_attach_is_awaited_not_polled(self):
+        # Immutable-environment workers attach in seconds: creates for one
+        # image share the attach and wait for it, instead of a 2 s answer
+        # that sends them back to the durable queue.
+        tasks = cp.CreateImagePullTasks(cp.ENVIRONMENT_ATTACH_WAIT_SECONDS)
+        result = cp.ProxiedResponse(201, {}, b"{}")
+        pull = Mock(side_effect=lambda: time.sleep(.3) or result)
+        with patch.object(cp, "SANDBOX_IMAGE_WAIT_SECONDS", 0.02), ThreadPoolExecutor(max_workers=8) as executor:
+            responses = list(executor.map(lambda _: tasks.run(("same",), pull), range(8)))
+        self.assertEqual((pull.call_count, {id(r) for r in responses}), (1, {id(result)}))
+        self.assertGreater(cp.ENVIRONMENT_ATTACH_WAIT_SECONDS, cp.SANDBOX_IMAGE_WAIT_SECONDS)
+
     def test_shared_pull_has_bounded_wait_and_bounded_background_capacity(self):
         tasks = cp.CreateImagePullTasks()
         release = Event()

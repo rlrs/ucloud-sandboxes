@@ -104,9 +104,10 @@ import unittest
 # verifying and running the Go read server, the node on loopback behind it (the
 # server itself is runtime/chunk_serve, Go: one GIL capped reads near one core).
 # +30 the placement worker logs why it deferred commands (a burst retried 182 of
-# 512 creates and nothing said why).
+# 512 creates and nothing said why), +7 a create waits for an environment
+# attach instead of polling the queue every 2 s.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 113_463
+PACKAGE_LINE_BUDGET = 113_470
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

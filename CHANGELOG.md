@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.9.15 - 2026-10-04 (gateway only)
+
+- **On immutable-environment workers, a create waits for its image's attach** (up to 30 s) instead of getting a 503 `image_warmup_pending` after 2 s.
+  - There, the gateway's per-node "pull" is the attach (resolve and mount the components): seconds, not an OCI pull's minutes. Creates for one image on one node still share one attach.
+  - Why: 0.9.14's deferral log showed it was nearly every retry in a 512-rollout burst. About 100-160 creates per 10 s went back to the durable queue and polled with backoff while their attach ran.
+  - OCI workers keep the 2 s answer.
+
 ## 0.9.14 - 2026-10-04 (gateway only)
 
 - **The placement worker says why it deferred commands.** Every 10 s with deferrals, it logs a warning counting them by kind, status, error code (or transport `code`) and the gist of the message, digits elided. A warm 512-rollout burst retried 182 creates up to 34 times, and nothing recorded the cause. `node_active_admission_deferred` covers both startup slots and memory, so the message is part of the key.

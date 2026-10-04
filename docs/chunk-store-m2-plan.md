@@ -577,6 +577,18 @@ snapshot `439378718`): 40/40 again, and no NBD timeouts or I/O errors.
   canaries. The comparison is indicative: the bursts ran under more
   contention than these canaries.
 
+### 5.3b Wave 3 (2026-10-04, switched 17:25Z)
+
+- **Converted:** 2,748 of 2,748 (ScaleSWE, SWE-rebench v2, SWE-Lego, R2E-Gym,
+  MultiSWE, foundations), 10:43Z-17:10Z on two CCX63. Every failure retried
+  clean: the store node's root-owned `tmp/` (15:00Z), leaked NBD devices from
+  stopped converters, and the store node's moves.
+- **Recorded and switched:** all 2,748 in 441 s, none `not_warm`.
+- **Canary from a cold fleet:** 100/100, 20 per family. First command p50
+  1.1-1.8 s, p95 2.2-6.7 s.
+- **Wave 4** (1,455 `unknown`-family images) converts on both converters,
+  started 16:05Z and 17:12Z.
+
 ### 5.4 After the waves: retire the registry Volume (decided 2026-10-04)
 
 The goal is **no registry Volume**. Environments live in the chunk store:

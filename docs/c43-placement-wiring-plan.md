@@ -111,6 +111,21 @@ store node's reads in Go (0.9.13):
   creates/s at the API tier (≥ 300/s). The fixes above are stopgaps on
   today's path, not the target shape.
 
+**Then (2026-10-04, later):** traces of a warm burst (a loopback OTLP sink at
+100% sampling) put 64% of create time in image preparation: a node pull-slot
+wait of 11.8 s p50 and an attach of 7.9 s p50. PostgreSQL was idle (no lock
+waits) and the placement process averaged ~45% of a core. On the workers,
+env-io sat at 120-160% CPU: every nydusd attach built the Python reader's
+per-chunk state under one GIL. 0.9.18 loads only what nydusd reads:
+
+| Workers | Warm ready p50/p95/max (s) | Worker create p50/p95 (s) | Attach p50/p95 (s) |
+| --- | --- | --- | --- |
+| 0.9.6 agent, gateway 0.9.17 | 26 / 56 / 65 | 1.7 / 8.1 | 1.3 / 7.6 |
+| 0.9.18 agent | 19 / 36 / 44 | 0.7 / 1.4 | 0.3 / 1.1 |
+
+The burst drains at ~14-15 creates/s with 96 in flight. C4.3 phases 1-2 are
+next for creates/s; C3.2 for attaches per group.
+
 ## Today's create (PostgreSQL)
 
 Each step is marked by its fate: **D** deleted by the create phases, **W**

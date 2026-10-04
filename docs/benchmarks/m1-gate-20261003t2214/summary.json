@@ -1,0 +1,304 @@
+{
+ "burst_comparison": {
+  "chunk_store": {
+   "demand": {
+    "create_max": 8.998,
+    "create_p50": 4.067,
+    "import_sys_max": 3.995,
+    "import_sys_p50": 0.45,
+    "n": 20,
+    "pip_version_max": 2.791,
+    "pip_version_p50": 2.101,
+    "wall": 11.81
+   },
+   "traced": {
+    "create_max": 5.707,
+    "create_p50": 4.416,
+    "import_sys_max": 0.551,
+    "import_sys_p50": 0.317,
+    "n": 20,
+    "pip_version_max": 1.977,
+    "pip_version_p50": 1.663,
+    "wall": 7.5
+   }
+  },
+  "today": {
+   "demand": {
+    "create_max": 8.138,
+    "create_p50": 4.447,
+    "import_sys_max": 2.666,
+    "import_sys_p50": 1.554,
+    "n": 20,
+    "pip_version_max": 6.83,
+    "pip_version_p50": 5.124,
+    "wall": 12.889
+   },
+   "traced": {
+    "create_max": 6.87,
+    "create_p50": 3.729,
+    "import_sys_max": 1.955,
+    "import_sys_p50": 1.02,
+    "n": 20,
+    "pip_version_max": 5.944,
+    "pip_version_p50": 4.526,
+    "wall": 9.9
+   }
+  }
+ },
+ "criteria": [
+  {
+   "gate": "181/181 equal (contents, modes, owners, mtimes, xattrs)",
+   "measured": "181/181",
+   "name": "full_tree",
+   "status": "pass"
+  },
+  {
+   "gate": "17.5 GB +-5%",
+   "measured": "17.61 GB",
+   "name": "stored_bytes",
+   "status": "pass"
+  },
+  {
+   "gate": "<= 1.3x S10 (pip: <= 1.3x S12 local, else 2.5 s), trace replayed",
+   "measured": [
+    {
+     "command": "import_sys",
+     "index": 0,
+     "limit": 0.598,
+     "ok": false,
+     "ratio": 1.52,
+     "wall": 0.699
+    },
+    {
+     "command": "git_status",
+     "index": 0,
+     "limit": 0.325,
+     "ok": true,
+     "ratio": 0.24,
+     "wall": 0.061
+    },
+    {
+     "command": "pip_version",
+     "index": 0,
+     "limit": 2.327,
+     "ok": true,
+     "ratio": 1.19,
+     "wall": 2.13
+    },
+    {
+     "command": "import_sys",
+     "index": 60,
+     "limit": 0.559,
+     "ok": true,
+     "ratio": 0.95,
+     "wall": 0.407
+    },
+    {
+     "command": "git_status",
+     "index": 60,
+     "limit": 0.403,
+     "ok": true,
+     "ratio": 0.53,
+     "wall": 0.164
+    },
+    {
+     "command": "pip_version",
+     "index": 60,
+     "limit": 2.327,
+     "ok": true,
+     "ratio": 1.13,
+     "wall": 2.023
+    },
+    {
+     "command": "import_sys",
+     "index": 63,
+     "limit": 0.533,
+     "ok": true,
+     "ratio": 0.87,
+     "wall": 0.355
+    },
+    {
+     "command": "git_status",
+     "index": 63,
+     "limit": 0.65,
+     "ok": true,
+     "ratio": 0.35,
+     "wall": 0.175
+    },
+    {
+     "command": "pip_version",
+     "index": 63,
+     "limit": 2.431,
+     "ok": true,
+     "ratio": 1.07,
+     "wall": 2.007
+    },
+    {
+     "command": "import_sys",
+     "index": 72,
+     "limit": 0.65,
+     "ok": true,
+     "ratio": 0.71,
+     "wall": 0.356
+    },
+    {
+     "command": "git_status",
+     "index": 72,
+     "limit": 0.676,
+     "ok": true,
+     "ratio": 0.32,
+     "wall": 0.168
+    },
+    {
+     "command": "pip_version",
+     "index": 72,
+     "limit": null,
+     "note": "not in image",
+     "ok": null,
+     "ratio": null,
+     "wall": 0.396
+    },
+    {
+     "command": "import_sys",
+     "index": 90,
+     "limit": 0.468,
+     "ok": true,
+     "ratio": 0.98,
+     "wall": 0.354
+    },
+    {
+     "command": "git_status",
+     "index": 90,
+     "limit": 0.338,
+     "ok": true,
+     "ratio": 0.24,
+     "wall": 0.062
+    },
+    {
+     "command": "pip_version",
+     "index": 90,
+     "limit": 2.5,
+     "ok": true,
+     "ratio": null,
+     "wall": 1.839
+    },
+    {
+     "command": "import_sys",
+     "index": 130,
+     "limit": 0.52,
+     "ok": true,
+     "ratio": 0.68,
+     "wall": 0.272
+    },
+    {
+     "command": "git_status",
+     "index": 130,
+     "limit": 0.338,
+     "ok": true,
+     "ratio": 0.16,
+     "wall": 0.041
+    },
+    {
+     "command": "pip_version",
+     "index": 130,
+     "limit": 2.5,
+     "ok": true,
+     "ratio": null,
+     "wall": 1.17
+    },
+    {
+     "command": "import_sys",
+     "index": 170,
+     "limit": 0.52,
+     "ok": true,
+     "ratio": 0.85,
+     "wall": 0.341
+    },
+    {
+     "command": "git_status",
+     "index": 170,
+     "limit": 0.338,
+     "ok": true,
+     "ratio": 0.24,
+     "wall": 0.062
+    },
+    {
+     "command": "pip_version",
+     "index": 170,
+     "limit": 2.5,
+     "ok": true,
+     "ratio": null,
+     "wall": 1.482
+    }
+   ],
+   "name": "cold_commands",
+   "status": "fail"
+  },
+  {
+   "gate": "<= 5.5 s (S11)",
+   "measured": "7.50 s (20 sandboxes)",
+   "name": "burst_20",
+   "status": "fail"
+  },
+  {
+   "gate": "every write-path step: killed, no visible partial image, rerun converges",
+   "measured": {
+    "failed_steps": [],
+    "steps": 12
+   },
+   "name": "crash_injection",
+   "status": "pass"
+  },
+  {
+   "gate": "10 images unpacked, tree-equal and rebuilt by today's builder",
+   "measured": "10/10",
+   "name": "rollback_10",
+   "status": "pass"
+  }
+ ],
+ "generated": 1791079048.595412,
+ "pass": false,
+ "prefix": "spike/m1/20261003t2214",
+ "resources": {
+  "eur_estimate": 2.9,
+  "servers": [
+   {
+    "billed_hours": 4,
+    "eur": 1.84,
+    "hours": 3.68,
+    "name": "sandboxes-m1-20261003t2214-converter",
+    "type": "ccx63"
+   },
+   {
+    "billed_hours": 4,
+    "eur": 0.61,
+    "hours": 3.69,
+    "name": "sandboxes-m1-20261003t2214-store",
+    "type": "ccx43"
+   },
+   {
+    "billed_hours": 1,
+    "eur": 0.15,
+    "hours": 0.8,
+    "name": "sandboxes-m1-20261003t2214-w1",
+    "type": "ccx43"
+   },
+   {
+    "billed_hours": 1,
+    "eur": 0.15,
+    "hours": 0.78,
+    "name": "sandboxes-m1-20261003t2214-w2",
+    "type": "ccx43"
+   },
+   {
+    "billed_hours": 1,
+    "eur": 0.15,
+    "hours": 0.76,
+    "name": "sandboxes-m1-20261003t2214-b1",
+    "type": "ccx43"
+   }
+  ],
+  "vm_hours": 9.71
+ },
+ "run_id": "20261003t2214"
+}

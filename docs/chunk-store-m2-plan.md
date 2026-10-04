@@ -371,6 +371,84 @@ family (`WAVES` in `chunk_migrate.py`, the list above).
 - releasing the old closure's owner rows one by one. `release_owner` would
   drop the new closure too.
 
+### 5.2 Wave 1 (2026-10-04)
+
+**Status: switched in production.** 145 images (SWE-smith and OpenSWE,
+102,809 task rows) dispatch chunk-store roots served by nydusd.
+- **Infrastructure:**
+  - production chunk store 0.9.0 (docs/rollout-0.8.0.md, "0.9.0");
+  - store node at 0.9.2, workers and gateway at 0.9.3 (snapshot `439310398`).
+- **Conversion.** One CCX63 converter from the worker snapshot, 12 at a time,
+  with the gateway registry read policed to 800 Mbit/s.
+  - 145/145 converted and full-tree verified.
+  - 20 needed reruns: 18 on S3 read timeouts at registration or commit
+    (fixed in 0.9.1), and 2 on verification EIO from fills that missed
+    their deadline.
+- **Record:** 145 recorded and none refused.
+
+**First switch, and why it was reverted.** In the canaries from a cold fleet
+(20 sandboxes per family, `bench_rl_scale.py rollout --seed 7`), first commands
+were 2–3× faster, but each run lost 1 of 40 sandboxes:
+- **EIO:** an NBD read timed out, so `git status` failed after 76 s.
+- **An exec session timed out.**
+
+Root causes:
+- **Hetzner S3's tail.**
+  - From the store node, about 2.4% of sequential GETs stall for 6–60 s, and
+    a stalled key often stalls again on immediate retry.
+  - Stalls that follow the key defeat hedging.
+- **Warming missed objects workers read.** nydusd's virtual blobs read each
+  blob's tail and layout at first attach, and the warm list held only packs,
+  bootstraps and chunk maps.
+- **A stall became EIO.**
+  - The store node's 60 s fill deadline equalled nydusd's 60 s NBD timeout.
+  - Each expiry of that timeout marks one of the device's 4 connections dead
+    for good.
+- **A converter could starve worker fills.** It verifies through the same node.
+- **Serial attach.** Production keeps EROFS attach serial, and RAFS attaches
+  queued behind it at about 5 s each.
+
+Wave 1 was reverted from the journal in seconds and switched again after the
+fixes:
+- **0.9.2:** builders' fills are limited to half the S3 slots.
+- **0.9.3:**
+  - warming covers tails and layouts;
+  - `switch` warms each image and dispatches only images with zero failed
+    objects;
+  - the NBD timeout is 600 s, with nydusd retrying the node for 270 s;
+  - RAFS attaches get 8 slots of their own.
+
+**Canary after 0.9.3**, 20 sandboxes per family from a cold fleet:
+
+| Family | Rollouts | First command p50 / p95 (s) | Time to ready p50 (s) |
+| --- | --- | ---: | ---: |
+| SWE-smith, before (EROFS) | 20/20 | 3.53 / 8.01 | 63.7 |
+| SWE-smith, after | 20/20 | 1.25 / 7.12 | 75.3 |
+| OpenSWE, before | 20/20 | 2.98 / 3.40 | 56.6 |
+| OpenSWE, after | 20/20 | 0.91 / 1.08 | 70.6 |
+
+- The worker logged no NBD timeouts or I/O errors.
+- First commands meet the 1.3× gate.
+- Time to ready is 12–14 s slower. Each create's RAFS resolve takes
+  0.7–1.0 s, against 20 ms for EROFS. nydusd daemons start one at a time,
+  because the shared cache's TOC files have one temporary name, so a
+  20-sandbox burst on one node waits about 14 s. Next fix: a lock per blob
+  instead of one per node.
+
+**Before wave 2: the store node's cache.**
+- Wave 2 (TMax and Terminal-Lego, 3,584 images) is larger than the
+  240 GiB cache.
+- Its conversions verify by reading through the node, so they would evict
+  wave 1's warm extents.
+- With 0.9.3 an eviction costs latency, not errors, but warming before a
+  switch would be undone.
+- Options:
+  - builders' reads do not install into the cache (warm jobs still do);
+  - converters verify against S3 directly, accepting S3's tail;
+  - a larger node, or a second one for builders.
+
+  The first is the smallest.
+
 ## 6. Gates
 
 | Gate | Measure | When |

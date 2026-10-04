@@ -89,6 +89,21 @@ class FakeRegistry(RegistryClient):
         self.deleted.append((repository, reference))
 
 
+class CacheRegistryClientTests(unittest.TestCase):
+    def test_manifest_reads_take_the_base_clients_timeout(self) -> None:
+        # Since 2dac20a manifest_document passes timeout_seconds; without it in
+        # this override every registry prune crashed in its build-cache pass.
+        from types import SimpleNamespace
+        from ucloud_sandboxes.build_cache import _CacheRegistryClient
+        client = _CacheRegistryClient("http://127.0.0.1:9", timeout_seconds=5)
+        body = BytesIO(b'{"schemaVersion": 2}')
+        response = SimpleNamespace(headers={"Docker-Content-Digest": "sha256:" + "a" * 64}, read=body.read,
+                                   read1=body.read1, close=lambda: None)
+        with patch.object(client, "_request", return_value=response):
+            document, _ = client.manifest_document("cache", "latest", timeout_seconds=2)
+        self.assertEqual(document, {"schemaVersion": 2})
+
+
 class RegistryBuildCacheTests(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = FakeRegistry()

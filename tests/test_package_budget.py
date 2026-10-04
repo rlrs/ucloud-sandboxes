@@ -89,8 +89,10 @@ import unittest
 # reads install first-to-evict and never promote (M2 waves outsize the cache),
 # +20 only a blob's first nydusd starts alone, +10 converters split a wave
 # (--shard), +7 a converter's verification warms first-to-evict (keep false),
-# +3 env-io's LimitNOFILE 65536. Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 113_218
+# +3 env-io's LimitNOFILE 65536, +23 retention holds converted roots 72 h for
+# recording and the build cache's client takes timeout_seconds (registry prune
+# crashed hourly). Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 113_241
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

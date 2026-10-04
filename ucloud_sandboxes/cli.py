@@ -112,6 +112,7 @@ from .registry_retention import (
     ReferenceRetentionDecision,
     RegistryTagClock,
     environment_live_identities,
+    hold_unrecorded_conversions,
     execute_reference_prune,
     image_is_referenced,
     list_repository_tags,
@@ -2164,7 +2165,7 @@ def _run_reference_retention(
                         and (record.repository, record.digest) not in dispatched
                     ) | mapped_roots,
                 )
-                decision = decide(ENVIRONMENT_REASON, live)
+                decision = hold_unrecorded_conversions(decide(ENVIRONMENT_REASON, live), tag_time, now)
                 if decision.delete:
                     decision = replace(
                         decision,

@@ -22,6 +22,7 @@ from ucloud_sandboxes.registry_retention import (
     RegistryTagClock,
     environment_live_identities,
     execute_reference_prune,
+    hold_unrecorded_conversions,
     managed_images,
     routing_image_identities,
     select_lru_evictions,
@@ -213,6 +214,19 @@ class EnvironmentLivenessTests(unittest.TestCase):
             grace_seconds=3600, tag_time=at(2), now=NOW,
         )
         self.assertEqual([item.digest for item in decision.delete], [digest("6")])
+
+    def test_converted_roots_wait_their_recording_window(self) -> None:
+        # M2 wave 2: one hour of grace deleted 1,115 converted, unrecorded roots.
+        ages = {"rafs-root-new": 2 * 3600, "rafs-new": 2 * 3600, "rafs-root-stale": 80 * 3600,
+                "environment-root-old": 2 * 3600}
+        tags = [RegistryTag(ENVIRONMENTS, tag, digest(str(index + 1))) for index, tag in enumerate(ages)]
+        decision = select_unreferenced(tags, reason=ENVIRONMENT_REASON, repository=ENVIRONMENTS, live=set(),
+                                       grace_seconds=3600, tag_time=lambda tag: NOW - timedelta(seconds=ages[tag.tag]),
+                                       now=NOW)
+        self.assertEqual(len(decision.delete), 4)
+        held = hold_unrecorded_conversions(decision, lambda tag: NOW - timedelta(seconds=ages[tag.tag]), NOW)
+        self.assertEqual(sorted(item.tag for item in held.delete), ["environment-root-old", "rafs-root-stale"])
+        self.assertEqual(held.kept["conversion_window"], 2)
 
     def test_shared_layer_components_live_while_any_root_lists_them(self) -> None:
         registry = FakeRegistry()

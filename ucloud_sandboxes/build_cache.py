@@ -90,11 +90,14 @@ def _parse_owned_tag(tag: str) -> _OwnedCacheTag | None:
 
 
 class _CacheRegistryClient(RegistryClient):
-    def _json_request(self, path: str, *, headers: dict[str, str] | None = None):
+    def _json_request(self, path: str, *, headers: dict[str, str] | None = None,
+                      timeout_seconds: float | None = None):
         # Chunked reads prevent a trickling response from holding up optional
         # cache preparation indefinitely. A blocking read may overshoot the
         # deadline by one socket timeout, as with other registry bounded reads.
-        deadline = time.monotonic() + self.timeout_seconds
+        # (manifest_document passes timeout_seconds since 2dac20a: without it,
+        # every registry prune crashed in its build-cache pass.)
+        deadline = time.monotonic() + (timeout_seconds or self.timeout_seconds)
         response = self._request(path, headers=headers)
         try:
             body = _read_response_bytes(response, MAX_REGISTRY_JSON_RESPONSE_BYTES + 1, deadline=deadline)

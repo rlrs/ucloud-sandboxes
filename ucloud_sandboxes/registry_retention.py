@@ -20,7 +20,7 @@ used first (``select_lru_evictions``); see docs/managed-registry.md.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
@@ -327,6 +327,25 @@ def environment_components(
             raise ValueError(f"environment root {root} has an invalid component")
         components.append(normalized)
     return tuple(components)
+
+
+# Chunk store M2: a converter publishes rafs-root-* and rafs-* tags hours before
+# the gateway records them in image_roots, and only a recorded row keeps them
+# live. One hour of grace deleted 1,115 of wave 2's converted roots; they get
+# a fixed window to be recorded instead.
+CONVERSION_RECORD_SECONDS = 72 * 3600
+
+
+def hold_unrecorded_conversions(decision, tag_time, now, window=CONVERSION_RECORD_SECONDS):
+    """``decision`` without the chunk-store tags written within ``window``."""
+    cutoff = now - timedelta(seconds=window)
+    held = {record.digest for record in decision.delete if record.tag.startswith("rafs-")
+            and (written := tag_time(record)) is not None and written >= cutoff}
+    if not held:
+        return decision
+    kept = dict(decision.kept, conversion_window=len(held))
+    return replace(decision, delete=tuple(record for record in decision.delete if record.digest not in held),
+                   kept=kept)
 
 
 def environment_live_identities(

@@ -60,8 +60,9 @@ from tests.test_package_budget import package_lines
 # +6 a failed warm call skips the image, +27 a builder's reads never evict the
 # warm set, also across a restart, +32 only a blob's first nydusd starts alone,
 # +4 converters split a wave, +4 a verifier's warm keeps the warm set, +1 env-io's
-# fd limit.
-SUITE_LINE_BUDGET = 97_329
+# fd limit, +31 the conversion recording window and the cache client's real
+# signature.
+SUITE_LINE_BUDGET = 97_362
 SUITE = Path(__file__).resolve().parent
 
 

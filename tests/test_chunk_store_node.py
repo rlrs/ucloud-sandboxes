@@ -109,6 +109,30 @@ class ChunkStoreNodeTests(unittest.TestCase):
             ChunkStoreClient(store.url, READ).warm([{"key": key}])
         self.assertEqual(caught.exception.status_code, 401)
 
+    def test_a_slow_disk_read_never_stalls_other_requests(self):
+        # A replica on a Volume: a cold read takes milliseconds. It is faulted in
+        # on a read thread, never on the loop that serves every other request.
+        from unittest import mock
+        from ucloud_sandboxes import chunk_store_node
+        store, (hot, cold) = StoreNode(self, self.objects, self.root), self.keys[:2]
+        for key in (hot, cold):
+            store.get(key, 0, 4096)
+        slow, preadv, faulted = cold.split("/")[-1].removesuffix(".pack"), chunk_store_node.os.preadv, []
+
+        def disk(fd, buffers, offset, *flags):
+            if slow in chunk_store_node.os.readlink(f"/proc/self/fd/{fd}"):
+                faulted.append(threading.current_thread().name)
+                time.sleep(1.0)
+            return preadv(fd, buffers, offset, *flags)
+        with mock.patch.object(chunk_store_node.os, "preadv", disk), ThreadPoolExecutor(1) as pool:
+            pending = pool.submit(store.get, cold, 0, 4096)
+            time.sleep(.2)
+            started = time.monotonic()
+            self.assertEqual(store.get(hot, 100, 4096), self.packs[hot][100:4196])
+            self.assertLess(time.monotonic() - started, .5)
+            self.assertEqual(pending.result(), self.packs[cold][:4096])
+        self.assertTrue(faulted and all(name.startswith("chunk-store-read") for name in faulted), faulted)
+
     def test_concurrent_misses_on_one_extent_coalesce(self):
         store, key = StoreNode(self, self.objects, self.root), self.keys[0]
         self.objects.fault = lambda *_: ("stall", .3)

@@ -175,12 +175,12 @@ class ExtentCache:
         with self._guard:
             return self._lru.get(ident)
 
-    def open(self, ident, verify=True):
-        """A readable file of a verified extent, or None (absent or torn;
-        or, with ``verify`` false, not yet hashed since the restart)."""
+    def open(self, ident):
+        """A readable file of a verified extent (hashed on its first open since
+        the restart), or None (absent or torn)."""
         with self._guard:
             extent = self._lru.get(ident)
-            if extent is None or not (verify or extent.verified):
+            if extent is None:
                 return None
             self._lru.move_to_end(ident)
         try:
@@ -580,19 +580,16 @@ class ChunkStoreNode:
         for future in futures:
             future.result(timeout=max(0.001, deadline - time.monotonic()))
 
-    def read(self, relative, first=None, last=None, suffix=None, *, cached_only=False, background=False):
+    def read(self, relative, first=None, last=None, suffix=None, *, background=False):
         """(object size, start, length, [(file, offset, count)]) for one range.
 
         ``first``/``last`` are inclusive like HTTP; ``suffix`` is ``bytes=-n``;
         neither means the whole object. Raises LookupError, RangeNotSatisfiable,
-        TimeoutError or the fill's own error. ``cached_only`` never blocks: it
-        returns None when a fill or a first hash would be needed.
+        TimeoutError or the fill's own error.
         """
         digest, kind = object_identity(relative)
         deadline, filled, began = time.monotonic() + FILL_DEADLINE_SECONDS + 5, False, time.monotonic()
         total = self.cache.total(digest, kind)
-        if total is None and cached_only:
-            return None
         if total is None:  # One fill tells the size.
             probe = 0 if first is None else first // self.extent_bytes
             self._wait([self.extent((digest, kind, probe), background)], deadline)
@@ -606,15 +603,13 @@ class ChunkStoreNode:
             raise RangeNotSatisfiable(total)
         try:
             for _attempt in range(3):
-                pieces = self._open(digest, kind, first, last, verify=not cached_only)
+                pieces = self._open(digest, kind, first, last)
                 missing = [index for index, piece in pieces if piece is None]
                 if not missing:
                     break
                 for _, piece in pieces:
                     if piece is not None:
                         piece[0].close()
-                if cached_only:
-                    return None
                 filled = True
                 self._wait([self.extent((digest, kind, index), background) for index in missing], deadline)
             else:
@@ -634,8 +629,8 @@ class ChunkStoreNode:
             output.append((stream, low - index * size, high - low))
         return total, first, last - first + 1, output
 
-    def _open(self, digest, kind, first, last, verify=True):
-        return [(index, self.cache.open((digest, kind, index), verify))
+    def _open(self, digest, kind, first, last):
+        return [(index, self.cache.open((digest, kind, index)))
                 for index in range(first // self.extent_bytes, last // self.extent_bytes + 1)]
 
     def missing(self, objects):
@@ -1046,14 +1041,11 @@ class ChunkStoreServer:
             if isinstance(relative, tuple) and head:  # A blob's size: no bytes, whatever its size.
                 size = (await self._loop.run_in_executor(self._reads, self.blobs.layout, relative[1]))[0]
                 found = (size, 0, size, [])
-            elif isinstance(relative, tuple):  # A layout needs the index: always off the loop.
-                found = await self._loop.run_in_executor(self._reads, self.blobs.read, *relative, first, last, suffix,
-                                                         background)
-            else:
-                found = self.node.read(relative, first, last, suffix, cached_only=True, background=background)
-            if found is None:  # A fill or a first hash: off the loop.
-                found = await self._loop.run_in_executor(
-                    self._reads, partial(self.node.read, relative, first, last, suffix, background=background))
+            else:  # Off the loop: a layout needs the index, a fill S3, and the bytes the disk.
+                read = (partial(self.blobs.read, *relative, first, last, suffix, background)
+                        if isinstance(relative, tuple) else
+                        partial(self.node.read, relative, first, last, suffix, background=background))
+                found = await self._loop.run_in_executor(self._reads, _resident, read)
         except NotFound:
             return await _reply(writer, 404, {"error": "no such object"})
         except LookupError:
@@ -1082,6 +1074,24 @@ class ChunkStoreServer:
             for stream, _, _ in pieces:
                 stream.close()
         return True
+
+
+_FAULT = threading.local()
+
+
+def _resident(read):
+    """``read()``, with its ranges faulted into the page cache, so the loop's
+    sendfile never waits on the disk. On a Volume a cold read takes ~7 ms, and
+    on the loop it stalled every request: hot 64 KiB reads went from 1.3 to 88 ms
+    p50 behind 32 cold readers (2026-10-04)."""
+    found = read()
+    if not hasattr(_FAULT, "buffer"):
+        _FAULT.buffer = memoryview(bytearray(1 << 20))
+    for stream, offset, count in found[3]:
+        end = offset + count
+        while offset < end and (done := os.preadv(stream.fileno(), [_FAULT.buffer[:end - offset]], offset)) > 0:
+            offset += done
+    return found
 
 
 def _parse_head(head):

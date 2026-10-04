@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.9.11 - 2026-10-04 (store node only)
+
+- **A slow disk read no longer stalls the store node.**
+  - The node sent response bytes with `sendfile` on its one event loop. When those bytes were not in the page cache, the loop waited on the disk, and every other request waited with it.
+  - Local NVMe hid this. On the Volume (0.9.10), a cold read takes about 7 ms. Behind 32 cold readers, a hot 64 KiB read went from 1.3 to 88 ms p50, and a 512-rollout warm burst's first commands from 1.5 to 17 s p50 for SWE-smith.
+  - Now a read thread faults each response's ranges into the page cache first, so the loop's `sendfile` only copies from memory. The on-loop fast path for cached objects is gone: every read takes the read pool.
+
 ## 0.9.10 - 2026-10-04 (gateway and store node)
 
 - **The store node can keep its replica and index on a Volume** (`store_node.data_device`, a `/dev/disk/by-id/` path).

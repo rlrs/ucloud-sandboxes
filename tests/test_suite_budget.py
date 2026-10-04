@@ -63,8 +63,9 @@ from tests.test_package_budget import package_lines
 # fd limit, +31 the conversion recording window and the cache client's real
 # signature, +4 net: the replica, less the cold-placement test, +7 a switch
 # skips an image whose closure lost a component, +2 locators never wait on S3,
-# +29 store_node.data_device (schema, mounts before tokens, units require them).
-SUITE_LINE_BUDGET = 97_405
+# +29 store_node.data_device (schema, mounts before tokens, units require them),
+# +27 a slow disk read never stalls other requests.
+SUITE_LINE_BUDGET = 97_432
 SUITE = Path(__file__).resolve().parent
 
 

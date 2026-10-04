@@ -728,11 +728,15 @@ class LocalFleet:
     samples and the exec-prefix knob then raise. ``admission_wait_seconds``
     bounds the gateway's and each node's admission waits (production: 30 s),
     and ``max_concurrent_sandbox_creates`` caps the gateway's in-flight creates.
+    ``gateways`` servers share the routing and heartbeat state, as one host's
+    gateway processes do (nodes heartbeat to the first); ``create_placement``
+    is the deployment switch.
     """
 
     def __init__(self, *, nodes: int = 1, postgres: bool = False, heartbeat_ttl_seconds: int = 120,
                  node_processes: bool = False, admission_wait_seconds: float = 30.0,
-                 max_concurrent_sandbox_creates: int | None = None) -> None:
+                 max_concurrent_sandbox_creates: int | None = None, gateways: int = 1,
+                 create_placement: str = "ranked") -> None:
         if nodes < 1:
             raise ValueError("a fleet needs at least one node")
         if postgres and not POSTGRES_DSN:
@@ -746,13 +750,15 @@ class LocalFleet:
             {} if max_concurrent_sandbox_creates is None
             else {"max_concurrent_sandbox_creates": max_concurrent_sandbox_creates}
         )
+        self.gateway_options.update(create_placement=create_placement, process_count=gateways)
+        self.gateway_count = gateways
+        self.gateways: list = []
         self.tokens = FleetTokens.generate()
         self.deployment_id = "harness-" + secrets.token_hex(4)
         self.init_binary = root_owned_init_binary()
         self.nodes: list[FleetNode] = []
         self.gateway = None
         self.gateway_url = ""
-        self._gateway_thread: threading.Thread | None = None
         self._temporary: tempfile.TemporaryDirectory | None = None
         self._postgres_schema = ""
 
@@ -781,23 +787,25 @@ class LocalFleet:
         routing_file = self.routing_file = gateway_root / "routes.sqlite"
         if self.postgres:
             self._prepare_postgres_routing(routing_file)
-        self.gateway = build_server(
-            "127.0.0.1",
-            0,
-            gateway_root / "control-state.sqlite",
-            gateway_bearer_token=self.tokens.gateway,
-            sandbox_api_token=self.tokens.sandbox_api,
-            heartbeat_bearer_token=self.tokens.heartbeat,
-            node_control_bearer_token=self.tokens.node_control,
-            deployment_id=self.deployment_id,
-            routing_file=routing_file,
-            image_file=gateway_root / "images.json",
-            metrics_file=gateway_root / "metrics.sqlite",
-            heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
-            **self.gateway_options,
-        )
-        self.gateway.RequestHandlerClass.admission_wait_seconds = self.admission_wait_seconds
-        self._gateway_thread = _serve(self.gateway)
+        for _index in range(self.gateway_count):
+            server = build_server(
+                "127.0.0.1",
+                0,
+                gateway_root / "control-state.sqlite",
+                gateway_bearer_token=self.tokens.gateway,
+                sandbox_api_token=self.tokens.sandbox_api,
+                heartbeat_bearer_token=self.tokens.heartbeat,
+                node_control_bearer_token=self.tokens.node_control,
+                deployment_id=self.deployment_id,
+                routing_file=routing_file,
+                image_file=gateway_root / "images.json",
+                metrics_file=gateway_root / "metrics.sqlite",
+                heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
+                **self.gateway_options,
+            )
+            server.RequestHandlerClass.admission_wait_seconds = self.admission_wait_seconds
+            self.gateways.append((server, _serve(server)))
+        self.gateway = self.gateways[0][0]
         host, port = self.gateway.server_address
         self.gateway_url = f"http://{host}:{port}"
         for index in range(self.node_count):
@@ -828,15 +836,14 @@ class LocalFleet:
 
     def close(self) -> None:
         errors: list[BaseException] = []
-        if self.gateway is not None:
+        for server, thread in self.gateways:
             try:
-                self.gateway.shutdown()
-                if self._gateway_thread is not None:
-                    self._gateway_thread.join(timeout=5)
-                self.gateway.server_close()
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
             except BaseException as exc:
                 errors.append(exc)
-            self.gateway = None
+        self.gateways, self.gateway = [], None
         for node in self.nodes:
             try:
                 node.close()
@@ -945,9 +952,11 @@ class LocalFleet:
         body: bytes | None = None,
         token: str = "gateway",
         timeout: float = 30.0,
+        gateway: int = 0,
     ) -> Response:
         credential = {"gateway": self.tokens.gateway, "sandbox": self.tokens.sandbox_api}[token]
-        return _request(self.gateway_url, method, path, credential,
+        host, port = self.gateways[gateway][0].server_address
+        return _request(f"http://{host}:{port}", method, path, credential,
                         payload=payload, body=body, timeout=timeout)
 
     def create(self, sandbox_id: str, *, image: str = DEFAULT_IMAGE, **spec) -> dict:

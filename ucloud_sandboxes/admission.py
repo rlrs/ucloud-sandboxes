@@ -1,9 +1,26 @@
 """FIFO resource admission: wait before allocating, without retry races."""
 
 from collections import deque
+from contextvars import ContextVar
 from dataclasses import dataclass, field
+import math
 from threading import Condition, Event, get_ident
 import time
+
+# C4.3: a gateway with other candidates asks a create to wait less than the
+# node's admission_wait_seconds for a startup slot and memory, then reject, so
+# it can try the next node. Nodes without this ignore it and wait in full.
+ADMISSION_WAIT_HEADER = "X-UCloud-Admission-Wait"
+CREATE_ADMISSION_WAIT: ContextVar[float | None] = ContextVar("create_admission_wait", default=None)
+
+
+def parse_admission_wait(value: str | None) -> float | None:
+    """Header seconds; anything malformed leaves the node's own wait."""
+    try:
+        seconds = float(value) if value else None
+    except ValueError:
+        return None
+    return seconds if seconds is not None and math.isfinite(seconds) and seconds >= 0 else None
 
 
 @dataclass(eq=False)

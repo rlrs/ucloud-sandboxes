@@ -90,7 +90,7 @@ class _Connection:
         return cursor
 
 
-def _transactional(method):
+def _transactional(method, isolation=None):
     @wraps(method)
     def call(self, *args, **kwargs):
         if self._current.get() is not None:
@@ -104,7 +104,7 @@ def _transactional(method):
         delay = 0.001
         while True:
             try:
-                with self._transaction():
+                with self._transaction(isolation):
                     return method(self, *args, **kwargs)
             except (SerializationFailure, DeadlockDetected):
                 self.serialization_retries += 1
@@ -489,19 +489,54 @@ class PostgresRoutingStore(RoutingStore):
         with self._transaction() as conn:
             command = self._command_row(conn)
             result = super().allocate_sandbox_create_with_pending(allocation, **kwargs)
-            if command is not None:
-                if (
-                    command["kind"] != "create"
-                    or command["sandbox_id"] != allocation.sandbox_id
-                ):
-                    raise PlacementCommandRejected(
-                        "placement command allocation differs"
-                    )
-                conn.execute(
-                    "UPDATE gateway_commands SET generation=? WHERE command_id=?",
-                    (result[0].generation, command["command_id"]),
-                )
+            self._bind_command(conn, command, result[0])
             return result
+
+    def _bind_command(self, conn, command, route):
+        if command is None:
+            return
+        if command["kind"] != "create" or command["sandbox_id"] != route.sandbox_id:
+            raise PlacementCommandRejected("placement command allocation differs")
+        conn.execute(
+            "UPDATE gateway_commands SET generation=? WHERE command_id=?",
+            (route.generation, command["command_id"]),
+        )
+
+    # C4.3 creates run under READ COMMITTED: row locks, not a snapshot, make
+    # each read-check-write atomic, so no fleet-wide write can abort them. The
+    # writes still fence worker revisions, so wake snapshots see these routes.
+    def _lock_create(self, conn, sandbox_id):
+        # These creates of one sandbox queue on the key (a first create has no
+        # row to lock); its route row then orders every other writer, and each
+        # later statement reads the newest commit.
+        conn.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(?,0))",
+            (self.schema + "/create/" + sandbox_id,),
+        )
+        conn.execute("SELECT 1 FROM sandboxes WHERE sandbox_id=? FOR UPDATE", (sandbox_id,))
+
+    def reserve_create_intent(self, allocation, **kwargs):
+        with self._transaction() as conn:
+            self._lock_create(conn, allocation.sandbox_id)
+            # A claim rewrites prepared counts it read.
+            conn.execute("SELECT 1 FROM prepared_capacity ORDER BY prepare_id FOR UPDATE")
+            return super().reserve_create_intent(allocation, **kwargs)
+
+    def retarget_create_intent(self, route, allocation, **kwargs):
+        with self._transaction() as conn:
+            self._lock_create(conn, route.sandbox_id)
+            command = self._command_row(conn)
+            moved = super().retarget_create_intent(route, allocation, **kwargs)
+            if moved is not None:
+                self._bind_command(conn, command, moved)
+            return moved
+
+    def confirm_create(self, route):
+        with self._transaction() as conn:
+            conn.execute(
+                "SELECT 1 FROM sandboxes WHERE sandbox_id=? FOR UPDATE", (route.sandbox_id,)
+            )
+            return super().confirm_create(route)
 
     def migrate(self):
         """Explicit offline initialization; constructing the store never runs DDL.
@@ -642,7 +677,7 @@ class PostgresRoutingStore(RoutingStore):
                 raise
 
     @contextmanager
-    def _transaction(self):
+    def _transaction(self, isolation=None):
         current = self._current.get()
         if current is not None:
             yield current
@@ -658,9 +693,10 @@ class PostgresRoutingStore(RoutingStore):
                     acquired = time.monotonic()
                     with self._worker_turn(conn, span), _begun(
                         conn,
-                        "BEGIN ISOLATION LEVEL REPEATABLE READ"
-                        if self._placement_snapshot.get()
-                        else "BEGIN ISOLATION LEVEL SERIALIZABLE",
+                        "BEGIN ISOLATION LEVEL " + (isolation or (
+                            "REPEATABLE READ" if self._placement_snapshot.get()
+                            else "SERIALIZABLE"
+                        )),
                     ):
                         adapted = _Connection(conn)
                         token = self._current.set(adapted)
@@ -767,3 +803,7 @@ for _name in TRANSACTIONAL_METHODS:
         _name,
         _transactional(getattr(PostgresRoutingStore, _name)),
     )
+
+for _name in ("reserve_create_intent", "retarget_create_intent", "confirm_create"):
+    setattr(PostgresRoutingStore, _name, _transactional(
+        getattr(PostgresRoutingStore, _name), isolation="READ COMMITTED"))

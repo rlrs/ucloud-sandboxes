@@ -118,6 +118,13 @@ through host-wide keyed locks under `<state>/gateway-locks`. Per-process request
 threads, upload memory and PostgreSQL pools are divided by the process count.
 All replicas must run on one host.
 
+`gateway_create_placement` (default `"ranked"`) chooses how a create picks its
+worker. `"ranked"` scans the fleet's routes and reserves capacity in a
+transaction. `"power_of_k"` samples three capable workers from the heartbeats
+and lets the worker's admission decide, trying the next on a definite reject
+([c43-placement-wiring-plan.md](c43-placement-wiring-plan.md), phase 1).
+Workers older than the switch ignore its shorter admission wait.
+
 The deployment creates independent secrets for:
 
 - least-privileged public SDK access;

@@ -72,7 +72,10 @@ from tests.test_package_budget import package_lines
 # every node's startup slots, +2 and are not capped like 2 s pulls, +28 a nydusd
 # attach loads only what nydusd reads, +20 release keeps what another image of
 # the owner still needs.
-SUITE_LINE_BUDGET = 97_774
+# +352 C4.3 phase 1: two gateways over shared state in both create modes, the
+# power-of-k create loop's outcomes, the admission-wait header and the route
+# intent's fences on SQLite and PostgreSQL.
+SUITE_LINE_BUDGET = 98_126
 SUITE = Path(__file__).resolve().parent
 
 

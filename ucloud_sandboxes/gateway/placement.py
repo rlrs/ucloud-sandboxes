@@ -280,26 +280,7 @@ class Placement:
 
         routes: list[PlacementRecord] = list(self.routing_store.placement_routes_readonly())
         routes_by_id = {route.sandbox_id: route for route in routes}
-        for migration in self.routing_store.sandbox_migrations(active_only=True):
-            source = routes_by_id.get(migration.sandbox_id)
-            if source is None:
-                continue
-            # Before route commit the destination may already be allocating
-            # quota and restoring metadata, while its heartbeat still has no
-            # observation. Reserve the complete shape. After route commit the
-            # parked route owns disk itself, but a wake relocation still needs
-            # its CPU/RAM reservation through activation. Completion can then
-            # atomically turn that parked route into ``waking``.
-            reservation = source.resources
-            if migration.phase in {"routed", "activated"}:
-                reservation = ResourceQuantity(
-                    vcpu=source.resources.vcpu, memory_mb=source.resources.memory_mb,
-                )
-            routes.append(PlacementReservation(
-                reservation_id=migration.migration_id, node_id=migration.destination_node_id,
-                job_id=migration.destination_job_id, node_url=migration.destination_node_url,
-                resources=reservation, image=str(source.spec.get("image") or ""),
-            ))
+        routes.extend(migration_reservations(self.routing_store, routes_by_id.get))
         return routes
 
     def routes_for_node(self, heartbeat: NodeHeartbeat) -> list[PlacementRecord]:
@@ -450,6 +431,35 @@ class Placement:
                         yield span
                     finally:
                         span.set_attribute("gateway.placement.lock_hold_seconds", time.monotonic() - acquired)
+
+
+def migration_reservations(
+    routing_store: RoutingStore, source_route: Callable[[str], SandboxRoute | None],
+) -> list[PlacementReservation]:
+    """Incoming migrations' destination charges, which heartbeats lag."""
+
+    reservations = []
+    for migration in routing_store.sandbox_migrations(active_only=True):
+        source = source_route(migration.sandbox_id)
+        if source is None:
+            continue
+        # Before route commit the destination may already be allocating
+        # quota and restoring metadata, while its heartbeat still has no
+        # observation. Reserve the complete shape. After route commit the
+        # parked route owns disk itself, but a wake relocation still needs
+        # its CPU/RAM reservation through activation. Completion can then
+        # atomically turn that parked route into ``waking``.
+        reservation = source.resources
+        if migration.phase in {"routed", "activated"}:
+            reservation = ResourceQuantity(
+                vcpu=source.resources.vcpu, memory_mb=source.resources.memory_mb,
+            )
+        reservations.append(PlacementReservation(
+            reservation_id=migration.migration_id, node_id=migration.destination_node_id,
+            job_id=migration.destination_job_id, node_url=migration.destination_node_url,
+            resources=reservation, image=str(source.spec.get("image") or ""),
+        ))
+    return reservations
 
 
 def _sandbox_required_capabilities(spec: dict[str, Any]) -> tuple[str, ...]:

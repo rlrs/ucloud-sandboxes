@@ -12,6 +12,7 @@ from ..metrics import MetricsStore
 from ..registry_disk import RegistryDiskMonitor
 from ..routing import RoutingStore
 from ..telemetry import Telemetry
+from .create import CreatePlacement
 from .fleet import FleetView
 from .heartbeats import HeartbeatIngest, RebootReaper, WorkerDelete
 from .image_resolution import (
@@ -33,6 +34,7 @@ class GatewayServices:
     fleet: FleetView
     heartbeats: HeartbeatIngest
     placement: Placement
+    creates: CreatePlacement
     images: ImageResolution
 
 
@@ -42,7 +44,7 @@ def build_services(
     registry_worker_url: str | None, registry_usage_store: RegistryUsageStore | None,
     registry_disk_monitor: RegistryDiskMonitor | None, image_manager: ImageManager,
     deployment_id: str, dependency_resolver: Any, create_target_concurrency_per_node: int,
-    delete_on_worker: WorkerDelete | None,
+    delete_on_worker: WorkerDelete | None, api_processes: int = 1,
 ) -> GatewayServices:
     """The single wiring of the use cases; build_server owns their lifetime.
 
@@ -74,6 +76,12 @@ def build_services(
             routing_store, fleet, telemetry=telemetry,
             create_target_concurrency=create_target_concurrency_per_node,
             layer_cache=layer_cache, inflight=InflightCreatePlacements(),
+        ),
+        creates=CreatePlacement(
+            routing_store, store, heartbeat_ttl_seconds=heartbeat_ttl_seconds,
+            registry_refs=registry_refs, metrics_store=metrics_store, telemetry=telemetry,
+            target_creates_per_node=create_target_concurrency_per_node,
+            api_processes=api_processes,
         ),
         images=ImageResolution(
             image_manager=image_manager, registry_url=registry_url,

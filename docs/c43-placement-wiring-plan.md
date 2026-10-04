@@ -2,8 +2,9 @@
 
 Status: plan, 2026-10-03. Scoped against today's create path. The design is
 in [rl-scale-architecture-plan.md](rl-scale-architecture-plan.md) ("C4.3",
-"C3.2") and [rl-state-primitives.md §4](rl-state-primitives.md). The library
-`placement_choice.py` exists but is not wired.
+"C3.2") and [rl-state-primitives.md §4](rl-state-primitives.md). Phase 1
+wired the `placement_choice.py` library behind the switch (2026-10-04, not
+deployed; see "Phase 1 (implemented)").
 
 ## Findings
 
@@ -198,6 +199,56 @@ The switch is `gateway_create_placement: "ranked" | "power_of_k"`, default
 - **Node.** Parses the admission-wait header.
 - **Tests.** LocalFleet with two gateways over shared state, parametrized
   over both modes, plus an `environment_root` scenario.
+
+**Phase 1 (implemented, 2026-10-04).** Nothing deployed; the default stays
+`ranked`, whose behavior is unchanged.
+- **Switch.** `gateway_create_placement` in the deployment config, omitted
+  from `to_dict` at its default. `build_server(create_placement=)`.
+- **Create path.** `gateway/create.py` (`CreatePlacement`, one per process in
+  `GatewayServices.creates`) takes over `_create_sandbox_on_node_locked` after
+  the shared steps: image resolution, import, root dispatch, the existing-route
+  check and the warmup check. It then runs k = 3, 2 rounds, a 1 s
+  `X-UCloud-Admission-Wait` for every candidate but the last, and no header
+  (the node's full wait) for the last. Accept confirms, and the overlay charge
+  stays until a heartbeat settles it. A definite reject (including one at the
+  image pull) releases the charge and retargets. An ambiguous answer keeps the
+  route and the charge. When every candidate rejects, the route is deleted
+  and fenced demand is queued, with a 503 that names the last rejection. When
+  there is no candidate at all, the answer is today's `no_ready_node`.
+- **Routing.** `reserve_create_intent` is today's allocation;
+  `retarget_create_intent` moves the intent; `confirm_create` is the receipt.
+  On PostgreSQL all three run under READ COMMITTED. A per-sandbox advisory
+  transaction lock plus `FOR UPDATE` on the route row make each
+  read-check-write atomic. They keep the placement-command binding.
+- **Node.** The header sets a context variable that `startup_admission`
+  reads. It bounds the slot wait and, through the shared deadline, the memory
+  wait. It is capped at `admission_wait_seconds`; a malformed value is
+  ignored. The gateway strips a client's copy of the header.
+
+**Deviations:**
+- **Retarget is a fresh incarnation** (new generation and operation id), not
+  the same one moved. It matches today's delete and reallocate, so a late
+  answer from the rejecting node stays fenced.
+- **The route reference is re-taken per retarget**, because its owner names
+  the node and generation.
+- **`confirm_create` is the domain receipt** (`confirm_sandbox_observation`)
+  behind a row lock, not a hand-written UPDATE. Epoch adoption and activity
+  monotonicity stay in one place.
+- **Create writes still bump worker revisions**, as Risks requires.
+- **`api_processes` is the server's `process_count`.** The PostgreSQL
+  placement process passes 1, because in phase 1 it alone places creates.
+  API processes, which place in local mode now and in phase 2, pass
+  `gateway_processes`.
+- **A replayed create's definite reject** (`_retry_sandbox_create_on_assigned_node`)
+  skips the ranked `alternate_available` scan in this mode.
+
+**Residual risks:**
+- **Mixed modes.** A ranked allocation of the same new sandbox id that runs
+  concurrently in another process takes no advisory lock, so READ COMMITTED
+  could overwrite its route. Only the one placement process creates on
+  PostgreSQL, so both modes never run together.
+- **A replay that reaches the rejecting node** (the same retry race as
+  today's reselect) can leave an unrouted copy that nothing reaps (finding 6).
 
 **Phase 3 deletes:**
 - the ranked block of `control_plane.py`;

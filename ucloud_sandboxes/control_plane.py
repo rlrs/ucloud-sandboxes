@@ -82,6 +82,11 @@ from .storage_native_migration import (
 # Patch node transport via node_rpc; its pools, limits and opener are not imported here.
 from .gateway import node_rpc
 from .gateway.auth import _is_sdk_api_request, _token_matches
+from .gateway.create import (
+    SANDBOX_CREATE_PROXY_TIMEOUT_SECONDS, _is_duplicate_sandbox_response,
+    _node_create_definitively_rejected, _node_create_may_still_be_running,
+    _node_create_rejection_reason,
+)
 from .gateway.fleet import _heartbeat_has_image, _node_metadata, _requested_image_cache_keys
 from .gateway.heartbeats import PULL_TIMEOUT_SECONDS
 from .gateway.image_resolution import (
@@ -211,10 +216,6 @@ SANDBOX_IMAGE_WAIT_SECONDS = 2.0
 # durable queue every 2 s (a warm 512 burst deferred ~100 creates/10 s so).
 ENVIRONMENT_ATTACH_WAIT_SECONDS = 30.0
 MAX_BACKGROUND_CREATE_IMAGE_PULLS = 32
-# Creation includes quota allocation, rootfs preparation, networking, and
-# runsc startup. Those idempotent lifecycle operations can legitimately queue
-# behind other creates on a dense direct node.
-SANDBOX_CREATE_PROXY_TIMEOUT_SECONDS = 10 * 60
 DEFAULT_MAX_PROXY_BODY_BYTES = 256 * 1024 * 1024
 DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES = 2 * 1024 * 1024 * 1024
 _BUILD_CONTEXT_PROBE_MIN_BYTES = 1024 * 1024
@@ -467,6 +468,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     server_version = "ucloud-sandboxes-control-plane/0.1"
     routing_write_process = None
     dispatch_environment_roots = False
+    create_placement = "ranked"
 
     @traced_http_request
     def do_GET(self) -> None:
@@ -2650,6 +2652,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 )
                 return
 
+            if self.create_placement == "power_of_k":
+                self.services.creates.create(
+                    self, spec, root, excluded_job_ids=excluded_job_ids,
+                    last_failure_reason=last_failure_reason,
+                )
+                return
             layer_cache = self.services.placement.layer_cache
             if layer_cache is not None:
                 with self.telemetry.span(
@@ -2736,20 +2744,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 root.set_attribute(
                     "pending_resources", demand.pending_resources.to_dict()
                 )
-                self._write_json(
-                    {
-                        "error": "no ready node has resources for sandbox request",
-                        "error_code": last_failure_reason or "no_ready_node",
-                        "retryable": True,
-                        "pending_resources": demand.pending_resources.to_dict(),
-                        "oldest_pending_seconds": demand.oldest_pending_seconds,
-                    },
-                    status=HTTPStatus.SERVICE_UNAVAILABLE,
-                    headers={
-                        "Retry-After": str(SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS),
-                        "X-UCloud-Sandbox-Retryable": "true",
-                    },
-                )
+                self._write_no_ready_node(demand, last_failure_reason or "no_ready_node")
                 return
 
             assert route is not None
@@ -2853,17 +2848,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     return
                 root.status = "error"
                 root.set_attribute("outcome", "image_pull_failed")
-                self._write_json(
-                    {
-                        "error": (
-                            "image is not available on selected sandbox node; pull failed. "
-                            "For gateway-managed images, resubmit the build by image id "
-                            "before creating sandboxes."
-                        ),
-                        "pull": image_response.json(),
-                    },
-                    status=HTTPStatus.BAD_GATEWAY,
-                )
+                self._write_image_pull_failed(image_response)
                 return
 
             refreshed_heartbeat = self._heartbeat_for_route(
@@ -2986,16 +2971,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 else:
                     root.status = "error"
                     root.set_attribute("outcome", "invalid_create_confirmation")
-                    self._write_json(
-                        {
-                            "error": (
-                                "node create response did not confirm the assigned "
-                                "sandbox generation and spec hash"
-                            ),
-                            "retryable": True,
-                        },
-                        status=HTTPStatus.BAD_GATEWAY,
-                    )
+                    self._write_invalid_create_confirmation()
                     return
                 confirmed=self._confirm_sandbox_observation(route)
                 if confirmed is None:
@@ -3060,6 +3036,22 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         self.services.registry_refs.release_route_reference(removed)
             self._send_proxied_response(response)
 
+    def _write_no_ready_node(self, demand: Any, error_code: str) -> None:
+        self._write_json(
+            {
+                "error": "no ready node has resources for sandbox request",
+                "error_code": error_code,
+                "retryable": True,
+                "pending_resources": demand.pending_resources.to_dict(),
+                "oldest_pending_seconds": demand.oldest_pending_seconds,
+            },
+            status=HTTPStatus.SERVICE_UNAVAILABLE,
+            headers={
+                "Retry-After": str(SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS),
+                "X-UCloud-Sandbox-Retryable": "true",
+            },
+        )
+
     def _persist_failed_sandbox_demand(
         self,
         spec: SandboxSpec,
@@ -3076,8 +3068,24 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             failure_reason=failure_reason,
         )
 
-    def _confirm_sandbox_observation(self,route):
-        confirmed=self.routing_store.confirm_sandbox_observation(route)
+    def _write_image_pull_failed(self, image_response: ProxiedResponse) -> None:
+        self._write_json({
+            "error": (
+                "image is not available on selected sandbox node; pull failed. "
+                "For gateway-managed images, resubmit the build by image id "
+                "before creating sandboxes."
+            ),
+            "pull": image_response.json(),
+        }, status=HTTPStatus.BAD_GATEWAY)
+
+    def _write_invalid_create_confirmation(self) -> None:
+        self._write_json({
+            "error": "node create response did not confirm the assigned sandbox generation and spec hash",
+            "retryable": True,
+        }, status=HTTPStatus.BAD_GATEWAY)
+
+    def _confirm_sandbox_observation(self,route,confirm=None):
+        confirmed=(confirm or self.routing_store.confirm_sandbox_observation)(route)
         if confirmed is None:
             self._write_json({'error':'sandbox ownership ended before worker confirmation',
                 'error_code':'sandbox_observation_superseded','retryable':False},status=HTTPStatus.GONE)
@@ -3155,16 +3163,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             if not isinstance(record, dict) or not _sandbox_record_matches_route(
                 record, route, spec
             ):
-                self._write_json(
-                    {
-                        "error": (
-                            "node create response did not confirm the assigned "
-                            "sandbox generation and spec hash"
-                        ),
-                        "retryable": True,
-                    },
-                    status=HTTPStatus.BAD_GATEWAY,
-                )
+                self._write_invalid_create_confirmation()
                 return
             stored = self._confirm_sandbox_observation(_route_with_sandbox_record(route, record))
             if stored is None:
@@ -3199,7 +3198,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     failure_reason=rejection_reason,
                 )
                 excluded_job_ids = (route.job_id,)
-                if self.services.placement.alternate_available(
+                if self.create_placement == "power_of_k" or self.services.placement.alternate_available(
                     spec,
                     excluded_job_ids=excluded_job_ids,
                 ):
@@ -5576,6 +5575,7 @@ def build_server(
     environment_registry: object | None = None,
     dispatch_environment_roots: bool = False,
     import_external_images: bool = False,
+    create_placement: str = "ranked",
     registry_disk_monitor: RegistryDiskMonitor | None = None,
     max_concurrent_sandbox_creates: int = DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
     create_target_concurrency_per_node: int = (
@@ -5729,7 +5729,11 @@ def build_server(
         dependency_resolver=dependency_resolver,
         create_target_concurrency_per_node=int(create_target_concurrency_per_node),
         delete_on_worker=_worker_delete(node_control_bearer_token, resolved_telemetry),
+        api_processes=max(1, int(process_count)),
     )
+    if create_placement not in {"ranked", "power_of_k"}:
+        raise ValueError("create placement must be ranked or power_of_k")
+    BoundHandler.create_placement = create_placement
     BoundHandler.max_concurrent_sandbox_creates = max(
         0,
         int(max_concurrent_sandbox_creates),
@@ -5940,13 +5944,6 @@ def _sandbox_record_is_ready(
     """Return true only for externally usable lifecycle states."""
 
     return sandbox_route_state_from_observation(record.get("state")) is not None
-
-
-def _is_duplicate_sandbox_response(response: ProxiedResponse, sandbox_id: str) -> bool:
-    if response.status not in {HTTPStatus.BAD_REQUEST, HTTPStatus.CONFLICT}:
-        return False
-    error_message = str(response.json().get("error") or "").lower()
-    return "already exists" in error_message and sandbox_id.lower() in error_message
 
 
 
@@ -6203,14 +6200,6 @@ def _warmup_node_units(
     return max(0, min(units))
 
 
-def _node_create_may_still_be_running(response: ProxiedResponse) -> bool:
-    if response.transport_error_kind == "dns":
-        # DNS lookup failed before an HTTP connection could be established, so
-        # the node cannot have received or persisted this create operation.
-        return False
-    return response.status in {408, 425, 429, 500, 502, 503, 504}
-
-
 def _retryable_image_pull_response(response: ProxiedResponse) -> bool:
     if response.status != HTTPStatus.SERVICE_UNAVAILABLE:
         return False
@@ -6223,25 +6212,6 @@ def _retryable_image_pull_response(response: ProxiedResponse) -> bool:
 
 def _precise_elapsed_ms(started: float) -> float:
     return round(max(0.0, (time.monotonic() - started) * 1000), 3)
-
-
-def _node_create_definitively_rejected(response: ProxiedResponse) -> bool:
-    """An explicit pre-provisioning rejection is safe to place elsewhere."""
-
-    return _node_create_rejection_reason(response) is not None
-
-
-def _node_create_rejection_reason(response: ProxiedResponse) -> str | None:
-    if response.status != HTTPStatus.SERVICE_UNAVAILABLE:
-        return None
-    payload = response.json()
-    error_code = str(payload.get("error_code") or "")
-    if error_code in {
-        "node_admission_closed",
-        "node_active_admission_deferred",
-    }:
-        return error_code
-    return None
 
 
 def _image_build_response_terminal(payload: dict[str, Any]) -> bool:

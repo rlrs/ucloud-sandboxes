@@ -18,7 +18,7 @@ import time
 from typing import BinaryIO, Callable, Iterator, Sequence
 from uuid import uuid4
 
-from .admission import FairCapacity
+from .admission import CREATE_ADMISSION_WAIT, FairCapacity
 from .direct_provisioner import DirectSandboxProvisioner
 from .storage_native_migration import (
     StorageNativeSandboxManifest,
@@ -2486,8 +2486,11 @@ class DirectSandboxService:
         with self._capacity_guard:
             if not self._admission_open:
                 raise SandboxAdmissionClosedError("direct node admission is closed")
-        deadline = time.monotonic() + self.admission_wait_seconds
-        if not self._startup_slots.acquire(timeout=self.admission_wait_seconds, owner=owner):
+        wait = CREATE_ADMISSION_WAIT.get()
+        # The memory wait (_reserve_active_capacity) shares this deadline.
+        wait = self.admission_wait_seconds if wait is None else min(wait, self.admission_wait_seconds)
+        deadline = time.monotonic() + wait
+        if not self._startup_slots.acquire(timeout=wait, owner=owner):
             raise SandboxStartupBusyError("node startup admission wait deadline exceeded")
         self._startup_admission_state.admitted = True
         self._startup_admission_state.deadline = deadline

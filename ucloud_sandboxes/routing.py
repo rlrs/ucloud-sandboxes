@@ -1787,6 +1787,53 @@ class RoutingStore:
             self._claim_prepared_capacity_unlocked(conn, stored)
         return stored, pending
 
+    # C4.3 power-of-k creates (docs/c43-placement-wiring-plan.md, phase 1): the
+    # route intent is written before dispatch without a fleet capacity read;
+    # the chosen worker's admission is the authority.
+    def reserve_create_intent(
+        self, allocation: SandboxRouteAllocation, *, spec_hash: str, create_operation_id: str,
+    ) -> tuple[SandboxRoute, PendingSandboxDemand | None]:
+        """The route intent, or the route another create already holds."""
+        return self.allocate_sandbox_create_with_pending(
+            allocation, spec_hash=spec_hash, create_operation_id=create_operation_id,
+        )
+
+    def retarget_create_intent(
+        self, route: SandboxRoute, allocation: SandboxRouteAllocation, *, create_operation_id: str,
+    ) -> SandboxRoute | None:
+        """Move a create its worker definitively rejected to ``allocation``'s.
+
+        It becomes a fresh incarnation, as a delete and reallocation would, so
+        a late answer for the old one stays fenced. None if the route is no
+        longer that unconfirmed create.
+        """
+        with self._transaction() as conn:
+            current = self._get_sandbox_unlocked(conn, route.sandbox_id)
+            if (
+                current is None or current.delete_operation_id
+                or current.state.lower() not in {"creating", "unknown"}
+                or not _same_sandbox_route_incarnation(current, route)
+            ):
+                return None
+            row = conn.execute(
+                "SELECT generation FROM sandbox_generation_hwm WHERE sandbox_id = ?",
+                (route.sandbox_id,),
+            ).fetchone()
+            now = utc_now().isoformat()
+            stored = replace(
+                current, node_id=allocation.node_id, job_id=allocation.job_id,
+                node_url=allocation.node_url, node_epoch=allocation.node_epoch,
+                activity_epoch=max(0, allocation.activity_epoch),
+                generation=max(current.generation, int(row["generation"]) if row else 0) + 1,
+                create_operation_id=create_operation_id, created_at=now, updated_at=now,
+            )
+            self._write_sandbox(conn, stored)
+        return stored
+
+    def confirm_create(self, route: SandboxRoute) -> SandboxRoute | None:
+        """A worker's create receipt, applied only to the exact incarnation."""
+        return self.confirm_sandbox_observation(route)
+
     def prepare_sandbox_delete(self, sandbox_id: str) -> SandboxRoute | None:
         """Persist and reuse one delete operation for the current generation."""
 

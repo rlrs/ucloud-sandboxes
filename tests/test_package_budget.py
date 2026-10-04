@@ -114,9 +114,11 @@ import unittest
 # design sized the migration tool at ~400 with release).
 # +467 C4.3 phase 1: power-of-k creates behind gateway_create_placement
 # (gateway/create.py, READ COMMITTED route intents, the node's admission-wait
-# header); phase 3 deletes the ranked create path (plan: about -960).
+# header); phase 3 deletes the ranked create path (plan: about -960), +13 a
+# create pinned to its dispatched root skips the node pull (it resolved the
+# released old root).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 114_105
+PACKAGE_LINE_BUDGET = 114_118
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

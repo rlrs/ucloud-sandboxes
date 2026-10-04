@@ -4,6 +4,7 @@ import json
 import sqlite3
 from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 # Import the module, not the TestCase: discovery would rerun it here.
 from tests import test_environment_artifact as artifact_fixtures
@@ -265,6 +266,26 @@ class WaveTests(artifact_fixtures.EnvironmentArtifactTests):
 
 class GatewayDispatchTests(unittest.TestCase):
     SPEC = {"cpus": 1, "memory_mb": 256, "disk_mb": 1024, "network": "none"}
+
+    def test_a_create_with_its_dispatched_root_skips_the_node_pull(self):
+        # The node's pull resolves the annotation: after release, the deleted
+        # old root. A create pinned to the dispatched root attaches it itself.
+        from ucloud_sandboxes.control_plane import ControlPlaneHandler
+        roots = SimpleNamespace(dispatch_root=lambda repository, digest: D["5"] if repository == "managed/a" else None)
+        pulls = []
+        handler = SimpleNamespace(
+            services=SimpleNamespace(registry_refs=SimpleNamespace(
+                dependency_resolver=SimpleNamespace(image_roots=roots), requires_digest_identity=lambda image: False)),
+            create_image_pull_tasks=SimpleNamespace(run=lambda key, pull: pulls.append(key)))
+        handler._dispatched_root = lambda image: ControlPlaneHandler._dispatched_root(handler, image)
+        heartbeat = SimpleNamespace(job_id="j", node_epoch="e", node_url="http://n", images=[], image_cache=None)
+        image = "10.42.0.2:5000/managed/a@" + D["1"]
+        self.assertIsNone(ControlPlaneHandler._ensure_image_for_create(handler, heartbeat, image, D["5"]))
+        self.assertEqual(pulls, [])
+        with mock.patch("ucloud_sandboxes.control_plane._heartbeat_has_image", return_value=False):
+            ControlPlaneHandler._ensure_image_for_create(handler, heartbeat, image, D["6"])  # Not its dispatched root.
+            ControlPlaneHandler._ensure_image_for_create(handler, heartbeat, image)
+        self.assertEqual(len(pulls), 2)
 
     def test_clients_cannot_choose_a_root_and_only_capable_workers_take_one(self):
         with LocalFleet(nodes=1) as fleet:

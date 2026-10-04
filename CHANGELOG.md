@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.9.20 - 2026-10-04 (gateway only)
+
+- **A create pinned to its image's dispatched chunk-store root skips the node's separate image pull.** The create attaches that root itself. The pull carried no root, so the worker resolved the image's annotation, which is the old EROFS root. Once `chunk-migrate release` drops that root's leases, the prune deletes it, and the first create of a released image on a fresh node would fail. It also attached the old EROFS root for nothing on every burst.
+- **Ships C4.3 phase 1 switched off** (`gateway_create_placement: "ranked"`): power-of-k create placement, see `docs/c43-placement-wiring-plan.md`.
+
 ## 0.9.19 - 2026-10-04 (gateway only)
 
 - **`chunk-migrate release --wave N [--execute]`** (M2 step 4, EROFS only). For each switched image, it drops its durable owners' `:environment` leases on digests in the old closure that the new closure does not contain, and marks the row `released`. Retention already ignores a dispatched image's annotation, so its hourly prune then deletes the old roots and components nothing else keeps, and the registry sweep frees their bytes.

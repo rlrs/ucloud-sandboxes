@@ -138,6 +138,7 @@ from .managed_registry import (
     canonical_image_digest_ref,
     manifest_digest_from_image_ref,
     normalize_manifest_digest,
+    registry_repository_tag_from_image_ref,
 )
 from .managed_process import ManagedProcessRecord
 from .metrics import (
@@ -2786,7 +2787,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         spec.image
                     ),
                 )
-                image_response = self._ensure_image_for_create(heartbeat, spec.image)
+                image_response = self._ensure_image_for_create(heartbeat, spec.image, spec.environment_root)
                 span.set_attribute("cache_hit", image_response is None)
                 span.set_attribute("initial_cache_hit", initial_cache_hit)
                 span.set_attribute(
@@ -3146,7 +3147,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         if heartbeat is None:
             self._write_route_worker_unreachable(route)
             return
-        image_response = self._ensure_image_for_create(heartbeat, spec.image)
+        image_response = self._ensure_image_for_create(heartbeat, spec.image, spec.environment_root)
         if image_response is not None and image_response.status >= 400:
             self._send_proxied_response(image_response)
             return
@@ -5221,8 +5222,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         )
 
     def _ensure_image_for_create(
-        self, heartbeat: NodeHeartbeat, image: str
+        self, heartbeat: NodeHeartbeat, image: str, environment_root: str | None = None,
     ) -> ProxiedResponse | None:
+        if environment_root and self._dispatched_root(image) == environment_root:
+            # The create attaches its pinned chunk-store root itself. The node's
+            # pull would resolve the annotation, the released old root (M2 §3.3).
+            return None
         if not image.strip() or _heartbeat_has_image(
             heartbeat,
             image,
@@ -5260,6 +5265,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             if self._node_has_image(heartbeat, image, use_heartbeat_cache=False):
                 return None
             return self._pull_image_on_node(heartbeat, image)
+
+    def _dispatched_root(self, image: str) -> str | None:
+        resolver = getattr(self.services.registry_refs, "dependency_resolver", None)
+        roots = getattr(resolver, "image_roots", None)
+        coordinates = registry_repository_tag_from_image_ref(image)
+        digest = manifest_digest_from_image_ref(image)
+        return roots.dispatch_root(coordinates[0], digest) if roots and coordinates and digest else None
 
     def _warm_image_on_ready_nodes(
         self,

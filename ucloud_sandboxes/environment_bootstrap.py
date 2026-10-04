@@ -81,6 +81,9 @@ RuntimeDirectory=ucloud-environment
 RuntimeDirectoryMode=0700
 ExecStart=$UCLOUD_AGENT_BIN serve-environment-io --root $UCLOUD_STATE_DIR/environment-io --socket {SOCKET} --cache-bytes {options.environment_cache_bytes}{"" if options.environment_prefetch_enabled else " --disable-prefetch"}{"" if options.environment_attach_concurrency == 1 else f" --attach-concurrency {int(options.environment_attach_concurrency)}"}{" --shared-traces" if options.environment_shared_traces else ""}{chunk_flags}{registry_flags}
 Restart=no
+# Every attached image holds NBD connections, sockets and, for RAFS, its
+# bootstrap: a 512-rollout burst hit the default 1024 at about 140 images.
+LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target

@@ -201,6 +201,7 @@ class EnvironmentBootstrapTests(unittest.TestCase):
                       "environment_repository": "environments", "environment_trusted_keys_json": public}
             worker = render_vm_init_script(vm_fixtures.VmInitTests._options(**common))
             self.assertIn("serve-environment-io", worker)
+            self.assertIn("LimitNOFILE=65536", worker.split("ENVIRONMENT_IO_SERVICE")[1])  # Not 1024 (512-burst EMFILE).
             self.assertIn("systemctl start ucloud-environment-io.service", worker)
             self.assertNotIn("systemctl restart ucloud-environment-io.service", worker)
             self.assertNotIn("PartOf=", worker)

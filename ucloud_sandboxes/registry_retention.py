@@ -43,8 +43,10 @@ from .models import parse_iso_datetime
 
 SNAPSHOT_REASON = "unreferenced_snapshot"
 ENVIRONMENT_REASON = "unreferenced_environment"
-# Each batch holds the usage-store writer lock through its registry DELETEs.
-REFERENCE_PRUNE_BATCH = 64
+# Each batch's registry DELETEs run inside one write transaction on the usage
+# database, the lease fence. 64 held it near a minute: other writers (switch,
+# release, leases) timed out after 60 s, and a gateway start's read failed.
+REFERENCE_PRUNE_BATCH = 8
 # The snapshot repository holds tens of thousands of tags; keep output bounded.
 DECISION_SAMPLE_SIZE = 20
 _MAX_ENVIRONMENT_ROOT_BYTES = 1024 * 1024

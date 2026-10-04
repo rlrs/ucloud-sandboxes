@@ -79,9 +79,9 @@ from tests.test_package_budget import package_lines
 # +264 M2 OCI release: a fake Distribution registry, every reader after a
 # released manifest is deleted, release-oci's lease, route and build-input
 # fences, and a local fleet creating a released image by tag and by digest.
-# +257 C3.2 group create: packing, overflow, one pull per (node, image), re-plans,
+# +259 C3.2 group create: packing, overflow, one pull per (node, image), re-plans,
 # leftovers, member deletes, the queue end to end, group intent fences.
-SUITE_LINE_BUDGET = 98_667
+SUITE_LINE_BUDGET = 98_669
 SUITE = Path(__file__).resolve().parent
 
 

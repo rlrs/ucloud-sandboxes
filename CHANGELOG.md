@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.9.21 - 2026-10-04 (gateway and workers)
+
+- **The registry prune deletes 8 manifests per lease-fence transaction, not 64.** Each batch's registry DELETEs run inside one write transaction on the registry usage database. 64 held it for nearly a minute, so other writers (`chunk-migrate switch` and `release`, lease writes) timed out after 60 s, and a gateway start could not read it ("registry usage database is invalid or unavailable").
+- **M2 OCI release readers** (see Unreleased notes below): a released image resolves by tag and by digest after its OCI manifest is deleted, and `chunk-migrate release-oci` deletes non-build-input released images' manifests. Workers take the pull's root. Not run yet.
+- **C3.2 group create** (`POST/GET/DELETE /v1/sandboxes:batch`) ships with C4.3 phase 1. Both are active only with `gateway_create_placement: "power_of_k"`, which is off.
+
 ## 0.9.20 - 2026-10-04 (gateway only)
 
 - **A create pinned to its image's dispatched chunk-store root skips the node's separate image pull.** The create attaches that root itself. The pull carried no root, so the worker resolved the image's annotation, which is the old EROFS root. Once `chunk-migrate release` drops that root's leases, the prune deletes it, and the first create of a released image on a fresh node would fail. It also attached the old EROFS root for nothing on every burst.

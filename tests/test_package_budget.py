@@ -126,9 +126,11 @@ import unittest
 # +757 C3.2 group create on power-of-k (gateway/groups.py: /v1/sandboxes:batch,
 # per-worker multi-row intents and receipts, the sandbox_groups tables on both
 # stores, the durable queue's group command); no node batch endpoint. Over the
-# plan's ~420: the group row's replay fence and member-level outcomes.
+# plan's ~420: the group row's replay fence and member-level outcomes. +2 the
+# prune deletes 8 manifests per lease-fence transaction, not 64 (it held the
+# usage database near a minute: switch, release and gateway starts failed).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 115_106
+PACKAGE_LINE_BUDGET = 115_108
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

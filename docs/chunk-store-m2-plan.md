@@ -256,6 +256,20 @@ journal.
   bind mounts. Converters kept going through it, and every image they started
   failed with `NewConnectionError` (485, rerun with the wave). Stop converters
   first next time.
+- **Swap (13:20Z):** no CX53 capacity in hel1, so the node is a CX43 (8 shared
+  vCPUs, 16 GB, €16). 0.9.10's store init mounted the Volume; no refill.
+- **Burst on the Volume (0.9.11 fixes the first finding):**
+  - The node served `sendfile` on its one event loop; a cold Volume read stalled
+    every request (hot 64 KiB reads 1.3 → 88 ms p50 behind 32 cold readers).
+    0.9.11 faults ranges in on a read thread: 1.7 ms p50, 2.6 ms max.
+  - First command p50/p95 (s), CCX43 local NVMe → CX43 Volume 0.9.11. Cold
+    fleet: SWE-smith 0.7/6.7 → 1.2/9.5, TMax 4.7/9.8 → 1.7/3.8. Warm fleet:
+    SWE-smith 1.5/9.3 → 9.7/66.8, TMax 5.2/8.8 → 13.1/22.2. The warm fleet was
+    ready in 24 s (63 s before), so its first commands arrive together.
+  - Not Volume throughput: the Volume read at most 41 MB/s in the warm burst.
+- **Volumes scale out:** one Volume caps at ~320 MB/s (1 MiB, QD64); two read
+  together gave 321 + 319. Latency is per request: 4 KiB 0.7-1.1 ms, 128 KiB
+  1.3-1.6 ms, 1 MiB 5 ms at QD1. Price is per GB, so striping is free.
 
 ### 4.2 Conversion capacity
 

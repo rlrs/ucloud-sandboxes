@@ -516,6 +516,32 @@ snapshot `439378718`): 40/40 again, and no NBD timeouts or I/O errors.
   canaries. The comparison is indicative: the bursts ran under more
   contention than these canaries.
 
+### 5.4 After the waves: retire the registry Volume (decided 2026-10-04)
+
+The goal is **no registry Volume**. Environments live in the chunk store:
+S3 is the permanent store, and the store node is a full replica that can be
+turned off. Growing the Volume is not an option. The remaining reasons OCI
+lives on it, in order:
+
+1. **Release.** Delete the old EROFS roots and components of switched
+   images, and the OCI that is not a build input: about 2 TB.
+2. **Volume-free builds.**
+   - Builders read `FROM` layers from the chunk store, unpacked on demand;
+     `unpack-environment` is byte-exact.
+   - Builds write their results into the chunk store, keeping no OCI.
+   - Then build inputs no longer need to sit on the Volume.
+3. **New image sets become chunk-store preparations**, with no Volume
+   footprint. Example: SWE-bench Pro, 731 per-task images of 1.4 GB each,
+   about 550–770 GB of OCI.
+
+**Evals, 2026-10-04:**
+- **Terminal-Bench 2:** all 89 images are prepared.
+- **SWE-bench Verified and Multilingual:** the remaining 236 images are
+  preparing on the existing path, then migrate with M2.
+- **TBLite and Senior:** run base-only. The bases are prepared, and the task
+  steps are a live build at eval time.
+- **SWE-bench Pro is skipped** until step 2 exists.
+
 ## 6. Gates
 
 | Gate | Measure | When |

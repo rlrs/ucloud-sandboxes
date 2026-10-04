@@ -574,3 +574,31 @@ Each step has its own backup: `deployment.before-dispatch-roots.json`,
     - `chunk-migrate record`;
     - warm the store node;
     - switch.
+
+## 0.9.1 to 0.9.3: what M2 wave 1 found (2026-10-04)
+
+The findings are in [chunk-store-m2-plan.md](chunk-store-m2-plan.md) §5.2.
+
+**0.9.1 and 0.9.2: the store node only.**
+- Built with `package_091.py` / `package_092.py`: the 0.9.0 sandbox bundle with
+  the new wheel. Bundles `33645ae1…` and `4cae6041…`.
+- Deployed by store-role `init-vm` again, as `ucloud`. The extent cache
+  survives (39.7 GB kept).
+- The converter took 0.9.1's index client through `PYTHONPATH`.
+- The gateway and workers stayed on 0.9.0.
+
+**0.9.3: gateway and workers.**
+- **Build.** Wheel `0588a5a8…`. Bundles: sandbox `3e898e08…` (nydusd
+  unchanged), builder `4148f4bb…`.
+- **Gateway:** `gateway_upgrade_093.py` at 01:44:50Z.
+- **Snapshot `439310398`** from `439298797`, through the usual source canary
+  (create 0.92 s, park 0.27 s, wake 0.36 s), then `set_snapshot_093.py`.
+- **Checked on a converter:** an attached nydusd device reports `io_timeout`
+  600000 ms and `retry_limit` 8, and mounts and reads 362 MB.
+
+**Wave 1.**
+- Reverted at about 01:30Z, while S3 kept failing fills.
+- Switched again with 0.9.3's warming switch: 142, then 3 more on rerun,
+  145 in total.
+- Cold-fleet canary: 40/40 rollouts, and no NBD timeouts or I/O errors.
+- The converter `sandboxes-m2-conv-1` was deleted after wave 1.

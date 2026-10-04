@@ -186,6 +186,31 @@ class ChunkStoreNodeTests(unittest.TestCase):
         store.get(a, MIB, 10)  # The evicted extent: least recently used.
         self.assertEqual(self.s3_gets(), before + 1)
 
+    def test_a_builders_reads_never_evict_the_warm_set(self):
+        # Before M2 wave 2: converters verify through the node, and a wave is
+        # larger than the cache; their extents go first, the warm set stays.
+        store, (a, b, c) = StoreNode(self, self.objects, self.root, budget=3 * MIB), self.keys
+        store.get(a, 0, 10)
+        store.get(a, MIB, 10)  # Two warm extents (a worker).
+        for offset in (0, MIB, 0, MIB):  # A builder reads b twice over: no promotion.
+            store.get(b, offset, 10, WRITE)
+        store.get(c, 0, 10, WRITE)
+        before = self.s3_gets()
+        store.get(a, 0, 10)
+        store.get(a, MIB, 10)
+        self.assertEqual(self.s3_gets(), before)  # Still cached.
+        cache = store.node.cache
+        self.assertEqual([ident[0] for ident in cache._lru][-2:], [a.split("/")[-1][:-5]] * 2)
+        b_digest = b.split("/")[-1][:-5]
+        warm = ChunkStoreClient(store.url, WRITE)
+        self.assertEqual(warm.wait(warm.warm([{"key": c, "ranges": None}])["job"], timeout=30)["failed"], 0)
+        self.assertNotIn(c.split("/")[-1][:-5], [ident[0] for ident in list(cache._lru)[:1]])  # Warm promotes.
+        self.assertEqual(store.get(b, 0, 10, WRITE), self.packs[b][:10])  # A full warm cache still serves it.
+        self.assertEqual(next(iter(cache._lru))[0], b_digest)
+        store.stop()
+        store.start()  # A restart orders by mtime: the builder's cold extent stays first.
+        self.assertEqual(next(iter(store.node.cache._lru))[0], b_digest)
+
     def test_a_restart_drops_torn_and_partial_files_and_never_serves_them(self):
         store, key = StoreNode(self, self.objects, self.root), self.keys[0]
         store.get(key, 0, 10)

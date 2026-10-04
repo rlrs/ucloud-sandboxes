@@ -57,8 +57,9 @@ from tests.test_package_budget import package_lines
 # owners (routes keep theirs), revert, +22 presigned reads retry only faults,
 # +16 worker fills never wait behind a builder's stalled fills, +26 warm coverage
 # and a cold image is never switched, +17 RAFS attaches never queue behind EROFS,
-# +6 a failed warm call skips the image.
-SUITE_LINE_BUDGET = 97_259
+# +6 a failed warm call skips the image, +27 a builder's reads never evict the
+# warm set, also across a restart.
+SUITE_LINE_BUDGET = 97_287
 SUITE = Path(__file__).resolve().parent
 
 

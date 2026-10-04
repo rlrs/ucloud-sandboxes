@@ -172,14 +172,16 @@ class ExtentCache:
         with self._guard:
             return self._lru.get(ident)
 
-    def open(self, ident, verify=True):
+    def open(self, ident, verify=True, touch=True):
         """A readable file of a verified extent, or None (absent or torn;
-        or, with ``verify`` false, not yet hashed since the restart)."""
+        or, with ``verify`` false, not yet hashed since the restart).
+        ``touch`` false (a builder's read) leaves its place in the LRU."""
         with self._guard:
             extent = self._lru.get(ident)
             if extent is None or not (verify or extent.verified):
                 return None
-            self._lru.move_to_end(ident)
+            if touch:
+                self._lru.move_to_end(ident)
         try:
             stream = open(extent.path, "rb", buffering=0)
         except FileNotFoundError:
@@ -228,11 +230,26 @@ class ExtentCache:
         name = self.tmp / f"{os.getpid()}-{threading.get_ident()}-{secrets.token_hex(8)}"
         return os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600), name
 
-    def install(self, ident, temporary, size, total, sha256):
-        """Rename a complete, hashed file into place (one reservation of ``size`` ends)."""
+    def touch(self, ident):
+        """Most recently used, also across a restart (a warm job keeps it)."""
+        with self._guard:
+            extent = self._lru.get(ident)
+            if extent is not None:
+                self._lru.move_to_end(ident)
+        if extent is not None:
+            try:
+                os.utime(extent.path)
+            except FileNotFoundError:
+                pass  # Evicted meanwhile.
+
+    def install(self, ident, temporary, size, total, sha256, cold=False):
+        """Rename a complete, hashed file into place (one reservation of ``size`` ends).
+        ``cold``: first to be evicted (a builder's read), also after a restart."""
         directory = self.root / ident[0][:2]
         directory.mkdir(mode=0o700, exist_ok=True)
         path = directory / f"{ident[0]}.{ident[1]}.{ident[2]}.{total}.{sha256}"
+        if cold:
+            os.utime(temporary, ns=(0, 0))  # Restarts order the LRU by mtime.
         os.replace(temporary, path)
         extent = Extent(path, size, total, sha256, True)
         with self._guard:
@@ -246,6 +263,8 @@ class ExtentCache:
             self._totals[ident[:2]] = total
             self.bytes += size
             self._evict()
+            if cold and ident in self._lru:  # After evicting: the reader needs it once.
+                self._lru.move_to_end(ident, last=False)
         return extent
 
     def _evict(self):
@@ -518,7 +537,7 @@ class ChunkStoreNode:
         with self._guard:
             self.counters[name] += value
 
-    def extent(self, ident, background=False):
+    def extent(self, ident, background=False, keep=True):
         """A Future of the installed extent ``ident`` = (digest, kind, index)."""
         with self._guard:
             future = self._inflight.get(ident)
@@ -531,7 +550,7 @@ class ChunkStoreNode:
             self._settle(ident, future, existing, None)
             return future
         try:
-            (self._background_fills if background else self._fills).submit(self._fill, ident, future, background)
+            (self._background_fills if background else self._fills).submit(self._fill, ident, future, background, keep)
         except RuntimeError as exc:  # Closing: nobody may wait on a fill that never runs.
             self._settle(ident, future, None, exc)
         return future
@@ -541,7 +560,7 @@ class ChunkStoreNode:
             self._inflight.pop(ident, None)
         future.set_exception(error) if error is not None else future.set_result(value)
 
-    def _fill(self, ident, future, background=False):
+    def _fill(self, ident, future, background=False, keep=True):
         digest, kind, index = ident
         start, total = index * self.extent_bytes, self.cache.total(digest, kind)
         try:
@@ -556,7 +575,7 @@ class ChunkStoreNode:
                     self.count("fill_rejects")
                     raise RegistryRequestError(502, "GET", object_key(digest, kind), "object identity mismatch")
                 self.cache.reserve(size)
-                extent = self.cache.install(ident, path, size, total, sha256)
+                extent = self.cache.install(ident, path, size, total, sha256, cold=not keep)
             except BaseException:
                 Path(path).unlink(missing_ok=True)
                 raise
@@ -584,7 +603,7 @@ class ChunkStoreNode:
             return None
         if total is None:  # One fill tells the size.
             probe = 0 if first is None else first // self.extent_bytes
-            self._wait([self.extent((digest, kind, probe), background)], deadline)
+            self._wait([self.extent((digest, kind, probe), background, keep=not background)], deadline)
             filled, total = True, self.cache.total(digest, kind)
         if suffix is not None:
             first, last = max(0, total - suffix), total - 1
@@ -595,7 +614,7 @@ class ChunkStoreNode:
             raise RangeNotSatisfiable(total)
         try:
             for _attempt in range(3):
-                pieces = self._open(digest, kind, first, last, verify=not cached_only)
+                pieces = self._open(digest, kind, first, last, verify=not cached_only, touch=not background)
                 missing = [index for index, piece in pieces if piece is None]
                 if not missing:
                     break
@@ -605,7 +624,8 @@ class ChunkStoreNode:
                 if cached_only:
                     return None
                 filled = True
-                self._wait([self.extent((digest, kind, index), background) for index in missing], deadline)
+                self._wait([self.extent((digest, kind, index), background, keep=not background)
+                            for index in missing], deadline)
             else:
                 raise TimeoutError("chunk store extents were evicted while being read")
         except BaseException:
@@ -623,8 +643,8 @@ class ChunkStoreNode:
             output.append((stream, low - index * size, high - low))
         return total, first, last - first + 1, output
 
-    def _open(self, digest, kind, first, last, verify=True):
-        return [(index, self.cache.open((digest, kind, index), verify))
+    def _open(self, digest, kind, first, last, verify=True, touch=True):
+        return [(index, self.cache.open((digest, kind, index), verify, touch))
                 for index in range(first // self.extent_bytes, last // self.extent_bytes + 1)]
 
     def warm(self, items, concurrency=8):
@@ -665,6 +685,7 @@ class ChunkStoreNode:
             with job.guard:
                 job.counts["extents"] += 1
             if self.cache.contains(ident):
+                self.cache.touch(ident)  # Warmed means kept: also a builder's cold extent.
                 with job.guard:
                     job.counts["cached"] += 1
             else:
@@ -965,7 +986,7 @@ class ChunkStoreServer:
                 found = await self._loop.run_in_executor(self._reads, self.blobs.read, *relative, first, last, suffix,
                                                          background)
             else:
-                found = self.node.read(relative, first, last, suffix, cached_only=True)
+                found = self.node.read(relative, first, last, suffix, cached_only=True, background=background)
             if found is None:  # A fill or a first hash: off the loop.
                 found = await self._loop.run_in_executor(
                     self._reads, partial(self.node.read, relative, first, last, suffix, background=background))

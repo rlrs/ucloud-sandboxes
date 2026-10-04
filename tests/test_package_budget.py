@@ -85,8 +85,10 @@ import unittest
 # covers nydusd blob tails and layouts, and an M2 switch dispatches only a fully
 # warm image, +17 a stalled read is latency, not EIO (nydusd retries the node for
 # 270 s inside a 600 s NBD timeout), and RAFS attaches have their own 8 slots,
-# +3 a switch skips an image whose warm call fails. Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 113_157
+# +3 a switch skips an image whose warm call fails, +21 a builder's store-node
+# reads install first-to-evict and never promote (M2 waves outsize the cache).
+# Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 113_178
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

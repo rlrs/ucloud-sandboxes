@@ -9,11 +9,13 @@ Wake commands already carry the worker's durable generation/operation fence.
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 import concurrent.futures
 from datetime import datetime, timedelta
 from hashlib import sha256
 import json
 import logging
+import re
 import threading
 from uuid import UUID, uuid4
 from typing import NamedTuple
@@ -552,6 +554,23 @@ class IsolatedPlacementResponses:
                 loop.close()
 
 
+DEFERRAL_LOG_SECONDS = 10
+
+
+def _error_code(body):
+    """A deferred answer's error code (or transport ``code``) and the gist of
+    its message, digits elided: node_active_admission_deferred covers both
+    startup slots and memory, and only the message tells them apart."""
+    try:
+        decoded = json.loads(body[:4096]) if body and len(body) <= 4096 else None
+    except ValueError:
+        return ""
+    if not isinstance(decoded, dict):
+        return ""
+    gist = re.sub(r"[0-9a-f-]{8,}|\d+(\.\d+)?", "#", str(decoded.get("error") or ""))[:72]
+    return f"{decoded.get('error_code') or decoded.get('code') or ''}: {gist}"
+
+
 class PlacementQueueWorker:
     def __init__(
         self,
@@ -567,6 +586,9 @@ class PlacementQueueWorker:
         self.budgets = {"create": create_concurrency, "wake": wake_concurrency}
         self.lease = lease_seconds
         self.hints = None
+        # Why commands were deferred, (status, error_code), logged every
+        # DEFERRAL_LOG_SECONDS: a burst's retries name their cause.
+        self.deferrals = Counter()
 
     async def _complete(self, command, status, headers, body):
         completed = await self.store.complete(command, status, headers, body)
@@ -621,6 +643,7 @@ class PlacementQueueWorker:
             status, headers, body = rpc.result()
             if status in (408, 425, 429) or status >= 500:
                 if command["deadline"] > utc_now():
+                    self.deferrals[(command.get("kind"), status, _error_code(body))] += 1
                     await self.store.defer(
                         command, delay=min(2, 0.05 * 2 ** min(command["attempts"], 5))
                     )
@@ -637,6 +660,7 @@ class PlacementQueueWorker:
                     b'{"error":"placement outcome is unknown; retry the same sandbox identity","retryable":true}',
                 )
             else:
+                self.deferrals[(command.get("kind"), "connection", "")] += 1
                 await self.store.defer(command)
         finally:
             rpc.cancel()
@@ -654,7 +678,7 @@ class PlacementQueueWorker:
         )
         self.hints.start()
         tasks = {kind: set() for kind in self.budgets}
-        next_prune = 0
+        next_prune = next_deferral_log = 0
         try:
             async with aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=660, connect=10),
@@ -688,6 +712,12 @@ class PlacementQueueWorker:
                         )
                         changed |= bool(commands)
                     now = asyncio.get_running_loop().time()
+                    if self.deferrals and now >= next_deferral_log:
+                        LOGGER.warning("placement deferrals in %ds: %s", DEFERRAL_LOG_SECONDS, ", ".join(
+                            f"{kind} {status} {code or '-'} x{count}"
+                            for (kind, status, code), count in self.deferrals.most_common()))
+                        self.deferrals.clear()
+                        next_deferral_log = now + DEFERRAL_LOG_SECONDS
                     if now >= next_prune:
                         try:
                             await self.store.prune()

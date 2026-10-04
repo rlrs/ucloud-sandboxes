@@ -423,6 +423,34 @@ async def _blocked(*_args, **_kwargs):
     await asyncio.Event().wait()
 
 
+class PlacementDeferralTests(unittest.IsolatedAsyncioTestCase):
+    async def test_deferred_commands_are_counted_by_status_and_error_code(self):
+        # A burst's retries name their cause (2026-10-04: 182 of 512 creates
+        # were retried, and nothing said why).
+        store = Mock(defer=AsyncMock(), complete=AsyncMock(), renew=AsyncMock(return_value=True))
+        worker = PlacementQueueWorker(store, origin="http://gateway", token="t")
+        answers = [(503, b'{"error_code":"node_active_admission_deferred","error":"waited 30.0 s for memory"}'),
+                   (429, b"busy"), (503, b'{"error_code":"node_active_admission_deferred","error":"waited 29.5 s for '
+                                     b'memory"}'), (502, b'{"code":"node_transport_error"}'), (201, b"{}")]
+        for status, body in answers:
+            response = AsyncMock(status=status, headers={})
+            response.content.iter_chunked = lambda _size, body=body: _chunks(body)
+            session = Mock(post=Mock(return_value=AsyncMock(__aenter__=AsyncMock(return_value=response),
+                                                             __aexit__=AsyncMock(return_value=False))))
+            command = {"command_id": uuid4(), "claim_token": uuid4(), "kind": "create", "path": "/v1/sandboxes",
+                       "body": b"{}", "headers": {}, "attempts": 1, "generation": None,
+                       "deadline": utc_now() + timedelta(seconds=60)}
+            await worker.execute(session, command)
+        self.assertEqual(dict(worker.deferrals), {
+            ("create", 503, "node_active_admission_deferred: waited # s for memory"): 2, ("create", 429, ""): 1,
+            ("create", 502, "node_transport_error: "): 1})
+        self.assertEqual((store.defer.await_count, store.complete.await_count), (4, 1))
+
+
+async def _chunks(body):
+    yield body
+
+
 class PlacementLoopTerminationTests(unittest.IsolatedAsyncioTestCase):
     """Python 3.10's wait_for, used inside psycopg, can return a result that
     raced cancellation (gh-86296); the caller then enters its next wait."""

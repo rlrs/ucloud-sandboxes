@@ -67,7 +67,8 @@ from tests.test_package_budget import package_lines
 # +27 a slow disk read never stalls other requests, +5 and is timed as a read,
 # +228 ucloud-chunk-serve: byte-for-byte parity with the Python node over real
 # converted blobs (reads, errors, a miss passed through), its store init and repack.
-SUITE_LINE_BUDGET = 97_668
+# +31 placement deferrals are counted by status, code and message gist.
+SUITE_LINE_BUDGET = 97_699
 SUITE = Path(__file__).resolve().parent
 
 

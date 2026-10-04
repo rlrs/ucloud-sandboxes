@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.9.14 - 2026-10-04 (gateway only)
+
+- **The placement worker says why it deferred commands.** Every 10 s with deferrals, it logs a warning counting them by kind, status, error code (or transport `code`) and the gist of the message, digits elided. A warm 512-rollout burst retried 182 creates up to 34 times, and nothing recorded the cause. `node_active_admission_deferred` covers both startup slots and memory, so the message is part of the key.
+
 ## 0.9.13 - 2026-10-04 (gateway and store node)
 
 - **The store node's reads move to Go: `ucloud-chunk-serve`** (`runtime/chunk_serve`), enabled by pinning its sha256 in `store_node.native_server_sha256`.

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.9.2 - 2026-10-04 (store node only)
+
+- **Worker fills never wait behind a builder's.**
+  - On the store node, requests with the write token (converters verifying through the node, and warm jobs) fill from their own pool of half the S3 concurrency, unhedged.
+  - Worker fills (the read token) always have the other half.
+  - Why: M2 wave 1's post-switch canary lost one sandbox to EIO. While the converter verified 20 large images through the node, a worker's fill missed the 60 s deadline and its NBD read timed out.
+- **M1 gate:** the baseline worker drops production's chunk store and root dispatch.
+
 ## 0.9.1 - 2026-10-03 (store node and converters only)
 
 - **Chunk-index registration survives S3's tail.**

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.9.3 - 2026-10-04
+
+What M2 wave 1's post-switch canaries found (wave 1 was reverted until this ships):
+- **A stalled read is latency, not EIO.**
+  - nydusd sets a fixed 60 s NBD timeout, and each expiry marks one of the device's connections dead for good.
+  - Hetzner S3 stalls about 2% of GETs for 6–60 s, often again on retry of the same key.
+  - Now the device timeout is 600 s, set after nydusd connects, and nydusd retries the store node for up to 270 s. Each retry joins the node's in-flight fill.
+- **Warming covers everything workers read.** `warm-chunk-store` and M2 switches include every nydusd blob's tail and layout. Workers had fetched these from S3 at each first attach.
+- **`chunk-migrate switch` dispatches only fully warm images.** It warms each image's objects first and leaves any image with a failed object unswitched (`not_warm`).
+- **RAFS attaches never queue behind the EROFS attach limit.** They get a fixed 8, while production keeps EROFS serial. Serial nydusd attaches had cost a 20-sandbox burst about 30 s.
+
 ## 0.9.2 - 2026-10-04 (store node only)
 
 - **Worker fills never wait behind a builder's.**

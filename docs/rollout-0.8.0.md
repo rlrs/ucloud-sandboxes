@@ -602,3 +602,32 @@ The findings are in [chunk-store-m2-plan.md](chunk-store-m2-plan.md) §5.2.
   145 in total.
 - Cold-fleet canary: 40/40 rollouts, and no NBD timeouts or I/O errors.
 - The converter `sandboxes-m2-conv-1` was deleted after wave 1.
+
+## 0.9.4 to 0.9.6 (2026-10-04)
+
+**0.9.4: gateway, workers and store node.**
+- Snapshot `439378718`. The first snapshot, `439375977`, was **not sanitized**,
+  so it is unused and should be deleted: a RAFS check run on the source
+  before sanitizing left state that made `prepare_hetzner_snapshot.sh` fail,
+  and the snapshot was taken anyway.
+- A rebuilt source passed the canary and sanitized cleanly.
+- The cold-fleet wave 1 canary passed 40/40.
+
+**0.9.5: store node and converters only.**
+- A converter's verification warm is filled first-to-evict.
+- `chunk-migrate convert --shard`.
+- Store-role init again, with the cache kept (42.5 GB). Wave 2 was stopped and
+  restarted around it.
+
+**0.9.6: gateway and workers, snapshot `439434667`.**
+- **Why:** env-io's `LimitNOFILE` 65536. Two 512-rollout bursts on 0.9.4
+  (`rlbench-6bf72456eacc`, `rlbench-2335c389db71`) lost 45 and 59 creates to
+  EMFILE and timeouts. env-io sat at systemd's default of 1024 descriptors.
+- **The first source run used a wrong server ID.** Its init failed, and
+  sanitize refused before any destructive step. The canary then ran on an
+  autoscaled worker, which booted snapshot `439378718` and installed the
+  0.9.6 bundle at init. It passed.
+- **The second source run** passed both checks: an env-io open-file limit of
+  65536, and the canary.
+- **512 bursts after 0.9.6:** 511/512 from zero and 511/512 on a warm fleet.
+  The one failure is the catalog gap. env-io peaked at 1217 descriptors.

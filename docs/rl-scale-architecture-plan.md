@@ -1848,6 +1848,47 @@ worker snapshot, then an autoscaled canary
      production creates run at most 32 at once fleet-wide, through one
      placement process.
 
+### 2026-10-04 (afternoon): waves 1-2 switched, the store node rebuilt cheaper and faster
+
+- **M2** ([chunk-store-m2-plan.md](chunk-store-m2-plan.md) §4.1, §5):
+  - Waves 1 and 2 are switched: 3,717 images, with 40/40 canaries each.
+  - Wave 3 (2,748 images, mostly ScaleSWE) is converting: 1,958 done at
+    15:27Z. Wave 4 (1,455 images) follows.
+  - The store node is a full replica of the S3 prefix (0.9.8), with local
+    stored locators and a closure check before every switch (0.9.9).
+- **The store node: a CX43 with a 1 TB Volume, reads in Go** (0.9.10-0.9.13).
+  - Wave 3 dedups less, and the replica would have outgrown the CCX43's
+    disk. Its 16 dedicated cores sat idle, and local SSD does not come larger.
+    The replica moved to a Volume that outlives the server, and the node
+    became a CX43: €73/month instead of €276.
+  - The Volume exposed two serving limits: a cold read on the event loop
+    stalled every request (0.9.11), and one GIL capped reads near one core.
+  - `ucloud-chunk-serve` (Go) now answers resident reads on every core and
+    passes the rest to the Python node (0.9.13).
+  - Warm 512 burst, first command p50/p95: SWE-smith 1.5/9.3 → 0.9/3.9 s,
+    TMax 5.2/8.8 → 1.0/1.5 s, against the CCX43 on local NVMe.
+- **Evals:** SWE-bench Verified and Multilingual are fully prepared (643
+  images), on the EROFS path until M2 moves them. SWE-bench Pro is deferred
+  until builds no longer need the registry Volume (§5.4 of the M2 plan).
+- **The burst gap to M2's exit is ready time, not first commands.** The warm
+  512 burst is ready at p50 45 s, at about 3.5 creates/s. M2's exit is 1,024
+  over 128 images in ≤ 30 s, and ≥ 300 creates/s. Phase 0
+  ([c43-placement-wiring-plan.md](c43-placement-wiring-plan.md)) put the
+  wait in node-side attach (EROFS attaches serially) and in admission
+  rejections that requeue (2-26 attempts).
+- **Next:**
+  1. Finish waves 3 and 4: switch, canary, rerun failures, and the 12
+     `foundation-terminal-prefix` images that fail registration.
+  2. Remeasure the burst with nearly every image on RAFS (8 attach slots).
+     Then node admission that queues instead of rejecting, and per-node create
+     concurrency. Then C4.3 wiring and C3.2 group create, against the M2 exit
+     numbers.
+  3. M2 release: delete old EROFS and OCI that no build needs. Then builds
+     that read and write the chunk store, then retire the registry Volume.
+     SWE-bench Pro follows.
+  4. Converters reap their own leaked NBD devices; nydusd read merging if the
+     request rate grows.
+
 ## Appendix: evidence index
 
 - Image path:

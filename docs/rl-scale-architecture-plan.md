@@ -1809,6 +1809,45 @@ worker snapshot, then an autoscaled canary
      - the Python RAFS reader, once nydusd is the only path;
      - the relay-driven park, once every trainer uses the private relay.
 
+### 2026-10-04: the production chunk store, and M2 wave 1 in production
+
+- **0.9.0 (production chunk store).**
+  - Store node `sandboxes-store-1` (CCX43, `10.42.0.200`), S3 prefix
+    `production/chunks`.
+  - The pinned nydusd on every worker.
+  - Root dispatch on: every create pins its root.
+  - Inert until a wave switched ([rollout-0.8.0.md](rollout-0.8.0.md), "0.9.0").
+- **M1 gate run 4**
+  ([benchmarks/m1-gate-20261003t2214](benchmarks/m1-gate-20261003t2214/README.md)):
+  - stored bytes pass (17.61 GB);
+  - full tree, crash injection and rollback pass;
+  - the burst is 0.76× today's path;
+  - one cold command misses, on S3's tail against a cold store node.
+- **M2 wave 1 is in production**
+  ([chunk-store-m2-plan.md](chunk-store-m2-plan.md) §5.2): 145 SWE-smith and
+  OpenSWE images, 102,809 task rows.
+  - **First commands 2–3× faster:** OpenSWE p50 0.91 s against 2.98 s,
+    SWE-smith 1.25 s against 3.53 s.
+  - **Canary:** 40/40.
+  - **The first switch was reverted.** Hetzner S3 stalls single keys for
+    6–60 s, and with cold blob tails, a 60 s fill deadline equal to nydusd's
+    NBD timeout, and serial attach, that became EIO.
+  - **Fixed in 0.9.1–0.9.3:**
+    - index retries;
+    - builders limited to half the S3 slots;
+    - complete warming, and a switch only for fully warm images;
+    - NBD timeout 600 s, with nydusd retrying the node for 270 s;
+    - 8 RAFS attach slots.
+- **Next:**
+  1. **Before wave 2:** builders' reads must not evict the store node's warm
+     set. Wave 2 is larger than the 240 GiB cache.
+  2. **nydusd starts per blob, not one per node.** Ready time is 12–14 s
+     slower per 20-sandbox burst.
+  3. **Waves 2–4, then releases.**
+  4. **C4.3 and C3.2** ([c43-placement-wiring-plan.md](c43-placement-wiring-plan.md)):
+     production creates run at most 32 at once fleet-wide, through one
+     placement process.
+
 ## Appendix: evidence index
 
 - Image path:

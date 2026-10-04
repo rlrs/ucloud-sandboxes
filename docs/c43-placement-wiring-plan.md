@@ -84,6 +84,33 @@ admission, not by the gateway's 32-command executor.
 100 MB/s throughout, which slows EROFS attach reads. Rerun B3 with no
 conversions running before tuning against these numbers.
 
+## Phase 0b (2026-10-04, evening): the queue's own bounds removed
+
+0.9.14 logs why the placement worker defers commands. Each change below was
+measured alone on the same 512-rollout pair (from zero, then warm), with the
+store node's reads in Go (0.9.13):
+
+| Gateway | Warm ready p50/p95/max (s) | Retried creates | Worker create p50/p95 (s) |
+| --- | --- | ---: | --- |
+| 0.9.13 | 45 / 83 / 89 | 182 (up to 34 tries) | 2.0 / 4.8 |
+| 0.9.15: a create awaits its environment attach (was 503 after 2 s) | 45 / 85 / 90 | 3 | 1.8 / 4.6 |
+| 0.9.16: creates in flight = per-node slots x max nodes (was 32) | 23 / 55 / 61 | 105 | 3.0 / 8.8 |
+| 0.9.17: awaited attaches not capped at 32 per process | 33 / 72 / 84 | 69 (2 tries) | 3.3 / 10.5 |
+
+- **The retries were a polling loop.** `image_warmup_pending` was nearly
+  every deferral: the gateway's separate per-node "pull" is the attach on
+  environment workers, and creates polled it every 2 s through the queue.
+- **Then the fleet-wide 32 bound** capped completions near 6/s (32 in flight
+  over ~5.5 s each).
+- **Now the burst is node-bound.** `image_resolve` (the attach) is 2.9/8.1 s
+  p50/p95 under burst load, against 0.5 s when creates trickle in. Run-to-run
+  noise is about ±10 s at p50.
+- **Next levers:** node attach throughput (RAFS attach slots, and the
+  remaining EROFS images, which attach serially until wave 3 switches);
+  C3.2 group create, which attaches once per group; C4.3 phase 1-2 for
+  creates/s at the API tier (≥ 300/s). The fixes above are stopgaps on
+  today's path, not the target shape.
+
 ## Today's create (PostgreSQL)
 
 Each step is marked by its fate: **D** deleted by the create phases, **W**

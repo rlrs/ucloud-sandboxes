@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.9.9 - 2026-10-04 (gateway and store node)
+
+- **The chunk index keeps stored locators in its own database.**
+  - A worker's first attach of an image reads that image's locator. The index used to fetch it from S3 on a cold request, and S3 stalled it for 56 s once in M2 wave 2.
+  - Now the index reads its database first, falls back to S3 once (for a fresh index), and writes both when it builds a locator.
+- **`chunk-migrate switch` verifies the whole closure before switching an image.**
+  - An image with a missing component goes to `not_warm` instead of being half-switched.
+  - Why: one wave 2 image had lost a component to the retention incident.
+
 ## 0.9.8 - 2026-10-04 (gateway and store node)
 
 - **The store node is a full replica of its S3 prefix** (`store_node.replica`).

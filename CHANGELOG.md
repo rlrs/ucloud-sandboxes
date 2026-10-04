@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.9.7 - 2026-10-04 (gateway only)
+
+- **Retention gives a converter's roots 72 hours to be recorded.**
+  - Chunk-store tags (`rafs-root-*`, `rafs-*`) younger than the window are no longer deleted as unreferenced.
+  - Why: wave 2's converted roots waited hours before `chunk-migrate record`, and the one-hour grace deleted 1,115 of them. The old roots and S3 chunks were untouched.
+- **The registry prune no longer crashes.**
+  - Since 0.8.6, `manifest_document` passed `timeout_seconds` to the build cache's `_json_request` override, which did not accept it.
+  - As a result, every hourly prune failed in its build-cache pass.
+
 ## 0.9.6 - 2026-10-04
 
 - **env-io runs with `LimitNOFILE=65536`.** A 512-rollout burst on 0.9.4 lost creates to EMFILE, because env-io sat at systemd's default of 1024. At about 140 attached images per node it held roughly 600 NBD sockets and 355 device fds. The node agent already ran with 65536.

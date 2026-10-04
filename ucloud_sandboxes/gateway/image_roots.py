@@ -10,6 +10,10 @@ change is journaled so a wave can be reverted from the journal
 OCI release (plan §5.4) deletes a released image's manifest, and with it every
 tag. ``image_tags`` remembers those tags first, so a tag still resolves to the
 pinned digest; the digest itself resolves from its ``released`` row.
+
+``image_regenerations`` (volume-free builds, plan §5.4) keeps, per image, the
+receipt of a verified regeneration (root, diff ID, the original config bytes)
+and the regenerated copy builds take as their base, or its last error.
 """
 from contextlib import contextmanager
 import os
@@ -78,6 +82,11 @@ class ImageRootsStore:
                 CREATE TABLE IF NOT EXISTS image_oci_releases (
                     repository TEXT NOT NULL, manifest_digest TEXT NOT NULL, layer_bytes INTEGER NOT NULL,
                     released REAL NOT NULL, PRIMARY KEY (repository, manifest_digest));
+                CREATE TABLE IF NOT EXISTS image_regenerations (
+                    repository TEXT NOT NULL, manifest_digest TEXT NOT NULL, root TEXT NOT NULL,
+                    diff_id TEXT NOT NULL, config BLOB NOT NULL, recorded REAL NOT NULL,
+                    regenerated_digest TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '',
+                    attempted REAL NOT NULL DEFAULT 0, PRIMARY KEY (repository, manifest_digest));
             """)
 
     @contextmanager
@@ -135,6 +144,38 @@ class ImageRootsStore:
             db.execute("INSERT OR REPLACE INTO image_oci_releases VALUES (?, ?, ?, ?)",
                        (repository, manifest_digest, int(layer_bytes), time.time()))
             self._journal(db, repository, manifest_digest, "released", "released", row[1], "oci released " + detail)
+
+    def record_regeneration(self, repository, manifest_digest, *, root, diff_id, config):
+        """A verified regeneration's receipt; the row's root and config bind it."""
+        from ..environment_artifact import content_digest
+        row = self.get(repository, manifest_digest)
+        if row is None or row["new_root"] != root or content_digest(config) != row["config_digest"]:
+            raise ValueError(f"{repository}@{manifest_digest}: the receipt names another root or config")
+        require_digest(diff_id)
+        with self._db() as db:
+            db.execute("INSERT OR REPLACE INTO image_regenerations (repository, manifest_digest, root, diff_id, config, "
+                       "recorded) VALUES (?, ?, ?, ?, ?, ?)",
+                       (repository, manifest_digest, root, diff_id, bytes(config), time.time()))
+
+    def regeneration(self, repository, manifest_digest):
+        with self._db() as db:
+            row = db.execute("SELECT root, diff_id, config, regenerated_digest, error, attempted FROM "
+                             "image_regenerations WHERE repository = ? AND manifest_digest = ?",
+                             (repository, manifest_digest)).fetchone()
+        return None if row is None else dict(zip(("root", "diff_id", "config", "regenerated_digest", "error",
+                                                  "attempted"), row))
+
+    def regenerable(self):
+        with self._db() as db:
+            return {(repository, digest) for repository, digest in db.execute(
+                "SELECT repository, manifest_digest FROM image_regenerations")}
+
+    def mark_regenerated(self, repository, manifest_digest, *, digest="", error=""):
+        """The regenerated copy's manifest digest, or the attempt's error."""
+        with self._db() as db:
+            db.execute("UPDATE image_regenerations SET regenerated_digest = ?, error = ?, attempted = ? WHERE "
+                       "repository = ? AND manifest_digest = ?",
+                       (digest, error[:1000], time.time(), repository, manifest_digest))
 
     def live_roots(self):
         with self._db() as db:

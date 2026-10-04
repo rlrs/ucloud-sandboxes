@@ -1055,6 +1055,7 @@ def cmd_serve_environment_io(args: argparse.Namespace) -> int:
 
 def cmd_serve_control_plane(args: argparse.Namespace) -> int:
     from .environment_config import environment_registry_from_args, environment_registry_from_deployment
+    from .gateway.base_regeneration import from_deployment as base_regeneration_from_deployment
     config = load_config(args)
     if getattr(args,'check_placement_enabled',False):
         return 0 if open_routing_store(config.routing_file()).distributed else 1
@@ -1107,6 +1108,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         environment_registry=environment_registry_from_args(args) or environment_registry_from_deployment(config),
         dispatch_environment_roots=bool(config.immutable_environments is not None
                                         and config.immutable_environments.dispatch_roots),
+        base_regeneration=base_regeneration_from_deployment(config, args.config),
         import_external_images=bool(
             config.immutable_environments is not None
             and config.immutable_environments.worker_enabled

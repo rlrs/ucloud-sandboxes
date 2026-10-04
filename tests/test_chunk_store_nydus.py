@@ -2,6 +2,7 @@
 
 Set UCLOUD_TEST_NYDUS_IMAGE (or put nydus-image on PATH); otherwise skipped.
 """
+import base64
 import io
 from pathlib import Path
 import shutil
@@ -9,7 +10,7 @@ import tarfile
 import unittest
 
 from tests.chunk_store_support import NYDUS, REPOSITORY, ChunkStoreFixture, sample_images
-from ucloud_sandboxes.chunk_convert import compare_trees, expected_tree, unpack_environment
+from ucloud_sandboxes.chunk_convert import compare_trees, expected_tree, unpack_environment, verify_regeneration
 from ucloud_sandboxes.environment_artifact import load_environment
 from ucloud_sandboxes.environment_cache import VerifiedEnvironmentCache
 from ucloud_sandboxes.environment_rafs import load_rafs_image
@@ -59,6 +60,16 @@ class RealConversionTests(unittest.TestCase):
             self.assertNotIn("etc/gone", reader.getnames())
         self.assertEqual(result["root"], roots[0])
         self.assertTrue(Path(store.root).exists())
+
+    def test_a_verified_receipt_is_reproduced_with_the_original_config(self):
+        store, _, roots = self.convert("image")
+        receipt = verify_regeneration(store.registry, store.index.reader, roots[0], store.client, REPOSITORY, "a",
+                                      work_root=store.root, nydus_image=BINARY)
+        self.assertEqual((receipt["verified"], receipt["differences"]), (True, []))
+        result = unpack_environment(store.registry, store.index.reader, roots[0], repository=REPOSITORY,
+                                    tag="copy", work_root=store.root, nydus_image=BINARY, diff_id=receipt["diff_id"],
+                                    image_config=base64.b64decode(receipt["config"]))
+        self.assertEqual(result["diff_id"], receipt["diff_id"])  # Deterministic: volume-free builds rely on it.
 
 
 if __name__ == "__main__":

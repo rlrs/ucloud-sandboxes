@@ -431,7 +431,19 @@ def manifest_readers(routing_store):
             for ref in refs if (coordinates := registry_repository_tag_from_image_ref(ref))}
 
 
-def release_oci(roots, client, usage, wave, *, catalog_file, routing_store, keys=None, execute=False):
+def receipt_binds(row, receipt):
+    """A verified regeneration receipt for this row's root and config."""
+    import base64
+    from .environment_artifact import content_digest
+    try:
+        return (receipt.get("verified") is True and receipt.get("root") == row["new_root"]
+                and content_digest(base64.b64decode(receipt["config"], validate=True)) == row["config_digest"])
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def release_oci(roots, client, usage, wave, *, catalog_file, routing_store, keys=None, execute=False,
+                include_build_inputs=False, receipts=None):
     """Step 4b (plan §5.4): delete the OCI manifest of each released image that
     is not a build input, after remembering its tags, so its tag and digest
     references resolve from image_roots. Deletes are fenced like retention's:
@@ -439,22 +451,35 @@ def release_oci(roots, client, usage, wave, *, catalog_file, routing_store, keys
     stays, as does one a route without a root, a prepared sandbox or a warmup
     names. Workers must attach dispatched roots on pulls first. A rerun deletes
     a manifest again that a racing protection-tag write restored. Bytes are
-    manifest layer sizes, an upper bound: a layer a kept image shares stays."""
+    manifest layer sizes, an upper bound: a layer a kept image shares stays.
+
+    ``include_build_inputs`` (volume-free builds): a build input goes too once
+    it has a verified regeneration receipt (``receipts``, by key, or one
+    recorded before); the receipt is recorded before its manifest is deleted,
+    and a build naming the image takes its regenerated copy."""
     from datetime import datetime, timezone
     from .managed_registry import RegistryRequestError, is_digest_protection_tag
     from .registry_retention import REFERENCE_PRUNE_BATCH, list_repository_tags
     inputs, readers, done = build_inputs(catalog_file)[0], manifest_readers(routing_store), roots.oci_released()
+    regenerable, receipts = roots.regenerable(), receipts or {}
     summary = {"wave": wave, "execute": execute, "images": 0, "build_inputs": 0, "gone": 0, "read_by_routes": 0,
-               "leased": {}, "released": 0, "layer_bytes": 0, "unique_layer_bytes": 0, "errors": {}}
-    listed, pending, sizes = {}, [], {}
+               "leased": {}, "released": 0, "layer_bytes": 0, "unique_layer_bytes": 0, "errors": {},
+               "no_receipt": 0}
+    listed, pending, sizes, receipted = {}, [], {}, {}
     for row in roots.rows(wave=wave, state="released"):
         key = (row["repository"], row["manifest_digest"])
         if keys is not None and key not in keys:
             continue
         summary["images"] += 1
+        if key in receipts and receipt_binds(row, receipts[key]):
+            receipted[key] = receipts[key]
         if row["build_input"] or key in inputs:  # The catalog is reread: a decision may name it since.
             summary["build_inputs"] += 1
-            continue
+            if not include_build_inputs:
+                continue
+            if key not in receipted and key not in regenerable:
+                summary["no_receipt"] += 1
+                continue
         try:
             if key[0] not in listed:
                 listed[key[0]] = list_repository_tags(client, key[0])
@@ -479,8 +504,12 @@ def release_oci(roots, client, usage, wave, *, catalog_file, routing_store, keys
     for start in range(0, len(pending), REFERENCE_PRUNE_BATCH):
         batch, deleted = pending[start:start + REFERENCE_PRUNE_BATCH], []
         if execute:
+            import base64
             for key, tags, _layers in batch:  # Remembered before any delete.
                 roots.record_tags(*key, tags)
+                if key in receipted:
+                    roots.record_regeneration(*key, root=receipted[key]["root"], diff_id=receipted[key]["diff_id"],
+                                              config=base64.b64decode(receipted[key]["config"]))
         with usage.lease_fence() if execute else nullcontext(usage.snapshot()) as snapshot:
             now, holders = datetime.now(timezone.utc), {}
             for lease in snapshot.leases.values():
@@ -508,6 +537,54 @@ def release_oci(roots, client, usage, wave, *, catalog_file, routing_store, keys
     return summary
 
 
+def verify_regenerations(rows, *, verify, receipts, parallel):
+    """Volume-free builds (plan §5.4), on a converter before release: each
+    image's root must regenerate its OCI tree exactly (M1's rollback check).
+    ``verify(repository, digest, root)`` returns the receipt release-oci
+    records. A rerun skips images with a receipt."""
+    done = {(row["repository"], row["manifest_digest"]) for row in read_jsonl(receipts) if "verified" in row}
+    pending = list({(row["repository"], row["manifest_digest"]): row for row in rows
+                    if row.get("new_root") and (row["repository"], row["manifest_digest"]) not in done}.values())
+    guard = threading.Lock()
+
+    def one(row):
+        try:
+            record = verify(row["repository"], row["manifest_digest"], row["new_root"])
+        except Exception as exc:  # noqa: BLE001 - one failed image is reported, not fatal
+            record = {"repository": row["repository"], "manifest_digest": row["manifest_digest"],
+                      "root": row["new_root"], "error": f"{type(exc).__name__}: {exc}"[-500:]}
+        with guard, open(receipts, "a") as handle:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+        return record
+    with ThreadPoolExecutor(parallel) as pool:
+        records = list(pool.map(one, pending))
+    return {"pending": len(pending), "verified": sum(item.get("verified") is True for item in records),
+            "differ": [f"{item['repository']}@{item['manifest_digest']}" for item in records
+                       if item.get("verified") is False],
+            "failed": [f"{item['repository']}@{item['manifest_digest']}" for item in records if "error" in item]}
+
+
+def regenerate_image(roots, environments, index, repository, digest, *, work_root, nydus_image, access=None,
+                     reserve_bytes=0):
+    """Push an OCI-released image's verified regeneration as the copy builds
+    take as their base (``ucloud-regenerated``); record its digest, or the error."""
+    from .chunk_convert import unpack_environment
+    from .gateway.base_regeneration import REGENERATED_REPOSITORY, regenerated_tag
+    receipt = roots.regeneration(repository, digest)
+    if receipt is None:
+        raise ValueError(f"{repository}@{digest} has no verified regeneration")
+    try:
+        result = unpack_environment(environments, index, receipt["root"], repository=REGENERATED_REPOSITORY,
+                                    tag=regenerated_tag(repository, digest), work_root=work_root,
+                                    nydus_image=nydus_image, access=access, image_config=receipt["config"],
+                                    diff_id=receipt["diff_id"], reserve_bytes=reserve_bytes)
+    except Exception as exc:
+        roots.mark_regenerated(repository, digest, error=f"{type(exc).__name__}: {exc}")
+        raise
+    roots.mark_regenerated(repository, digest, digest=result["manifest_digest"])
+    return result
+
+
 def family_keys(rows_file, family):
     if family and rows_file is None:
         raise ValueError("--family needs the inventory --rows")
@@ -531,6 +608,22 @@ def inventory_command(args):
     return 0 if not summary["errors"] else 1
 
 
+def converter_argv(args, command):
+    return [sys.executable, "-c", CLI, command, "--config", str(args.config),
+            "--chunk-index-token-file", str(args.chunk_index_token_file), "--work-root", str(args.work_root),
+            "--environment-registry-url", args.environment_registry_url,
+            "--environment-registry-repository", args.environment_registry_repository,
+            "--environment-trusted-keys", str(args.environment_trusted_keys)]
+
+
+def run_json(argv):
+    """One image in its own process; its last stdout line is the result."""
+    completed = subprocess.run(argv, capture_output=True, text=True, timeout=3 * 3600, env=os.environ)
+    if completed.returncode:
+        raise RuntimeError(" | ".join(completed.stderr.strip().splitlines()[-3:]))
+    return json.loads(completed.stdout.strip().splitlines()[-1])
+
+
 def convert_command(args):
     """Each image converts in its own process: its own index owner (a shared one
     let parallel converters claim as one builder, M1 gate run 3), its own
@@ -539,21 +632,14 @@ def convert_command(args):
     if per_slot < 1:
         raise ValueError("M2 conversions are full-tree verified: give each parallel slot a --verify-device")
     host = urlparse(args.environment_registry_url).netloc
-    base = [sys.executable, "-c", CLI, "convert-environment", "--config", str(args.config),
-            "--chunk-index-token-file", str(args.chunk_index_token_file), "--work-root", str(args.work_root),
-            "--environment-registry-url", args.environment_registry_url,
-            "--environment-registry-repository", args.environment_registry_repository,
-            "--environment-trusted-keys", str(args.environment_trusted_keys),
-            "--environment-signing-key", str(args.environment_signing_key), "--nydusd-blobs"]
+    base = converter_argv(args, "convert-environment") + [
+        "--environment-signing-key", str(args.environment_signing_key), "--nydusd-blobs"]
 
     def convert(repository, digest, slot):
         argv = base + ["--image-ref", f"{host}/{repository}@{digest}"]
         for device in args.verify_device[slot * per_slot:(slot + 1) * per_slot]:
             argv += ["--verify-device", device]
-        completed = subprocess.run(argv, capture_output=True, text=True, timeout=3 * 3600, env=os.environ)
-        if completed.returncode:
-            raise RuntimeError(" | ".join(completed.stderr.strip().splitlines()[-3:]))
-        return json.loads(completed.stdout.strip().splitlines()[-1])
+        return run_json(argv)
     index, _, count = args.shard.partition("/")
     if not (index.isdigit() and count.isdigit() and int(index) < int(count)):
         raise ValueError("--shard is I/N with 0 <= I < N")
@@ -561,6 +647,23 @@ def convert_command(args):
                            parallel=args.parallel, shard=(int(index), int(count)))
     print(json.dumps(summary, sort_keys=True))
     return 0 if not summary["failed"] else 1
+
+
+def verify_command(args):
+    host = urlparse(args.environment_registry_url).netloc
+    base = converter_argv(args, "unpack-environment")
+    summary = verify_regenerations(read_jsonl(args.rows), receipts=args.receipts, parallel=args.parallel,
+                                   verify=lambda repository, digest, root: run_json(
+                                       base + ["--root", root, "--verify-image", f"{host}/{repository}@{digest}"]))
+    print(json.dumps(summary, sort_keys=True))
+    return 0 if not (summary["failed"] or summary["differ"]) else 1
+
+
+def regeneration_available(config):
+    """The gateway regenerates released build bases (config) and can (nydus-image here)."""
+    import shutil
+    selected = config.immutable_environments
+    return bool(selected.regenerate_bases and shutil.which(selected.chunk_store.nydus_image))
 
 
 def store_warmer(config):
@@ -590,6 +693,26 @@ def store_warmer(config):
                 _LOG.warning("store node fill: %s", "; ".join(done["errors"][:3]))
         return {image: [key for key in keys if key in missing] for image, keys in objects.items()}
     return warm
+
+
+def regenerate_command(config, roots, environments, image):
+    """Run by the gateway per missing copy (or by an operator ahead of builds)."""
+    from .chunk_convert import store_reads
+    from .chunk_index import ChunkIndexClient
+    from .environment_config import read_token
+    from .gateway.base_regeneration import SCRATCH_RESERVE_BYTES, regeneration_claim, regeneration_root
+    if not regeneration_available(config):
+        raise ValueError("regenerate needs immutable_environments.regenerate_bases and chunk_store.nydus_image")
+    repository, _, digest = image.partition("@")
+    store, work_root = config.immutable_environments.chunk_store, regeneration_root(config.control_state_file().parent)
+    with regeneration_claim(work_root, repository, digest) as claimed:
+        if not claimed:
+            return {"image": image, "in_progress": True}
+        os.nice(10)  # Behind the gateway's request threads.
+        index = ChunkIndexClient(store.index_url, read_token(store.read_token_file).decode())
+        return regenerate_image(roots, environments, index, repository, digest, work_root=work_root / "work",
+                                nydus_image=store.nydus_image, access=store_reads(store, store.read_token_file),
+                                reserve_bytes=SCRATCH_RESERVE_BYTES)
 
 
 def gateway_command(args):
@@ -628,12 +751,22 @@ def gateway_command(args):
         from .managed_registry import RegistryClient, RegistryUsageStore
         from .prepared_images import catalog_path
         from .routing import open_routing_store
+        if args.include_build_inputs and not regeneration_available(config):
+            raise ValueError("--include-build-inputs needs immutable_environments.regenerate_bases on and "
+                             "chunk_store.nydus_image on this gateway: builds would lose their bases")
+        receipts = {(row["repository"], row["manifest_digest"]): row for path in args.receipts
+                    for row in read_jsonl(path) if row.get("verified") is True}
         result = release_oci(roots, RegistryClient(config.registry_url),
                              RegistryUsageStore(config.registry_usage_file()), args.wave,
                              catalog_file=catalog_path(config.image_file()),
                              routing_store=open_routing_store(config.routing_file()),
-                             keys=family_keys(args.rows, args.family), execute=args.execute)
+                             keys=family_keys(args.rows, args.family), execute=args.execute,
+                             include_build_inputs=args.include_build_inputs, receipts=receipts)
+    elif command == "regenerate":
+        result = regenerate_command(config, roots, environments, args.image)
     else:
+        if args.out:  # The rows a converter verifies regenerations of.
+            args.out.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in roots.rows()))
         result, oci = {}, roots.oci_released()
         for row in roots.rows():
             states = result.setdefault(row["wave"], {})
@@ -666,6 +799,16 @@ def add_commands(subparsers):
     convert.add_argument("--parallel", type=int, default=12)
     convert.add_argument("--shard", default="0/1", help="I/N: this converter's share of the wave")
     convert.set_defaults(func=convert_command)
+    verify = commands.add_parser("verify-regeneration", help="Check that roots regenerate their images' OCI "
+                                 "trees exactly, before release-oci (converter host).")
+    verify.add_argument("--config", type=Path, required=True, help="deployment.json with chunk_store")
+    verify.add_argument("--chunk-index-token-file", type=Path, required=True)
+    verify.add_argument("--work-root", type=Path, required=True)
+    add_environment_registry_args(verify)
+    verify.add_argument("--rows", type=Path, required=True, help="JSON lines with new_root (status --out)")
+    verify.add_argument("--receipts", type=Path, required=True, help="JSON lines, appended; a rerun resumes")
+    verify.add_argument("--parallel", type=int, default=12)
+    verify.set_defaults(func=verify_command)
     for name, text in (("record", "Record verified conversions as converted rows (gateway)."),
                        ("switch", "Dispatch a wave's new roots and re-point its durable owners (step 3)."),
                        ("revert", "Dispatch a switched wave's old roots again (rollback)."),
@@ -673,6 +816,7 @@ def add_commands(subparsers):
                                    "unless --execute)."),
                        ("release-oci", "Delete released, non-build-input images' OCI manifests, remembering their "
                                        "tags (dry run unless --execute)."),
+                       ("regenerate", "Push an OCI-released image's verified regeneration for builds (gateway)."),
                        ("status", "image_roots rows per wave and state.")):
         command = commands.add_parser(name, help=text)
         command.add_argument("--config", type=Path, required=True)
@@ -684,6 +828,15 @@ def add_commands(subparsers):
             command.add_argument("--execute", action="store_true", help="release; without it, only count")
         if name == "revert":
             command.add_argument("--reason", default="")
+        if name == "release-oci":
+            command.add_argument("--include-build-inputs", action="store_true",
+                                 help="also build inputs with a verified regeneration (regenerate_bases on)")
+            command.add_argument("--receipts", type=Path, action="append", default=[],
+                                 help="verify-regeneration receipts (JSON lines); repeatable")
+        if name == "regenerate":
+            command.add_argument("--image", required=True, help="repository@sha256:digest")
+        if name == "status":
+            command.add_argument("--out", type=Path, help="also write every row (JSON lines)")
         command.set_defaults(func=gateway_command)
     for command in (convert, *(commands.choices[name] for name in ("switch", "revert", "release", "release-oci"))):
         command.add_argument("--wave", choices=sorted(WAVES), required=True)

@@ -129,8 +129,13 @@ import unittest
 # plan's ~420: the group row's replay fence and member-level outcomes. +2 the
 # prune deletes 8 manifests per lease-fence transaction, not 64 (it held the
 # usage database near a minute: switch, release and gateway starts failed).
+# +529 M2 volume-free builds (plan §5.4): chunk-migrate verify-regeneration
+# (M1's rollback check per image, a receipt), release-oci of build inputs that
+# have one, and the gateway's regenerated copies (one image-layout root -> one
+# layer, the original config) handed to BuildKit as named contexts. It retires
+# the build inputs' OCI on the registry Volume (~1.2 TB), not code.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 115_108
+PACKAGE_LINE_BUDGET = 115_637
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

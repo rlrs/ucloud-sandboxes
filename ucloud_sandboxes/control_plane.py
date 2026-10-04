@@ -125,6 +125,7 @@ from .http_server import (
     traced_http_request,
 )
 from .http_contract import SandboxHttpRoute, match_sandbox_http_route
+from .gateway.base_regeneration import BaseRegenerating, BaseReleased
 from .images import (
     DockerImageRuntime,
     ImageBuildSpec,
@@ -3380,6 +3381,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             raw = json.loads(body.decode("utf-8")) if body else None
             if not isinstance(raw, dict):
                 raise ValueError("image build payload must be a JSON object")
+            raw.pop("base_contexts", None)  # Only the gateway names regenerated bases.
             context_reference = uploaded_build_context_reference(
                 raw, self.build_context_store
             )
@@ -3423,6 +3425,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     ),
                 )
                 context_reference = uploaded_build_context_reference(raw, self.build_context_store)
+            regeneration = getattr(self, "base_regeneration", None)
+            if regeneration is not None and raw.get("context_archive_digest"):
+                from .gateway.base_regeneration import context_dockerfile
+
+                def texts():  # Lazy: no context is read until an image has a receipt.
+                    yield context_dockerfile(self.build_context_store, raw["context_archive_digest"], spec.dockerfile)
+                    yield from spec.build_args.values()
+                contexts, copies = regeneration.contexts(texts())
+                for copy in copies:  # Kept, and touched for the age rule, while the build runs.
+                    self.services.registry_refs.ensure_image_lease(copy, _registry_operation_lease_owner(
+                        "regenerated-base", {"id": spec.id, "context": raw["context_archive_digest"]}), touch=True)
+                if contexts:
+                    raw["base_contexts"] = contexts
             body = json.dumps(raw, separators=(",", ":")).encode("utf-8")
             with _builder_image_dispatch_lock(spec.id):
                 with self.telemetry.span(
@@ -3552,11 +3567,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         root.set_attribute("status_code", int(response.status))
                     self._send_proxied_response(response)
                     return
+        except BaseReleased as exc:
+            self._write_json({"error": str(exc), "error_code": "base_released"}, status=HTTPStatus.CONFLICT)
+            return
         except (json.JSONDecodeError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
         except RegistryImageReferenceUnavailable as exc:
             self._write_registry_lease_unavailable(exc)
+            return
+        except BaseRegenerating as exc:
+            self._write_json({"error": str(exc), "error_code": "base_regenerating", "retryable": True},
+                             status=HTTPStatus.SERVICE_UNAVAILABLE,
+                             headers={"Retry-After": "30", "X-UCloud-Sandbox-Retryable": "true"})
             return
         except RuntimeError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
@@ -5700,6 +5723,7 @@ def build_server(
     registry_usage_file: Path | None = None,
     environment_registry: object | None = None,
     dispatch_environment_roots: bool = False,
+    base_regeneration: object | None = None,
     import_external_images: bool = False,
     create_placement: str = "ranked",
     registry_disk_monitor: RegistryDiskMonitor | None = None,
@@ -5818,6 +5842,7 @@ def build_server(
     BoundHandler.build_context_store = build_context_store
     from .prepared_images import PreparedImageCatalog, catalog_path
     BoundHandler.prepared_image_catalog = PreparedImageCatalog(catalog_path(image_file))
+    BoundHandler.base_regeneration = base_regeneration
     BoundHandler.metrics_store = metrics_store
     BoundHandler.build_history = build_history
     BoundHandler.metrics_response_cache = None

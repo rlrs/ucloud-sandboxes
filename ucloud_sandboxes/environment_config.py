@@ -340,6 +340,10 @@ class EnvironmentDeploymentConfig:
     # image-roots.sqlite3, else the annotation). Only once every worker runs
     # 0.9.0 with a chunk store: a dispatched root needs both capabilities.
     dispatch_roots: bool = False
+    # Volume-free builds (M2 plan §5.4): the gateway regenerates an
+    # OCI-released image a build names from its chunk-store root (nydus-image
+    # on the gateway); release-oci may then release build inputs.
+    regenerate_bases: bool = False
     # Workers share startup traces through the managed registry (plan C2.7),
     # so a node that never attached a component replays another's trace.
     shared_traces: bool = False
@@ -367,7 +371,7 @@ class EnvironmentDeploymentConfig:
         if not isinstance(result.repository, str) or not re.fullmatch(r"[a-z0-9]+(?:[._/-][a-z0-9]+)*", result.repository):
             raise ValueError("invalid immutable environment repository")
         for name in ("worker_enabled", "builder_enabled", "preserve_mtimes", "prefetch_enabled", "dispatch_roots",
-                     "shared_traces"):
+                     "shared_traces", "regenerate_bases"):
             if not isinstance(getattr(result, name), bool):
                 raise ValueError(f"immutable environment {name} must be boolean")
         if type(result.attach_concurrency) is not int or not 1 <= result.attach_concurrency <= 256:
@@ -386,14 +390,17 @@ class EnvironmentDeploymentConfig:
                 raise ValueError("immutable environment allow_paths must be clean relative paths")
         if result.builder_enabled and (not result.signing_key_file or not result.allow_paths):
             raise ValueError("immutable environment builder requires signing_key_file and allow_paths")
+        if result.regenerate_bases and (result.chunk_store is None or result.chunk_store.store_node is None):
+            raise ValueError("immutable environment regenerate_bases reads roots through chunk_store.store_node")
         return result
 
     def to_dict(self):
         # Older releases reject unknown fields: write the switch only once set,
         # so a release rollback still reads configs rendered with it off.
         raw = asdict(self)
-        if not self.preserve_mtimes:
-            del raw["preserve_mtimes"]
+        for name in ("preserve_mtimes", "regenerate_bases"):
+            if not raw[name]:
+                del raw[name]
         if self.chunk_store is None:
             del raw["chunk_store"]
         else:

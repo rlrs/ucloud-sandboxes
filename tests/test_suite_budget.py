@@ -81,7 +81,10 @@ from tests.test_package_budget import package_lines
 # fences, and a local fleet creating a released image by tag and by digest.
 # +259 C3.2 group create: packing, overflow, one pull per (node, image), re-plans,
 # leftovers, member deletes, the queue end to end, group intent fences.
-SUITE_LINE_BUDGET = 98_669
+# +306 M2 volume-free builds: receipts (the tree, the kept config, a refused
+# diff ID), release-oci's receipt fence, the regeneration single-flight, and a
+# gateway build answering 503 then building with the copy as a named context.
+SUITE_LINE_BUDGET = 98_975
 SUITE = Path(__file__).resolve().parent
 
 

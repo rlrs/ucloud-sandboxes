@@ -647,21 +647,25 @@ def exact_symlinks(source, destination, targets):
     return destination
 
 
-def unpack_environment(registry, index, root, *, repository, tag, work_root, nydus_image="nydus-image",
-                       reader=None, access=None):
-    """Regenerate a single-layer OCI image from a converted root.
+@contextmanager
+def regenerated_layer(registry, index, root, *, work_root, nydus_image="nydus-image", reader=None, access=None,
+                      reserve_bytes=0):
+    """(environment, tar path) for a converted ``image`` layout root: its tree
+    as one uncompressed layer, alive inside the context.
 
-    Supports ``image`` layout roots. The blobs are rebuilt uncompressed from
-    verified chunks and a private copy of the bootstrap's chunk table is
-    rewritten to match, so ``nydus-image unpack`` needs no original blob.
+    The blobs are rebuilt uncompressed from verified chunks and a private copy
+    of the bootstrap's chunk table is rewritten to match, so ``nydus-image
+    unpack`` needs no original blob. Scratch needs about three device sizes.
     """
-    from .chunk_index import http_range
-    from .environment_builder import _gzip_layer
     from .environment_rafs import load_rafs_image
     environment = load_environment(registry, root)
     base = registry.load(environment.environment.base)
     if not isinstance(base, RafsEnvironmentComponent) or base.format["layout"] != "image":
         raise ValueError("unpack supports roots with one image-layout RAFS base")
+    Path(work_root).mkdir(mode=0o700, parents=True, exist_ok=True)
+    if shutil.disk_usage(work_root).free < 3 * base.device_size + reserve_bytes:
+        raise OSError(28, f"regenerating {root} needs {3 * base.device_size + reserve_bytes} free bytes")
+    from .chunk_index import http_range
     image = load_rafs_image(environment.environment.base, base, index, **(access or {"reader": reader or http_range}))
     with TemporaryDirectory(dir=work_root) as temporary:
         scratch = Path(temporary)
@@ -673,14 +677,47 @@ def unpack_environment(registry, index, root, *, repository, tag, work_root, nyd
         patched.write_bytes(_uncompressed_chunk_table(bootstrap))
         subprocess.run([nydus_image, "unpack", "--bootstrap", str(patched), "--blob-dir", str(blobs),
                         "--output", str(scratch / "layer.tar")], check=True, capture_output=True, timeout=3600)
-        layer = exact_symlinks(scratch / "layer.tar", scratch / "exact.tar", symlink_targets(bootstrap))
-        diff_id, layer_digest, layer_size = _gzip_layer(layer, scratch / "layer.tar.gz")
-        client = registry.client
+        shutil.rmtree(blobs)
+        yield environment, exact_symlinks(scratch / "layer.tar", scratch / "exact.tar", symlink_targets(bootstrap))
+
+
+def regenerated_config(environment, root, diff_id, original=None):
+    """A regenerated image's config. With the image's ``original`` config
+    bytes (the root names their digest) it keeps every field a build inherits
+    (ONBUILD, SHELL, labels, volumes), over one layer; its history entries
+    stay as empty layers. Without them, only the root's process config."""
+    if original is None:
+        return canonical_bytes({"architecture": "amd64", "os": "linux", "config": environment.image_config,
+                                "rootfs": {"type": "layers", "diff_ids": [diff_id]},
+                                "history": [{"created_by": "ucloud-sandboxes unpack-environment", "comment": root}]})
+    if content_digest(original) != environment.source_image:
+        raise ValueError("the image config is not the one the root names")
+    document = json.loads(original)
+    history = [{**item, "empty_layer": True} for item in document.get("history") or () if isinstance(item, dict)]
+    document["rootfs"] = {"type": "layers", "diff_ids": [diff_id]}
+    document["history"] = history + [{"created_by": "ucloud-sandboxes unpack-environment", "comment": root}]
+    return canonical_bytes(document)
+
+
+def unpack_environment(registry, index, root, *, repository, tag, work_root, nydus_image="nydus-image",
+                       reader=None, access=None, image_config=None, diff_id=None, reserve_bytes=0):
+    """Regenerate a single-layer OCI image from a converted root and push it.
+
+    The tree is the image's (M1's rollback check); the manifest, config and
+    layer digests are new. ``image_config``: the original config bytes, kept.
+    ``diff_id``: the layer a verified regeneration produced; anything else
+    is refused before upload.
+    """
+    from .environment_builder import _gzip_layer
+    client = registry.client
+    with regenerated_layer(registry, index, root, work_root=work_root, nydus_image=nydus_image, reader=reader,
+                           access=access, reserve_bytes=reserve_bytes) as (environment, layer):
+        produced, layer_digest, layer_size = _gzip_layer(layer, layer.parent / "layer.tar.gz")
+        if diff_id is not None and produced != diff_id:
+            raise ValueError(f"the regenerated layer {produced} differs from the verified {diff_id}")
         if not client.blob_exists(repository, layer_digest):
-            client.upload_blob_file(repository, scratch / "layer.tar.gz", layer_digest, layer_size)
-    config = canonical_bytes({"architecture": "amd64", "os": "linux", "config": environment.image_config,
-                              "rootfs": {"type": "layers", "diff_ids": [diff_id]},
-                              "history": [{"created_by": "ucloud-sandboxes unpack-environment", "comment": root}]})
+            client.upload_blob_file(repository, layer.parent / "layer.tar.gz", layer_digest, layer_size)
+    config = regenerated_config(environment, root, produced, image_config)
     from .environment_artifact import _upload_blob
     _upload_blob(client, repository, config, content_digest(config))
     manifest = canonical_bytes(strip_environment_annotation({
@@ -690,8 +727,39 @@ def unpack_environment(registry, index, root, *, repository, tag, work_root, nyd
         "layers": [{"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip", "digest": layer_digest,
                     "size": layer_size}]}))
     client.put_manifest(repository, tag, manifest, media_type=OCI_IMAGE)
-    return {"manifest_digest": content_digest(manifest), "diff_id": diff_id, "root": root,
+    return {"manifest_digest": content_digest(manifest), "diff_id": produced, "root": root,
             "toolkits": list(environment.environment.toolkits)}
+
+
+def verify_regeneration(registry, index, root, client, repository, digest, *, work_root, nydus_image="nydus-image",
+                        reader=None, access=None):
+    """M1's rollback check for one image while its OCI still exists (M2 plan
+    §5.4): the root's regenerated tree must equal the image's OCI layers. The
+    receipt holds what a later regeneration reproduces and is checked
+    against: the layer's diff ID, and the original config bytes."""
+    import base64
+    document, _ = client.manifest_document(repository, digest)
+    descriptor = document["config"]
+    config = client.blob_bytes(repository, descriptor["digest"], max_bytes=descriptor["size"])
+    if content_digest(config) != descriptor["digest"]:
+        raise ValueError("source OCI config content identity mismatch")
+    with regenerated_layer(registry, index, root, work_root=work_root, nydus_image=nydus_image, reader=reader,
+                           access=access) as (environment, layer):
+        if environment.source_image != descriptor["digest"]:
+            raise ValueError("the root names another image config")
+        hashed = hashlib.sha256()
+        with open(layer, "rb") as stream:
+            while chunk := stream.read(1 << 20):
+                hashed.update(chunk)
+        diff_id, originals = "sha256:" + hashed.hexdigest(), []
+        for position, item in enumerate(document["layers"]):
+            originals.append(layer.parent / f"original-{position}")
+            with client.open_blob(repository, item["digest"]) as response, open(originals[-1], "wb") as stream:
+                shutil.copyfileobj(response, stream, 1 << 20)
+        differences = compare_trees(expected_tree(originals), expected_tree([layer]))
+    return {"repository": repository, "manifest_digest": digest, "root": root, "config_digest": descriptor["digest"],
+            "config": base64.b64encode(config).decode(), "diff_id": diff_id, "verified": not differences,
+            "differences": differences}
 
 
 def _rebuild_blobs(image, directory, range_bytes=8 * 1024 ** 2):
@@ -803,23 +871,35 @@ def convert_command(args):
     return 0
 
 
+def store_reads(store, token_file):
+    """Locators name the store node: read there, with the token (else None)."""
+    if store.store_node is None:
+        return None
+    from .environment_config import read_token
+    from .environment_rafs import store_access
+    reader, getter = store_access(store.store_node.url, read_token(token_file).decode())
+    return {"reader": reader, "getter": getter, "origin": store.store_node.url}
+
+
 def unpack_command(args):
-    from .managed_registry import registry_repository_tag_from_image_ref
+    from .managed_registry import manifest_digest_from_image_ref, registry_repository_tag_from_image_ref
     store = _chunk_store(args.config)
     registry, index = _registry_and_index(args, store)
-    coordinates = registry_repository_tag_from_image_ref(args.output_ref)
-    if coordinates is None or "@" in args.output_ref:
-        raise ValueError("unpack-environment needs an owned output tag")
+    coordinates = registry_repository_tag_from_image_ref(args.verify_image or args.output_ref)
     args.work_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    access = None
-    if store.store_node is not None:  # Locators name the store node: read there, with the token.
-        from .environment_config import read_token
-        from .environment_rafs import store_access
-        reader, getter = store_access(store.store_node.url, read_token(args.chunk_index_token_file).decode())
-        access = {"reader": reader, "getter": getter, "origin": store.store_node.url}
-    result = unpack_environment(registry, index, require_digest(args.root), repository=coordinates[0],
-                                tag=coordinates[1], work_root=args.work_root, nydus_image=store.nydus_image,
-                                access=access)
+    options = {"work_root": args.work_root, "nydus_image": store.nydus_image,
+               "access": store_reads(store, args.chunk_index_token_file)}
+    if args.verify_image:  # Plan §5.4: a receipt, before the image's OCI is released.
+        digest = manifest_digest_from_image_ref(args.verify_image)
+        if coordinates is None or not digest:
+            raise ValueError("--verify-image needs a pinned image in the managed registry")
+        result = verify_regeneration(registry, index, require_digest(args.root), registry.client, coordinates[0],
+                                     digest, **options)
+    elif coordinates is None or "@" in args.output_ref:
+        raise ValueError("unpack-environment needs an owned output tag")
+    else:
+        result = unpack_environment(registry, index, require_digest(args.root), repository=coordinates[0],
+                                    tag=coordinates[1], **options)
     print(json.dumps(result, sort_keys=True))
     return 0
 
@@ -853,6 +933,8 @@ def add_commands(subparsers):
                                  help="NBD device for the full-tree verification mount (root); repeatable")
         else:
             command.add_argument("--root", required=True)
-            command.add_argument("--output-ref", required=True)
+            output = command.add_mutually_exclusive_group(required=True)
+            output.add_argument("--output-ref")
+            output.add_argument("--verify-image", help="compare with this pinned image's OCI layers; push nothing")
         command.set_defaults(func=function)
 

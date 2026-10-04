@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Volume-free builds (M2 plan §5.4, not run).** A build that names an image whose OCI manifest was released gets that image's regenerated copy as a BuildKit named context (`--build-context <ref>=docker-image://ucloud-regenerated:…`); the context and Dockerfile bytes, catalog pins and decisions are unchanged. The copy is one layer with the verified tree and the original config (ONBUILD, SHELL, labels kept). The gateway regenerates a missing copy with `chunk-migrate regenerate` and answers `503 base_regenerating` (retryable) until it exists; `409 base_released` when it cannot. Off unless `immutable_environments.regenerate_bases` is set (needs `nydus-image` on the gateway).
+  - `chunk-migrate verify-regeneration` (converter) writes a receipt per image: its regenerated tree equals its OCI layers, with the layer's diff ID and the config bytes. Regeneration must reproduce that diff ID.
+  - `chunk-migrate release-oci --include-build-inputs --receipts …` also releases build inputs that have a receipt, recording it first. `chunk-migrate status --out` lists the rows to verify.
+  - Builders and the gateway ship together: an older builder ignores `base_contexts` and such a build fails on the missing manifest.
+
 ## 0.9.21 - 2026-10-04 (gateway and workers)
 
 - **The registry prune deletes 8 manifests per lease-fence transaction, not 64.** Each batch's registry DELETEs run inside one write transaction on the registry usage database. 64 held it for nearly a minute, so other writers (`chunk-migrate switch` and `release`, lease writes) timed out after 60 s, and a gateway start could not read it ("registry usage database is invalid or unavailable").

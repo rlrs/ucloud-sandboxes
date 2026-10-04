@@ -670,9 +670,110 @@ root for warmups. Workers attach that root instead of reading the annotation.
   deleted that root, the pull fails and so does the create. Nodes that already
   hold the image are unaffected.
 
+**Volume-free builds (implemented 2026-10-04, not run): step 2's first half.**
+
+What reads a build input's OCI today:
+- **BuildKit on the builder.** The gateway's `resolve_build` rewrites a
+  matching `FROM` to the catalog's pinned `repo@sha256:<manifest>` (and takes
+  a `prepared-build` lease); foundation builds name their prepared source the
+  same way; user Dockerfiles may name any managed image by tag or digest
+  (`FROM`, `COPY --from`, an `ARG`). BuildKit fetches that manifest, its
+  config and every layer, and the output's push mounts or uploads those
+  layers into the output repository.
+- **Nothing after the build.** The environment publisher reads the output's
+  own manifest and blobs; `base_layers_linked` / `mount_prepared_base` are
+  optional blob mounts that fail softly.
+- **Prepare scripts reading OCI directly:** `prepare_shared_task_image.py`
+  reads its anchor's manifest and layer (fails on a released anchor, as does
+  re-running any prepare script on a released image; listed below).
+
+**Not byte-exact at the OCI level.** `unpack-environment` reproduces the
+*tree* (M1: 10 of 10), but an `image`-layout root keeps no layer boundaries
+and the original gzip bytes are gone, so the manifest, config and layer
+digests are new. Nothing may therefore stand in for the original digest. The
+design keeps every pin as it is and changes only what BuildKit reads:
+- **Named contexts, not rewrites.** For each OCI-released image a build names
+  (any whole reference on our registry in the Dockerfile or a build argument),
+  the gateway adds `--build-context <reference>=docker-image://<copy>`
+  (`ImageBuildSpec.base_contexts`). The context archive, the Dockerfile bytes,
+  catalog pins, `prepared_decisions`, `image_roots` keys and cache affinity
+  stay byte-identical; the build fingerprint changes only for such builds.
+  Checked with BuildKit 0.26: a digest-pinned `FROM`, tag+digest, `ARG`
+  substitution and `COPY --from` all take the context, and BuildKit never
+  contacts the missing manifest.
+- **The copy keeps the original config.** `release-oci` records the image's
+  config bytes (bound to the root: their digest is its `source_image`). The
+  copy's config is that config over one layer, its history marked empty, so
+  `ONBUILD`, `SHELL`, `ENV`, labels and volumes are inherited as before
+  (checked with BuildKit: ONBUILD ran, ENV and SHELL kept). Without them the
+  root's five process fields would silently drop `ONBUILD` triggers.
+- **Verified before release, reproduced after.** `chunk-migrate
+  verify-regeneration` (converter host) runs M1's rollback check per image
+  while its OCI still exists: regenerated tree = OCI layers, plus the
+  regenerated layer's diff ID and the config, in a receipt. Regeneration later
+  must reproduce that diff ID or it is refused, so a copy is byte-identical
+  (uncompressed) to a verified one. `nydus-image unpack` is deterministic for
+  v2.4.5 (tested twice on one fixture); gzip may differ across hosts, which
+  only changes the copy's digest.
+- **On demand, not inline.** A build naming a released image whose copy is
+  missing gets `503 base_regenerating` (`Retry-After: 30`, retryable, like
+  `builder_not_ready`); the gateway starts `chunk-migrate regenerate` for it
+  (flock single-flight across replicas, 2 per host, `nice`, scratch of three
+  device sizes plus 16 GiB reserve on the state disk) and the retry builds.
+  A failure answers `409 base_released` with its error for 10 minutes, then
+  retries; an image released without a receipt answers 409 at once.
+- **Copies are short-lived.** `ucloud-regenerated:r-<hash>` is outside
+  `ucloud-managed/`: no LRU eviction; each build leases (`regenerated-base`,
+  1 h) and touches it, and the hourly prune's age rule drops it 30 days after
+  its last build. A pruned copy is regenerated on the next build.
+- **Outputs stay OCI** for now (few). An output from a copy carries the
+  copy's layer instead of the original's layers; converting outputs to the
+  chunk store and releasing their OCI is step 2's second half.
+
+**Release of build inputs.** `release-oci --include-build-inputs` takes a
+build input only with a receipt (`--receipts`, or one recorded earlier) whose
+root is the row's `new_root` and whose config is the row's config; it refuses
+without `immutable_environments.regenerate_bases` and a runnable
+`chunk_store.nydus_image` on the gateway. `prepared-build` leases still keep
+a base an in-flight catalog build names; a user build mid-pull of a deleted
+manifest fails once and its retry takes the copy.
+
+**Operator sequence** (dry runs first, as for every release):
+1. Install `nydus-image` v2.4.5 on the gateway at `chunk_store.nydus_image`
+   (sha256 `1ad7b793…19072`, as the converters); set
+   `immutable_environments.regenerate_bases: true`; roll the gateway. Builders
+   need this release too (they read `base_contexts`; an older builder ignores
+   it, and the build fails on the missing manifest).
+2. Gateway: `chunk-migrate status --config … --out rows.jsonl`.
+3. Converter (as for `convert`, no NBD needed): `chunk-migrate
+   verify-regeneration --config converter.json --chunk-index-token-file …
+   --work-root … <registry args> --rows rows.jsonl --receipts receipts.jsonl
+   --parallel 12`. A rerun resumes; `differ` and `failed` images keep their OCI.
+4. Gateway: `chunk-migrate release-oci --wave N --include-build-inputs
+   --receipts receipts.jsonl`, then with `--execute`.
+5. Canary: one prepared build per family on a released base (first answer
+   503, then success), and `chunk-migrate regenerate --image repo@digest`
+   ahead of an eval whose live builds start from released foundations.
+6. The registry sweep in its window (§3.4).
+
 **Still between this and no registry Volume:**
-- **Build inputs keep their OCI** until volume-free builds (step 2). That
+- **Build inputs keep their OCI** until verified and released as above. That
   includes all of wave 4 (§9 decision 4), foundations and named sources.
+- **`ucloud-upstream` keeps the same layers.** Staged upstream sources
+  (`stage_source_image.py`, durable `upstream-source:` leases) share most of
+  their layers with the prepared images built from them, and the inventory
+  (`ucloud-managed/` only) never measured them. Releasing prepared images
+  frees those shared layers only once the staged sources are released too
+  (a prepared source already stands in for them in the catalog). Measure,
+  then release them with the same receipts (they have no root yet: convert
+  first) or drop them.
+- **Copies and outputs land on the registry.** Each regenerated copy is one
+  base's full layer for 30 days after its last build, and build outputs
+  remain OCI until builds publish into the chunk store.
+- **Park snapshots live in the registry** (`snapshot_store.kind: registry` in
+  production). They move with `snapshot_store.kind: s3`, an existing switch.
+- **Commit builds on a released parent** are refused (`commit_parent_released`);
+  they could extend the copy instead.
 - **A manifest delete frees nothing until a registry sweep** (§3.4), which
   needs its timed window.
 - **The registry still holds other repositories:** environment roots and
@@ -683,6 +784,28 @@ root for warmups. Workers attach that root instead of reading the annotation.
 - **`inventory` no longer lists OCI-released images.**
 - **Rollback** after OCI release regenerates the OCI with `unpack-environment`
   (§7) and re-pushes its tags.
+
+**Where the remaining metadata goes.** After the above, the registry holds
+signed environment roots and component manifests (a few KB each; RAFS
+bootstraps and chunk maps are already in the chunk store), startup traces,
+the build cache (32 GiB cap), regenerated copies and build outputs. Create
+paths read some of it: the gateway loads a dispatched root and its
+components to lease the closure (cached per digest), and a worker loads the
+signed root and components at attach (LRU-cached) and, with
+`shared_traces`, a trace. The options:
+- **Registry on S3** (`registry_store.kind: s3`, `ucloud-sandboxes-registry-migrate`):
+  no disk to grow, but every uncached manifest read on a create pays S3's
+  tail (S12: 1 MiB p99 5.5 s; small GETs are better but not local), through
+  the gateway's NAT for workers.
+- **Registry on the gateway's local disk:** fast and bounded by what is left
+  (metadata, the capped cache, copies, outputs), but the gateway's disk then
+  holds the only copy of the roots. Roots are rebuildable from the chunk
+  store and the converters' results, and `image-roots.sqlite3` already lives
+  there.
+- Recommended: local disk for the registry with roots and components
+  mirrored to S3 (or published there by `convert` as well), so creates read
+  locally and a lost gateway is restored from S3, not rebuilt; decide after
+  measuring what stays (`registry-gc` dry walk after the build-input release).
 
 ## 6. Gates
 

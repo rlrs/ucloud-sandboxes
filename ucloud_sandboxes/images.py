@@ -124,6 +124,9 @@ class ImageBuildSpec:
     dockerfile: str = "Dockerfile"
     build_args: dict[str, str] = field(default_factory=dict)
     labels: dict[str, str] = field(default_factory=dict)
+    # Gateway-set BuildKit named contexts: an OCI-released image a build names
+    # -> its regenerated copy (docker-image://...); M2 plan §5.4.
+    base_contexts: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ImageBuildSpec":
@@ -139,6 +142,7 @@ class ImageBuildSpec:
             ),
             build_args={str(k): str(v) for k, v in dict(build_args).items()},
             labels={str(k): str(v) for k, v in dict(labels).items()},
+            base_contexts={str(k): str(v) for k, v in dict(raw.get("base_contexts") or {}).items()},
         )
 
     def validate(self) -> None:
@@ -152,6 +156,10 @@ class ImageBuildSpec:
         if not self.context_path.strip():
             raise ValueError("image context_path is required.")
         _normalize_dockerfile_path(self.dockerfile)
+        for name, value in self.base_contexts.items():
+            if (not re.fullmatch(r"[^\s=]+", name) or not value.startswith("docker-image://")
+                    or not re.fullmatch(r"\S+", value)):
+                raise ValueError("image base_contexts must map image references to docker-image:// references.")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -178,6 +186,8 @@ def image_build_fingerprint(
         "tag": spec.tag,
         "version": 1,
     }
+    if spec.base_contexts:  # Only then: every other build keeps its identity.
+        payload["base_contexts"] = dict(spec.base_contexts)
     encoded = json.dumps(
         payload,
         ensure_ascii=False,
@@ -484,6 +494,8 @@ class DockerImageRuntime:
             argv.extend(["--build-arg", f"{key}={spec.build_args[key]}"])
         for key in sorted(spec.labels):
             argv.extend(["--label", f"{key}={spec.labels[key]}"])
+        for key in sorted(spec.base_contexts):
+            argv.extend(["--build-context", f"{key}={spec.base_contexts[key]}"])
         if direct_push:
             argv.append("--push")
             for cache in cache_imports:

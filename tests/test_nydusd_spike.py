@@ -186,6 +186,37 @@ class NydusdDeviceTests(unittest.TestCase):
             self.assertEqual(list(factory.cache.iterdir()), [])
             self.assertEqual(factory.cache_bytes(), 0)
 
+    def test_only_a_blobs_first_daemon_starts_alone(self):
+        # M2 wave 1: one lock for every daemon start cost a 20-sandbox burst about 14 s.
+        from ucloud_sandboxes.environment_nydusd import NydusdFactory
+        with TemporaryDirectory() as directory:
+            binary = Path(directory, "nydusd-bin")
+            binary.write_bytes(b"pinned")
+            factory = NydusdFactory(str(binary), hashlib.sha256(b"pinned").hexdigest(), "http://store", "token",
+                                    Path(directory, "nydusd"))
+            base, a, b = "a" * 64, "b" * 64, "c" * 64
+
+            def attempt(blobs):  # True when it started while the first start was still running.
+                done = threading.Event()
+
+                def run():
+                    with factory.starting(blobs):
+                        done.set()
+                thread = threading.Thread(target=run)
+                thread.start()
+                started = done.wait(.3)
+                return started, thread
+            with factory.starting((base, a)):  # base's first daemon is preparing it.
+                self.assertTrue(attempt((b,))[0])  # A new blob of its own: in parallel.
+                waited, thread = attempt((base, b))
+                self.assertFalse(waited)  # base is not prepared yet: wait.
+            thread.join(2)
+            self.assertTrue(attempt((base, a))[0])  # Prepared: no lock at all.
+            factory.acquire((base,))
+            factory.release((base,))  # Its files go, so its next daemon prepares it again.
+            with factory.starting((base,)):
+                self.assertFalse(attempt((base,))[0])
+
 
 @unittest.skipUnless(NYDUS or shutil.which("nydus-image"), "needs nydus-image v2.4.5 (UCLOUD_TEST_NYDUS_IMAGE)")
 class RealVirtualBlobTests(VirtualBlobTests):

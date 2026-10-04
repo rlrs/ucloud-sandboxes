@@ -12,6 +12,7 @@ Everything else (today's EROFS components) keeps the Python export.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 import errno
 import fcntl
 import hashlib
@@ -57,11 +58,12 @@ class NydusdFactory:
         self.root.mkdir(mode=0o700, parents=True)
         # One cache for every daemon, so images share layers (half the bytes
         # of a cache per image). nydusd's chunk bitmap is a shared mmap of
-        # atomics and cache hits are re-validated, but a starting daemon
-        # writes a blob's TOC and digests through one fixed temporary name:
-        # daemons start one at a time.
+        # atomics and cache hits are re-validated, but a daemon starting on a
+        # new blob writes its TOC and digests through one fixed temporary
+        # name: a blob's first daemon starts alone, later ones need no lock.
+        # (One lock for every start cost a 20-sandbox burst about 14 s, M2 wave 1.)
         self.cache = self.root / "cache"
-        self.startup, self._guard, self._users = threading.Lock(), threading.Lock(), {}
+        self._guard, self._users, self._ready, self._preparing = threading.Lock(), {}, set(), {}
         self.cache.mkdir(mode=0o700)
 
     def acquire(self, blobs):
@@ -79,6 +81,23 @@ class NydusdFactory:
                 pass  # Released meanwhile.
         return total
 
+    @contextmanager
+    def starting(self, blobs):
+        """Held while a daemon starts: the locks of its blobs no daemon has
+        prepared yet, in one order. Ready means prepared."""
+        with self._guard:
+            locks = [self._preparing.setdefault(blob, threading.Lock())
+                     for blob in sorted(set(blobs) - self._ready)]
+        for lock in locks:
+            lock.acquire()
+        try:
+            yield
+            with self._guard:
+                self._ready.update(blobs)
+        finally:
+            for lock in reversed(locks):
+                lock.release()
+
     def release(self, blobs):
         """Drop a blob's cache files once no attached image uses it."""
         with self._guard:
@@ -86,6 +105,7 @@ class NydusdFactory:
                 self._users[blob] -= 1
                 if not self._users[blob]:
                     del self._users[blob]
+                    self._ready.discard(blob)  # Its files go: the next daemon prepares it again.
                     for path in self.cache.glob(blob + ".*"):
                         path.unlink(missing_ok=True)
 
@@ -134,7 +154,7 @@ class NydusdDevice:
                                  0o600)
             with os.fdopen(descriptor, "w") as stream:  # Holds the read token.
                 json.dump(config, stream)
-            with open(self._work / "nydusd.log", "ab") as log, factory.startup:
+            with open(self._work / "nydusd.log", "ab") as log, factory.starting(self._blobs):
                 self.process = subprocess.Popen(
                     [factory.nydusd, "nbd", str(device), "--config", str(self._work / "config.json"),
                      "--threads", str(factory.threads), "--log-level", "warn"],

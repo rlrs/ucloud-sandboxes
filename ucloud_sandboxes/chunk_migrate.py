@@ -303,8 +303,15 @@ def switch_wave(roots, environments, usage, wave, *, registry_host, keys=None, w
                if row["state"] in ("converted", "reverted")
                and (keys is None or (row["repository"], row["manifest_digest"]) in keys)]
     for start in range(0, len(pending), SWITCH_BATCH):
-        batch = {(repository, digest): load_environment(environments, root).components  # Signed, published.
-                 for repository, digest, root in pending[start:start + SWITCH_BATCH]}
+        batch = {}
+        for repository, digest, root in pending[start:start + SWITCH_BATCH]:
+            try:  # The whole closure, signed and published: retention may have taken a part.
+                components = load_environment(environments, root).components
+                for component in components:
+                    environments.load(component)
+                batch[(repository, digest)] = components
+            except (OSError, ValueError) as exc:  # RegistryRequestError (404) is a ValueError.
+                cold[f"{repository}@{digest}"] = [f"closure: {type(exc).__name__}: {exc}"[:300]]
         try:
             failed = warm(batch) if warm is not None else {}
         except (OSError, ValueError) as exc:  # The index or node timed out: this batch waits for a rerun.

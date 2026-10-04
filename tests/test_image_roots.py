@@ -213,6 +213,12 @@ class WaveTests(artifact_fixtures.EnvironmentArtifactTests):
         self.assertEqual((summary["switched"], list(summary["not_warm"])), (0, ["managed/a@" + digest]))
         self.assertIsNone(roots.dispatch_root("managed/a", digest))  # Nothing cold is dispatched.
 
+        component = self.registry.client.manifests.pop(self.digest)  # Retention took a component.
+        summary = switch_wave(roots, self.registry, usage, "1", registry_host="r:5000", warm=lambda batch: {})
+        self.assertEqual(summary["switched"], 0)
+        self.assertIn("closure", summary["not_warm"]["managed/a@" + digest][0])
+        self.registry.client.manifests[self.digest] = component
+
         def unreachable(batch):
             raise OSError("chunk store request failed: ReadTimeoutError")
         summary = switch_wave(roots, self.registry, usage, "1", registry_host="r:5000", warm=unreachable)

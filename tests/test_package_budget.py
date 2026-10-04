@@ -93,8 +93,9 @@ import unittest
 # recording and the build cache's client takes timeout_seconds (registry prune
 # crashed hourly), +91 net: the store node as a full replica of its S3 prefix
 # (mirror loop, no eviction, a residency check; batched switch), less the cold
-# placement it obsoletes. Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 113_332
+# placement it obsoletes, +7 a switch verifies the whole closure first. Lower it
+# on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 113_339
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

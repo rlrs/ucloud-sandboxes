@@ -100,6 +100,32 @@ class VirtualBlobTests(unittest.TestCase):
             with self.subTest(blob=blob):
                 self.assertEqual(self.get(component_hex, blob, 0, len(expected)), expected)
 
+    def test_nydusd_attach_loads_only_what_nydusd_reads(self):
+        # A burst's attaches shared one Python process: per-chunk state cost
+        # 8 s each under load. nydusd needs the verified bootstrap and regions.
+        from dataclasses import replace
+        from tempfile import TemporaryDirectory
+        from ucloud_sandboxes.environment_rafs import load_nydusd_image, load_rafs_image, store_access
+        self.store.index.service.store_url = self.url
+        component_digest = load_environment(self.store.registry, self.roots[0]).components[0]
+        loaded = self.store.registry.load(component_digest)
+        self.store.index.writer.register(component_digest, loaded.bootstrap["digest"], loaded.chunk_map)
+        client = ChunkStoreClient(self.url, WRITE)
+        keys = [item["key"] for item in locator_objects(self.store.index.reader.locator(component_digest), self.url)]
+        self.assertEqual(client.wait(client.warm([{"key": key} for key in keys])["job"], timeout=60)["failed"], 0)
+        reader, getter = store_access(self.url, READ)
+        with TemporaryDirectory() as meta:
+            full = load_rafs_image(component_digest, loaded, self.store.index.reader, reader=reader, getter=getter,
+                                   origin=self.url)
+            light = load_nydusd_image(component_digest, loaded, getter=getter, meta_root=meta, origin=self.url)
+            self.assertEqual(light.path.read_bytes(), full.bootstrap.read(0, full.bootstrap.size))
+            self.assertEqual((light.map.regions, light.image_size), (full.map.regions, full.image_size))
+            light.close()
+            self.assertFalse(light.path.exists())
+            wrong = replace(loaded, chunk_map={**loaded.chunk_map, "digest": loaded.bootstrap["digest"]})
+            with self.assertRaises((ValueError, RegistryRequestError)):
+                load_nydusd_image(component_digest, wrong, getter=getter, meta_root=meta, origin=self.url)
+
     def test_warming_a_component_covers_its_blob_tails_and_layouts(self):
         # M2 wave 1: tails and layouts were fetched from S3 at first attach.
         self.store.index.service.store_url = self.url

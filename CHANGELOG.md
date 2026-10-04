@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.9.18 - 2026-10-04 (gateway and workers)
+
+- **A nydusd attach loads only what nydusd reads.** The worker fetches the bootstrap and chunk map from the store node by the digests the signed component pins, with no index call. It verifies both digests, checks the chunk map's regions against the bootstrap's device table, and writes the bootstrap for nydusd. nydusd checks every chunk against the bootstrap itself.
+  - Why: building the Python reader's per-chunk state took seconds per large image, and all of a node's attaches share env-io's one GIL. In a warm 512-rollout burst, env-io sat at 120-160% CPU and an attach took 8 s instead of 0.5 s. Traces showed 64% of create time was image preparation.
+
 ## 0.9.17 - 2026-10-04 (gateway only)
 
 - **Awaited environment attaches are no longer capped at 32 per gateway process.** The cap (`MAX_BACKGROUND_CREATE_IMAGE_PULLS`) bounds pulls that outlive their 2 s callers. An awaited attach always has a waiting create, so creates in flight bound it. With 96 creates in flight (0.9.16), the cap turned away 579 creates in 10 s as `image_warmup_pending`.

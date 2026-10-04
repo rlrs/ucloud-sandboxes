@@ -19,7 +19,8 @@ from pathlib import Path
 import threading
 
 from .chunk_index import http_range, http_request
-from .chunk_store import BLOCK, RAW, ChunkMap, decode_chunk, pack_key, parse_bootstrap, zstd_decompress
+from .chunk_store import (BLOCK, RAW, ChunkMap, bootstrap_devices, chunk_map_regions, decode_chunk, pack_key,
+                          parse_bootstrap, zstd_decompress)
 from .environment_artifact import Chunk, RafsEnvironmentComponent, content_digest
 from .managed_registry import RegistryRequestError
 
@@ -291,6 +292,54 @@ def load_rafs_image(digest, component, index, *, getter=_get, reader=http_range,
         bootstrap = VerifiedBootstrap(bootstrap, Path(meta_root) / (digest[7:] + ".boot"))
     return RafsImage(digest, component, bootstrap, chunk_map, locator, refresh=lambda: index.locator(digest),
                      reader=reader, origin=origin)
+
+
+class NydusdImage:
+    """A verified chunk-store image as nydusd reads it: the bootstrap in a
+    private file and the blob regions, nothing per chunk (nydusd checks every
+    chunk against the bootstrap's digests). Building RafsImage's per-chunk
+    state took seconds of Python per large image, and a burst's attaches
+    shared one GIL: 8 s each under load against 0.5 s alone (2026-10-04)."""
+
+    def __init__(self, digest, component, path, regions):
+        self.digest, self.component, self.path = digest, component, path
+        self.bootstrap = self  # The factory reads ``bootstrap.path``.
+        self.map = dataclasses.make_dataclass("Regions", ["regions"])(regions)
+        self.image_digest, self.image_size = component.image_digest, component.device_size
+
+    def authenticate(self, trusted_keys):
+        self.component.authenticate(trusted_keys)
+        return self
+
+    def close(self):
+        self.path.unlink(missing_ok=True)
+
+
+def load_nydusd_image(digest, component, *, getter, meta_root, origin):
+    """Fetch and verify the bootstrap and chunk map from the store node, by
+    the digests the signed component pins (no index: their keys follow from
+    the digests), and check the map's regions against the bootstrap's devices."""
+    boot, chunk_map = component.bootstrap, component.chunk_map
+    base = store_prefix(origin) + "meta/"
+    with ThreadPoolExecutor(2, thread_name_prefix="rafs-meta") as pool:
+        compressed = pool.submit(getter, base + boot["digest"][7:] + ".boot.zst", boot["size"] + boot["size"] // 64
+                                 + (1 << 20))
+        encoded = pool.submit(getter, base + chunk_map["digest"][7:] + ".map", chunk_map["size"])
+        compressed, encoded = compressed.result(), encoded.result()
+    bootstrap = zstd_decompress(compressed, boot["size"])
+    if content_digest(bootstrap) != boot["digest"]:
+        raise ValueError("RAFS bootstrap identity mismatch")
+    if len(encoded) != chunk_map["size"] or content_digest(encoded) != chunk_map["digest"]:
+        raise ValueError("RAFS chunk map identity mismatch")
+    bootstrap_size, device_size, regions = chunk_map_regions(encoded)
+    if (bootstrap_size != len(bootstrap) or device_size != component.device_size or sorted(regions) != sorted(
+            (blob, mapped, blocks) for blob, blocks, mapped in bootstrap_devices(bootstrap))):
+        raise ValueError("RAFS chunk map regions differ from the bootstrap's device table")
+    path = Path(meta_root) / (digest[7:] + ".boot")
+    temporary = path.with_name(path.name + f".{os.getpid()}.{threading.get_ident()}")
+    temporary.write_bytes(bootstrap)
+    os.replace(temporary, path)
+    return NydusdImage(digest, component, path, regions)
 
 
 def read_image(cache, image, offset, length, cancel=None):

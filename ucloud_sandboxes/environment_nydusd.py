@@ -28,7 +28,7 @@ import time
 from urllib.parse import urlsplit
 
 from .environment_nbd import CLEAR_SOCK, DISCONNECT, ReadOnlyEnvironmentDevice
-from .environment_rafs import RafsImage
+from .environment_rafs import NydusdImage, RafsImage
 
 READY_SECONDS = 30.0
 # One read must never reach the kernel's NBD timeout: each expiry marks one of
@@ -110,7 +110,7 @@ class NydusdFactory:
                         path.unlink(missing_ok=True)
 
     def __call__(self, device, component, cache, workers, *, trusted_keys):
-        if not isinstance(component, RafsImage):
+        if not isinstance(component, (RafsImage, NydusdImage)):
             return ReadOnlyEnvironmentDevice(device, component, cache, workers, trusted_keys=trusted_keys)
         return NydusdDevice(device, component, self, trusted_keys=trusted_keys)
 

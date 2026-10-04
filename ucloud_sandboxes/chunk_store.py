@@ -149,8 +149,27 @@ class RafsBootstrap:
     chunks: tuple  # (id, blob index, flags, compressed size, size, compressed offset, offset)
 
 
+def bootstrap_devices(data):
+    """A RAFS v6 bootstrap's device table, strictly bounded; the chunk table's
+    bounds are checked, not its records (nydusd checks every chunk)."""
+    return _bootstrap_tables(data)[0]
+
+
 def parse_bootstrap(data):
     """The device and chunk tables of a RAFS v6 bootstrap, strictly bounded."""
+    devices, (ct_off, ct_size) = _bootstrap_tables(data)
+    chunks = []
+    for raw in _CHUNK_INFO.iter_unpack(data[ct_off:ct_off + ct_size]):
+        digest, blob, chunk_flags, csize, usize, coff, uoff = raw[:7]
+        if (blob >= len(devices) or chunk_flags & ~_RAFS_CHUNK_FLAGS or not 0 < usize <= CHUNK_BYTES
+                or not 0 < csize <= MAX_CLEN or (not chunk_flags & 1 and csize != usize)
+                or uoff % BLOCK or uoff + usize > devices[blob][1] * BLOCK):
+            raise ValueError("invalid RAFS chunk record")
+        chunks.append((digest, blob, chunk_flags, csize, usize, coff, uoff))
+    return RafsBootstrap(len(data), tuple(devices), tuple(chunks))
+
+
+def _bootstrap_tables(data):
     size = len(data)
     if not 1024 + 128 + 40 <= size <= MAX_BOOTSTRAP_BYTES or size % BLOCK:
         raise ValueError("invalid RAFS bootstrap size")
@@ -173,15 +192,7 @@ def parse_bootstrap(data):
         if not _HEX64.fullmatch(blob_id) or blocks <= 0 or mapped <= 0:
             raise ValueError("invalid RAFS device slot")
         devices.append((blob_id, blocks, mapped))
-    chunks = []
-    for raw in _CHUNK_INFO.iter_unpack(data[ct_off:ct_off + ct_size]):
-        digest, blob, chunk_flags, csize, usize, coff, uoff = raw[:7]
-        if (blob >= len(devices) or chunk_flags & ~_RAFS_CHUNK_FLAGS or not 0 < usize <= CHUNK_BYTES
-                or not 0 < csize <= MAX_CLEN or (not chunk_flags & 1 and csize != usize)
-                or uoff % BLOCK or uoff + usize > devices[blob][1] * BLOCK):
-            raise ValueError("invalid RAFS chunk record")
-        chunks.append((digest, blob, chunk_flags, csize, usize, coff, uoff))
-    return RafsBootstrap(size, tuple(devices), tuple(chunks))
+    return tuple(devices), (ct_off, ct_size)
 
 
 # --- Chunk map: ucloud-chunk-map-v1 (signed by digest in the component) ---
@@ -238,16 +249,8 @@ class ChunkMap:
 
     @classmethod
     def decode(cls, payload):
-        if len(payload) < _MAP_HEADER.size:
-            raise ValueError("chunk map is truncated")
-        magic, bootstrap_size, device_size, regions, entries = _MAP_HEADER.unpack_from(payload)
-        body = _MAP_HEADER.size + regions * _MAP_REGION.size
-        if magic != _MAP_MAGIC or regions > MAX_REGIONS or entries > MAX_MAP_ENTRIES \
-                or len(payload) != body + entries * _MAP_ENTRY.size:
-            raise ValueError("invalid chunk map encoding")
-        parsed = tuple((blob.hex(), mapped, blocks) for blob, mapped, blocks
-                       in _MAP_REGION.iter_unpack(payload[_MAP_HEADER.size:body]))
-        offsets, sizes, ids = zip(*_MAP_ENTRY.iter_unpack(payload[body:])) if entries else ((), (), ())
+        (bootstrap_size, device_size, parsed), body = _map_header(payload)
+        offsets, sizes, ids = zip(*_MAP_ENTRY.iter_unpack(payload[body:])) if len(payload) > body else ((), (), ())
         return cls(bootstrap_size, device_size, parsed, offsets, sizes, ids)
 
     def overlapping(self, offset, end):
@@ -262,6 +265,35 @@ class ChunkMap:
         """Its header equals the verified bootstrap's size and device table."""
         return (self.bootstrap_size == bootstrap.size and sorted(self.regions) == sorted(
             (blob, mapped, blocks) for blob, blocks, mapped in bootstrap.devices))
+
+
+def chunk_map_regions(payload):
+    """(bootstrap size, device size, regions) of an encoded chunk map, without
+    its entries: what nydusd needs, the blobs and where they sit."""
+    header, _body = _map_header(payload)
+    bootstrap_size, device_size, regions = header
+    end = round_up(bootstrap_size) if 0 < bootstrap_size <= MAX_BOOTSTRAP_BYTES else None
+    for blob_id, mapped, blocks in regions:
+        require_hex(blob_id)
+        if end is None or mapped * BLOCK < end or blocks <= 0:
+            raise ValueError("chunk map regions overlap")
+        end = (mapped + blocks) * BLOCK
+    if device_size != end:
+        raise ValueError("chunk map device size differs from its regions")
+    return header
+
+
+def _map_header(payload):
+    if len(payload) < _MAP_HEADER.size:
+        raise ValueError("chunk map is truncated")
+    magic, bootstrap_size, device_size, regions, entries = _MAP_HEADER.unpack_from(payload)
+    body = _MAP_HEADER.size + regions * _MAP_REGION.size
+    if magic != _MAP_MAGIC or regions > MAX_REGIONS or entries > MAX_MAP_ENTRIES \
+            or len(payload) != body + entries * _MAP_ENTRY.size:
+        raise ValueError("invalid chunk map encoding")
+    parsed = tuple((blob.hex(), mapped, blocks) for blob, mapped, blocks
+                   in _MAP_REGION.iter_unpack(payload[_MAP_HEADER.size:body]))
+    return (bootstrap_size, device_size, parsed), body
 
 
 def chunk_map_from_bootstrap(bootstrap):

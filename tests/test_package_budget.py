@@ -107,9 +107,11 @@ import unittest
 # 512 creates and nothing said why), +7 a create waits for an environment
 # attach instead of polling the queue every 2 s, +8 creates in flight sized to
 # every node's startup slots (a fixed 32 capped bursts near 6/s), +4 awaited
-# attaches are not capped by the 2 s pulls' background limit.
+# attaches are not capped by the 2 s pulls' background limit, +85 nydusd-mode
+# attach loads headers only (a burst's attaches shared env-io's GIL: 8 s each);
+# the full loader goes with the Python RAFS reader.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 113_482
+PACKAGE_LINE_BUDGET = 113_567
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

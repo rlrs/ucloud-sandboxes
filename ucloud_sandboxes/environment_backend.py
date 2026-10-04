@@ -528,6 +528,10 @@ def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetc
             access = {"reader": reader, "getter": getter, "origin": chunk_store_url}
         rafs = lambda digest, component: load_rafs_image(digest, component, client, meta_root=meta,  # noqa: E731
                                                          **access)
+        if nydusd is not None and chunk_store_url:  # nydusd verifies chunks: load headers only.
+            from .environment_rafs import load_nydusd_image
+            rafs = lambda digest, component: load_nydusd_image(  # noqa: E731
+                digest, component, getter=access["getter"], meta_root=meta, origin=chunk_store_url)
         # S3 demand misses wait 30-100 ms, not the registry's 3 ms.
         cache_options = {"concurrent_misses": concurrent_misses}
         # C2.1 (docs/benchmarks/nydusd-spike-2026-10-03): nydusd serves RAFS

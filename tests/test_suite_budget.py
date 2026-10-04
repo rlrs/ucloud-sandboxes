@@ -71,7 +71,10 @@ from tests.test_package_budget import package_lines
 # +13 an environment attach is awaited, not polled, +7 creates in flight cover
 # every node's startup slots, +2 and are not capped like 2 s pulls, +28 a nydusd
 # attach loads only what nydusd reads.
-SUITE_LINE_BUDGET = 97_752
+# +352 C4.3 phase 1: two gateways over shared state in both create modes, the
+# power-of-k create loop's outcomes, the admission-wait header and the route
+# intent's fences on SQLite and PostgreSQL.
+SUITE_LINE_BUDGET = 98_104
 SUITE = Path(__file__).resolve().parent
 
 

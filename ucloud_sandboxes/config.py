@@ -33,6 +33,7 @@ _REGISTRY_GUARD_DEFAULTS = {
     "registry_reference_grace_seconds": 3600,
     "registry_blob_grace_seconds": 7200,
 }
+CREATE_PLACEMENTS = ("ranked", "power_of_k")
 _RUNTIME_POLICY_FIELDS = {
     "builder_scale_down_idle_seconds",
     "heartbeat_ttl_seconds",
@@ -605,6 +606,10 @@ class DeploymentConfig:
     relay_postgres: RelayPostgresConfig | None = None
     immutable_environments: EnvironmentDeploymentConfig | None = None
     upstream_mirror: UpstreamMirrorConfig | None = None
+    # How a create picks its worker: "ranked" scans the fleet and reserves
+    # capacity transactionally; "power_of_k" samples k workers and lets the
+    # node's admission decide (C4.3, docs/c43-placement-wiring-plan.md).
+    gateway_create_placement: str = "ranked"
     # Filesystem registry disk guard (docs/managed-registry.md): at the cleanup
     # threshold the registry-pressure unit prunes, evicts least-recently-used
     # managed images down to the target, and garbage collects; at the refuse
@@ -677,7 +682,7 @@ class DeploymentConfig:
     def from_dict(cls, raw: object) -> "DeploymentConfig":
         if not isinstance(raw, dict):
             raise ValueError("deployment config must be a JSON object")
-        raw = {"node_package_root": DEFAULT_INSTALL_ROOT + "/release", "relay_postgres": None, "immutable_environments": None, "upstream_mirror": None, "gateway_processes": 1, **_REGISTRY_GUARD_DEFAULTS, **raw}
+        raw = {"node_package_root": DEFAULT_INSTALL_ROOT + "/release", "relay_postgres": None, "immutable_environments": None, "upstream_mirror": None, "gateway_processes": 1, "gateway_create_placement": "ranked", **_REGISTRY_GUARD_DEFAULTS, **raw}
         expected = {item.name for item in fields(cls)}
         schema = _require_int("schema", raw.get("schema"), minimum=1)
         if schema != DEPLOYMENT_CONFIG_SCHEMA:
@@ -742,6 +747,8 @@ class DeploymentConfig:
             gateway_processes=_require_int(
                 "gateway_processes", raw["gateway_processes"], minimum=1, maximum=16,
             ),
+            gateway_create_placement=_require_choice(
+                "gateway_create_placement", raw["gateway_create_placement"], CREATE_PLACEMENTS),
             relay_port=_require_port("relay_port", raw["relay_port"]),
             relay_request_timeout_seconds=_require_int(
                 "relay_request_timeout_seconds",
@@ -1029,6 +1036,9 @@ class DeploymentConfig:
             ),
             "gateway_max_http_request_threads": self.gateway_max_http_request_threads,
             "gateway_processes": self.gateway_processes,
+            # Omitted at its default, so releases without the field still read it.
+            **({"gateway_create_placement": self.gateway_create_placement}
+               if self.gateway_create_placement != "ranked" else {}),
             "relay_port": self.relay_port,
             "relay_request_timeout_seconds": self.relay_request_timeout_seconds,
             "relay_worker_lease_seconds": self.relay_worker_lease_seconds,
@@ -1180,6 +1190,12 @@ def _require_string(label: str, value: object) -> str:
     if any(character in value for character in ("\x00", "\r", "\n")):
         raise ValueError(f"{label} contains invalid characters")
     return value.strip()
+
+
+def _require_choice(label: str, value: object, choices: tuple[str, ...]) -> str:
+    if value not in choices:
+        raise ValueError(f"{label} must be one of {', '.join(choices)}")
+    return str(value)
 
 
 def _require_optional_string(label: str, value: object) -> str:

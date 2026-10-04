@@ -153,6 +153,7 @@ def build_request(
         if key.lower() not in {
             "host", "content-length", "connection",
             "authorization", "proxy-authorization", "x-ucloud-sandbox-token",
+            "x-ucloud-admission-wait",  # The gateway's own, never a client's.
         }
     }
     headers.update(extra_headers or {})

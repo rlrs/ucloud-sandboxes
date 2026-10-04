@@ -1116,6 +1116,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         create_target_concurrency_per_node=(
             config.policy.create_target_concurrency_per_node
         ),
+        create_placement=config.gateway_create_placement,
         max_http_request_threads=max(64, config.gateway_max_http_request_threads // processes),
         max_sandbox_resources=config.sandbox.resources,
         wake_consolidation_policy=config.policy,

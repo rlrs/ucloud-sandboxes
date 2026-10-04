@@ -110,8 +110,11 @@ import unittest
 # attaches are not capped by the 2 s pulls' background limit, +85 nydusd-mode
 # attach loads headers only (a burst's attaches shared env-io's GIL: 8 s each);
 # the full loader goes with the Python RAFS reader.
+# +467 C4.3 phase 1: power-of-k creates behind gateway_create_placement
+# (gateway/create.py, READ COMMITTED route intents, the node's admission-wait
+# header); phase 3 deletes the ranked create path (plan: about -960).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 113_567
+PACKAGE_LINE_BUDGET = 114_034
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

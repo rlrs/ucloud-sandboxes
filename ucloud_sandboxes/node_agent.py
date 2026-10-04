@@ -18,6 +18,7 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, unquote, urlparse
 from uuid import UUID, uuid4
 
+from .admission import ADMISSION_WAIT_HEADER, CREATE_ADMISSION_WAIT, parse_admission_wait
 from .agent import build_heartbeat
 from .build_context_store import (
     BuildContextBlobStore,
@@ -560,10 +561,14 @@ class NodeAgentHandler(BuildContextHttpHandler):
             spec = SandboxSpec.from_dict(spec_raw)
             phases["parse_spec_ms"] = _elapsed_ms(phase)
             phase = time.monotonic()
-            record, manager_timings = self.manager.create_with_timings(
-                spec,
-                operation=operation,
-            )
+            wait = CREATE_ADMISSION_WAIT.set(parse_admission_wait(self.headers.get(ADMISSION_WAIT_HEADER)))
+            try:
+                record, manager_timings = self.manager.create_with_timings(
+                    spec,
+                    operation=operation,
+                )
+            finally:
+                CREATE_ADMISSION_WAIT.reset(wait)
             phases["manager_create_ms"] = _elapsed_ms(phase)
         except SandboxConflictError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)

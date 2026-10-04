@@ -41,6 +41,49 @@ in [rl-scale-architecture-plan.md](rl-scale-architecture-plan.md) ("C4.3",
    route intent before dispatch, but cheaply. The literal "write the route
    once, after acceptance" is phase 3b, with a reaper and a delete fence.
 
+## Phase 0 result (2026-10-04)
+
+The 2026-10-03 baseline's burst was rerun on 0.9.6: 512 rollouts, 195 images,
+three CCX63, with wave 1 on the chunk store. Each command's `created_at` and
+`completed_at` were read from `gateway_commands`.
+
+**Gateway descriptor limit (fixed).** First, two runs on 0.9.4 lost 45 and
+131 creates to EMFILE: env-io ran at systemd's default of 1024 descriptors
+and peaked at 1217. 0.9.6 raised it to 65536.
+
+**After the fix:**
+
+| Run | Ready | Ready p50 / p95 / max (s) | Commands done on attempt 1 | Rate |
+| --- | --- | ---: | ---: | --- |
+| A3, from zero, 8 turns | 511/512 | 159 / 225 / 244 | 148 | nothing for 96 s (provisioning), then about 3.5/s |
+| B3, warm fleet, 1 turn | 511/512 | 63 / 130 / 139 | 353 | about 3.5/s, flat for all 139 s |
+
+The one failure in each run is the catalog gap, as in the baseline.
+
+**Where B3 waited:**
+- **Inside a worker's create.** `manager_create` p50 3.0 s, p95 12 s, max
+  21 s. Nearly all of it is `image_resolve`, the component attach: p50 2.7 s,
+  p95 11.6 s. Every other phase stays under 0.2 s. The 0.8.4 baseline's
+  worker create was 0.38 s.
+- **In requeues.** 158 creates needed 2 to 26 attempts. Busy nodes turned them
+  away, and the queue retried them with backoff.
+
+**Verdict.** At this scale the burst is limited by node-side attach and
+admission, not by the gateway's 32-command executor.
+- The executor never had fewer than 32 commands waiting, but a command's time
+  went into the node.
+- The levers come first:
+  - EROFS attach is serial (`attach_concurrency` 1). Each wave M2 moves to RAFS
+    gets 8 nydusd slots.
+  - Node admission rejects rather than queueing.
+  - Per-node create concurrency (C5.2).
+- C4.3 is still needed for creates/s at the API tier and for C4.5, but it is
+  not what limits a 512-rollout burst today.
+
+**Confound.** Wave 2's converters were reading the gateway registry at
+100 MB/s throughout, which slows EROFS attach reads. Rerun B3 with no
+conversions running before tuning against these numbers.
+
 ## Today's create (PostgreSQL)
 
 Each step is marked by its fate: **D** deleted by the create phases, **W**

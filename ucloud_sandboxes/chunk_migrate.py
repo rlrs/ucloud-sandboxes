@@ -292,7 +292,10 @@ def switch_wave(roots, environments, usage, wave, *, registry_host, keys=None, w
         if row["state"] not in ("converted", "reverted") or (keys is not None and key not in keys):
             continue
         environment = load_environment(environments, row["new_root"])  # Still published, signed by a trusted key.
-        failed = warm(environment.components) if warm is not None else []
+        try:
+            failed = warm(environment.components) if warm is not None else []
+        except (OSError, ValueError) as exc:  # The index or node timed out: this image waits for a rerun.
+            failed = [f"{type(exc).__name__}: {exc}"[:300]]
         if failed:
             cold["@".join(key)] = failed[:3]
             continue
@@ -383,7 +386,7 @@ def store_warmer(config):
         raise ValueError("switch needs immutable_environments.chunk_store with a store node to warm")
     index = ChunkIndexClient(store.index_url, read_token(store.read_token_file).decode())
     token = read_token(store.write_token_file).decode()
-    client = ChunkStoreClient(store.store_node.url, token)
+    client = ChunkStoreClient(store.store_node.url, token, timeout=120.0)
 
     def warm(components):
         objects = [item for component in components

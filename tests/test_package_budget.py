@@ -84,9 +84,9 @@ import unittest
 # store-node fills (the write token) run unhedged in half the S3 slots, +44 warming
 # covers nydusd blob tails and layouts, and an M2 switch dispatches only a fully
 # warm image, +17 a stalled read is latency, not EIO (nydusd retries the node for
-# 270 s inside a 600 s NBD timeout), and RAFS attaches have their own 8 slots.
-# Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 113_154
+# 270 s inside a 600 s NBD timeout), and RAFS attaches have their own 8 slots,
+# +3 a switch skips an image whose warm call fails. Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 113_157
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

@@ -209,6 +209,11 @@ class WaveTests(artifact_fixtures.EnvironmentArtifactTests):
                               warm=lambda components: ["meta/x.tail: TimeoutError"])
         self.assertEqual((summary["switched"], list(summary["not_warm"])), (0, ["managed/a@" + digest]))
         self.assertIsNone(roots.dispatch_root("managed/a", digest))  # Nothing cold is dispatched.
+
+        def unreachable(components):
+            raise OSError("chunk store request failed: ReadTimeoutError")
+        summary = switch_wave(roots, self.registry, usage, "1", registry_host="r:5000", warm=unreachable)
+        self.assertEqual((summary["switched"], len(summary["not_warm"])), (0, 1))  # Skipped, not aborted.
         warmed = []
         summary = switch_wave(roots, self.registry, usage, "1", registry_host="r:5000",
                               warm=lambda components: warmed.extend(components) or [])

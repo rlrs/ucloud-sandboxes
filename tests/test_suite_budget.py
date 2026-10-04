@@ -56,8 +56,9 @@ from tests.test_package_budget import package_lines
 # +87 M2 waves: resumable conversion, recording, switch re-pointing durable
 # owners (routes keep theirs), revert, +22 presigned reads retry only faults,
 # +16 worker fills never wait behind a builder's stalled fills, +26 warm coverage
-# and a cold image is never switched, +17 RAFS attaches never queue behind EROFS.
-SUITE_LINE_BUDGET = 97_253
+# and a cold image is never switched, +17 RAFS attaches never queue behind EROFS,
+# +6 a failed warm call skips the image.
+SUITE_LINE_BUDGET = 97_259
 SUITE = Path(__file__).resolve().parent
 
 

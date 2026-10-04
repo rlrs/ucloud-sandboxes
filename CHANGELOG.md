@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.9.6 - 2026-10-04
+
+- **env-io runs with `LimitNOFILE=65536`.** A 512-rollout burst on 0.9.4 lost creates to EMFILE, because env-io sat at systemd's default of 1024. At about 140 attached images per node it held roughly 600 NBD sockets and 355 device fds. The node agent already ran with 65536.
+
 ## 0.9.5 - 2026-10-04 (store node and converters)
 
 - **A converter's verification no longer warms hot.**

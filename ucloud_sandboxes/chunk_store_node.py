@@ -1237,6 +1237,7 @@ def add_commands(subparsers):
 
 STORE_CONFIG = "/etc/ucloud-sandboxes/chunk-store.json"
 STORE_ENV = "/etc/ucloud-sandboxes/chunk-store.env"  # The S3 key; root-only, read by systemd.
+STORE_DATA_MOUNT = "/mnt/store-replica"  # data_device; cache_dir and the index directory bind from it.
 _SAFE_SECRET = re.compile(r"[A-Za-z0-9+/=_.:-]{8,4096}")
 
 
@@ -1260,12 +1261,13 @@ def validate_store_options(options):
         raise ValueError("a store node takes no immutable-environment worker or builder material")
 
 
-def _unit(description, command, agent_bin, user):
+def _unit(description, command, agent_bin, user, mounts=()):
+    requires = f"RequiresMountsFor={' '.join(mounts)}\n" if mounts else ""
     return f"""[Unit]
 Description={description}
 Wants=network-online.target
 After=network-online.target
-
+{requires}
 [Service]
 Type=simple
 User={user}
@@ -1302,16 +1304,35 @@ def store_init_script(options):
     quote = shlex.quote
     secrets_file = (f"{store.access_key_id_env}={options.chunk_store_s3_access_key_id}\n"
                     f"{store.secret_access_key_env}={options.chunk_store_s3_secret_access_key}\n")
+    binds = {"cache": node.cache_dir} | ({"index": str(Path(store.index_database).parent)} if node.serve_index else {})
+    mounts = tuple(binds.values()) if node.data_device else ()
     units = {"ucloud-chunk-store.service": _unit("UCloud chunk store node (chunk_store.store_node)",
-                                                 "serve-chunk-store", agent_bin, user)}
+                                                 "serve-chunk-store", agent_bin, user, mounts)}
     if node.serve_index:
         units["ucloud-chunk-index.service"] = _unit("UCloud chunk store index on the store node",
-                                                    "serve-chunk-index", agent_bin, user)
+                                                    "serve-chunk-index", agent_bin, user, mounts)
     lines = [f"printf %s {b64(text)} | base64 -d | $SUDO tee /etc/systemd/system/{name} >/dev/null"
              for name, text in units.items()]
     if not node.serve_index:
         lines.append("$SUDO systemctl disable --now ucloud-chunk-index.service >/dev/null 2>&1 || true")
-    directories = [node.cache_dir] + ([str(Path(store.index_database).parent)] if node.serve_index else [])
+    directories = list(binds.values())
+    data = ""
+    if node.data_device:  # Never formatted here: a Volume arrives as ext4 and may already hold the replica.
+        device, mount = quote(node.data_device), STORE_DATA_MOUNT
+        data = "\n".join([
+            f'[ "$($SUDO blkid -s TYPE -o value {device})" = ext4 ] '
+            f'|| {{ echo "store_node.data_device is not ext4" >&2; exit 1; }}',
+            f"$SUDO install -d -m 0755 {mount}",
+            f"grep -q ' {mount} ' /etc/fstab || echo '{node.data_device} {mount} ext4 defaults,discard,nofail 0 2' "
+            "| $SUDO tee -a /etc/fstab >/dev/null",
+            f"mountpoint -q {mount} || $SUDO mount {mount}",
+            f"$SUDO tune2fs -m 0 {device} >/dev/null",
+            *(line for name, target in binds.items() for line in (
+                f'$SUDO install -d -m 0700 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_USER" {mount}/{name} '
+                f"{quote(target)}",
+                f"grep -q ' {target} ' /etc/fstab || echo '{mount}/{name} {target} none "
+                f"bind,nofail,x-systemd.requires-mounts-for={mount} 0 0' | $SUDO tee -a /etc/fstab >/dev/null",
+                f"mountpoint -q {quote(target)} || $SUDO mount {quote(target)}"))])
     tokens = "\n".join(
         f'$SUDO install -d -m 0700 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_USER" "$(dirname {quote(path)})"\n'
         f'$SUDO install -m 0600 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_USER" /dev/null {quote(path)}\n'
@@ -1322,7 +1343,7 @@ def store_init_script(options):
         package=quote(options.package_spec), sha=quote(options.package_sha256), user=quote(user), work=quote(work),
         runtime=quote(runtime), agent=quote(agent_bin), node_id=quote(options.normalized_node_id()),
         config=b64(json.dumps(store.to_dict(), indent=2, sort_keys=True)), config_path=STORE_CONFIG,
-        env=b64(secrets_file), env_path=STORE_ENV, tokens=tokens, units="\n".join(lines), names=" ".join(units),
+        env=b64(secrets_file), env_path=STORE_ENV, data=data, tokens=tokens, units="\n".join(lines), names=" ".join(units),
         directories=" ".join(quote(path) for path in directories), probe=quote(probe), url=quote(node.url))
 
 
@@ -1379,6 +1400,7 @@ printf %s {config} | base64 -d | $SUDO tee {config_path} >/dev/null
 $SUDO chmod 0644 {config_path}
 $SUDO install -m 0600 -o root -g root /dev/null {env_path}
 printf %s {env} | base64 -d | $SUDO tee {env_path} >/dev/null
+{data}
 {tokens}
 $SUDO install -d -m 0700 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_USER" {directories}
 # Bursts open hundreds of connections at once.

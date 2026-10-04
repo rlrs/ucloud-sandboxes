@@ -116,7 +116,8 @@ def delete_server(name):
     entry = ledger()["servers"].get(name)
     if entry is None:
         raise SystemExit(f"unknown server {name}")
-    call("DELETE", f"/servers/{entry['id']}")
+    # Wait, so a replacement can take the same private IP (and volumes are detached).
+    wait_action(call("DELETE", f"/servers/{entry['id']}")["action"]["id"])
     forget("servers", name)
     print("deleted server", name)
 
@@ -167,6 +168,19 @@ if __name__ == "__main__":
         record("volumes", name, {**entry, "size_gb": int(size_gb)})
         volume = call("GET", f"/volumes/{entry['id']}")["volume"]
         print(json.dumps({"id": volume["id"], "linux_device": volume["linux_device"], "size_gb": volume["size"]}))
+    elif command == "attach-volume":
+        # Move a volume to another server (e.g. the store node's replica onto its replacement).
+        name, server_name = args
+        entry, server_id = ledger()["volumes"][name], ledger()["servers"][server_name]["id"]
+        volume = call("GET", f"/volumes/{entry['id']}")["volume"]
+        if volume["server"] not in (None, server_id):
+            wait_action(call("POST", f"/volumes/{entry['id']}/actions/detach")["action"]["id"])
+        if volume["server"] != server_id:
+            wait_action(call("POST", f"/volumes/{entry['id']}/actions/attach",
+                             {"server": server_id, "automount": False})["action"]["id"])
+        record("volumes", name, {**entry, "server": server_name})
+        volume = call("GET", f"/volumes/{entry['id']}")["volume"]
+        print(json.dumps({"id": volume["id"], "linux_device": volume["linux_device"], "server": volume["server"]}))
     elif command == "delete-volume":
         entry = ledger()["volumes"][args[0]]
         detach = call("POST", f"/volumes/{entry['id']}/actions/detach")

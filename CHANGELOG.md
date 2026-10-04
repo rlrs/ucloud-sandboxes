@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.9.10 - 2026-10-04 (gateway and store node)
+
+- **The store node can keep its replica and index on a Volume** (`store_node.data_device`, a `/dev/disk/by-id/` path).
+  - Store init mounts the device at `/mnt/store-replica`, bind-mounts `cache_dir` and the index directory from it, and makes both services require those mounts. It never formats: the device must already be ext4.
+  - Why: wave 3 (mostly ScaleSWE) dedups less than waves 1 and 2, and the replica would outgrow the CCX43's 360 GB disk. A Volume grows on its own and outlives the server, so the node can be a small, cheap type and be replaced without refilling from S3.
+  - Off by default, and not rendered when unset, so older releases still read the block.
+
 ## 0.9.9 - 2026-10-04 (gateway and store node)
 
 - **The chunk index keeps stored locators in its own database.**

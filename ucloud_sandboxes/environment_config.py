@@ -110,12 +110,16 @@ class StoreNodeConfig:
     # store; the deduplicated corpus fits). Off: a read-through LRU cache.
     replica: bool = False
     mirror_seconds: int = 600
+    # A block device holding cache_dir and the index (a Hetzner Volume,
+    # /dev/disk/by-id/...), so the server can be replaced or resized without
+    # refilling from S3. Store init mounts it; it must already be ext4.
+    data_device: str | None = None
 
     @classmethod
     def from_dict(cls, raw):
         from dataclasses import fields
         names = {field.name for field in fields(cls)}
-        if not isinstance(raw, dict) or not names - {"replica", "mirror_seconds"} <= set(raw) <= names:
+        if not isinstance(raw, dict) or not names - {"replica", "mirror_seconds", "data_device"} <= set(raw) <= names:
             raise ValueError("immutable_environments.chunk_store.store_node fields do not match schema")
         result = cls(**raw)
         _origin(result.url, "store_node.url")
@@ -135,6 +139,10 @@ class StoreNodeConfig:
                              "is invalid")
         if type(result.mirror_seconds) is not int or not 60 <= result.mirror_seconds <= 86400:
             raise ValueError("immutable_environments.chunk_store.store_node.mirror_seconds must be in [60, 86400]")
+        if result.data_device is not None and not (isinstance(result.data_device, str)
+                                                   and re.fullmatch(r"/dev/disk/by-id/[A-Za-z0-9._:-]+",
+                                                                    result.data_device)):
+            raise ValueError("immutable_environments.chunk_store.store_node.data_device must be a /dev/disk/by-id/ path")
         return replace(result, url=result.url.rstrip("/"))
 
 
@@ -251,6 +259,8 @@ class ChunkStoreConfig:
         if raw.get("store_node") and not raw["store_node"]["replica"]:
             for name in ("replica", "mirror_seconds"):
                 del raw["store_node"][name]
+        if raw.get("store_node") and raw["store_node"]["data_device"] is None:
+            del raw["store_node"]["data_device"]
         return raw
 
     def credentials(self, environ=None):

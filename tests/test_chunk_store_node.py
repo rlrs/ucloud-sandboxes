@@ -360,6 +360,13 @@ class StoreNodeConfigTests(unittest.TestCase):
         for bad in ({"replica": 1}, {"replica": True, "mirror_seconds": 5}):
             with self.subTest(replica=bad), self.assertRaises(ValueError):
                 ChunkStoreConfig.from_dict(self.raw(**bad))
+        # So is a data device; unset, it is not rendered either.
+        self.assertNotIn("data_device", store.to_dict()["store_node"])
+        volume = ChunkStoreConfig.from_dict(self.raw(data_device="/dev/disk/by-id/scsi-0HC_Volume_1"))
+        self.assertEqual(volume.to_dict()["store_node"]["data_device"], "/dev/disk/by-id/scsi-0HC_Volume_1")
+        for bad in ("/dev/sdb", "/dev/disk/by-id/a b", 1):
+            with self.subTest(data_device=bad), self.assertRaises(ValueError):
+                ChunkStoreConfig.from_dict(self.raw(data_device=bad))
 
     def test_the_store_role_renders_a_node_without_fleet_services(self):
         from tests import test_vm_init as vm_fixtures
@@ -389,6 +396,25 @@ class StoreNodeConfigTests(unittest.TestCase):
                 render_vm_init_script(vm_fixtures.VmInitTests._options(**{**options.__dict__, **invalid}))
         with self.assertRaisesRegex(ValueError, "store role"):
             render_vm_init_script(vm_fixtures.VmInitTests._options(chunk_store_read_token=READ))
+        # With a data device (a Volume), the replica and the index live on it, and
+        # the services start only once it is mounted.
+        import base64
+        import re
+        units = lambda text: "".join(base64.b64decode(blob).decode() for blob in re.findall(  # noqa: E731
+            r"printf %s '?([A-Za-z0-9+/=]+)'? \| base64 -d \| \$SUDO tee /etc/systemd/system/", text))
+        self.assertNotIn("RequiresMountsFor", units(script))
+        volume = ChunkStoreConfig.from_dict(self.raw(data_device="/dev/disk/by-id/scsi-0HC_Volume_1"))
+        script = render_vm_init_script(vm_fixtures.VmInitTests._options(
+            **{**options.__dict__, "chunk_store_config_json": json.dumps(volume.to_dict())}))
+        cache, index = volume.store_node.cache_dir, str(Path(volume.index_database).parent)
+        for expected in ("/dev/disk/by-id/scsi-0HC_Volume_1 /mnt/store-replica ext4", "mount /mnt/store-replica",
+                         f"/mnt/store-replica/cache {cache} none bind", f"/mnt/store-replica/index {index} none bind"):
+            self.assertIn(expected, script)
+        self.assertEqual(units(script).count(f"RequiresMountsFor={cache} {index}\n"), 2)
+        self.assertNotIn("mkfs", script)
+        self.assertLess(script.index("mount /mnt/store-replica"), script.index("read.token"))
+        syntax = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
 
     def test_the_index_runs_only_where_serve_index_puts_it(self):
         from types import SimpleNamespace

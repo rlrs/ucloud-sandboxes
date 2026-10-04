@@ -95,8 +95,10 @@ import unittest
 # (mirror loop, no eviction, a residency check; batched switch), less the cold
 # placement it obsoletes, +7 a switch verifies the whole closure first, +15 the
 # index keeps stored locators in its database (S3 only as the permanent copy).
+# +32 the store node's replica and index on a Volume (store_node.data_device:
+# mounted and bound by store init; the node becomes a small, replaceable type).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 113_354
+PACKAGE_LINE_BUDGET = 113_386
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

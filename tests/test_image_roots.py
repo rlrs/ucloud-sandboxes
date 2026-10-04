@@ -10,8 +10,8 @@ from unittest import mock
 from tests import test_environment_artifact as artifact_fixtures
 from tests.harness import LocalFleet
 from ucloud_sandboxes.capabilities import ENVIRONMENT_RAFS_CAPABILITY, ENVIRONMENT_ROOT_CAPABILITY
-from ucloud_sandboxes.chunk_migrate import (convert_wave, inventory, read_jsonl, record_results, release_wave,
-                                            revert_wave, switch_wave, wave_of)
+from ucloud_sandboxes.chunk_migrate import (convert_wave, inventory, read_jsonl, reap_dead_nbd, record_results,
+                                            release_wave, revert_wave, switch_wave, wave_of)
 from ucloud_sandboxes.environment_artifact import OCI_IMAGE, attach_environment_to_image, canonical_bytes, publish_environment
 from ucloud_sandboxes.environment_dependencies import EnvironmentDependencyResolver
 from ucloud_sandboxes.environment_manifest import EnvironmentManifest
@@ -186,6 +186,20 @@ class WaveTests(artifact_fixtures.EnvironmentArtifactTests):
         shares = [convert_wave(rows, "1", convert=convert, results=self.root / f"shard{i}.jsonl", parallel=2,
                                shard=(i, 2))["pending"] for i in range(2)]
         self.assertEqual(sum(shares), 3)  # Two converters split a wave, each image once.
+
+    def test_reap_dead_nbd_unmounts_and_disconnects_only_dead_owners(self):
+        fake = self.root / "host"
+        for name, pid in (("nbd0", "4001"), ("nbd1", "4002")):  # nbd2: not connected.
+            (fake / "sys/block" / name).mkdir(parents=True)
+            (fake / "sys/block" / name / "pid").write_text(pid + "\n")
+        (fake / "proc/4002").mkdir(parents=True)  # nbd1's owner lives.
+        (fake / "proc/mounts").write_text("/dev/nbd0 /w/7/lower-0 erofs ro 0 0\noverlay /w/7/merged overlay ro 0 0\n"
+                                          "/dev/nbd1 /w/8/lower-0 erofs ro 0 0\n/dev/sda1 / ext4 rw 0 0\n")
+        runs, disconnected = [], []
+        reaped = reap_dead_nbd(["/dev/nbd0", "/dev/nbd1", "/dev/nbd2"], root=fake,
+                               runner=lambda argv, check: runs.append(argv), disconnect=disconnected.append)
+        self.assertEqual((reaped, disconnected), (["/dev/nbd0"], ["/dev/nbd0"]))
+        self.assertEqual(sorted(argv[-1] for argv in runs), ["/w/7/lower-0", "/w/7/merged"])
 
     def test_record_switch_and_revert_repoint_durable_owners(self):
         digest, roots = self.annotated_image(), ImageRootsStore(self.root / "image-roots.sqlite3")

@@ -624,10 +624,52 @@ def run_json(argv):
     return json.loads(completed.stdout.strip().splitlines()[-1])
 
 
+NBD_DISCONNECT, NBD_CLEAR_SOCK = 0xAB08, 0xAB04
+
+
+def _nbd_ioctls(device):
+    import fcntl
+    descriptor = os.open(device, os.O_RDWR)
+    try:
+        for request in (NBD_DISCONNECT, NBD_CLEAR_SOCK):
+            try:
+                fcntl.ioctl(descriptor, request)
+            except OSError:
+                pass
+    finally:
+        os.close(descriptor)
+
+
+def reap_dead_nbd(devices, *, root=Path("/"), runner=subprocess.run, disconnect=_nbd_ioctls):
+    """Disconnect the slot's NBD devices a killed converter left connected (the
+    kernel keeps a device whose owner died). Its EROFS mount, and the overlay
+    stacked in the same work directory, hold the device: unmount those first.
+    A device whose owner lives is left alone. Returns the reaped devices."""
+    mounts = [line.split()[:2] for line in (root / "proc/mounts").read_text().splitlines()]
+    reaped = []
+    for device in devices:
+        name = Path(device).name
+        try:
+            pid = (root / "sys/block" / name / "pid").read_text().strip()
+        except FileNotFoundError:
+            continue  # Not connected.
+        if (root / "proc" / pid).is_dir():
+            continue
+        works = {os.path.dirname(target) for source, target in mounts if source == f"/dev/{name}"}
+        for source, target in sorted(mounts, key=lambda item: -len(item[1])):
+            if source == f"/dev/{name}" or os.path.dirname(target) in works:
+                runner(["umount", "-l", target], check=False)
+        disconnect(str(device))
+        reaped.append(str(device))
+    return reaped
+
+
 def convert_command(args):
     """Each image converts in its own process: its own index owner (a shared one
     let parallel converters claim as one builder, M1 gate run 3), its own
-    verification devices, and a crash costs one image."""
+    verification devices, and a crash costs one image. A slot reaps its
+    devices before each image: a killed converter leaks them connected, and
+    every later image on the slot would find no free device."""
     per_slot = len(args.verify_device) // args.parallel
     if per_slot < 1:
         raise ValueError("M2 conversions are full-tree verified: give each parallel slot a --verify-device")
@@ -637,7 +679,11 @@ def convert_command(args):
 
     def convert(repository, digest, slot):
         argv = base + ["--image-ref", f"{host}/{repository}@{digest}"]
-        for device in args.verify_device[slot * per_slot:(slot + 1) * per_slot]:
+        devices = args.verify_device[slot * per_slot:(slot + 1) * per_slot]
+        reaped = reap_dead_nbd(devices)
+        if reaped:
+            logging.getLogger(__name__).warning("reaped leaked NBD devices %s", ", ".join(reaped))
+        for device in devices:
             argv += ["--verify-device", device]
         return run_json(argv)
     index, _, count = args.shard.partition("/")

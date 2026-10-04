@@ -134,8 +134,10 @@ import unittest
 # have one, and the gateway's regenerated copies (one image-layout root -> one
 # layer, the original config) handed to BuildKit as named contexts. It retires
 # the build inputs' OCI on the registry Volume (~1.2 TB), not code.
+# +46 M2 converters reap the NBD devices a killed converter leaked (each
+# slot, before each image): wave 4 lost images to "no free NBD" otherwise.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 115_637
+PACKAGE_LINE_BUDGET = 115_683
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.9.4 - 2026-10-04
+
+- **A converter's store-node reads never evict the warm set.**
+  - Write-token demand reads put their extents at the eviction end and never promote existing ones. Restarts keep that order through mtime.
+  - Warm jobs promote what they find.
+  - Why: M2 waves are larger than the store node's cache, and converters verify by reading through it.
+- **Only a blob's first nydusd starts alone.**
+  - Each blob has a lock, held only until the first daemon on it is ready. Daemons on prepared blobs need no lock.
+  - Before, every daemon start on a node took one lock, and 20 RAFS creates on a node queued about 14 s.
+- **`chunk-migrate switch` skips an image whose warm call fails,** instead of stopping.
+
 ## 0.9.3 - 2026-10-04
 
 What M2 wave 1's post-switch canaries found (wave 1 was reverted until this ships):

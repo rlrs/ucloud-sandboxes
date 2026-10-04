@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 from collections import OrderedDict, deque
 from concurrent.futures import Future, ThreadPoolExecutor
+from functools import partial
 import hashlib
 import hmac
 from http import HTTPStatus
@@ -341,12 +342,12 @@ class S3Source:
     def hedge_after(self):
         return min(HEDGE_MAX_SECONDS, max(HEDGE_MIN_SECONDS, 3 * self.ttfb.percentile(.5, HEDGE_MIN_SECONDS)))
 
-    def fetch(self, relative, start, length, cache):
+    def fetch(self, relative, start, length, cache, *, hedge=True):
         """(temporary path, sha256 hex, size, object size) of [start, start + length)."""
         deadline, backoff, started = time.monotonic() + self.deadline, .1, time.monotonic()
         while True:
             try:
-                result = self._hedged(relative, start, length, cache, deadline)
+                result = self._hedged(relative, start, length, cache, deadline, MAX_HEDGES if hedge else 0)
                 self.latency.add(time.monotonic() - started)
                 return result
             except _Retry as exc:
@@ -356,7 +357,7 @@ class S3Source:
                 time.sleep(backoff)
                 backoff = min(2.0, backoff * 2)
 
-    def _hedged(self, relative, start, length, cache, deadline):
+    def _hedged(self, relative, start, length, cache, deadline, max_hedges=MAX_HEDGES):
         race, pending, hedges, errors = _Race(), 0, 0, []
         if not self._slots.acquire(timeout=max(0.0, deadline - time.monotonic())):
             raise _Retry("no S3 request slot")
@@ -367,12 +368,12 @@ class S3Source:
                 now = time.monotonic()
                 if now >= deadline:
                     raise _Retry("S3 attempts exceeded the fill deadline")
-                wait = min(deadline - now, threshold / 4 if hedges < MAX_HEDGES else deadline - now)
+                wait = min(deadline - now, threshold / 4 if hedges < max_hedges else deadline - now)
                 try:
                     result, error = race.results.get(timeout=max(0.001, wait))
                 except queue.Empty:
                     # Never wait for a hedge slot.
-                    if hedges < MAX_HEDGES and race.stalled_for() >= threshold and self._slots.acquire(blocking=False):
+                    if hedges < max_hedges and race.stalled_for() >= threshold and self._slots.acquire(blocking=False):
                         hedges += 1
                         pending += 1
                         self._count("hedged")
@@ -501,8 +502,12 @@ class ChunkStoreNode:
         if extent_bytes & (extent_bytes - 1) or not MIB <= extent_bytes <= MAX_EXTENT_BYTES:
             raise ValueError("chunk store extents must be a power of two from 1 to 64 MiB")
         self.cache, self.source, self.extent_bytes = cache, source, extent_bytes
-        self._fills = ThreadPoolExecutor(max_workers=source.concurrency + warm_concurrency,
-                                         thread_name_prefix="chunk-store-fill")
+        self._fills = ThreadPoolExecutor(max_workers=source.concurrency, thread_name_prefix="chunk-store-fill")
+        # Builders' reads and warm jobs (the write token) hold at most half the
+        # S3 slots, unhedged: a converter verifying large images starved
+        # worker fills past the NBD timeout (M2 wave 1).
+        self._background_fills = ThreadPoolExecutor(max_workers=max(1, source.concurrency // 2),
+                                                    thread_name_prefix="chunk-store-background")
         self._warm_slots = threading.BoundedSemaphore(warm_concurrency)
         self._guard, self._inflight, self._jobs, self._ids = threading.Lock(), {}, OrderedDict(), itertools.count(1)
         self.fill_wait = Samples()
@@ -513,7 +518,7 @@ class ChunkStoreNode:
         with self._guard:
             self.counters[name] += value
 
-    def extent(self, ident):
+    def extent(self, ident, background=False):
         """A Future of the installed extent ``ident`` = (digest, kind, index)."""
         with self._guard:
             future = self._inflight.get(ident)
@@ -526,7 +531,7 @@ class ChunkStoreNode:
             self._settle(ident, future, existing, None)
             return future
         try:
-            self._fills.submit(self._fill, ident, future)
+            (self._background_fills if background else self._fills).submit(self._fill, ident, future, background)
         except RuntimeError as exc:  # Closing: nobody may wait on a fill that never runs.
             self._settle(ident, future, None, exc)
         return future
@@ -536,14 +541,15 @@ class ChunkStoreNode:
             self._inflight.pop(ident, None)
         future.set_exception(error) if error is not None else future.set_result(value)
 
-    def _fill(self, ident, future):
+    def _fill(self, ident, future, background=False):
         digest, kind, index = ident
         start, total = index * self.extent_bytes, self.cache.total(digest, kind)
         try:
             if total is not None and start >= total:
                 raise RangeNotSatisfiable(total)
             length = self.extent_bytes if total is None else min(self.extent_bytes, total - start)
-            path, sha256, size, total = self.source.fetch(object_key(digest, kind), start, length, self.cache)
+            path, sha256, size, total = self.source.fetch(object_key(digest, kind), start, length, self.cache,
+                                                          hedge=not background)
             try:
                 # Whole packs and chunk maps are named by their sha256.
                 if start == 0 and size == total and kind in ("pack", "map") and sha256 != digest:
@@ -563,7 +569,7 @@ class ChunkStoreNode:
         for future in futures:
             future.result(timeout=max(0.001, deadline - time.monotonic()))
 
-    def read(self, relative, first=None, last=None, suffix=None, *, cached_only=False):
+    def read(self, relative, first=None, last=None, suffix=None, *, cached_only=False, background=False):
         """(object size, start, length, [(file, offset, count)]) for one range.
 
         ``first``/``last`` are inclusive like HTTP; ``suffix`` is ``bytes=-n``;
@@ -578,7 +584,7 @@ class ChunkStoreNode:
             return None
         if total is None:  # One fill tells the size.
             probe = 0 if first is None else first // self.extent_bytes
-            self._wait([self.extent((digest, kind, probe))], deadline)
+            self._wait([self.extent((digest, kind, probe), background)], deadline)
             filled, total = True, self.cache.total(digest, kind)
         if suffix is not None:
             first, last = max(0, total - suffix), total - 1
@@ -599,7 +605,7 @@ class ChunkStoreNode:
                 if cached_only:
                     return None
                 filled = True
-                self._wait([self.extent((digest, kind, index)) for index in missing], deadline)
+                self._wait([self.extent((digest, kind, index), background) for index in missing], deadline)
             else:
                 raise TimeoutError("chunk store extents were evicted while being read")
         except BaseException:
@@ -662,8 +668,8 @@ class ChunkStoreNode:
                 with job.guard:
                     job.counts["cached"] += 1
             else:
-                with self._warm_slots:  # Demand fills are never queued behind these.
-                    extent = self.extent(ident).result(timeout=FILL_DEADLINE_SECONDS + 5)
+                with self._warm_slots:
+                    extent = self.extent(ident, background=True).result(timeout=FILL_DEADLINE_SECONDS + 5)
                 with job.guard:
                     job.counts["done"] += 1
                     job.counts["bytes"] += extent.size
@@ -716,7 +722,8 @@ class ChunkStoreNode:
                 "s3": {**s3, "ttfb": self.source.ttfb.summary(), "fill": self.source.latency.summary()}}
 
     def close(self):
-        self._fills.shutdown(wait=False, cancel_futures=True)
+        for pool in (self._fills, self._background_fills):
+            pool.shutdown(wait=False, cancel_futures=True)
 
 
 # --- HTTP ---
@@ -780,7 +787,7 @@ class VirtualBlobs:
                 self._layouts.popitem(last=False)
         return result
 
-    def read(self, component, blob_id, first=None, last=None, suffix=None):
+    def read(self, component, blob_id, first=None, last=None, suffix=None, background=False):
         """Like ChunkStoreNode.read, over the rebuilt blob; ``component``
         (the request's repository) only names who asked."""
         size, segments = self.layout(blob_id)
@@ -796,7 +803,8 @@ class VirtualBlobs:
             for start, length, relative, offset in segments:
                 low, high = max(first, start), min(last + 1, start + length)
                 if low < high:
-                    pieces += self.node.read(relative, offset + low - start, offset + high - start - 1)[3]
+                    pieces += self.node.read(relative, offset + low - start, offset + high - start - 1,
+                                             background=background)[3]
         except BaseException:
             for stream, _, _ in pieces:
                 stream.close()
@@ -909,12 +917,14 @@ class ChunkStoreServer:
         if method == "GET" and path.startswith("/v1/objects/"):
             if not self._authorized(headers, write=False):
                 return await _reply(writer, 401, {"error": "unauthorized"})
-            return await self._object(writer, path.removeprefix("/v1/objects/"), headers.get("range"))
+            return await self._object(writer, path.removeprefix("/v1/objects/"), headers.get("range"),
+                                      background=self._authorized(headers, write=True))
         match = _VIRTUAL.fullmatch(path)
         if method in ("GET", "HEAD") and match and self.blobs is not None:
             if not self._authorized(headers, write=False):
                 return await _reply(writer, 401, {"error": "unauthorized"})
-            return await self._object(writer, match.groups(), headers.get("range"), head=method == "HEAD")
+            return await self._object(writer, match.groups(), headers.get("range"), head=method == "HEAD",
+                                      background=self._authorized(headers, write=True))
         if not self._authorized(headers, write=not (method == "GET" and path == "/v1/metrics")):
             return await _reply(writer, 401, {"error": "unauthorized"})
         if method == "GET" and path == "/v1/metrics":
@@ -942,19 +952,23 @@ class ChunkStoreServer:
             return await _reply(writer, 200, {"removed_extents": node.cache.remove(digest, kind)})
         return await _reply(writer, 404, {"error": "unknown endpoint"})
 
-    async def _object(self, writer, relative, spec, head=False):
-        """One object, or with ``relative`` = (component, blob id) one virtual blob."""
+    async def _object(self, writer, relative, spec, head=False, background=False):
+        """One object, or with ``relative`` = (component, blob id) one virtual blob.
+        ``background``: a builder's read (the write token), filled from the
+        background pool."""
         try:
             first, last, suffix = parse_range(spec)
             if isinstance(relative, tuple) and head:  # A blob's size: no bytes, whatever its size.
                 size = (await self._loop.run_in_executor(self._reads, self.blobs.layout, relative[1]))[0]
                 found = (size, 0, size, [])
             elif isinstance(relative, tuple):  # A layout needs the index: always off the loop.
-                found = await self._loop.run_in_executor(self._reads, self.blobs.read, *relative, first, last, suffix)
+                found = await self._loop.run_in_executor(self._reads, self.blobs.read, *relative, first, last, suffix,
+                                                         background)
             else:
                 found = self.node.read(relative, first, last, suffix, cached_only=True)
             if found is None:  # A fill or a first hash: off the loop.
-                found = await self._loop.run_in_executor(self._reads, self.node.read, relative, first, last, suffix)
+                found = await self._loop.run_in_executor(
+                    self._reads, partial(self.node.read, relative, first, last, suffix, background=background))
         except NotFound:
             return await _reply(writer, 404, {"error": "no such object"})
         except LookupError:

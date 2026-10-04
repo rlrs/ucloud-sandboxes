@@ -122,8 +122,13 @@ def cmd_derive_config(args):
         if not str(block.get("prefix", "")).startswith(RUN_PREFIX):
             raise SystemExit(f"chunk_store.prefix must stay under {RUN_PREFIX}")
         raw["immutable_environments"]["chunk_store"] = block
-    elif raw["immutable_environments"].get("chunk_store") is not None:
-        raise SystemExit("the baseline copy must not carry a chunk_store block")
+    else:
+        # The baseline is today's path: since 0.9.0 production carries its own
+        # chunk store (and root dispatch), which the baseline copy leaves out.
+        dropped = [key for key in ("chunk_store", "dispatch_roots")
+                   if raw["immutable_environments"].pop(key, None) is not None]
+        if dropped:
+            print(json.dumps({"baseline_dropped": dropped}))
     for item in args.set:
         dotted, _, value = item.partition("=")
         set_dotted(raw, dotted, json.loads(value))

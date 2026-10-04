@@ -133,6 +133,19 @@ class ChunkStoreNodeTests(unittest.TestCase):
             time.sleep(.1)  # The losers drop their partial files.
         self.assertEqual(list((self.root / "cache" / "tmp").iterdir()), [])
 
+    def test_builders_hold_half_the_s3_slots_so_worker_fills_never_wait_behind_them(self):
+        store, slow, fast = StoreNode(self, self.objects, self.root, concurrency=4), self.keys[0], self.keys[1]
+        self.objects.fault = lambda key, *_: ("stall", 1.5) if key.endswith(slow) else None
+        with ThreadPoolExecutor(4) as pool:  # A converter verifying: four stalled extents, write token.
+            builders = [pool.submit(store.get, slow, index * MIB, 4096, WRITE) for index in range(4)]
+            time.sleep(.3)
+            began = time.monotonic()
+            self.assertEqual(store.get(fast, 0, 4096), self.packs[fast][:4096])  # A worker, read token.
+            self.assertLess(time.monotonic() - began, 1.0)
+            self.assertEqual(len(self.objects.gets(slow)), 2)  # Two background slots, never hedged.
+            self.assertEqual([future.result() for future in builders],
+                             [self.packs[slow][index * MIB:index * MIB + 4096] for index in range(4)])
+
     def test_s3_errors_are_retried_then_answered_503(self):
         store, key = StoreNode(self, self.objects, self.root, deadline=1.5), self.keys[0]
         answers = iter([("status", 503), ("status", 500)])

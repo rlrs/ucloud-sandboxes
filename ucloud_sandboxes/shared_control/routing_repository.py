@@ -30,7 +30,7 @@ from psycopg.errors import DeadlockDetected, SerializationFailure
 from psycopg_pool import ConnectionPool
 
 from .database import process_pool_share
-from ..routing import RoutingStore, PlacementCommandRejected
+from ..routing import SANDBOX_GROUP_DDL, RoutingStore, PlacementCommandRejected
 from ..models import utc_now
 from uuid import UUID
 from ..telemetry import Telemetry
@@ -128,13 +128,19 @@ def _transactional(method, isolation=None):
 
 _AUTHORITY_RECHECK_SECONDS = 1.0
 
-# Indexes added after version 1. They only speed queries up, so old and new
-# code share the schema version; ``migrate`` applies them idempotently.
+# Statements added after version 1 that old code ignores, so old and new code
+# share the schema version; ``migrate`` applies them idempotently.
 ROUTING_ADDITIVE_DDL = (
     # Detach, migration, owner loss and delete remove a sandbox's sessions;
     # without it each DELETE scanned the table and, under SERIALIZABLE, took a
     # relation predicate lock that conflicted with every exec upsert.
     "CREATE INDEX IF NOT EXISTS exec_sessions_sandbox ON exec_sessions(sandbox_id)",
+    # C3.2 group creates: their tables, and their durable command kind (old
+    # placement workers claim only create and wake commands).
+    *SANDBOX_GROUP_DDL,
+    "ALTER TABLE gateway_commands DROP CONSTRAINT IF EXISTS gateway_commands_kind_check",
+    "ALTER TABLE gateway_commands ADD CONSTRAINT gateway_commands_kind_check"
+    " CHECK(kind IN ('create','wake','group')) NOT VALID",
 )
 
 
@@ -451,7 +457,7 @@ class PostgresRoutingStore(RoutingStore):
                 self._command_row(conn) if self._command.get() is not None else None
             )
             removed = super().delete_sandbox_if_current(sandbox_id, **kwargs)
-            if removed is not None and command is not None:
+            if removed is not None and command is not None and command["kind"] != "group":
                 if command["kind"] != "create" or command["sandbox_id"] != sandbox_id:
                     raise PlacementCommandRejected(
                         "placement command cannot release this route"
@@ -493,7 +499,8 @@ class PostgresRoutingStore(RoutingStore):
             return result
 
     def _bind_command(self, conn, command, route):
-        if command is None:
+        # A group command binds no generation: sandbox_groups fences its replay.
+        if command is None or command["kind"] == "group":
             return
         if command["kind"] != "create" or command["sandbox_id"] != route.sandbox_id:
             raise PlacementCommandRejected("placement command allocation differs")
@@ -537,6 +544,33 @@ class PostgresRoutingStore(RoutingStore):
                 "SELECT 1 FROM sandboxes WHERE sandbox_id=? FOR UPDATE", (route.sandbox_id,)
             )
             return super().confirm_create(route)
+
+    # A group's intents hold the group row FOR SHARE, so a group delete
+    # (which updates it) either precedes them and refuses them, or waits and
+    # then sees their routes. Members lock in id order: no deadlock between
+    # two transactions of one group.
+    _group_lock_clause = " FOR SHARE"
+
+    def reserve_create_intents(self, allocations, **kwargs):
+        with self._transaction() as conn:
+            for sandbox_id in sorted(item.sandbox_id for item in allocations):
+                self._lock_create(conn, sandbox_id)
+            conn.execute("SELECT 1 FROM prepared_capacity ORDER BY prepare_id FOR UPDATE")
+            self._command_row(conn)
+            return super().reserve_create_intents(allocations, **kwargs)
+
+    def retarget_create_intents(self, moves, **kwargs):
+        with self._transaction() as conn:
+            for sandbox_id in sorted(route.sandbox_id for route, _allocation, _operation in moves):
+                self._lock_create(conn, sandbox_id)
+            self._command_row(conn)
+            return super().retarget_create_intents(moves, **kwargs)
+
+    def confirm_creates(self, routes, **kwargs):
+        with self._transaction() as conn:
+            for sandbox_id in sorted(route.sandbox_id for route in routes):
+                conn.execute("SELECT 1 FROM sandboxes WHERE sandbox_id=? FOR UPDATE", (sandbox_id,))
+            return super().confirm_creates(routes, **kwargs)
 
     def migrate(self):
         """Explicit offline initialization; constructing the store never runs DDL.
@@ -804,6 +838,8 @@ for _name in TRANSACTIONAL_METHODS:
         _transactional(getattr(PostgresRoutingStore, _name)),
     )
 
-for _name in ("reserve_create_intent", "retarget_create_intent", "confirm_create"):
+for _name in ("reserve_create_intent", "retarget_create_intent", "confirm_create",
+              "reserve_create_intents", "retarget_create_intents", "confirm_creates",
+              "ensure_sandbox_group", "delete_sandbox_group"):
     setattr(PostgresRoutingStore, _name, _transactional(
         getattr(PostgresRoutingStore, _name), isolation="READ COMMITTED"))

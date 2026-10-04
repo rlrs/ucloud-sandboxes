@@ -674,6 +674,40 @@ class PlacementCommandRejected(ValueError):
     """A durable placement claim no longer authorizes this incarnation."""
 
 
+class SandboxGroupDeletedError(RuntimeError):
+    """The group was deleted; none of its members may be placed again."""
+
+
+@dataclass(frozen=True)
+class SandboxGroup:
+    """C3.2: a group create's resolved member spec (no id) and its members
+    the group confirmed, so a replay never recreates one deleted since."""
+
+    group_id: str
+    request_hash: str
+    spec: dict[str, Any]
+    count: int
+    state: str = "active"
+    placed: frozenset[str] = frozenset()
+
+    def member_ids(self) -> list[str]:
+        return [f"{self.group_id}-{index:04d}" for index in range(self.count)]
+
+
+# The same statements create both stores' tables (SQLite and PostgreSQL),
+# so a routing cutover sees one table set with one column order.
+SANDBOX_GROUP_DDL = (
+    """CREATE TABLE IF NOT EXISTS sandbox_groups (
+        group_id TEXT PRIMARY KEY, request_hash TEXT NOT NULL, spec_json TEXT NOT NULL,
+        member_count INTEGER NOT NULL CHECK (member_count > 0),
+        state TEXT NOT NULL CHECK (state IN ('active', 'deleted')),
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS sandbox_group_members (
+        sandbox_id TEXT PRIMARY KEY, group_id TEXT NOT NULL, generation INTEGER NOT NULL)""",
+    "CREATE INDEX IF NOT EXISTS sandbox_group_members_group ON sandbox_group_members(group_id)",
+)
+
+
 _EXEC_ROUTE_BY_ID_SQL = """
             SELECT session_id, sandbox_id, node_id, job_id, node_url,
                    created_at, updated_at
@@ -1742,49 +1776,53 @@ class RoutingStore:
             raise ValueError("create operation id and spec hash are required")
         # The SQL transaction serializes all incarnation and ownership checks.
         # Do not hold the fleet lock while queued for the shared durable writer.
-        now = utc_now().isoformat()
         with self._transaction() as conn:
-            pending = self._get_pending_unlocked(conn, allocation.sandbox_id)
-            existing = self._get_sandbox_unlocked(conn, allocation.sandbox_id)
-            if existing is not None:
-                if (existing.spec_hash and existing.spec_hash != spec_hash) or (
-                    existing.spec
-                    and allocation.spec
-                    and existing.spec != allocation.spec
-                ):
-                    raise SandboxRouteConflictError(
-                        f"sandbox route already exists with a different spec: "
-                        f"{allocation.sandbox_id}"
-                    )
-                return existing, pending
-            row = conn.execute(
-                "SELECT generation FROM sandbox_generation_hwm WHERE sandbox_id = ?",
-                (allocation.sandbox_id,),
-            ).fetchone()
-            high_water = int(row["generation"]) if row is not None else 0
-            generation = high_water + 1
-            stored = SandboxRoute(
-                sandbox_id=allocation.sandbox_id,
-                node_id=allocation.node_id,
-                job_id=allocation.job_id,
-                node_url=allocation.node_url,
-                resources=allocation.resources,
-                spec=dict(allocation.spec),
-                state="creating",
-                generation=generation,
-                create_operation_id=operation_id,
-                spec_hash=spec_hash.strip(),
-                node_epoch=allocation.node_epoch,
-                activity_epoch=max(0, allocation.activity_epoch),
-                created_at=now,
-                updated_at=now,
-            )
-            self._write_sandbox(conn, stored)
-            conn.execute(
-                "DELETE FROM pending WHERE sandbox_id = ?",
-                (allocation.sandbox_id,),
-            )
-            self._claim_prepared_capacity_unlocked(conn, stored)
+            return self._allocate_create_unlocked(conn, allocation, spec_hash, operation_id)
+
+    def _allocate_create_unlocked(
+        self, conn, allocation: SandboxRouteAllocation, spec_hash: str, operation_id: str,
+    ) -> tuple[SandboxRoute, PendingSandboxDemand | None]:
+        now = utc_now().isoformat()
+        pending = self._get_pending_unlocked(conn, allocation.sandbox_id)
+        existing = self._get_sandbox_unlocked(conn, allocation.sandbox_id)
+        if existing is not None:
+            if (existing.spec_hash and existing.spec_hash != spec_hash) or (
+                existing.spec
+                and allocation.spec
+                and existing.spec != allocation.spec
+            ):
+                raise SandboxRouteConflictError(
+                    f"sandbox route already exists with a different spec: "
+                    f"{allocation.sandbox_id}"
+                )
+            return existing, pending
+        row = conn.execute(
+            "SELECT generation FROM sandbox_generation_hwm WHERE sandbox_id = ?",
+            (allocation.sandbox_id,),
+        ).fetchone()
+        high_water = int(row["generation"]) if row is not None else 0
+        stored = SandboxRoute(
+            sandbox_id=allocation.sandbox_id,
+            node_id=allocation.node_id,
+            job_id=allocation.job_id,
+            node_url=allocation.node_url,
+            resources=allocation.resources,
+            spec=dict(allocation.spec),
+            state="creating",
+            generation=high_water + 1,
+            create_operation_id=operation_id,
+            spec_hash=spec_hash.strip(),
+            node_epoch=allocation.node_epoch,
+            activity_epoch=max(0, allocation.activity_epoch),
+            created_at=now,
+            updated_at=now,
+        )
+        self._write_sandbox(conn, stored)
+        conn.execute(
+            "DELETE FROM pending WHERE sandbox_id = ?",
+            (allocation.sandbox_id,),
+        )
+        self._claim_prepared_capacity_unlocked(conn, stored)
         return stored, pending
 
     # C4.3 power-of-k creates (docs/c43-placement-wiring-plan.md, phase 1): the
@@ -1808,31 +1846,142 @@ class RoutingStore:
         longer that unconfirmed create.
         """
         with self._transaction() as conn:
-            current = self._get_sandbox_unlocked(conn, route.sandbox_id)
-            if (
-                current is None or current.delete_operation_id
-                or current.state.lower() not in {"creating", "unknown"}
-                or not _same_sandbox_route_incarnation(current, route)
-            ):
-                return None
-            row = conn.execute(
-                "SELECT generation FROM sandbox_generation_hwm WHERE sandbox_id = ?",
-                (route.sandbox_id,),
-            ).fetchone()
-            now = utc_now().isoformat()
-            stored = replace(
-                current, node_id=allocation.node_id, job_id=allocation.job_id,
-                node_url=allocation.node_url, node_epoch=allocation.node_epoch,
-                activity_epoch=max(0, allocation.activity_epoch),
-                generation=max(current.generation, int(row["generation"]) if row else 0) + 1,
-                create_operation_id=create_operation_id, created_at=now, updated_at=now,
-            )
-            self._write_sandbox(conn, stored)
+            return self._retarget_create_unlocked(conn, route, allocation, create_operation_id)
+
+    def _retarget_create_unlocked(
+        self, conn, route: SandboxRoute, allocation: SandboxRouteAllocation, operation_id: str,
+    ) -> SandboxRoute | None:
+        current = self._get_sandbox_unlocked(conn, route.sandbox_id)
+        if (
+            current is None or current.delete_operation_id
+            or current.state.lower() not in {"creating", "unknown"}
+            or not _same_sandbox_route_incarnation(current, route)
+        ):
+            return None
+        row = conn.execute(
+            "SELECT generation FROM sandbox_generation_hwm WHERE sandbox_id = ?",
+            (route.sandbox_id,),
+        ).fetchone()
+        now = utc_now().isoformat()
+        stored = replace(
+            current, node_id=allocation.node_id, job_id=allocation.job_id,
+            node_url=allocation.node_url, node_epoch=allocation.node_epoch,
+            activity_epoch=max(0, allocation.activity_epoch),
+            generation=max(current.generation, int(row["generation"]) if row else 0) + 1,
+            create_operation_id=operation_id, created_at=now, updated_at=now,
+        )
+        self._write_sandbox(conn, stored)
         return stored
 
     def confirm_create(self, route: SandboxRoute) -> SandboxRoute | None:
         """A worker's create receipt, applied only to the exact incarnation."""
         return self.confirm_sandbox_observation(route)
+
+    # C3.2 group create: one transaction per worker for a group's members. A
+    # deleted group refuses new intents, and members the group confirmed are
+    # recorded so that replaying the group never recreates one deleted since.
+    _group_lock_clause = ""
+
+    def _require_active_group(self, conn, group_id: str) -> None:
+        if not group_id:
+            return
+        row = conn.execute(
+            "SELECT state FROM sandbox_groups WHERE group_id = ?" + self._group_lock_clause,
+            (group_id,),
+        ).fetchone()
+        if row is None or row["state"] != "active":
+            raise SandboxGroupDeletedError(group_id)
+
+    def reserve_create_intents(
+        self, allocations: list[SandboxRouteAllocation], *, spec_hashes: list[str],
+        operation_ids: list[str], group_id: str = "",
+    ) -> list[tuple[SandboxRoute, PendingSandboxDemand | None] | None]:
+        """Each member's intent, or the route it already has; None where a
+        route with another spec holds the id."""
+        with self._transaction() as conn:
+            self._require_active_group(conn, group_id)
+            reserved: list[tuple[SandboxRoute, PendingSandboxDemand | None] | None] = []
+            for allocation, spec_hash, operation_id in zip(allocations, spec_hashes, operation_ids):
+                try:
+                    reserved.append(self._allocate_create_unlocked(conn, allocation, spec_hash, operation_id))
+                except SandboxRouteConflictError:
+                    reserved.append(None)  # Raised before any write for this member.
+            return reserved
+
+    def retarget_create_intents(
+        self, moves: list[tuple[SandboxRoute, SandboxRouteAllocation, str]], *, group_id: str = "",
+    ) -> list[SandboxRoute | None]:
+        with self._transaction() as conn:
+            self._require_active_group(conn, group_id)
+            return [self._retarget_create_unlocked(conn, *move) for move in moves]
+
+    def confirm_creates(self, routes: list[SandboxRoute], *, group_id: str = "") -> list[SandboxRoute | None]:
+        with self._lock, self._transaction() as conn:
+            confirmed: list[SandboxRoute | None] = []
+            for route in routes:
+                current = self._get_sandbox_unlocked(conn, route.sandbox_id)
+                if current is None or current.delete_operation_id or not _same_sandbox_route_incarnation(
+                        current, route):
+                    confirmed.append(None)
+                    continue
+                confirmed.append(self.upsert_sandbox(route, _connection=conn))
+                if group_id:
+                    conn.execute(
+                        """INSERT INTO sandbox_group_members(sandbox_id, group_id, generation)
+                        VALUES (?, ?, ?) ON CONFLICT(sandbox_id) DO UPDATE SET
+                        group_id = excluded.group_id, generation = excluded.generation""",
+                        (route.sandbox_id, group_id, route.generation),
+                    )
+            return confirmed
+
+    def ensure_sandbox_group(self, group: SandboxGroup) -> SandboxGroup:
+        """Record a group once; every retry gets the stored one."""
+        now = utc_now().isoformat()
+        with self._transaction() as conn:
+            conn.execute(
+                """INSERT INTO sandbox_groups(group_id, request_hash, spec_json, member_count,
+                state, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', ?, ?)
+                ON CONFLICT(group_id) DO NOTHING""",
+                (group.group_id, group.request_hash, _object_json(group.spec), group.count, now, now),
+            )
+            stored = self._sandbox_group_unlocked(conn, group.group_id)
+        assert stored is not None
+        return stored
+
+    def sandbox_group(self, group_id: str) -> SandboxGroup | None:
+        with self._connect() as conn:
+            return self._sandbox_group_unlocked(conn, group_id)
+
+    def delete_sandbox_group(self, group_id: str) -> SandboxGroup | None:
+        with self._transaction() as conn:
+            conn.execute(
+                "UPDATE sandbox_groups SET state = 'deleted', updated_at = ? WHERE group_id = ?",
+                (utc_now().isoformat(), group_id),
+            )
+            return self._sandbox_group_unlocked(conn, group_id)
+
+    def _sandbox_group_unlocked(self, conn, group_id: str) -> SandboxGroup | None:
+        row = conn.execute(
+            "SELECT request_hash, spec_json, member_count, state FROM sandbox_groups WHERE group_id = ?",
+            (group_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        placed = conn.execute(
+            "SELECT sandbox_id FROM sandbox_group_members WHERE group_id = ?", (group_id,),
+        ).fetchall()
+        return SandboxGroup(
+            group_id, row["request_hash"], _object(json.loads(row["spec_json"])),
+            int(row["member_count"]), row["state"], frozenset(item["sandbox_id"] for item in placed),
+        )
+
+    def sandbox_routes_by_id_readonly(self, sandbox_ids: list[str]) -> dict[str, SandboxRoute]:
+        with self._read() as conn:
+            rows = conn.execute(
+                _SANDBOX_ROUTE_BY_ID_SQL.replace("= ?", f"IN ({self._json_values_query})"),
+                (json.dumps(list(sandbox_ids)),),
+            ).fetchall()
+        return {row["sandbox_id"]: _sandbox_route_from_row(row) for row in rows}
 
     def prepare_sandbox_delete(self, sandbox_id: str) -> SandboxRoute | None:
         """Persist and reuse one delete operation for the current generation."""
@@ -3940,6 +4089,8 @@ class RoutingStore:
                     GROUP BY p.sandbox_id, p.sandbox_generation
                     """
                 )
+            for statement in SANDBOX_GROUP_DDL:
+                conn.execute(statement)
             conn.execute(f"PRAGMA user_version={ROUTING_SCHEMA_VERSION}")
             conn.commit()
 

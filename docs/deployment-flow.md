@@ -124,6 +124,8 @@ transaction. `"power_of_k"` samples three capable workers from the heartbeats
 and lets the worker's admission decide, trying the next on a definite reject
 ([c43-placement-wiring-plan.md](c43-placement-wiring-plan.md), phase 1).
 Workers older than the switch ignore its shorter admission wait.
+Group create (`/v1/sandboxes:batch`, C3.2) needs `"power_of_k"`, and on
+PostgreSQL one routing `migrate()` for its tables and command kind.
 
 The deployment creates independent secrets for:
 

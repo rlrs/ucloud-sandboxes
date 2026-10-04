@@ -149,7 +149,7 @@ class PlacementQueue(PostgresDatabase):
     ):
         command_id = uuid4()
         if (
-            kind not in ("create", "wake")
+            kind not in ("create", "wake", "group")
             or not sandbox_id
             or not 0 < timeout_seconds <= 7200
         ):
@@ -586,10 +586,12 @@ class PlacementQueueWorker:
         token,
         create_concurrency=32,
         wake_concurrency=64,
+        group_concurrency=32,
         lease_seconds=30,
     ):
         self.store, self.origin, self.token = store, origin.rstrip("/"), token
-        self.budgets = {"create": create_concurrency, "wake": wake_concurrency}
+        # A group command places many sandboxes; its members share the node gate.
+        self.budgets = {"create": create_concurrency, "wake": wake_concurrency, "group": group_concurrency}
         self.lease = lease_seconds
         self.hints = None
         # Why commands were deferred, (status, error_code), logged every

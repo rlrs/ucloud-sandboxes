@@ -88,6 +88,7 @@ from .gateway.create import (
     _node_create_rejection_reason,
 )
 from .gateway.fleet import _heartbeat_has_image, _node_metadata, _requested_image_cache_keys
+from .gateway.groups import GROUP_PATH, group_id_from_path, parse_group_request
 from .gateway.heartbeats import PULL_TIMEOUT_SECONDS
 from .gateway.image_resolution import (
     TRANSIENT_IMAGE_RESOLUTION_ERROR_CODES, _image_record_available_to_sandboxes,
@@ -184,6 +185,7 @@ from .routing import (
     PendingSandboxDemand,
     ProgramRequestState,
     RoutingStore,
+    SandboxGroup,
     SandboxRoute,
     SandboxRouteConflictError,
     is_portable_parked_route,
@@ -634,7 +636,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         try:
             if getattr(self,'placement_worker',False) and self.command=='POST':
                 action=match_sandbox_http_route(self.command,path)
-                if path=='/v1/sandboxes' or (action and action.action=='wake'):
+                if path in ('/v1/sandboxes',GROUP_PATH) or (action and action.action=='wake'):
                     body=self._read_raw_body(max_bytes=DEFAULT_MAX_JSON_BODY_BYTES)
                     self._placement_request_body=body
                     with self.routing_store.command_execution(
@@ -677,6 +679,17 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             return True
         if path == "/v1/sandboxes" and self.command == "POST":
             self._create_sandbox_on_node()
+            return True
+        if path == GROUP_PATH and self.command == "POST":
+            self._create_sandbox_group()
+            return True
+        group_id = group_id_from_path(path)
+        if group_id is not None and self.command in {"GET", "DELETE"}:
+            if self.command == "GET":
+                status, payload, headers = (*self.services.groups.status(group_id), {})
+            else:
+                status, payload, headers = self.services.groups.delete(self, group_id)
+            self._write_json(payload, status=status, headers=headers)
             return True
         if path == "/v1/capacity/prepare" and self.command == "GET":
             self._list_prepared_capacity()
@@ -2489,16 +2502,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     self.max_sandbox_resources,
                 )
         except SandboxShapeUnschedulableError as exc:
-            self._write_json(
-                {
-                    "error": str(exc),
-                    "error_code": "sandbox_shape_unschedulable",
-                    "retryable": False,
-                    "requested_resources": exc.requested.to_dict(),
-                    "maximum_resources": exc.maximum.to_dict(),
-                },
-                status=HTTPStatus.UNPROCESSABLE_ENTITY,
-            )
+            self._write_shape_unschedulable(exc)
             return
         except (json.JSONDecodeError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
@@ -2508,6 +2512,97 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self._defer_placement('create',spec.id,'/v1/sandboxes',body)
             return
         self._create_sandbox_on_node_locked(spec)
+
+    def _write_shape_unschedulable(self, exc: SandboxShapeUnschedulableError) -> None:
+        self._write_json(
+            {
+                "error": str(exc),
+                "error_code": "sandbox_shape_unschedulable",
+                "retryable": False,
+                "requested_resources": exc.requested.to_dict(),
+                "maximum_resources": exc.maximum.to_dict(),
+            },
+            status=HTTPStatus.UNPROCESSABLE_ENTITY,
+        )
+
+    def _create_sandbox_group(self) -> None:
+        """C3.2: ``count`` sandboxes of one spec (gateway/groups.py)."""
+        try:
+            body = self._read_raw_body(max_bytes=DEFAULT_MAX_JSON_BODY_BYTES)
+            group = parse_group_request(json.loads(body.decode("utf-8")) if body else None)
+            requested = group.member().requested_resources()
+            if not requested.fits_within(self.max_sandbox_resources):
+                raise SandboxShapeUnschedulableError(requested, self.max_sandbox_resources)
+        except SandboxShapeUnschedulableError as exc:
+            self._write_shape_unschedulable(exc)
+            return
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+        if self.create_placement != "power_of_k":
+            self._write_json({
+                "error": "group create requires gateway_create_placement power_of_k",
+                "error_code": "sandbox_group_create_unavailable", "retryable": False,
+            }, status=HTTPStatus.NOT_IMPLEMENTED)
+            return
+        if getattr(self, "placement_queue", None) is not None:
+            # As a create: the one placement process places it, durably.
+            self._defer_placement("group", group.group_id, GROUP_PATH, body)
+            return
+        limiter = self.sandbox_create_limiter
+        weight = min(group.count, limiter.capacity) if limiter is not None else 1
+        with self._startup_request_admission(creating=True, weight=weight) as admitted:
+            if admitted:
+                self._create_sandbox_group_admitted(group)
+
+    def _create_sandbox_group_admitted(self, group_request: Any) -> None:
+        with self.telemetry.span("gateway.sandbox_group_create", attributes={
+            "sandbox.group.id": group_request.group_id, "sandbox.group.count": group_request.count,
+        }) as root:
+            group = self.routing_store.sandbox_group(group_request.group_id)
+            if group is None:
+                # Resolved once: every retry places members from the stored spec.
+                spec = self._resolve_create_spec(group_request.member(), root)
+                if spec is None:
+                    return
+                warmup = self._active_image_warmup_for_image(spec.image, spec.requested_resources())
+                if warmup is not None:
+                    self._write_image_warmup_pending(warmup)
+                    return
+                template = {key: value for key, value in spec.to_dict().items() if key != "id"}
+                group = self.routing_store.ensure_sandbox_group(SandboxGroup(
+                    group_request.group_id, group_request.request_hash, template, group_request.count))
+            if group.request_hash != group_request.request_hash or group.state != "active":
+                root.status = "error"
+                self._write_json({
+                    "error": f"sandbox group {group_request.group_id} " + (
+                        "exists with a different request" if group.state == "active" else "was deleted"),
+                    "error_code": "sandbox_group_conflict" if group.state == "active" else "sandbox_group_deleted",
+                    "retryable": False,
+                }, status=HTTPStatus.CONFLICT)
+                return
+            status, payload, headers = self.services.groups.create(self, group, group_request.policy, root)
+            self._write_json(payload, status=status, headers=headers)
+
+    def _loopback_delete(self, sandbox_id: str) -> tuple[int, dict[str, Any]]:
+        """A group member's delete through this gateway's own public path."""
+        deletion = request.Request(
+            self.loopback_origin() + f"/v1/sandboxes/{quote(sandbox_id, safe='')}", method="DELETE",
+            headers={"Authorization": f"Bearer {self.gateway_bearer_token}"},
+        )
+        try:
+            with request.urlopen(deletion, timeout=DEFAULT_PROXY_TIMEOUT_SECONDS) as response:
+                status, raw = response.status, response.read()
+        except error.HTTPError as exc:
+            status, raw = exc.code, exc.read()
+            exc.close()
+        except OSError as exc:
+            return HTTPStatus.SERVICE_UNAVAILABLE, {"error": f"loopback delete failed: {exc}"}
+        try:
+            payload = json.loads(raw) if raw else {}
+        except ValueError:
+            payload = {}
+        return status, payload if isinstance(payload, dict) else {}
 
     def _create_sandbox_on_node_locked(
         self,
@@ -2530,39 +2625,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             },
         ) as root:
             if not image_resolved:
-                with self.telemetry.span(
-                    "gateway.sandbox_resolve_image",
-                    attributes={"container.image.name": spec.image},
-                ) as span:
-                    resolved_image, image_error = self._resolve_request_image_reference(
-                        spec.image
-                    )
-                    span.set_attribute("resolved_image", resolved_image)
-                    if image_error is not None:
-                        span.status = "error"
-                        root.status = "error"
-                        root.set_attribute("outcome", "image_reference_unavailable")
-                        self._write_image_resolution_error(image_error)
-                        return
-                    if resolved_image != spec.image:
-                        spec = replace(spec, image=resolved_image)
-                        root.set_attribute("resolved_image", resolved_image)
-                imported_image, import_error = self._external_image_import(
-                    spec.image, wait=True,
-                )
-                if import_error is not None:
-                    root.set_attribute("outcome", str(import_error.get("error_code")))
-                    self._write_image_import_error(import_error)
+                resolved = self._resolve_create_spec(spec, root)
+                if resolved is None:
                     return
-                if imported_image != spec.image:
-                    spec = replace(spec, image=imported_image)
-                    root.set_attribute("imported_image", imported_image)
-                if self.dispatch_environment_roots and spec.environment_root is None:
-                    # Chunk store M2: pin the root for the sandbox's life (plan §3.1).
-                    dispatched = self.services.registry_refs.dependency_resolver.root(spec.image)
-                    if dispatched is not None:
-                        spec = replace(spec, environment_root=dispatched)
-                        root.set_attribute("environment_root", dispatched)
+                spec = resolved
 
             with self.telemetry.span(
                 "gateway.sandbox_existing_route_check",
@@ -2638,19 +2704,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 # short-lived admission response.
                 root.set_attribute("outcome", "image_warmup_pending")
                 root.set_attribute("image.warmup.id", active_warmup.warmup_id)
-                self._write_json(
-                    {
-                        "error": "prepared image warmup is still in progress",
-                        "error_code": "image_warmup_pending",
-                        "retryable": True,
-                        "warmup_id": active_warmup.warmup_id,
-                    },
-                    status=HTTPStatus.SERVICE_UNAVAILABLE,
-                    headers={
-                        "Retry-After": "1",
-                        "X-UCloud-Sandbox-Retryable": "true",
-                    },
-                )
+                self._write_image_warmup_pending(active_warmup)
                 return
 
             if self.create_placement == "power_of_k":
@@ -3036,6 +3090,56 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     if removed is not None:
                         self.services.registry_refs.release_route_reference(removed)
             self._send_proxied_response(response)
+
+    def _write_image_warmup_pending(self, warmup: Any) -> None:
+        self._write_json(
+            {
+                "error": "prepared image warmup is still in progress",
+                "error_code": "image_warmup_pending",
+                "retryable": True,
+                "warmup_id": warmup.warmup_id,
+            },
+            status=HTTPStatus.SERVICE_UNAVAILABLE,
+            headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+        )
+
+    def _resolve_create_spec(self, spec: SandboxSpec, root: Any) -> SandboxSpec | None:
+        """Image reference, external import and root dispatch, once per create
+        or group; None once an error response is written."""
+        with self.telemetry.span(
+            "gateway.sandbox_resolve_image",
+            attributes={"container.image.name": spec.image},
+        ) as span:
+            resolved_image, image_error = self._resolve_request_image_reference(
+                spec.image
+            )
+            span.set_attribute("resolved_image", resolved_image)
+            if image_error is not None:
+                span.status = "error"
+                root.status = "error"
+                root.set_attribute("outcome", "image_reference_unavailable")
+                self._write_image_resolution_error(image_error)
+                return None
+            if resolved_image != spec.image:
+                spec = replace(spec, image=resolved_image)
+                root.set_attribute("resolved_image", resolved_image)
+        imported_image, import_error = self._external_image_import(
+            spec.image, wait=True,
+        )
+        if import_error is not None:
+            root.set_attribute("outcome", str(import_error.get("error_code")))
+            self._write_image_import_error(import_error)
+            return None
+        if imported_image != spec.image:
+            spec = replace(spec, image=imported_image)
+            root.set_attribute("imported_image", imported_image)
+        if self.dispatch_environment_roots and spec.environment_root is None:
+            # Chunk store M2: pin the root for the sandbox's life (plan §3.1).
+            dispatched = self.services.registry_refs.dependency_resolver.root(spec.image)
+            if dispatched is not None:
+                spec = replace(spec, environment_root=dispatched)
+                root.set_attribute("environment_root", dispatched)
+        return spec
 
     def _write_no_ready_node(self, demand: Any, error_code: str) -> None:
         self._write_json(
@@ -5727,6 +5831,7 @@ def build_server(
                     if isolate_fleet_reads else None)
     BoundHandler.fleet_snapshot_reader = fleet_reader
     loopback = ["127.0.0.1" if host in {"", "0.0.0.0", "::"} else host, port]
+    BoundHandler.loopback_origin = staticmethod(lambda: f"http://{loopback[0]}:{loopback[1]}")
     BoundHandler.image_import_submitter = (
         ImageImportSubmitter(_loopback_image_import(
             BoundHandler.build_context_store,

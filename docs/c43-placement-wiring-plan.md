@@ -4,7 +4,8 @@ Status: plan, 2026-10-03. Scoped against today's create path. The design is
 in [rl-scale-architecture-plan.md](rl-scale-architecture-plan.md) ("C4.3",
 "C3.2") and [rl-state-primitives.md §4](rl-state-primitives.md). Phase 1
 wired the `placement_choice.py` library behind the switch (2026-10-04, not
-deployed; see "Phase 1 (implemented)").
+deployed; see "Phase 1 (implemented)"). C3.2 group create followed on top of
+it, also not deployed (see "C3.2 (implemented)").
 
 ## Findings
 
@@ -282,6 +283,68 @@ The switch is `gateway_create_placement: "ranked" | "power_of_k"`, default
   `sandbox-batch-create-v1` capability. A node without it gets per-member
   POSTs.
 - **Deferred.** "Setup on create" moves to P5.
+
+**C3.2 (implemented, 2026-10-04).** Nothing deployed; only in `power_of_k`.
+Ranked mode answers a group with 501 `sandbox_group_create_unavailable`.
+- **API.** `POST /v1/sandboxes:batch` takes `{group_id, count ≤ 512, spec,
+  placement: "pack" | "spread"}`; `spec` has no `id`. Members are
+  `<group>-<i:04d>`, ordinary sandboxes: exec, park, wake and `DELETE
+  /v1/sandboxes/<id>` work per member. `GET .../<group>` lists them.
+  `DELETE .../<group>` marks the group deleted, then deletes each member
+  through the gateway's own single-sandbox DELETE (loopback, 8 at a time).
+  The SDK key may use all three.
+- **Answer.** 201 once every member is placed (200 if a repeat placed none).
+  503 retryable, with the last rejection's code, while any member is
+  `pending` (no worker took it; fenced demand, as a single create) or
+  `creating` (ambiguous; its intent is kept). 502 for a non-retryable worker
+  failure, 409 for an id held by another spec. Repeating the request is the
+  retry: it places only unplaced members and replays `creating` ones where
+  they are.
+- **Group row.** `sandbox_groups` keeps the request hash, the resolved spec
+  and the state; `sandbox_group_members` the members the group confirmed.
+  The image, import and root are resolved once, when the row is first
+  written; a repeat reuses the stored spec. A confirmed member with no route
+  is `deleted` and never recreated, so a lost reply's replay cannot undo a
+  member delete. A deleted group refuses new intents (PostgreSQL: the intent
+  transaction holds the group row `FOR SHARE`; the delete updates it).
+- **Placement.** `PowerOfKChooser.plan_group`: `pack` with B = min(32, 2 ×
+  `create_target_concurrency_per_node`), or `spread` (B capped at an even
+  share of the view). Workers whose heartbeat holds the image join the
+  sample (`choose(include_job_ids=)`) with full residency.
+- **Per worker.** One multi-row intent transaction
+  (`reserve_create_intents`, or `retarget_create_intents` for re-planned
+  members), one `_ensure_image_for_create`, the member POSTs (32 per group
+  at once), one `confirm_creates`. Members are sent without the admission
+  wait header: a short wait would bounce them off the worker that just
+  attached their image. A definite reject (at the pull or the create)
+  re-plans those members without that worker, up to 4 rounds.
+- **Durable queue.** With `queue_placement`, an API process enqueues a
+  group as one command of a new kind `group` (keyed by its body); the
+  placement process claims up to 32 group commands and replays each to its
+  loopback, so PostgreSQL keeps one placing process. The claim fences the
+  member writes, but binds no generation: the group row fences replays. A
+  503 answer requeues the whole group until its deadline, as a create's.
+- **Schema.** SQLite creates the two tables on open. PostgreSQL needs
+  `PostgresRoutingStore.migrate()` once: `ROUTING_ADDITIVE_DDL` creates them
+  and widens the `gateway_commands.kind` check to `group`.
+
+**Deviations:**
+- **No node batch endpoint.** `POST /v1/sandboxes:batch` on the node and
+  `sandbox-batch-create-v1` are not built; every node gets per-member POSTs.
+  The attach is already once per (worker, image), which was the cost the
+  traces found; the node batch only saves HTTP round trips.
+- **Two tables, not one.** `sandbox_group_members` is insert-only, so
+  confirms on different workers never rewrite one group row. Its first
+  column is the member id, which the routing cutover's ordered copy needs.
+- **No SDK method.** The repository has no Python SDK client.
+
+**Residual risks:**
+- **Demand visibility.** A queued group is not pending demand until it runs
+  and members are left over (a queued create is, at once).
+- **A member deleted while `creating`** has no group record yet, so a later
+  repeat of the group recreates it, as a client's single-create retry would.
+- **Pending rows expire** after 300 s; the members stay unplaced and a
+  repeat still places them.
 
 **Budget.** Phases 1–2 need a temporary raise of about 445 lines, repaid by
 phase 3, which leaves the package about 515 lines lower. P4 then fits with

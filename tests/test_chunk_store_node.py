@@ -205,6 +205,9 @@ class ChunkStoreNodeTests(unittest.TestCase):
         warm = ChunkStoreClient(store.url, WRITE)
         self.assertEqual(warm.wait(warm.warm([{"key": c, "ranges": None}])["job"], timeout=30)["failed"], 0)
         self.assertNotIn(c.split("/")[-1][:-5], [ident[0] for ident in list(cache._lru)[:1]])  # Warm promotes.
+        warm.wait(warm.warm([{"key": b, "ranges": None}], keep=False)["job"], timeout=30)  # A verifier's warm.
+        self.assertEqual(store.get(a, 0, 10), self.packs[a][:10])
+        self.assertEqual(self.s3_gets(), before + 3)  # c and b filled; a stayed.
         self.assertEqual(store.get(b, 0, 10, WRITE), self.packs[b][:10])  # A full warm cache still serves it.
         self.assertEqual(next(iter(cache._lru))[0], b_digest)
         store.stop()

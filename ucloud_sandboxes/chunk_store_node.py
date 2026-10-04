@@ -501,8 +501,10 @@ class S3Source:
 class WarmJob:
     """Fill a list of objects or ranges ahead of a burst (design C9.3)."""
 
-    def __init__(self, identifier, items, concurrency):
-        self.id, self.items, self.concurrency = identifier, items, concurrency
+    def __init__(self, identifier, items, concurrency, keep=True):
+        # keep false: a converter's verification, filled first-to-evict like
+        # its reads, never at the expense of the warm set.
+        self.id, self.items, self.concurrency, self.keep = identifier, items, concurrency, keep
         self.started, self.seconds, self.state = time.monotonic(), None, "running"
         self.counts = dict.fromkeys(("extents", "done", "cached", "failed", "bytes"), 0)
         self.errors, self.guard = [], threading.Lock()
@@ -647,7 +649,7 @@ class ChunkStoreNode:
         return [(index, self.cache.open((digest, kind, index), verify, touch))
                 for index in range(first // self.extent_bytes, last // self.extent_bytes + 1)]
 
-    def warm(self, items, concurrency=8):
+    def warm(self, items, concurrency=8, keep=True):
         """Start a WarmJob over [(relative key, [(start, length)] or None)]."""
         parsed = []
         for relative, ranges in items:
@@ -657,7 +659,7 @@ class ChunkStoreNode:
                 raise ValueError("warm ranges must be [start, length] pairs within 256 MiB")
             parsed.append((identity, ranges))
         with self._guard:
-            job = WarmJob(next(self._ids), parsed, max(1, min(64, concurrency)))
+            job = WarmJob(next(self._ids), parsed, max(1, min(64, concurrency)), keep)
             self._jobs[job.id] = job
             while len(self._jobs) > 64:
                 self._jobs.popitem(last=False)
@@ -685,12 +687,14 @@ class ChunkStoreNode:
             with job.guard:
                 job.counts["extents"] += 1
             if self.cache.contains(ident):
-                self.cache.touch(ident)  # Warmed means kept: also a builder's cold extent.
+                if job.keep:
+                    self.cache.touch(ident)  # Warmed means kept: also a builder's cold extent.
                 with job.guard:
                     job.counts["cached"] += 1
             else:
                 with self._warm_slots:
-                    extent = self.extent(ident, background=True).result(timeout=FILL_DEADLINE_SECONDS + 5)
+                    extent = self.extent(ident, background=True, keep=job.keep).result(
+                        timeout=FILL_DEADLINE_SECONDS + 5)
                 with job.guard:
                     job.counts["done"] += 1
                     job.counts["bytes"] += extent.size
@@ -961,7 +965,9 @@ class ChunkStoreServer:
                          for item in request["objects"]]
                 if not 0 < len(items) <= 100_000:
                     raise ValueError("warm takes 1 to 100,000 objects")
-                job = node.warm(items, int(request.get("concurrency", 8)))
+                if not isinstance(request.get("keep", True), bool):
+                    raise ValueError("keep must be a boolean")
+                job = node.warm(items, int(request.get("concurrency", 8)), request.get("keep", True))
             except (ValueError, KeyError, TypeError, LookupError) as exc:
                 return await _reply(writer, 400, {"error": str(exc)[:200]})
             return await _reply(writer, 202, job.progress())
@@ -1060,9 +1066,10 @@ class ChunkStoreClient:
         return json.loads(self._request(method, self.base_url + path, headers=headers, body=payload,
                                         timeout=self.timeout, max_bytes=4 * MIB)[2])
 
-    def warm(self, objects, *, concurrency=8):
-        """``objects``: [{"key": relative key, "ranges": [[start, length], ...] or None}]."""
-        return self._call("POST", "/v1/warm", {"objects": objects, "concurrency": concurrency})
+    def warm(self, objects, *, concurrency=8, keep=True):
+        """``objects``: [{"key": relative key, "ranges": [[start, length], ...] or None}];
+        ``keep`` false fills them first-to-evict (a converter's verification)."""
+        return self._call("POST", "/v1/warm", {"objects": objects, "concurrency": concurrency, "keep": keep})
 
     def progress(self, job):
         return self._call("GET", f"/v1/warm/{int(job)}")

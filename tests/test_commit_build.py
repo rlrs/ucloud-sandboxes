@@ -265,6 +265,10 @@ class PublishCommitTests(CommitFixture):
             self.builder.publish_commit(self.stage(UPPER, parent_ref=unrooted),
                                         image_ref="registry.local/managed/commits:bare")
         self.assertEqual(caught.exception.code, "commit_requires_environment_root")
+        with self.assertRaises(CommitRefused) as caught:  # Chunk store M2 deleted the parent's OCI.
+            self.builder.publish_commit(self.stage(UPPER, parent_ref="registry.local/managed/gone:1@sha256:" + "e" * 64),
+                                        image_ref="registry.local/managed/commits:gone")
+        self.assertEqual(caught.exception.code, "commit_parent_released")
         # A signed parent whose manifest omits mediaType (optional in OCI) has no layout to extend.
         document, _ = self.client.manifest_document("managed/base", self.parent_ref.rpartition("@")[2])
         bare = canonical_bytes({key: value for key, value in document.items() if key != "mediaType"})

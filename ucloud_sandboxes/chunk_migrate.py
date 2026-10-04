@@ -11,11 +11,16 @@
 - ``switch`` / ``revert`` (step 3, gateway): dispatch a wave's new roots, and
   re-point its durable owners to the new closure; or go back to the
   annotation.
+- ``release`` (step 4, gateway): drop durable owners' leases on switched
+  images' old EROFS closures.
+- ``release-oci`` (step 4b, gateway): delete released, non-build-input images'
+  OCI manifests once their tags are remembered (plan §5.4).
 - ``status``: rows per wave and state.
 """
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 import json
 import logging
 import os
@@ -349,8 +354,7 @@ def release_wave(roots, environments, usage, wave, *, keys=None, execute=False):
     """Step 4 (plan §3.3), EROFS only: drop each switched image's durable
     owners' leases on its old closure. Retention then deletes the old root and
     every component nothing else keeps, and the registry sweep frees them. The
-    OCI manifest stays: readers for a deleted manifest are not built, and
-    builds read FROM layers from it. An owner's lease on a digest another of
+    OCI manifest stays until ``release_oci``. An owner's lease on a digest another of
     its images still needs (by its dispatched root, else its annotation) stays."""
     from .environment_artifact import load_environment, load_image_environment
 
@@ -403,6 +407,104 @@ def release_wave(roots, environments, usage, wave, *, keys=None, execute=False):
         summary["images"] += 1
         summary["leases"] += released
     summary["old_digests"] = len(summary["old_digests"])
+    return summary
+
+
+# Lease owners a released image serves without its OCI manifest: catalog
+# owners (image_roots answers for the image), and routes and create pulls (both
+# carry the dispatched root). Any other owner (a build's FROM, an image pull or
+# warmup, one unknown) keeps the manifest.
+OCI_FREE_OWNERS = DURABLE_OWNERS + ("sandbox-route:", "create-image-pull:")
+
+
+def manifest_readers(routing_store):
+    """(repository, digest or tag) that may still resolve through the manifest:
+    a route without a pinned root (it predates dispatch, and a wake or move
+    reads the annotation), and every prepared sandbox and image warmup."""
+    from .managed_registry import manifest_digest_from_image_ref, registry_repository_tag_from_image_ref
+    state = routing_store.load()
+    refs = [str(route.spec.get("image") or "") for route in state.sandboxes.values()
+            if isinstance(route.spec, dict) and not route.spec.get("environment_root")]
+    refs += [str(getattr(item, "image", "") or "") for item in (*state.prepared.values(),
+                                                                 *state.image_warmups.values())]
+    return {(coordinates[0], manifest_digest_from_image_ref(ref) or coordinates[1])
+            for ref in refs if (coordinates := registry_repository_tag_from_image_ref(ref))}
+
+
+def release_oci(roots, client, usage, wave, *, catalog_file, routing_store, keys=None, execute=False):
+    """Step 4b (plan §5.4): delete the OCI manifest of each released image that
+    is not a build input, after remembering its tags, so its tag and digest
+    references resolve from image_roots. Deletes are fenced like retention's:
+    in the usage store's writer transaction, a digest another lease owner holds
+    stays, as does one a route without a root, a prepared sandbox or a warmup
+    names. Workers must attach dispatched roots on pulls first. A rerun deletes
+    a manifest again that a racing protection-tag write restored. Bytes are
+    manifest layer sizes, an upper bound: a layer a kept image shares stays."""
+    from datetime import datetime, timezone
+    from .managed_registry import RegistryRequestError, is_digest_protection_tag
+    from .registry_retention import REFERENCE_PRUNE_BATCH, list_repository_tags
+    inputs, readers, done = build_inputs(catalog_file)[0], manifest_readers(routing_store), roots.oci_released()
+    summary = {"wave": wave, "execute": execute, "images": 0, "build_inputs": 0, "gone": 0, "read_by_routes": 0,
+               "leased": {}, "released": 0, "layer_bytes": 0, "unique_layer_bytes": 0, "errors": {}}
+    listed, pending, sizes = {}, [], {}
+    for row in roots.rows(wave=wave, state="released"):
+        key = (row["repository"], row["manifest_digest"])
+        if keys is not None and key not in keys:
+            continue
+        summary["images"] += 1
+        if row["build_input"] or key in inputs:  # The catalog is reread: a decision may name it since.
+            summary["build_inputs"] += 1
+            continue
+        try:
+            if key[0] not in listed:
+                listed[key[0]] = list_repository_tags(client, key[0])
+            tags = sorted(record.tag for record in listed[key[0]]
+                          if record.digest == key[1] and not is_digest_protection_tag(record.tag))
+            layers = client.manifest_layers(*key)
+        except RegistryRequestError as exc:
+            if exc.status_code != 404:
+                summary["errors"]["@".join(key)] = f"{type(exc).__name__}: {exc}"[:300]
+                continue
+            summary["gone"] += 1
+            if execute and key not in done:
+                roots.mark_oci_released(*key, layer_bytes=0, detail="already gone")
+            continue
+        except (OSError, ValueError) as exc:
+            summary["errors"]["@".join(key)] = f"{type(exc).__name__}: {exc}"[:300]
+            continue
+        if any((key[0], name) in readers for name in (key[1], *tags)):
+            summary["read_by_routes"] += 1
+            continue
+        pending.append((key, tags, layers))
+    for start in range(0, len(pending), REFERENCE_PRUNE_BATCH):
+        batch, deleted = pending[start:start + REFERENCE_PRUNE_BATCH], []
+        if execute:
+            for key, tags, _layers in batch:  # Remembered before any delete.
+                roots.record_tags(*key, tags)
+        with usage.lease_fence() if execute else nullcontext(usage.snapshot()) as snapshot:
+            now, holders = datetime.now(timezone.utc), {}
+            for lease in snapshot.leases.values():
+                if lease.is_active(now) and not lease.owner.startswith(OCI_FREE_OWNERS):
+                    holders.setdefault((lease.repository, lease.digest), lease.owner.split(":", 1)[0])
+            for key, tags, layers in batch:
+                if key in holders:
+                    summary["leased"][holders[key]] = summary["leased"].get(holders[key], 0) + 1
+                    continue
+                if execute:
+                    try:
+                        client.delete_manifest(*key)
+                    except (OSError, RegistryRequestError) as exc:
+                        if getattr(exc, "status_code", None) != 404:
+                            summary["errors"]["@".join(key)] = f"{type(exc).__name__}: {exc}"[:300]
+                            continue
+                deleted.append((key, layers))
+        for key, layers in deleted:
+            if execute:
+                roots.mark_oci_released(*key, layer_bytes=layers.total_size)
+            summary["released"] += 1
+            summary["layer_bytes"] += layers.total_size
+            sizes.update((layer.digest, layer.size) for layer in layers.layers)
+    summary["unique_layer_bytes"] = sum(sizes.values())
     return summary
 
 
@@ -519,13 +621,27 @@ def gateway_command(args):
         HOST_LOCKS.configure(config.control_state_file().parent / "gateway-locks")
         result = release_wave(roots, environments, RegistryUsageStore(config.registry_usage_file()), args.wave,
                               keys=family_keys(args.rows, args.family), execute=args.execute)
+    elif command == "release-oci":
+        if not config.immutable_environments.dispatch_roots:
+            raise ValueError("release-oci needs immutable_environments.dispatch_roots on: a create without a "
+                             "dispatched root reads the manifest's annotation")
+        from .managed_registry import RegistryClient, RegistryUsageStore
+        from .prepared_images import catalog_path
+        from .routing import open_routing_store
+        result = release_oci(roots, RegistryClient(config.registry_url),
+                             RegistryUsageStore(config.registry_usage_file()), args.wave,
+                             catalog_file=catalog_path(config.image_file()),
+                             routing_store=open_routing_store(config.routing_file()),
+                             keys=family_keys(args.rows, args.family), execute=args.execute)
     else:
-        result = {}
+        result, oci = {}, roots.oci_released()
         for row in roots.rows():
             states = result.setdefault(row["wave"], {})
-            states[row["state"]] = states.get(row["state"], 0) + 1
+            for state in (row["state"], "oci_released") if (row["repository"], row["manifest_digest"]) in oci \
+                    else (row["state"],):
+                states[state] = states.get(state, 0) + 1
     print(json.dumps(result, sort_keys=True))
-    return 0 if not result.get("refused") else 1
+    return 0 if not (result.get("refused") or result.get("errors")) else 1
 
 
 def add_commands(subparsers):
@@ -555,19 +671,21 @@ def add_commands(subparsers):
                        ("revert", "Dispatch a switched wave's old roots again (rollback)."),
                        ("release", "Drop durable owners' leases on switched images' old EROFS closures (dry run "
                                    "unless --execute)."),
+                       ("release-oci", "Delete released, non-build-input images' OCI manifests, remembering their "
+                                       "tags (dry run unless --execute)."),
                        ("status", "image_roots rows per wave and state.")):
         command = commands.add_parser(name, help=text)
         command.add_argument("--config", type=Path, required=True)
         if name == "record":
             command.add_argument("--results", type=Path, required=True)
-        if name in ("switch", "revert", "release"):
+        if name in ("switch", "revert", "release", "release-oci"):
             command.add_argument("--family", default="", help="only this inventory family (needs --rows)")
-        if name == "release":
+        if name in ("release", "release-oci"):
             command.add_argument("--execute", action="store_true", help="release; without it, only count")
         if name == "revert":
             command.add_argument("--reason", default="")
         command.set_defaults(func=gateway_command)
-    for command in (convert, commands.choices["switch"], commands.choices["revert"], commands.choices["release"]):
+    for command in (convert, *(commands.choices[name] for name in ("switch", "revert", "release", "release-oci"))):
         command.add_argument("--wave", choices=sorted(WAVES), required=True)
         command.add_argument("--rows", type=Path, required=command is convert, help="inventory rows (JSON lines)")
     convert.add_argument("--results", type=Path, required=True, help="JSON lines, appended; a rerun resumes")

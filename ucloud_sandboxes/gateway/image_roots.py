@@ -6,6 +6,10 @@ release simply ignores it. A row is keyed by the pinned (annotated) manifest
 digest and moves converted → switched → released, or back to reverted; every
 change is journaled so a wave can be reverted from the journal
 (docs/chunk-store-m2-plan.md §3.2).
+
+OCI release (plan §5.4) deletes a released image's manifest, and with it every
+tag. ``image_tags`` remembers those tags first, so a tag still resolves to the
+pinned digest; the digest itself resolves from its ``released`` row.
 """
 from contextlib import contextmanager
 import os
@@ -42,6 +46,15 @@ def retention_view(image_file):
                                 for state in DISPATCHED for row in store.rows(state=state)}
 
 
+def released_lookup(image_file):
+    """(repository, tag, digest) -> whether a missing manifest's tag or digest
+    names a released image; always False before the gateway opens the table."""
+    path = roots_path(image_file)
+    store = ImageRootsStore(path) if path.exists() else None
+    return lambda repository, tag, digest="": bool(store and (
+        store.released_digest(repository, tag) or digest and store.released_digest(repository, digest)))
+
+
 class ImageRootsStore:
     def __init__(self, path):
         self.path = Path(path)
@@ -59,6 +72,12 @@ class ImageRootsStore:
                     seq INTEGER PRIMARY KEY AUTOINCREMENT, at REAL NOT NULL, repository TEXT NOT NULL,
                     manifest_digest TEXT NOT NULL, from_state TEXT, to_state TEXT NOT NULL,
                     new_root TEXT NOT NULL, detail TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS image_tags (
+                    repository TEXT NOT NULL, tag TEXT NOT NULL, manifest_digest TEXT NOT NULL,
+                    recorded REAL NOT NULL, PRIMARY KEY (repository, tag));
+                CREATE TABLE IF NOT EXISTS image_oci_releases (
+                    repository TEXT NOT NULL, manifest_digest TEXT NOT NULL, layer_bytes INTEGER NOT NULL,
+                    released REAL NOT NULL, PRIMARY KEY (repository, manifest_digest));
             """)
 
     @contextmanager
@@ -80,6 +99,42 @@ class ImageRootsStore:
         """The root to dispatch, or None while the annotation still decides."""
         row = self.get(repository, manifest_digest)
         return row["new_root"] if row is not None and row["state"] in DISPATCHED else None
+
+    def released_digest(self, repository, reference):
+        """The pinned digest of a ``released`` image named by ``reference`` (its
+        digest or a remembered tag), or "". Callers ask only once the registry
+        has no manifest for ``reference``: a tag pushed again there wins."""
+        with self._db() as db:
+            if not reference.startswith("sha256:"):
+                row = db.execute("SELECT manifest_digest FROM image_tags WHERE repository = ? AND tag = ?",
+                                 (repository, reference)).fetchone()
+                if row is None:
+                    return ""
+                reference = row[0]
+            row = db.execute("SELECT state FROM image_roots WHERE repository = ? AND manifest_digest = ?",
+                             (repository, reference)).fetchone()
+        return reference if row is not None and row[0] == "released" else ""
+
+    def record_tags(self, repository, manifest_digest, tags):
+        with self._db() as db:
+            db.executemany("INSERT OR REPLACE INTO image_tags VALUES (?, ?, ?, ?)",
+                           [(repository, tag, manifest_digest, time.time()) for tag in tags])
+
+    def oci_released(self):
+        with self._db() as db:
+            return {(repository, digest): layer_bytes for repository, digest, layer_bytes in db.execute(
+                "SELECT repository, manifest_digest, layer_bytes FROM image_oci_releases")}
+
+    def mark_oci_released(self, repository, manifest_digest, *, layer_bytes, detail=""):
+        """The image's OCI manifest is gone from the registry (journaled)."""
+        with self._db() as db:
+            row = db.execute("SELECT state, new_root FROM image_roots WHERE repository = ? AND manifest_digest = ?",
+                             (repository, manifest_digest)).fetchone()
+            if row is None or row[0] != "released":
+                raise ValueError(f"{repository}@{manifest_digest} is not released")
+            db.execute("INSERT OR REPLACE INTO image_oci_releases VALUES (?, ?, ?, ?)",
+                       (repository, manifest_digest, int(layer_bytes), time.time()))
+            self._journal(db, repository, manifest_digest, "released", "released", row[1], "oci released " + detail)
 
     def live_roots(self):
         with self._db() as db:

@@ -992,7 +992,13 @@ class FreshEnvironmentBuilder:
         if target is None or "@" in image_ref or source is None or not parent_digest:
             raise ValueError("commit publication requires an owned tag and a pinned parent image")
         (repository, tag), parent_repository, client = target, source[0], self.registry.client
-        attachment = load_image_environment(self.registry, parent_repository, parent_digest, required=False)
+        try:
+            attachment = load_image_environment(self.registry, parent_repository, parent_digest, required=False)
+        except RegistryRequestError as exc:
+            if exc.status_code != 404:
+                raise
+            # Chunk store M2 deletes a released image's OCI (plan §5.4); a commit extends OCI layers.
+            raise CommitRefused("commit_parent_released", "the parent image's OCI manifest was released") from exc
         if attachment is None:
             raise CommitRefused("commit_requires_environment_root", "the parent image has no signed root")
         root, parent = attachment

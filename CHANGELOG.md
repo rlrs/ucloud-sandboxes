@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **`chunk-migrate release-oci --wave N [--execute]`** (M2 plan §5.4) deletes the OCI manifest of each `released` image that is not a build input. It first remembers the image's tags in `image-roots.sqlite3`. Deletes are fenced in the usage store's writer transaction, as retention's are. A digest stays when it is leased by an owner other than catalog owners, routes and create pulls, or when a route without a pinned root, a prepared sandbox or a warmup names it. Without `--execute`, it only counts images and layer bytes.
+- **A released image resolves without its manifest.** When the registry has no manifest, the gateway answers a digest from the image's `released` row, and a tag from its remembered digest. This covers creates by tag, digest and name, image listings, the dependency resolver, and the prune's stale build-record check. Pressure eviction skips dispatched images. A commit on a released parent is refused with `commit_parent_released`.
+- **The gateway's per-node pull sends the dispatched root** (`environment_root`), and immutable-environment workers attach that root instead of reading the manifest's annotation.
+  - Why: a worker's first pull of a released image attached its old root, which retention deletes after `release`.
+  - Deploy workers with the gateway before running `release-oci --execute`.
+
 ## 0.9.19 - 2026-10-04 (gateway only)
 
 - **`chunk-migrate release --wave N [--execute]`** (M2 step 4, EROFS only). For each switched image, it drops its durable owners' `:environment` leases on digests in the old closure that the new closure does not contain, and marks the row `released`. Retention already ignores a dispatched image's annotation, so its hourly prune then deletes the old roots and components nothing else keeps, and the registry sweep frees their bytes.

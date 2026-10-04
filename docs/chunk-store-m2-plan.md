@@ -630,6 +630,60 @@ lives on it, in order:
   steps are a live build at eval time.
 - **SWE-bench Pro is skipped** until step 2 exists.
 
+**OCI release (implemented 2026-10-04, not run).** `chunk-migrate release-oci
+--wave N [--execute]` (dry run by default) is step 1's OCI half.
+- **Scope.** `released` rows that are not build inputs: neither the row's
+  `build_input` nor the catalog, which is reread at run time.
+- **Per image.** It remembers the image's tags in `image_tags`
+  (`image-roots.sqlite3`; `ucloud-digest-*` tags are not kept). Then it deletes
+  the manifest, and with it every tag, inside the usage store's writer
+  transaction, in batches of 64.
+- **What stays:**
+  - a digest leased by any owner other than catalog owners, routes and
+    create pulls (for example `prepared-build`, `image-pull`, `image-warmup`);
+  - a digest named by a route without a pinned root, a prepared sandbox or a
+    warmup.
+- **Bookkeeping.** Each delete is marked in `image_oci_releases` and
+  journaled, and `status` counts `oci_released`. A rerun is idempotent, and
+  deletes again a manifest that a racing protection-tag write restored.
+- **Report.** Counts, plus the summed and unique layer bytes. The bytes are an
+  upper bound: a layer that a kept image shares stays.
+
+**Readers.** The registry answers first. On a 404, a `released` row answers
+(a tag through its remembered digest):
+- `ImageResolution.resolve_and_protect_manifest`, which covers `resolve`'s
+  digest and tag branches, `enrich_records` and `record_missing_manifest`;
+- the dependency resolver, for a tag;
+- the hourly prune's stale build-record check.
+
+Pressure eviction skips dispatched images. A commit on a released parent is
+refused (`commit_parent_released`).
+
+**Worker pulls carry the dispatched root.** The gateway's per-node pull (the
+attach) now sends the root the create pinned, or a mapped image's dispatched
+root for warmups. Workers attach that root instead of reading the annotation.
+- **Precondition for `--execute`:** gateway and workers on this release. An
+  older worker ignores the field and attaches the annotation's root, which
+  needs the manifest.
+- **The same gap exists for EROFS release today.** On 0.9.19 workers, a node's
+  first pull of a `released` image attaches the old root. Once retention has
+  deleted that root, the pull fails and so does the create. Nodes that already
+  hold the image are unaffected.
+
+**Still between this and no registry Volume:**
+- **Build inputs keep their OCI** until volume-free builds (step 2). That
+  includes all of wave 4 (§9 decision 4), foundations and named sources.
+- **A manifest delete frees nothing until a registry sweep** (§3.4), which
+  needs its timed window.
+- **The registry still holds other repositories:** environment roots and
+  components (EROFS and RAFS metadata), sandbox snapshots, the build cache and
+  traces.
+- **Re-running a prepare script on an OCI-released image fails.** It reads the
+  annotation.
+- **`inventory` no longer lists OCI-released images.**
+- **Rollback** after OCI release regenerates the OCI with `unpack-environment`
+  (§7) and re-pushes its tags.
+
 ## 6. Gates
 
 | Gate | Measure | When |

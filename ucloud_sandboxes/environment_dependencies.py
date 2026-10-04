@@ -3,7 +3,7 @@ from collections import OrderedDict
 from threading import RLock
 
 from .environment_artifact import load_environment, load_image_environment
-from .managed_registry import (digest_protection_tag, manifest_digest_from_image_ref,
+from .managed_registry import (RegistryRequestError, digest_protection_tag, manifest_digest_from_image_ref,
                                registry_repository_tag_from_image_ref)
 
 
@@ -34,10 +34,18 @@ class EnvironmentDependencyResolver:
             if digest and key in self._cache:
                 self._cache.move_to_end(key)
                 return self._cache[key]
+        if not dispatched:
+            try:
+                attachment = load_image_environment(self.registry, repository, digest or tag, required=False)
+            except RegistryRequestError as exc:
+                # A released tag whose manifest went with OCI release (plan §5.4).
+                released = self.image_roots.released_digest(repository, tag) if self.image_roots and not digest \
+                    and exc.status_code == 404 else ""
+                dispatched = released and self.image_roots.dispatch_root(repository, released)
+                if not dispatched:
+                    raise
         if dispatched:
             attachment = dispatched, load_environment(self.registry, dispatched)
-        else:
-            attachment = load_image_environment(self.registry, repository, digest or tag, required=False)
         if attachment is None:
             resolved = None, ()
         else:

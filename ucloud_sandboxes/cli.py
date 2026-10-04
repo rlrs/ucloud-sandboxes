@@ -2014,10 +2014,14 @@ def _run_lru_eviction(
                 pass
         return result
 
+    # Chunk store M2: a dispatched image's bytes are in the chunk store; its
+    # OCI goes by OCI release, which remembers its tags (plan §3.3, §5.4).
+    from .gateway.image_roots import retention_view
+    _mapped_roots, dispatched = retention_view(config.image_file())
     now = utc_now()
     plan = select_lru_evictions(
         managed_images(
-            images,
+            [record for record in images if (record.repository, record.digest) not in dispatched],
             tag_time=RegistryTagClock(data_dir, usage_snapshot.records),
             blobs=blobs,
         ),
@@ -2234,9 +2238,11 @@ def _remove_stale_private_build_image_records(
     image_file: Path,
     client: RegistryClient,
 ) -> list[ImageRecord]:
+    from .gateway.image_roots import released_lookup
     store = ImageStore(image_file)
     records = store.load()
     tags_to_remove: list[str] = []
+    released = released_lookup(image_file)
     for record in records.values():
         if not _image_record_is_pushed_private_build(record, client.base_url):
             continue
@@ -2247,7 +2253,8 @@ def _remove_stale_private_build_image_records(
             exists = client.tag_exists(*parsed)
         except (OSError, ValueError, RegistryRequestError):
             continue
-        if not exists:
+        # Chunk store M2: OCI release deleted a released image's tags, not the image.
+        if not exists and not released(parsed[0], parsed[1], record.manifest_digest):
             tags_to_remove.append(record.tag)
     return store.delete_by_tags(tags_to_remove)
 

@@ -1372,9 +1372,9 @@ class ImageManager:
                 condition.wait(wait_seconds)
 
     def pull(
-        self, image: str, image_id: str | None = None
+        self, image: str, image_id: str | None = None, environment_root: str | None = None
     ) -> tuple[ImageRecord, CommandResult]:
-        result = self.runtime.pull(image)
+        result = self.runtime.pull(image, environment_root) if environment_root else self.runtime.pull(image)
         now = utc_now()
         record = ImageRecord(
             id=image_id or image_id_from_tag(image),

@@ -52,7 +52,8 @@ CREATE_ROUNDS = 2
 class CreateExchange(Exchange, Protocol):
     """The handler's create steps this use case shares with ranked placement."""
 
-    def _ensure_image_for_create(self, heartbeat: NodeHeartbeat, image: str) -> ProxiedResponse | None: ...
+    def _ensure_image_for_create(self, heartbeat: NodeHeartbeat, image: str,
+                                 environment_root: str | None = None) -> ProxiedResponse | None: ...
     def _send_existing_sandbox_response(self, route: SandboxRoute, spec: SandboxSpec, *, status: HTTPStatus,
                                         pending: PendingSandboxDemand | None = None) -> bool: ...
     def _retry_sandbox_create_on_assigned_node(self, route: SandboxRoute, spec: SandboxSpec) -> None: ...
@@ -199,7 +200,7 @@ class CreatePlacement:
         with self.telemetry.span("gateway.sandbox_ensure_image", attributes={
             "node.id": heartbeat.node_id, "container.image.name": spec.image,
         }) as span:
-            image_response = ex._ensure_image_for_create(heartbeat, spec.image)
+            image_response = ex._ensure_image_for_create(heartbeat, spec.image, spec.environment_root)
             span.set_attribute("pulled", image_response is not None)
             if image_response is not None:
                 span.set_attribute("status_code", int(image_response.status))

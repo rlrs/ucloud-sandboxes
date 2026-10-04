@@ -55,8 +55,9 @@ from tests.test_package_budget import package_lines
 # +11 the gate leaves a bundled nydusd to VM init, +45 the device cache budget,
 # +87 M2 waves: resumable conversion, recording, switch re-pointing durable
 # owners (routes keep theirs), revert, +22 presigned reads retry only faults,
-# +16 worker fills never wait behind a builder's stalled fills.
-SUITE_LINE_BUDGET = 97_209
+# +16 worker fills never wait behind a builder's stalled fills, +26 warm coverage
+# and a cold image is never switched.
+SUITE_LINE_BUDGET = 97_236
 SUITE = Path(__file__).resolve().parent
 
 

@@ -205,8 +205,15 @@ class WaveTests(artifact_fixtures.EnvironmentArtifactTests):
             usage.acquire_reference("environments", digest_protection_tag(identity), owner + ":environment",
                                     digest=identity)
         usage.acquire_reference("managed/a", "latest", "sandbox-route:v1:x", digest=digest)
-        summary = switch_wave(roots, self.registry, usage, "1", registry_host="r:5000")
+        summary = switch_wave(roots, self.registry, usage, "1", registry_host="r:5000",
+                              warm=lambda components: ["meta/x.tail: TimeoutError"])
+        self.assertEqual((summary["switched"], list(summary["not_warm"])), (0, ["managed/a@" + digest]))
+        self.assertIsNone(roots.dispatch_root("managed/a", digest))  # Nothing cold is dispatched.
+        warmed = []
+        summary = switch_wave(roots, self.registry, usage, "1", registry_host="r:5000",
+                              warm=lambda components: warmed.extend(components) or [])
         self.assertEqual((summary["switched"], summary["owners_repointed"]), (1, 1))
+        self.assertEqual(warmed, [self.digest])
         self.assertEqual(roots.dispatch_root("managed/a", digest), self.new)
         leases = usage.snapshot().leases
         held = {lease.digest for lease in leases.values() if lease.owner == owner + ":environment"}

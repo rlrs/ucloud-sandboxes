@@ -81,9 +81,10 @@ import unittest
 # ~400 with release). +16 the index's presigned S3 reads retry transport errors
 # and 5xx (one read timeout failed a gate conversion), +8 registration range-reads
 # only each tail's chunk table and the client waits 600 s for it, +14 builders'
-# store-node fills (the write token) run unhedged in half the S3 slots. Lower it
-# on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 113_093
+# store-node fills (the write token) run unhedged in half the S3 slots, +44 warming
+# covers nydusd blob tails and layouts, and an M2 switch dispatches only a fully
+# warm image. Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 113_137
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

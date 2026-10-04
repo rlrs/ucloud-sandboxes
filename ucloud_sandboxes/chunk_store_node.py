@@ -1058,13 +1058,26 @@ class ChunkStoreClient:
         return self._call("GET", "/v1/metrics")
 
 
-def locator_objects(locator, base_url):
-    """Warm items for one locator: its packs and metadata, as relative keys."""
+def locator_objects(locator, base_url, token=None):
+    """Warm items for one locator: its packs and metadata, as relative keys.
+
+    With the node's ``token``, also every nydusd blob's tail and layout, which
+    the node's virtual blobs read at each first attach: a cold one waits on
+    S3's tail (M2 wave 1)."""
     prefix = base_url.rstrip("/") + "/v1/objects/"
     urls = [url for _, url in locator.packs] + list(locator.meta.values())
     if any(not url.startswith(prefix) for url in urls):
         raise ValueError("the locator does not name this chunk store node")
-    return [{"key": url.removeprefix(prefix), "ranges": None} for url in urls]
+    keys = [url.removeprefix(prefix) for url in urls]
+    if token is not None and "chunk_map" in locator.meta:
+        from .chunk_index import http_range
+        from .chunk_store import _MAP_HEADER, _MAP_REGION
+        url, auth = locator.meta["chunk_map"], {"Authorization": "Bearer " + token}
+        count = _MAP_HEADER.unpack(http_range(url, 0, _MAP_HEADER.size, headers=auth))[3]
+        regions = http_range(url, 0, _MAP_HEADER.size + count * _MAP_REGION.size, headers=auth)[_MAP_HEADER.size:]
+        for blob, _, _ in _MAP_REGION.iter_unpack(regions):
+            keys += [object_key(blob.hex(), "tail"), object_key(blob.hex(), "layout")]
+    return [{"key": key, "ranges": None} for key in dict.fromkeys(keys)]
 
 
 # --- Commands: serve-chunk-store, warm-chunk-store ---
@@ -1105,9 +1118,10 @@ def warm_command(args):
     if store is None or store.store_node is None:
         raise ValueError("warm-chunk-store needs immutable_environments.chunk_store.store_node")
     index = ChunkIndexClient(store.index_url, read_token(store.read_token_file).decode())
-    objects = [item for component in args.component for item in locator_objects(index.locator(component),
-                                                                                 store.store_node.url)]
-    client = ChunkStoreClient(store.store_node.url, read_token(store.write_token_file).decode())
+    token = read_token(store.write_token_file).decode()
+    objects = [item for component in args.component
+               for item in locator_objects(index.locator(component), store.store_node.url, token)]
+    client = ChunkStoreClient(store.store_node.url, token)
     job = client.warm(list({item["key"]: item for item in objects}.values()), concurrency=args.concurrency)
     print(json.dumps(client.wait(job["job"], timeout=args.timeout) if args.wait else job, sort_keys=True))
     return 0

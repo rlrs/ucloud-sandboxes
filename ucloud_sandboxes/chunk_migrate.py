@@ -273,21 +273,29 @@ def durable_owners(usage):
     return owners
 
 
-def switch_wave(roots, environments, usage, wave, *, registry_host, keys=None):
+def switch_wave(roots, environments, usage, wave, *, registry_host, keys=None, warm=None):
     """Step 3: dispatch the wave's converted (or reverted) roots, then acquire
     every durable owner of the image on the new closure. The old closure
     stays with those owners until the image is released, and with every route
-    that started on it until the route ends."""
+    that started on it until the route ends.
+
+    ``warm(components)`` puts every object workers read on the store node and
+    returns the objects that failed; an image switches only with none (M2
+    wave 1: a cold object waits on S3's tail, past the NBD timeout)."""
     from .environment_artifact import load_environment
     from .environment_dependencies import EnvironmentDependencyResolver
     from .gateway.registry_refs import _persist_registry_image_protection
     resolver = EnvironmentDependencyResolver(environments, image_roots=roots)
-    owners, switched, repointed = durable_owners(usage), 0, 0
+    owners, switched, repointed, cold = durable_owners(usage), 0, 0, {}
     for row in roots.rows(wave=wave):
         key = (row["repository"], row["manifest_digest"])
         if row["state"] not in ("converted", "reverted") or (keys is not None and key not in keys):
             continue
-        load_environment(environments, row["new_root"])  # Still published, and signed by a trusted key.
+        environment = load_environment(environments, row["new_root"])  # Still published, signed by a trusted key.
+        failed = warm(environment.components) if warm is not None else []
+        if failed:
+            cold["@".join(key)] = failed[:3]
+            continue
         held = sorted(owners.get(key, ()))
         roots.transition(*key, "switched", detail=json.dumps({"owners": [owner for owner, _ in held]}))
         for owner, tag in held:
@@ -297,7 +305,7 @@ def switch_wave(roots, environments, usage, wave, *, registry_host, keys=None):
                 raise RuntimeError(f"{image}: the new closure was not retained for {owner}")
         switched += 1
         repointed += len(held)
-    return {"wave": wave, "switched": switched, "owners_repointed": repointed}
+    return {"wave": wave, "switched": switched, "owners_repointed": repointed, "not_warm": cold}
 
 
 def revert_wave(roots, wave, *, keys=None, detail=""):
@@ -365,6 +373,28 @@ def convert_command(args):
     return 0 if not summary["failed"] else 1
 
 
+def store_warmer(config):
+    """warm(components) -> failed objects, through the deployment's store node."""
+    from .chunk_index import ChunkIndexClient
+    from .chunk_store_node import ChunkStoreClient, locator_objects
+    from .environment_config import read_token
+    store = config.immutable_environments.chunk_store
+    if store is None or store.store_node is None:
+        raise ValueError("switch needs immutable_environments.chunk_store with a store node to warm")
+    index = ChunkIndexClient(store.index_url, read_token(store.read_token_file).decode())
+    token = read_token(store.write_token_file).decode()
+    client = ChunkStoreClient(store.store_node.url, token)
+
+    def warm(components):
+        objects = [item for component in components
+                   for item in locator_objects(index.locator(component), store.store_node.url, token)]
+        done = client.wait(client.warm(objects)["job"], timeout=1800)
+        if done.get("failed") or done.get("state") != "complete":
+            return list(done.get("errors") or ()) or [f"warm {done.get('state')}: {done.get('failed')} failed"]
+        return []
+    return warm
+
+
 def gateway_command(args):
     from .config import DeploymentConfig
     from .environment_config import environment_registry_from_deployment
@@ -385,7 +415,7 @@ def gateway_command(args):
         HOST_LOCKS.configure(config.control_state_file().parent / "gateway-locks")  # The gateway's lease fence.
         result = switch_wave(roots, environments, RegistryUsageStore(config.registry_usage_file()), args.wave,
                              registry_host=urlparse(config.registry_url).netloc,
-                             keys=family_keys(args.rows, args.family))
+                             keys=family_keys(args.rows, args.family), warm=store_warmer(config))
     elif command == "revert":
         result = revert_wave(roots, args.wave, keys=family_keys(args.rows, args.family), detail=args.reason)
     else:

@@ -13,7 +13,8 @@ import shutil
 
 from tests.chunk_store_support import NYDUS, REPOSITORY, ChunkStoreFixture, sample_images
 from ucloud_sandboxes.chunk_index import MissingChunks, http_range, http_request
-from ucloud_sandboxes.chunk_store_node import ChunkStoreNode, ChunkStoreServer, ExtentCache, S3Source, VirtualBlobs
+from ucloud_sandboxes.chunk_store_node import (ChunkStoreClient, ChunkStoreNode, ChunkStoreServer, ExtentCache,
+                                               S3Source, VirtualBlobs, locator_objects)
 from ucloud_sandboxes.environment_artifact import load_environment
 from ucloud_sandboxes.managed_registry import RegistryRequestError
 
@@ -97,6 +98,23 @@ class VirtualBlobTests(unittest.TestCase):
             expected = (self.kept / blob).read_bytes()
             with self.subTest(blob=blob):
                 self.assertEqual(self.get(component_hex, blob, 0, len(expected)), expected)
+
+    def test_warming_a_component_covers_its_blob_tails_and_layouts(self):
+        # M2 wave 1: tails and layouts were fetched from S3 at first attach.
+        self.store.index.service.store_url = self.url
+        component = load_environment(self.store.registry, self.roots[0]).components[0]
+        loaded = self.store.registry.load(component)
+        self.store.index.writer.register(component, loaded.bootstrap["digest"], loaded.chunk_map)
+        locator = self.store.index.reader.locator(component)
+        plain = {item["key"] for item in locator_objects(locator, self.url)}
+        full = {item["key"] for item in locator_objects(locator, self.url, READ)}
+        extra = full - plain
+        blobs = {blob for _, blob in self.blobs_kept()}
+        self.assertTrue(extra and {key.split("/")[1].split(".")[0] for key in extra} <= blobs)
+        self.assertEqual({key.rsplit(".", 1)[1] for key in extra}, {"tail", "layout"})
+        client = ChunkStoreClient(self.url, WRITE)
+        done = client.wait(client.warm([{"key": key, "ranges": None} for key in sorted(full)])["job"], timeout=60)
+        self.assertEqual((done["state"], done["failed"]), ("complete", 0))
 
     def test_head_sizes_a_blob_larger_than_one_response(self):
         component, blob = max(self.blobs_kept(), key=lambda item: (self.kept / item[1]).stat().st_size)

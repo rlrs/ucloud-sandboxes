@@ -435,7 +435,16 @@ fixes:
   20-sandbox burst on one node waits about 14 s. Next fix: a lock per blob
   instead of one per node.
 
-**Before wave 2: the store node's cache.**
+**After 0.9.4** (per-blob nydusd starts, builder-cold cache; workers on
+snapshot `439378718`): 40/40 again, and no NBD timeouts or I/O errors.
+- **First command:** SWE-smith p50 1.60 s and OpenSWE 1.02 s.
+- **Ready time is provisioning, not the image path.** Within each run, the
+  first to last sandbox ready spans 15–20 s on chunk-store roots and 16 s on
+  the EROFS baseline. What moved the p50 was when the first sandbox was ready,
+  which is how long Hetzner took to boot and initialize the worker from zero:
+  56 s (baseline), 66 s (0.9.3) and 95 s (0.9.4).
+
+**Before wave 2: the store node's cache** (resolved in 0.9.4).
 - Wave 2 (TMax and Terminal-Lego, 3,584 images) is larger than the
   240 GiB cache.
 - Its conversions verify by reading through the node, so they would evict
@@ -447,7 +456,17 @@ fixes:
   - converters verify against S3 directly, accepting S3's tail;
   - a larger node, or a second one for builders.
 
-  The first is the smallest.
+  The first is the smallest. **Done in 0.9.4:** a builder's reads install
+  first-to-evict and never promote, and warm jobs promote.
+
+### 5.3 Wave 2 (started 2026-10-04 ~06:30Z)
+
+- **Converters:** two CCX63 from snapshot `439378718`, `--shard 0/2` and
+  `1/2`, 12 at a time each.
+- **Registry reads:** each capped at 400 Mbit/s, so 100 MB/s in total.
+- **Agent:** HEAD's `chunk-migrate` from a dev wheel, for `--shard`.
+- **Size:** TMax and Terminal-Lego, 3,584 images, 24,702 task rows, about
+  641 GB of OCI.
 
 ## 6. Gates
 

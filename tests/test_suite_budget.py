@@ -59,8 +59,8 @@ from tests.test_package_budget import package_lines
 # and a cold image is never switched, +17 RAFS attaches never queue behind EROFS,
 # +6 a failed warm call skips the image, +27 a builder's reads never evict the
 # warm set, also across a restart, +32 only a blob's first nydusd starts alone,
-# +3 converters split a wave.
-SUITE_LINE_BUDGET = 97_322
+# +4 converters split a wave.
+SUITE_LINE_BUDGET = 97_323
 SUITE = Path(__file__).resolve().parent
 
 

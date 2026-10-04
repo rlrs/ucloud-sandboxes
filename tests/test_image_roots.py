@@ -9,8 +9,8 @@ import unittest
 from tests import test_environment_artifact as artifact_fixtures
 from tests.harness import LocalFleet
 from ucloud_sandboxes.capabilities import ENVIRONMENT_RAFS_CAPABILITY, ENVIRONMENT_ROOT_CAPABILITY
-from ucloud_sandboxes.chunk_migrate import (convert_wave, inventory, read_jsonl, record_results, revert_wave,
-                                            switch_wave, wave_of)
+from ucloud_sandboxes.chunk_migrate import (convert_wave, inventory, read_jsonl, record_results, release_wave,
+                                            revert_wave, switch_wave, wave_of)
 from ucloud_sandboxes.environment_artifact import OCI_IMAGE, attach_environment_to_image, canonical_bytes, publish_environment
 from ucloud_sandboxes.environment_dependencies import EnvironmentDependencyResolver
 from ucloud_sandboxes.environment_manifest import EnvironmentManifest
@@ -242,6 +242,25 @@ class WaveTests(artifact_fixtures.EnvironmentArtifactTests):
         self.assertEqual(switch_wave(roots, self.registry, usage, "1", registry_host="r:5000",
                                      keys={("managed/x", digest)})["switched"], 0)  # Another family.
         self.assertEqual(switch_wave(roots, self.registry, usage, "1", registry_host="r:5000")["switched"], 1)
+
+        # Release (EROFS only): the owner's old-closure leases go, unless another
+        # of its images still needs them; the OCI manifest stays.
+        other = attach_environment_to_image(self.registry, image_repository="managed/b", image_reference="image",
+                                            environment_digest=self.old)
+        usage.acquire_reference("managed/b", "latest", owner, digest=other)
+        dry = release_wave(roots, self.registry, usage, "1")
+        self.assertEqual((dry["images"], dry["leases"]), (1, 0))  # managed/b still mounts the old root.
+        usage.release_lease("managed/b", "latest", owner)
+        dry = release_wave(roots, self.registry, usage, "1")
+        self.assertEqual((dry["images"], dry["leases"], dry["old_digests"]), (1, 1, 1))
+        self.assertEqual(roots.dispatch_root("managed/a", digest), self.new)  # A dry run changes nothing.
+        done = release_wave(roots, self.registry, usage, "1", execute=True)
+        self.assertEqual((done["images"], done["leases"]), (1, 1))
+        held = {lease.digest for lease in usage.snapshot().leases.values() if lease.owner == owner + ":environment"}
+        self.assertEqual(held, {self.new, self.digest})  # The new closure, and the component it shares.
+        self.assertEqual(roots.dispatch_root("managed/a", digest), self.new)
+        self.assertIn(digest, self.client.manifests)
+        self.assertEqual(release_wave(roots, self.registry, usage, "1", execute=True)["images"], 0)
 
 
 class GatewayDispatchTests(unittest.TestCase):

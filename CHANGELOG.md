@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.9.19 - 2026-10-04 (gateway only)
+
+- **`chunk-migrate release --wave N [--execute]`** (M2 step 4, EROFS only). For each switched image, it drops its durable owners' `:environment` leases on digests in the old closure that the new closure does not contain, and marks the row `released`. Retention already ignores a dispatched image's annotation, so its hourly prune then deletes the old roots and components nothing else keeps, and the registry sweep frees their bytes.
+  - An owner's lease stays when another of its images still needs the digest, by that image's dispatched root or its annotation. If such an image cannot be resolved, all of that owner's leases stay.
+  - The OCI manifest stays: readers for a deleted manifest are not built, and builds read `FROM` layers from it.
+  - Without `--execute`, it only counts.
+
 ## 0.9.18 - 2026-10-04 (gateway and workers)
 
 - **A nydusd attach loads only what nydusd reads.** The worker fetches the bootstrap and chunk map from the store node by the digests the signed component pins, with no index call. It verifies both digests, checks the chunk map's regions against the bootstrap's device table, and writes the bootstrap for nydusd. nydusd checks every chunk against the bootstrap itself.

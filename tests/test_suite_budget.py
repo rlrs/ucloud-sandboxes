@@ -70,8 +70,9 @@ from tests.test_package_budget import package_lines
 # +31 placement deferrals are counted by status, code and message gist.
 # +13 an environment attach is awaited, not polled, +7 creates in flight cover
 # every node's startup slots, +2 and are not capped like 2 s pulls, +28 a nydusd
-# attach loads only what nydusd reads.
-SUITE_LINE_BUDGET = 97_752
+# attach loads only what nydusd reads, +20 release keeps what another image of
+# the owner still needs.
+SUITE_LINE_BUDGET = 97_774
 SUITE = Path(__file__).resolve().parent
 
 

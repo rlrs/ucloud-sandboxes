@@ -109,9 +109,11 @@ import unittest
 # every node's startup slots (a fixed 32 capped bursts near 6/s), +4 awaited
 # attaches are not capped by the 2 s pulls' background limit, +85 nydusd-mode
 # attach loads headers only (a burst's attaches shared env-io's GIL: 8 s each);
-# the full loader goes with the Python RAFS reader.
+# the full loader goes with the Python RAFS reader, +71 chunk-migrate release
+# (M2 step 4, EROFS only: owners' leases on switched images' old closures; the
+# design sized the migration tool at ~400 with release).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 113_567
+PACKAGE_LINE_BUDGET = 113_638
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

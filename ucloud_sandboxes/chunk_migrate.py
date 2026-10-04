@@ -345,6 +345,67 @@ def revert_wave(roots, wave, *, keys=None, detail=""):
     return {"wave": wave, "reverted": reverted}
 
 
+def release_wave(roots, environments, usage, wave, *, keys=None, execute=False):
+    """Step 4 (plan §3.3), EROFS only: drop each switched image's durable
+    owners' leases on its old closure. Retention then deletes the old root and
+    every component nothing else keeps, and the registry sweep frees them. The
+    OCI manifest stays: readers for a deleted manifest are not built, and
+    builds read FROM layers from it. An owner's lease on a digest another of
+    its images still needs (by its dispatched root, else its annotation) stays."""
+    from .environment_artifact import load_environment, load_image_environment
+
+    def closure(root):
+        try:
+            return {root, *load_environment(environments, root).components}
+        except (OSError, ValueError):  # Retention may have taken part of an old closure already.
+            return {root}
+    owners, held_by = durable_owners(usage), {}
+    for key, entries in owners.items():
+        for owner, _tag in entries:
+            held_by.setdefault(owner, set()).add(key)
+    leases = {}
+    for lease in usage.snapshot().leases.values():
+        if not lease.expires_at and lease.owner.endswith(":environment"):
+            leases.setdefault(lease.owner, []).append(lease)
+    rows = [row for row in roots.rows(wave=wave, state="switched")
+            if keys is None or (row["repository"], row["manifest_digest"]) in keys]
+    needed = {}  # Closures cached per image key.
+
+    def keeps(key):
+        """The digests an image still needs; None when unknown (keep every lease)."""
+        if key not in needed:
+            try:
+                root = roots.dispatch_root(*key) or next(
+                    iter(load_image_environment(environments, *key, required=False) or ("",)), "")
+                needed[key] = closure(root) if root else set()
+            except (OSError, ValueError):
+                needed[key] = None
+        return needed[key]
+    summary = {"wave": wave, "execute": execute, "images": 0, "leases": 0, "old_digests": set()}
+    for row in rows:
+        key = (row["repository"], row["manifest_digest"])
+        drop = closure(row["old_root"]) - closure(row["new_root"])
+        released = 0
+        for owner, _tag in sorted(owners.get(key, ())):
+            others = [keeps(other) for other in held_by[owner] if other != key]
+            if None in others:
+                summary["owners_kept_unknown"] = summary.get("owners_kept_unknown", 0) + 1
+                continue
+            kept = set().union(*others)
+            for lease in leases.get(owner + ":environment", ()):
+                if lease.digest in drop and lease.digest not in kept:
+                    if execute:
+                        usage.release_lease(lease.repository, lease.tag, lease.owner)
+                    released += 1
+                    summary["old_digests"].add(lease.digest)
+        if execute:
+            roots.transition(*key, "released", detail=json.dumps({"leases": released}))
+        summary["images"] += 1
+        summary["leases"] += released
+    summary["old_digests"] = len(summary["old_digests"])
+    return summary
+
+
 def family_keys(rows_file, family):
     if family and rows_file is None:
         raise ValueError("--family needs the inventory --rows")
@@ -452,6 +513,12 @@ def gateway_command(args):
                              keys=family_keys(args.rows, args.family), warm=store_warmer(config))
     elif command == "revert":
         result = revert_wave(roots, args.wave, keys=family_keys(args.rows, args.family), detail=args.reason)
+    elif command == "release":
+        from .host_locks import HOST_LOCKS
+        from .managed_registry import RegistryUsageStore
+        HOST_LOCKS.configure(config.control_state_file().parent / "gateway-locks")
+        result = release_wave(roots, environments, RegistryUsageStore(config.registry_usage_file()), args.wave,
+                              keys=family_keys(args.rows, args.family), execute=args.execute)
     else:
         result = {}
         for row in roots.rows():
@@ -486,17 +553,21 @@ def add_commands(subparsers):
     for name, text in (("record", "Record verified conversions as converted rows (gateway)."),
                        ("switch", "Dispatch a wave's new roots and re-point its durable owners (step 3)."),
                        ("revert", "Dispatch a switched wave's old roots again (rollback)."),
+                       ("release", "Drop durable owners' leases on switched images' old EROFS closures (dry run "
+                                   "unless --execute)."),
                        ("status", "image_roots rows per wave and state.")):
         command = commands.add_parser(name, help=text)
         command.add_argument("--config", type=Path, required=True)
         if name == "record":
             command.add_argument("--results", type=Path, required=True)
-        if name in ("switch", "revert"):
+        if name in ("switch", "revert", "release"):
             command.add_argument("--family", default="", help="only this inventory family (needs --rows)")
+        if name == "release":
+            command.add_argument("--execute", action="store_true", help="release; without it, only count")
         if name == "revert":
             command.add_argument("--reason", default="")
         command.set_defaults(func=gateway_command)
-    for command in (convert, commands.choices["switch"], commands.choices["revert"]):
+    for command in (convert, commands.choices["switch"], commands.choices["revert"], commands.choices["release"]):
         command.add_argument("--wave", choices=sorted(WAVES), required=True)
         command.add_argument("--rows", type=Path, required=command is convert, help="inventory rows (JSON lines)")
     convert.add_argument("--results", type=Path, required=True, help="JSON lines, appended; a rerun resumes")

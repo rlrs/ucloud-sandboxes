@@ -467,6 +467,31 @@ snapshot `439378718`): 40/40 again, and no NBD timeouts or I/O errors.
 - **Agent:** HEAD's `chunk-migrate` from a dev wheel, for `--shard`.
 - **Size:** TMax and Terminal-Lego, 3,584 images, 24,702 task rows, about
   641 GB of OCI.
+- **Store node:** 0.9.5 since about 06:30Z (the verifier's warm installs
+  first-to-evict).
+- **Registry read cap:** raised to 800 Mbit/s per converter at about 07:45Z.
+  The cap was binding (367k drops), and production carries no training.
+  Throughput went from about 3 to about 28 images a minute.
+- **First pass:** 3,491/3,584. The 93 failures were S3 tail and store-node
+  read timeouts, and all converted on rerun.
+- **Incident: retention deleted 1,115 converted roots before they were
+  recorded.**
+  - Only an `image_roots` row keeps a converted root live. The first record ran
+    about 2 h after conversion started, and the gateway's hourly prune
+    deletes unreferenced environment roots older than one hour.
+  - **Nothing in production was affected:**
+    - every old root was intact;
+    - the chunks stayed in S3 and the index;
+    - wave 1 was recorded within minutes.
+  - **The same investigation found the prune crashing every hour since
+    0.8.6,** in its build-cache pass on a signature mismatch.
+  - **Fixed in 0.9.7** (gateway only):
+    - chunk-store tags get a fixed 72 h recording window;
+    - the prune completes.
+  - The 1,115 are being converted again; their chunks are deduplicated, so
+    mostly metadata is republished.
+  - **Runbook:** record each converter's results at least every few hours,
+    and always within 72 h.
 
 ## 6. Gates
 

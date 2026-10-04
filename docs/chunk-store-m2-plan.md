@@ -235,6 +235,28 @@ journal.
   warmed from S3 with the running training's foundations. The replacement
   time is measured once before wave 1's release.
 
+**Update (2026-10-04, 0.9.10): the replica lives on a Volume.**
+- **Why:** the replica holds the whole prefix (§5.3). Wave 3 (mostly ScaleSWE)
+  dedups less than waves 1 and 2: the replica grew about 0.15 GB per image, so
+  roughly 700 GB after wave 4. The CCX43's 360 GB disk would have filled near
+  wave 3 image 1,150.
+- **Decision:** the CCX43's 16 dedicated cores and 64 GB were idle (load about
+  0.5, services under 4 GB RSS). The node needs disk and network, not compute.
+  So the replica and the index moved to a 1 TB Volume (`sandboxes-store-replica`,
+  `store_node.data_device`, `cache_bytes` 850 GiB), and the node becomes a CX53
+  (€29.5/month instead of €276; the Volume is €57). The Volume outlives the
+  server, so a replacement needs no S3 refill.
+- **Not the registry Volume.** This one holds a disposable copy; S3 stays the
+  permanent store (§5.4 still retires the registry Volume).
+- **Cost of a Volume: read speed.** Uncached 1 MiB direct reads measured
+  125 MB/s at one reader (7 ms), 290 MB/s at 64 (p99 304 ms), against several
+  GB/s from local NVMe. RAM page cache serves the hot set. A cold-fleet burst
+  on the CX53 decides whether that holds (§5 canary, phase 0 burst repeated).
+- **Move (11:43Z):** a live rsync, then 44 s of downtime for the final sync and
+  bind mounts. Converters kept going through it, and every image they started
+  failed with `NewConnectionError` (485, rerun with the wave). Stop converters
+  first next time.
+
 ### 4.2 Conversion capacity
 
 - **Throughput.** The M1 gate converted and verified about 2.5 images per minute

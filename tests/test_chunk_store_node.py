@@ -132,6 +132,10 @@ class ChunkStoreNodeTests(unittest.TestCase):
             self.assertLess(time.monotonic() - started, .5)
             self.assertEqual(pending.result(), self.packs[cold][:4096])
         self.assertTrue(faulted and all(name.startswith("chunk-store-read") for name in faulted), faulted)
+        serve = store.metrics()["serve"]  # Where served reads wait: the slow one is a read, not a queue.
+        self.assertGreaterEqual(serve["read"]["max_ms"], 1000)
+        self.assertLess(serve["queue"]["max_ms"], 500)
+        self.assertEqual(serve["send"]["count"], serve["read"]["count"])
 
     def test_concurrent_misses_on_one_extent_coalesce(self):
         store, key = StoreNode(self, self.objects, self.root), self.keys[0]

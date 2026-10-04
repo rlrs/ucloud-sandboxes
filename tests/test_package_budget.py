@@ -98,9 +98,10 @@ import unittest
 # +32 the store node's replica and index on a Volume (store_node.data_device:
 # mounted and bound by store init; the node becomes a small, replaceable type).
 # +10 net: a response's ranges are faulted in on a read thread before the loop's
-# sendfile (a Volume read stalled every request), less the on-loop hit path.
+# sendfile (a Volume read stalled every request), less the on-loop hit path,
+# +10 served reads' queue, read and send times (the store node only timed S3).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 113_396
+PACKAGE_LINE_BUDGET = 113_406
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

@@ -522,6 +522,8 @@ class ChunkStoreNode:
         self._warm_slots = threading.BoundedSemaphore(warm_concurrency)
         self._guard, self._inflight, self._jobs, self._ids = threading.Lock(), {}, OrderedDict(), itertools.count(1)
         self.fill_wait = Samples()
+        # A served read's wait for a read thread, its read (fills, layout, page faults) and its send.
+        self.serve = {"queue": Samples(), "read": Samples(), "send": Samples()}
         self.counters = dict.fromkeys(("requests", "hits", "misses", "coalesced", "bytes_served", "errors",
                                        "fills", "fill_rejects", "warm_jobs"), 0)
 
@@ -737,6 +739,7 @@ class ChunkStoreNode:
             s3 = dict(self.source.counters)
         return {**counters, "inflight_fills": inflight, "warm_jobs_active": active, "extent_bytes": self.extent_bytes,
                 "fill_wait": self.fill_wait.summary(), "cache": self.cache.stats(),
+                "serve": {name: samples.summary() for name, samples in self.serve.items()},
                 "s3": {**s3, "ttfb": self.source.ttfb.summary(), "fill": self.source.latency.summary()},
                 **({"mirror": dict(self.mirror.state)} if self.mirror is not None else {})}
 
@@ -1045,7 +1048,8 @@ class ChunkStoreServer:
                 read = (partial(self.blobs.read, *relative, first, last, suffix, background)
                         if isinstance(relative, tuple) else
                         partial(self.node.read, relative, first, last, suffix, background=background))
-                found = await self._loop.run_in_executor(self._reads, _resident, read)
+                found = await self._loop.run_in_executor(self._reads, _resident, read, self.node.serve,
+                                                         time.monotonic())
         except NotFound:
             return await _reply(writer, 404, {"error": "no such object"})
         except LookupError:
@@ -1062,6 +1066,7 @@ class ChunkStoreServer:
             _LOG.warning("chunk store fill failed: %s: %s", type(exc).__name__, exc)
             return await _reply(writer, 503, {"error": "object store unavailable"})
         total, start, length, pieces = found
+        sending = time.monotonic()
         try:
             lines = [f"HTTP/1.1 {206 if spec else 200} {'Partial Content' if spec else 'OK'}",
                      "Content-Type: application/octet-stream", f"Content-Length: {length}"]
@@ -1073,17 +1078,21 @@ class ChunkStoreServer:
         finally:
             for stream, _, _ in pieces:
                 stream.close()
+        self.node.serve["send"].add(time.monotonic() - sending)
         return True
 
 
 _FAULT = threading.local()
 
 
-def _resident(read):
+def _resident(read, serve, submitted):
     """``read()``, with its ranges faulted into the page cache, so the loop's
     sendfile never waits on the disk. On a Volume a cold read takes ~7 ms, and
     on the loop it stalled every request: hot 64 KiB reads went from 1.3 to 88 ms
-    p50 behind 32 cold readers (2026-10-04)."""
+    p50 behind 32 cold readers (2026-10-04). ``serve`` times the wait for a read
+    thread and the read itself."""
+    started = time.monotonic()
+    serve["queue"].add(started - submitted)
     found = read()
     if not hasattr(_FAULT, "buffer"):
         _FAULT.buffer = memoryview(bytearray(1 << 20))
@@ -1091,6 +1100,7 @@ def _resident(read):
         end = offset + count
         while offset < end and (done := os.preadv(stream.fileno(), [_FAULT.buffer[:end - offset]], offset)) > 0:
             offset += done
+    serve["read"].add(time.monotonic() - started)
     return found
 
 

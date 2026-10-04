@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.9.12 - 2026-10-04 (store node only)
+
+- **The store node times the reads it serves** (`serve` in `/v1/metrics`): the wait for a read thread, the read (fills, layout lookups, page faults) and the send, each as p50/p90/p99/max over recent requests. It used to time only its S3 fills, which hid where a warm burst's requests waited.
+
 ## 0.9.11 - 2026-10-04 (store node only)
 
 - **A slow disk read no longer stalls the store node.**

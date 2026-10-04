@@ -1516,6 +1516,10 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 raise ValueError("image pull payload must be a JSON object")
             image = str(raw.get("image") or "")
             image_id = str(raw["id"]) if raw.get("id") else None
+            # Chunk store M2: attach the dispatched root (the store verifies its
+            # signature); a Docker image store has none.
+            environment_root = (str(raw["environment_root"]) if raw.get("environment_root") and getattr(
+                self.image_manager.runtime, "pulls_environment_roots", False) else None)
             image_evictor = getattr(self, "image_evictor", None)
             if image_evictor is not None:
                 try:
@@ -1527,7 +1531,8 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 with self.image_manager.pull_slot() as pull_admission:
                     pull_queue_ms = int(pull_admission["queue_wait_ms"])
                     pull_started = time.monotonic()
-                    record, result = self.image_manager.pull(image, image_id=image_id)
+                    record, result = self.image_manager.pull(image, image_id=image_id,
+                                                             environment_root=environment_root)
                 pull_finished = time.monotonic()
                 if image_evictor is not None:
                     content_id = image_evictor.store.image_content_id(record.tag)

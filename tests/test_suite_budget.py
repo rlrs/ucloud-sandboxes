@@ -75,7 +75,11 @@ from tests.test_package_budget import package_lines
 # +352 C4.3 phase 1: two gateways over shared state in both create modes, the
 # power-of-k create loop's outcomes, the admission-wait header and the route
 # intent's fences on SQLite and PostgreSQL, +23 a dispatched root skips the pull.
-SUITE_LINE_BUDGET = 98_149
+# intent's fences on SQLite and PostgreSQL.
+# +264 M2 OCI release: a fake Distribution registry, every reader after a
+# released manifest is deleted, release-oci's lease, route and build-input
+# fences, and a local fleet creating a released image by tag and by digest.
+SUITE_LINE_BUDGET = 98_413
 SUITE = Path(__file__).resolve().parent
 
 

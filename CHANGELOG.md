@@ -6,6 +6,11 @@
 
 - **A create pinned to its image's dispatched chunk-store root skips the node's separate image pull.** The create attaches that root itself. The pull carried no root, so the worker resolved the image's annotation, which is the old EROFS root. Once `chunk-migrate release` drops that root's leases, the prune deletes it, and the first create of a released image on a fresh node would fail. It also attached the old EROFS root for nothing on every burst.
 - **Ships C4.3 phase 1 switched off** (`gateway_create_placement: "ranked"`): power-of-k create placement, see `docs/c43-placement-wiring-plan.md`.
+- **`chunk-migrate release-oci --wave N [--execute]`** (M2 plan §5.4) deletes the OCI manifest of each `released` image that is not a build input. It first remembers the image's tags in `image-roots.sqlite3`. Deletes are fenced in the usage store's writer transaction, as retention's are. A digest stays when it is leased by an owner other than catalog owners, routes and create pulls, or when a route without a pinned root, a prepared sandbox or a warmup names it. Without `--execute`, it only counts images and layer bytes.
+- **A released image resolves without its manifest.** When the registry has no manifest, the gateway answers a digest from the image's `released` row, and a tag from its remembered digest. This covers creates by tag, digest and name, image listings, the dependency resolver, and the prune's stale build-record check. Pressure eviction skips dispatched images. A commit on a released parent is refused with `commit_parent_released`.
+- **The gateway's per-node pull sends the dispatched root** (`environment_root`), and immutable-environment workers attach that root instead of reading the manifest's annotation.
+  - Why: a worker's first pull of a released image attached its old root, which retention deletes after `release`.
+  - Deploy workers with the gateway before running `release-oci --execute`.
 
 ## 0.9.19 - 2026-10-04 (gateway only)
 

@@ -4336,7 +4336,7 @@ class ControlPlaneTests(unittest.TestCase):
                 routing_file=route_file,
             )
             gateway.RequestHandlerClass._ensure_image_on_node = (  # type: ignore[attr-defined]
-                lambda _self, _heartbeat, _image: control_plane.ProxiedResponse(
+                lambda _self, _heartbeat, _image, _root=None: control_plane.ProxiedResponse(
                     502,
                     {"Content-Type": "application/json"},
                     b'{"error":"registry unavailable"}',

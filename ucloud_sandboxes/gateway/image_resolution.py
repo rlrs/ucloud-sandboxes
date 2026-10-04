@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
+import sqlite3
 from threading import Event, RLock, Thread
 import time
 from typing import Any
@@ -224,9 +225,11 @@ class ImageResolution:
     def __init__(
         self, *, image_manager: ImageManager, registry_url: str | None,
         registry_worker_url: str | None, disk_monitor: RegistryDiskMonitor | None,
-        fleet: FleetView,
+        fleet: FleetView, image_roots: Any = None,
     ) -> None:
         self.image_manager = image_manager
+        # Chunk store M2: answers for a released image whose manifest is gone.
+        self.image_roots = image_roots
         self.registry_url = registry_url
         self.registry_worker_url = registry_worker_url
         self.disk_monitor = disk_monitor
@@ -368,14 +371,30 @@ class ImageResolution:
             if cached:
                 return cached
         client = RegistryClient(self.registry_url)
-        digest = normalize_manifest_digest(client.manifest_digest(repository, reference))
-        if not digest or (existing and digest != existing):
-            return ""
-        client.ensure_digest_protection_tag(repository, digest)
+        try:
+            digest = normalize_manifest_digest(client.manifest_digest(repository, reference))
+            if not digest or (existing and digest != existing):
+                return ""
+            client.ensure_digest_protection_tag(repository, digest)
+        except RegistryRequestError as exc:
+            # OCI release (plan §5.4) deleted the manifest and its tags: the
+            # image runs from its dispatched root, which needs no protection.
+            digest = self.released_digest(repository, reference) if exc.status_code == 404 else ""
+            if not digest or (existing and digest != existing):
+                raise
         if cache is not None:
             cache.put(repository, reference, digest)
             cache.put(repository, digest, digest)
         return digest
+
+    def released_digest(self, repository: str, reference: str) -> str:
+        roots = self.image_roots
+        if roots is None:
+            return ""
+        try:
+            return roots.released_digest(repository, reference)
+        except (OSError, sqlite3.Error):
+            return ""
 
     def record_with_digest(self, record: dict[str, Any]) -> dict[str, Any]:
         updated = dict(record)

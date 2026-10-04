@@ -1205,7 +1205,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
     def _prepare_migration_destination_image(self, source: SandboxRoute, destination: NodeHeartbeat) -> None:
         image = str(source.spec.get("image") or "").strip()
-        response = self._ensure_image_on_node(destination, image)
+        response = self._ensure_image_on_node(destination, image, source.spec.get("environment_root"))
         if response is not None and response.status >= 400:
             error = response.json()
             raise WakePlacementStopped(WakeUnavailable(
@@ -5243,13 +5243,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 _registry_operation_lease_owner("create-image-pull", key),
                 touch=True,
             )
-            return self._ensure_image_on_node(heartbeat, image)
+            return self._ensure_image_on_node(heartbeat, image, environment_root)
 
         key = (
             heartbeat.job_id,
             heartbeat.node_epoch,
             heartbeat.node_url or "",
             image,
+            environment_root,
         )
         return self.create_image_pull_tasks.run(key, pull)
 
@@ -5257,6 +5258,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self,
         heartbeat: NodeHeartbeat,
         image: str,
+        environment_root: str | None = None,
     ) -> ProxiedResponse | None:
         node_url = heartbeat.node_url or ""
         if not image.strip() or self._node_has_image(heartbeat, image):
@@ -5264,7 +5266,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         with _image_pull_lock(node_url, image):
             if self._node_has_image(heartbeat, image, use_heartbeat_cache=False):
                 return None
-            return self._pull_image_on_node(heartbeat, image)
+            return self._pull_image_on_node(heartbeat, image, environment_root=environment_root)
 
     def _dispatched_root(self, image: str) -> str | None:
         resolver = getattr(self.services.registry_refs, "dependency_resolver", None)
@@ -5344,10 +5346,17 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         image: str,
         *,
         image_id: str = "",
+        environment_root: str | None = None,
     ) -> ProxiedResponse:
         payload: dict[str, Any] = {"image": image}
         if image_id:
             payload["id"] = image_id
+        # Chunk store M2: the worker attaches the root a create pins, else a
+        # mapped image's dispatched one; a released image may have no manifest
+        # (plan §5.4). Older workers ignore the field.
+        environment_root = environment_root or self._dispatched_root(image)
+        if environment_root:
+            payload["environment_root"] = environment_root
         response: ProxiedResponse | None = None
         for attempt in range(IMAGE_PULL_RETRY_ATTEMPTS):
             response = self._proxy_request(
@@ -5367,6 +5376,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         if 200 <= response.status < 300:
             self.services.images.invalidate_inventory()
         return response
+
+    def _dispatched_root(self, image: str) -> str | None:
+        if not self.dispatch_environment_roots:
+            return None
+        roots = getattr(self.services.registry_refs.dependency_resolver, "image_roots", None)
+        coordinates = registry_repository_tag_from_image_ref(image)
+        digest = manifest_digest_from_image_ref(image)
+        return roots.dispatch_root(coordinates[0], digest) if roots is not None and coordinates and digest else None
 
     def _proxy_request(
         self, node_url: str, path: str, *, method: str, body: Any = None,

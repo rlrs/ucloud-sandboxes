@@ -262,8 +262,8 @@ class EnvironmentRootfsStore:
                 environment, _ = self._load(image_id)
                 self._mount(image_id, environment)
 
-    def warm(self, image_ref):
-        with self.operation_lease(image_ref):
+    def warm(self, image_ref, environment_root=None):
+        with self.operation_lease(image_ref, environment_root):
             pass
 
     def collect_image(self, image_id, *, is_referenced):
@@ -332,13 +332,16 @@ class EnvironmentImageRuntime:
     dry_run = False
     materializes_rootfs = True
     pull_phase = "environment_resolve"
+    # The gateway's pull attaches the root its create dispatches (chunk store
+    # M2): a released image's manifest, and its old root, may be gone.
+    pulls_environment_roots = True
 
     def __init__(self, image_store):
         self.image_store = image_store
 
-    def pull(self, image):
+    def pull(self, image, environment_root=None):
         from .sandbox import CommandResult
-        self.image_store.warm(image)
+        self.image_store.warm(image, environment_root)
         return CommandResult(argv=("immutable-environment", "resolve", image), exit_code=0)
 
     def build(self, *args, **kwargs):

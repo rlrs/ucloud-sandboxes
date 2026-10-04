@@ -117,8 +117,17 @@ import unittest
 # header); phase 3 deletes the ranked create path (plan: about -960), +13 a
 # create pinned to its dispatched root skips the node pull (it resolved the
 # released old root).
+# header); phase 3 deletes the ranked create path (plan: about -960), +13 a
+# create pinned to its dispatched root skips the node pull (it resolved the
+# released old root).
+# +240 M2 OCI release (plan §5.4): chunk-migrate release-oci (+118: released,
+# non-build-input images' manifests go once their tags are remembered, fenced
+# by leases and routes) and its readers: a released digest or remembered tag
+# answers when the registry has no manifest, and a node's pull attaches the
+# dispatched root (a released image's manifest and old root may be gone). It
+# retires the OCI half of the registry Volume (~1.3 TB), not code.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 114_118
+PACKAGE_LINE_BUDGET = 114_358
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

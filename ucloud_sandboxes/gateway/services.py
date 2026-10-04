@@ -86,6 +86,6 @@ def build_services(
         images=ImageResolution(
             image_manager=image_manager, registry_url=registry_url,
             registry_worker_url=registry_worker_url, disk_monitor=registry_disk_monitor,
-            fleet=fleet,
+            fleet=fleet, image_roots=getattr(dependency_resolver, "image_roots", None),
         ),
     )

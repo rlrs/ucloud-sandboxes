@@ -131,6 +131,11 @@ class EnvironmentRootfsTests(artifact_fixtures.EnvironmentArtifactTests):
             del self.client.manifests[key]  # Released: the manifest is gone.
         with store().operation_lease(ref, new_root) as image:
             self.assertEqual(image.image_config.command, ("/bin/new",))
+        # The gateway's pull (the attach) carries the root too; without it the manifest is needed.
+        manager = ImageManager(ImageStore(self.root / "image-api.sqlite"), EnvironmentImageRuntime(store()))
+        self.assertEqual(manager.pull(ref, environment_root=new_root)[0].manifest_digest, digest)
+        with self.assertRaisesRegex(ValueError, "MANIFEST_UNKNOWN"):
+            manager.pull(ref)
 
     def test_the_spec_field_is_optional_and_keeps_old_fingerprints(self):
         raw = {"id": "s", "image": "localhost:5000/environments:task@sha256:" + "1" * 64, "cpus": 1, "memory_mb": 512}

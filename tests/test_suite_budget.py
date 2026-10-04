@@ -62,8 +62,8 @@ from tests.test_package_budget import package_lines
 # +4 converters split a wave, +4 a verifier's warm keeps the warm set, +1 env-io's
 # fd limit, +31 the conversion recording window and the cache client's real
 # signature, +4 net: the replica, less the cold-placement test, +7 a switch
-# skips an image whose closure lost a component.
-SUITE_LINE_BUDGET = 97_374
+# skips an image whose closure lost a component, +2 locators never wait on S3.
+SUITE_LINE_BUDGET = 97_376
 SUITE = Path(__file__).resolve().parent
 
 

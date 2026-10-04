@@ -88,8 +88,9 @@ class VirtualBlobTests(unittest.TestCase):
                 self.store.index.writer.register(environment.components[0], component.bootstrap["digest"],
                                                  component.chunk_map)
             built = locate.call_count
-            service._locators.clear()  # A restarted index serves the stored locator.
-            locator = self.store.index.reader.locator(environment.components[0])
+            service._locators.clear()  # A restarted index serves the stored locator, from its database:
+            with mock.patch.object(service.store, "get", side_effect=OSError("S3 stalled")):  # never S3's tail.
+                locator = self.store.index.reader.locator(environment.components[0])
         self.assertGreater(built, 0)
         self.assertEqual(locate.call_count, built)  # Not recomputed.
         self.assertTrue(all(url.startswith("http://store-node/") for _, url in locator.packs))

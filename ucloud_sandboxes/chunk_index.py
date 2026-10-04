@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS roots (component BLOB PRIMARY KEY, chunk_map BLOB, bo
 CREATE TABLE IF NOT EXISTS root_packs (component BLOB, pack INTEGER, bytes INTEGER,
     PRIMARY KEY (component, pack)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS reservations (id BLOB PRIMARY KEY, owner TEXT, until INTEGER) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS locators (component BLOB, epoch INTEGER, payload BLOB,
+    PRIMARY KEY (component, epoch)) WITHOUT ROWID;
 """
 
 
@@ -405,6 +407,17 @@ class ChunkIndex:
                 self._writer.execute("ROLLBACK")
                 raise
 
+    def stored_locator(self, component, epoch, payload=None):
+        """The locator kept beside the index (a worker's attach must not wait on
+        S3's tail; M2 wave 2: 56 s for one), or with ``payload``, keep it."""
+        key = (bytes.fromhex(require_digest(component)[7:]), epoch)
+        if payload is not None:
+            with self._write_lock:
+                self._writer.execute("INSERT OR REPLACE INTO locators VALUES (?, ?, ?)", (*key, payload))
+            return payload
+        row = self._reader().execute("SELECT payload FROM locators WHERE component = ? AND epoch = ?", key).fetchone()
+        return None if row is None else bytes(row[0])
+
     def root(self, component):
         row = self._reader().execute("SELECT chunk_map, bootstrap, epoch FROM roots WHERE component = ?",
                                      (bytes.fromhex(require_digest(component)[7:]),)).fetchone()
@@ -533,13 +546,15 @@ class ChunkIndexService:
         meta = {"bootstrap": self._worker_url(bootstrap_key(self.store.prefix, bootstrap_digest[7:])),
                 "chunk_map": self._worker_url(chunk_map_key(self.store.prefix, chunk_map_digest[7:]))}
         stored = locator_key(self.store.prefix, component[7:], epoch) if self.store_url else None
-        encoded = None
-        if stored is not None and (size := self.store.size(stored)) is not None:
-            encoded = self.store.get(stored, size)  # Built at registration; never recomputed per attach.
+        # Local first: S3 keeps the permanent copy, a fresh index reads it once.
+        encoded = self.index.stored_locator(component, epoch) if stored is not None else None
+        if encoded is None and stored is not None and (size := self.store.size(stored)) is not None:
+            encoded = self.index.stored_locator(component, epoch, self.store.get(stored, size))
         if encoded is None:
             encoded = self.locate(list(self.chunk_map(chunk_map_digest).ids), meta, epoch, self._worker_url).encode()
-            if stored is not None:  # A registration from before stored locators: once.
+            if stored is not None:  # Built at registration; never recomputed per attach.
                 self.store.put_bytes(stored, encoded)
+                self.index.stored_locator(component, epoch, encoded)
         lifetime = float("inf") if self.store_url else self.store.url_seconds / 2
         self._cached(self._locators, key, (time.monotonic() + lifetime, encoded))
         return encoded

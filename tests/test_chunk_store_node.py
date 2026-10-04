@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import random
 import threading
+from types import SimpleNamespace
 import time
 import unittest
 from tempfile import TemporaryDirectory
@@ -13,7 +14,7 @@ from tempfile import TemporaryDirectory
 from tests.chunk_store_support import REPOSITORY, ChunkStoreFixture, ObjectServer, sample_images
 from ucloud_sandboxes.chunk_index import http_range, http_request
 from ucloud_sandboxes.chunk_store_node import (ChunkStoreClient, ChunkStoreNode, ChunkStoreServer, ExtentCache,
-                                               S3Source, locator_objects)
+                                               ReplicaMirror, S3Source, locator_objects)
 from ucloud_sandboxes.environment_artifact import load_environment
 from ucloud_sandboxes.environment_cache import VerifiedEnvironmentCache
 from ucloud_sandboxes.environment_rafs import load_rafs_image, store_access, store_locator
@@ -34,15 +35,17 @@ def pack_object(seed, size):
 class StoreNode:
     """A store node on localhost over ObjectServer; restartable on one cache."""
 
-    def __init__(self, test, objects, root, *, budget=64 * MIB, extent=MIB, concurrency=8, deadline=10.0):
+    def __init__(self, test, objects, root, *, budget=64 * MIB, extent=MIB, concurrency=8, deadline=10.0,
+                 replica=False):
         self.test, self.objects, self.root = test, objects, Path(root)
         self.budget, self.extent, self.concurrency, self.deadline = budget, extent, concurrency, deadline
+        self.replica = replica
         self.start()
 
     def start(self):
         source = S3Source(self.objects.presigner, PREFIX, concurrency=self.concurrency, deadline=self.deadline)
-        self.node = ChunkStoreNode(ExtentCache(self.root / "cache", self.budget), source, extent_bytes=self.extent,
-                                   warm_concurrency=2)
+        self.node = ChunkStoreNode(ExtentCache(self.root / "cache", self.budget, self.replica), source,
+                                   extent_bytes=self.extent, warm_concurrency=2)
         self.server = ChunkStoreServer(("127.0.0.1", 0), self.node, read_token=READ, write_token=WRITE)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
@@ -186,33 +189,26 @@ class ChunkStoreNodeTests(unittest.TestCase):
         store.get(a, MIB, 10)  # The evicted extent: least recently used.
         self.assertEqual(self.s3_gets(), before + 1)
 
-    def test_a_builders_reads_never_evict_the_warm_set(self):
-        # Before M2 wave 2: converters verify through the node, and a wave is
-        # larger than the cache; their extents go first, the warm set stays.
-        store, (a, b, c) = StoreNode(self, self.objects, self.root, budget=3 * MIB), self.keys
-        store.get(a, 0, 10)
-        store.get(a, MIB, 10)  # Two warm extents (a worker).
-        for offset in (0, MIB, 0, MIB):  # A builder reads b twice over: no promotion.
-            store.get(b, offset, 10, WRITE)
-        store.get(c, 0, 10, WRITE)
+    def test_a_replica_mirrors_its_prefix_never_evicts_and_refuses_past_its_budget(self):
+        # S3 is the permanent store; the node is a full copy of it, not a cache.
+        store = StoreNode(self, self.objects, self.root, budget=int(5.5 * MIB), replica=True)
+        (a, b, c), client = self.keys, ChunkStoreClient(store.url, WRITE)
+        listing = [(f"{PREFIX}/{key}", SimpleNamespace(size=len(self.packs[key]))) for key in (a, b)]
+        listing.append((f"{PREFIX}/meta/{'0' * 64}.12.loc", SimpleNamespace(size=10)))  # Not served: skipped.
+        self.assertEqual(sorted(client.missing([a, b])), sorted([a, b]))
+        mirror = ReplicaMirror(store.node, lambda prefix: listing, PREFIX, sleep=lambda seconds: time.sleep(.05))
+        state = mirror.round()
+        self.assertEqual((state["listed"], state["missing"], state["failed"]), (2, 2, 0))
+        self.assertEqual(client.missing([a, b]), [])
+        self.assertEqual(mirror.round()["missing"], 0)  # Nothing left to fill.
         before = self.s3_gets()
-        store.get(a, 0, 10)
-        store.get(a, MIB, 10)
-        self.assertEqual(self.s3_gets(), before)  # Still cached.
-        cache = store.node.cache
-        self.assertEqual([ident[0] for ident in cache._lru][-2:], [a.split("/")[-1][:-5]] * 2)
-        b_digest = b.split("/")[-1][:-5]
-        warm = ChunkStoreClient(store.url, WRITE)
-        self.assertEqual(warm.wait(warm.warm([{"key": c, "ranges": None}])["job"], timeout=30)["failed"], 0)
-        self.assertNotIn(c.split("/")[-1][:-5], [ident[0] for ident in list(cache._lru)[:1]])  # Warm promotes.
-        warm.wait(warm.warm([{"key": b, "ranges": None}], keep=False)["job"], timeout=30)  # A verifier's warm.
-        self.assertEqual(store.get(a, 0, 10), self.packs[a][:10])
-        self.assertEqual(self.s3_gets(), before + 3)  # c and b filled; a stayed.
-        self.assertEqual(store.get(b, 0, 10, WRITE), self.packs[b][:10])  # A full warm cache still serves it.
-        self.assertEqual(next(iter(cache._lru))[0], b_digest)
-        store.stop()
-        store.start()  # A restart orders by mtime: the builder's cold extent stays first.
-        self.assertEqual(next(iter(store.node.cache._lru))[0], b_digest)
+        with self.assertRaises(RegistryRequestError) as caught:  # a and b resident: c does not fit.
+            store.get(c, 0, 10)
+        self.assertEqual(caught.exception.status_code, 503)
+        cache = store.metrics()["cache"]
+        self.assertEqual((cache["evictions"], cache["full_refusals"], cache["replica"]), (0, 1, True))
+        self.assertEqual(store.get(a, 0, 10), self.packs[a][:10])  # Everything stays resident.
+        self.assertEqual(self.s3_gets(), before)  # Refused before any S3 GET.
 
     def test_a_restart_drops_torn_and_partial_files_and_never_serves_them(self):
         store, key = StoreNode(self, self.objects, self.root), self.keys[0]
@@ -357,6 +353,13 @@ class StoreNodeConfigTests(unittest.TestCase):
                 ChunkStoreConfig.from_dict({**self.raw(), "nydusd": bad})
         with self.assertRaisesRegex(ValueError, "needs store_node"):
             ChunkStoreConfig.from_dict({**ChunkStoreConfigTests.RAW, "nydusd": nydusd})
+        # A replica is opt-in; off, older releases still read the rendered block.
+        self.assertNotIn("replica", store.to_dict()["store_node"])
+        replica = ChunkStoreConfig.from_dict(self.raw(replica=True, mirror_seconds=300))
+        self.assertEqual((replica.store_node.replica, replica.to_dict()["store_node"]["mirror_seconds"]), (True, 300))
+        for bad in ({"replica": 1}, {"replica": True, "mirror_seconds": 5}):
+            with self.subTest(replica=bad), self.assertRaises(ValueError):
+                ChunkStoreConfig.from_dict(self.raw(**bad))
 
     def test_the_store_role_renders_a_node_without_fleet_services(self):
         from tests import test_vm_init as vm_fixtures

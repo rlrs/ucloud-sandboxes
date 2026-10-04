@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 import json
+import logging
 import os
 from pathlib import Path
 import sqlite3
@@ -27,6 +28,7 @@ from urllib.parse import urlparse
 import zipfile
 
 SELECTORS_NAME = "all-image-selectors.json"
+_LOG = logging.getLogger(__name__)
 # Plan §5: waves in order of training rows per byte. A name ending in ":" is a
 # family prefix (the foundations).
 WAVES = {"1": ("SWE-smith", "OpenSWE"), "2": ("TMax", "Terminal-Lego"),
@@ -279,41 +281,47 @@ def durable_owners(usage):
     return owners
 
 
+SWITCH_BATCH = 100
+
+
 def switch_wave(roots, environments, usage, wave, *, registry_host, keys=None, warm=None):
     """Step 3: dispatch the wave's converted (or reverted) roots, then acquire
     every durable owner of the image on the new closure. The old closure
     stays with those owners until the image is released, and with every route
     that started on it until the route ends.
 
-    ``warm(components)`` puts every object workers read on the store node and
-    returns the objects that failed; an image switches only with none (M2
+    ``warm({image: components})`` makes every object those images' workers read
+    resident on the store node, in one check and one fill per batch, and
+    returns {image: failed objects}; an image switches only with none (M2
     wave 1: a cold object waits on S3's tail, past the NBD timeout)."""
     from .environment_artifact import load_environment
     from .environment_dependencies import EnvironmentDependencyResolver
     from .gateway.registry_refs import _persist_registry_image_protection
     resolver = EnvironmentDependencyResolver(environments, image_roots=roots)
     owners, switched, repointed, cold = durable_owners(usage), 0, 0, {}
-    for row in roots.rows(wave=wave):
-        key = (row["repository"], row["manifest_digest"])
-        if row["state"] not in ("converted", "reverted") or (keys is not None and key not in keys):
-            continue
-        environment = load_environment(environments, row["new_root"])  # Still published, signed by a trusted key.
+    pending = [(row["repository"], row["manifest_digest"], row["new_root"]) for row in roots.rows(wave=wave)
+               if row["state"] in ("converted", "reverted")
+               and (keys is None or (row["repository"], row["manifest_digest"]) in keys)]
+    for start in range(0, len(pending), SWITCH_BATCH):
+        batch = {(repository, digest): load_environment(environments, root).components  # Signed, published.
+                 for repository, digest, root in pending[start:start + SWITCH_BATCH]}
         try:
-            failed = warm(environment.components) if warm is not None else []
-        except (OSError, ValueError) as exc:  # The index or node timed out: this image waits for a rerun.
-            failed = [f"{type(exc).__name__}: {exc}"[:300]]
-        if failed:
-            cold["@".join(key)] = failed[:3]
-            continue
-        held = sorted(owners.get(key, ()))
-        roots.transition(*key, "switched", detail=json.dumps({"owners": [owner for owner, _ in held]}))
-        for owner, tag in held:
-            image = f"{registry_host}/{key[0]}:{tag}@{key[1]}"
-            if not _persist_registry_image_protection(usage, image, owner, touch=False, persistent=True,
-                                                      dependency_resolver=resolver):
-                raise RuntimeError(f"{image}: the new closure was not retained for {owner}")
-        switched += 1
-        repointed += len(held)
+            failed = warm(batch) if warm is not None else {}
+        except (OSError, ValueError) as exc:  # The index or node timed out: this batch waits for a rerun.
+            failed = dict.fromkeys(batch, [f"{type(exc).__name__}: {exc}"[:300]])
+        for key in batch:
+            if failed.get(key):
+                cold["@".join(key)] = failed[key][:3]
+                continue
+            held = sorted(owners.get(key, ()))
+            roots.transition(*key, "switched", detail=json.dumps({"owners": [owner for owner, _ in held]}))
+            for owner, tag in held:
+                image = f"{registry_host}/{key[0]}:{tag}@{key[1]}"
+                if not _persist_registry_image_protection(usage, image, owner, touch=False, persistent=True,
+                                                          dependency_resolver=resolver):
+                    raise RuntimeError(f"{image}: the new closure was not retained for {owner}")
+            switched += 1
+            repointed += len(held)
     return {"wave": wave, "switched": switched, "owners_repointed": repointed, "not_warm": cold}
 
 
@@ -386,7 +394,9 @@ def convert_command(args):
 
 
 def store_warmer(config):
-    """warm(components) -> failed objects, through the deployment's store node."""
+    """warm({image: components}) -> {image: failed objects}, through the
+    deployment's store node: one residency check, one fill of what is
+    missing, one recheck."""
     from .chunk_index import ChunkIndexClient
     from .chunk_store_node import ChunkStoreClient, locator_objects
     from .environment_config import read_token
@@ -397,13 +407,18 @@ def store_warmer(config):
     token = read_token(store.write_token_file).decode()
     client = ChunkStoreClient(store.store_node.url, token, timeout=120.0)
 
-    def warm(components):
-        objects = [item for component in components
-                   for item in locator_objects(index.locator(component), store.store_node.url, token)]
-        done = client.wait(client.warm(objects)["job"], timeout=1800)
-        if done.get("failed") or done.get("state") != "complete":
-            return list(done.get("errors") or ()) or [f"warm {done.get('state')}: {done.get('failed')} failed"]
-        return []
+    def warm(batch):
+        objects = {image: [item["key"] for component in components for item in
+                           locator_objects(index.locator(component), store.store_node.url, token)]
+                   for image, components in batch.items()}
+        missing = set(client.missing({key for keys in objects.values() for key in keys}))
+        if missing:
+            done = client.wait(client.warm([{"key": key, "ranges": None} for key in sorted(missing)])["job"],
+                               timeout=3600)
+            missing = set(client.missing(missing))
+            if missing and done.get("errors"):
+                _LOG.warning("store node fill: %s", "; ".join(done["errors"][:3]))
+        return {image: [key for key in keys if key in missing] for image, keys in objects.items()}
     return warm
 
 

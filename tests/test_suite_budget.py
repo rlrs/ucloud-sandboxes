@@ -61,8 +61,8 @@ from tests.test_package_budget import package_lines
 # warm set, also across a restart, +32 only a blob's first nydusd starts alone,
 # +4 converters split a wave, +4 a verifier's warm keeps the warm set, +1 env-io's
 # fd limit, +31 the conversion recording window and the cache client's real
-# signature.
-SUITE_LINE_BUDGET = 97_362
+# signature, +4 net: the replica, less the cold-placement test.
+SUITE_LINE_BUDGET = 97_366
 SUITE = Path(__file__).resolve().parent
 
 

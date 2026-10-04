@@ -91,8 +91,10 @@ import unittest
 # (--shard), +7 a converter's verification warms first-to-evict (keep false),
 # +3 env-io's LimitNOFILE 65536, +23 retention holds converted roots 72 h for
 # recording and the build cache's client takes timeout_seconds (registry prune
-# crashed hourly). Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 113_241
+# crashed hourly), +91 net: the store node as a full replica of its S3 prefix
+# (mirror loop, no eviction, a residency check; batched switch), less the cold
+# placement it obsoletes. Lower it on deletions (C1.3 is ~8k).
+PACKAGE_LINE_BUDGET = 113_332
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

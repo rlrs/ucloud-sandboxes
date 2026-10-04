@@ -209,17 +209,17 @@ class WaveTests(artifact_fixtures.EnvironmentArtifactTests):
                                     digest=identity)
         usage.acquire_reference("managed/a", "latest", "sandbox-route:v1:x", digest=digest)
         summary = switch_wave(roots, self.registry, usage, "1", registry_host="r:5000",
-                              warm=lambda components: ["meta/x.tail: TimeoutError"])
+                              warm=lambda batch: dict.fromkeys(batch, ["meta/x.tail"]))
         self.assertEqual((summary["switched"], list(summary["not_warm"])), (0, ["managed/a@" + digest]))
         self.assertIsNone(roots.dispatch_root("managed/a", digest))  # Nothing cold is dispatched.
 
-        def unreachable(components):
+        def unreachable(batch):
             raise OSError("chunk store request failed: ReadTimeoutError")
         summary = switch_wave(roots, self.registry, usage, "1", registry_host="r:5000", warm=unreachable)
         self.assertEqual((summary["switched"], len(summary["not_warm"])), (0, 1))  # Skipped, not aborted.
         warmed = []
         summary = switch_wave(roots, self.registry, usage, "1", registry_host="r:5000",
-                              warm=lambda components: warmed.extend(components) or [])
+                              warm=lambda batch: warmed.extend(c for cs in batch.values() for c in cs) or {})
         self.assertEqual((summary["switched"], summary["owners_repointed"]), (1, 1))
         self.assertEqual(warmed, [self.digest])
         self.assertEqual(roots.dispatch_root("managed/a", digest), self.new)

@@ -15,6 +15,7 @@ extent torn by power loss fails its check on first use and is refetched.
 from __future__ import annotations
 
 import asyncio
+import errno
 from collections import OrderedDict, deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import partial
@@ -129,10 +130,12 @@ class ExtentCache:
     by power loss is dropped and refetched, never served.
     """
 
-    def __init__(self, root, budget):
+    def __init__(self, root, budget, replica=False):
         if budget < MIB:
             raise ValueError("the chunk store cache budget must hold an extent")
-        self.root, self.budget = Path(root), budget
+        # A replica keeps everything: past its budget it refuses new extents
+        # (counted) instead of evicting; the operator grows the disk.
+        self.root, self.budget, self.replica, self.full_refusals = Path(root), budget, replica, 0
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.tmp = self.root / "tmp"
         shutil.rmtree(self.tmp, ignore_errors=True)  # Fills a crash interrupted.
@@ -172,16 +175,14 @@ class ExtentCache:
         with self._guard:
             return self._lru.get(ident)
 
-    def open(self, ident, verify=True, touch=True):
+    def open(self, ident, verify=True):
         """A readable file of a verified extent, or None (absent or torn;
-        or, with ``verify`` false, not yet hashed since the restart).
-        ``touch`` false (a builder's read) leaves its place in the LRU."""
+        or, with ``verify`` false, not yet hashed since the restart)."""
         with self._guard:
             extent = self._lru.get(ident)
             if extent is None or not (verify or extent.verified):
                 return None
-            if touch:
-                self._lru.move_to_end(ident)
+            self._lru.move_to_end(ident)
         try:
             stream = open(extent.path, "rb", buffering=0)
         except FileNotFoundError:
@@ -219,6 +220,9 @@ class ExtentCache:
 
     def reserve(self, size):
         with self._guard:
+            if self.replica and self.bytes + self.reserved + size > self.budget:
+                self.full_refusals += 1
+                raise OSError(errno.ENOSPC, "chunk store replica is full: grow cache_bytes and its disk")
             self.reserved += size
             self._evict()
 
@@ -230,26 +234,11 @@ class ExtentCache:
         name = self.tmp / f"{os.getpid()}-{threading.get_ident()}-{secrets.token_hex(8)}"
         return os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600), name
 
-    def touch(self, ident):
-        """Most recently used, also across a restart (a warm job keeps it)."""
-        with self._guard:
-            extent = self._lru.get(ident)
-            if extent is not None:
-                self._lru.move_to_end(ident)
-        if extent is not None:
-            try:
-                os.utime(extent.path)
-            except FileNotFoundError:
-                pass  # Evicted meanwhile.
-
-    def install(self, ident, temporary, size, total, sha256, cold=False):
-        """Rename a complete, hashed file into place (one reservation of ``size`` ends).
-        ``cold``: first to be evicted (a builder's read), also after a restart."""
+    def install(self, ident, temporary, size, total, sha256):
+        """Rename a complete, hashed file into place (one reservation of ``size`` ends)."""
         directory = self.root / ident[0][:2]
         directory.mkdir(mode=0o700, exist_ok=True)
         path = directory / f"{ident[0]}.{ident[1]}.{ident[2]}.{total}.{sha256}"
-        if cold:
-            os.utime(temporary, ns=(0, 0))  # Restarts order the LRU by mtime.
         os.replace(temporary, path)
         extent = Extent(path, size, total, sha256, True)
         with self._guard:
@@ -263,11 +252,11 @@ class ExtentCache:
             self._totals[ident[:2]] = total
             self.bytes += size
             self._evict()
-            if cold and ident in self._lru:  # After evicting: the reader needs it once.
-                self._lru.move_to_end(ident, last=False)
         return extent
 
     def _evict(self):
+        if self.replica:
+            return
         # Open files keep their bytes, so a reader mid-sendfile is unaffected.
         while self.bytes + self.reserved > self.budget and self._lru:
             _, extent = self._lru.popitem(last=False)
@@ -279,7 +268,8 @@ class ExtentCache:
         with self._guard:
             return {"bytes": self.bytes, "budget": self.budget, "extents": len(self._lru),
                     "reserved": self.reserved, "evictions": self.evictions,
-                    "verify_failures": self.verify_failures}
+                    "verify_failures": self.verify_failures, "replica": self.replica,
+                    "full_refusals": self.full_refusals}
 
 
 class _Race:
@@ -501,10 +491,8 @@ class S3Source:
 class WarmJob:
     """Fill a list of objects or ranges ahead of a burst (design C9.3)."""
 
-    def __init__(self, identifier, items, concurrency, keep=True):
-        # keep false: a converter's verification, filled first-to-evict like
-        # its reads, never at the expense of the warm set.
-        self.id, self.items, self.concurrency, self.keep = identifier, items, concurrency, keep
+    def __init__(self, identifier, items, concurrency):
+        self.id, self.items, self.concurrency = identifier, items, concurrency
         self.started, self.seconds, self.state = time.monotonic(), None, "running"
         self.counts = dict.fromkeys(("extents", "done", "cached", "failed", "bytes"), 0)
         self.errors, self.guard = [], threading.Lock()
@@ -518,6 +506,8 @@ class WarmJob:
 
 class ChunkStoreNode:
     """Single-flight extent fills over an ExtentCache and an S3Source."""
+
+    mirror = None  # A replica node's ReplicaMirror, for metrics.
 
     def __init__(self, cache, source, *, extent_bytes=8 * MIB, warm_concurrency=16):
         if extent_bytes & (extent_bytes - 1) or not MIB <= extent_bytes <= MAX_EXTENT_BYTES:
@@ -539,7 +529,7 @@ class ChunkStoreNode:
         with self._guard:
             self.counters[name] += value
 
-    def extent(self, ident, background=False, keep=True):
+    def extent(self, ident, background=False):
         """A Future of the installed extent ``ident`` = (digest, kind, index)."""
         with self._guard:
             future = self._inflight.get(ident)
@@ -552,7 +542,7 @@ class ChunkStoreNode:
             self._settle(ident, future, existing, None)
             return future
         try:
-            (self._background_fills if background else self._fills).submit(self._fill, ident, future, background, keep)
+            (self._background_fills if background else self._fills).submit(self._fill, ident, future, background)
         except RuntimeError as exc:  # Closing: nobody may wait on a fill that never runs.
             self._settle(ident, future, None, exc)
         return future
@@ -562,7 +552,7 @@ class ChunkStoreNode:
             self._inflight.pop(ident, None)
         future.set_exception(error) if error is not None else future.set_result(value)
 
-    def _fill(self, ident, future, background=False, keep=True):
+    def _fill(self, ident, future, background=False):
         digest, kind, index = ident
         start, total = index * self.extent_bytes, self.cache.total(digest, kind)
         try:
@@ -577,7 +567,7 @@ class ChunkStoreNode:
                     self.count("fill_rejects")
                     raise RegistryRequestError(502, "GET", object_key(digest, kind), "object identity mismatch")
                 self.cache.reserve(size)
-                extent = self.cache.install(ident, path, size, total, sha256, cold=not keep)
+                extent = self.cache.install(ident, path, size, total, sha256)
             except BaseException:
                 Path(path).unlink(missing_ok=True)
                 raise
@@ -605,7 +595,7 @@ class ChunkStoreNode:
             return None
         if total is None:  # One fill tells the size.
             probe = 0 if first is None else first // self.extent_bytes
-            self._wait([self.extent((digest, kind, probe), background, keep=not background)], deadline)
+            self._wait([self.extent((digest, kind, probe), background)], deadline)
             filled, total = True, self.cache.total(digest, kind)
         if suffix is not None:
             first, last = max(0, total - suffix), total - 1
@@ -616,7 +606,7 @@ class ChunkStoreNode:
             raise RangeNotSatisfiable(total)
         try:
             for _attempt in range(3):
-                pieces = self._open(digest, kind, first, last, verify=not cached_only, touch=not background)
+                pieces = self._open(digest, kind, first, last, verify=not cached_only)
                 missing = [index for index, piece in pieces if piece is None]
                 if not missing:
                     break
@@ -626,8 +616,7 @@ class ChunkStoreNode:
                 if cached_only:
                     return None
                 filled = True
-                self._wait([self.extent((digest, kind, index), background, keep=not background)
-                            for index in missing], deadline)
+                self._wait([self.extent((digest, kind, index), background) for index in missing], deadline)
             else:
                 raise TimeoutError("chunk store extents were evicted while being read")
         except BaseException:
@@ -645,11 +634,23 @@ class ChunkStoreNode:
             output.append((stream, low - index * size, high - low))
         return total, first, last - first + 1, output
 
-    def _open(self, digest, kind, first, last, verify=True, touch=True):
-        return [(index, self.cache.open((digest, kind, index), verify, touch))
+    def _open(self, digest, kind, first, last, verify=True):
+        return [(index, self.cache.open((digest, kind, index), verify))
                 for index in range(first // self.extent_bytes, last // self.extent_bytes + 1)]
 
-    def warm(self, items, concurrency=8, keep=True):
+    def missing(self, objects):
+        """The keys of [(relative key, size or None)] not wholly in the cache.
+        Without a size, the size the cache learned at its first fill."""
+        result = []
+        for relative, size in objects:
+            digest, kind = object_identity(relative)
+            total = self.cache.total(digest, kind) if size is None else size
+            if total is None or not all(self.cache.contains((digest, kind, index))
+                                        for index in range(-(-total // self.extent_bytes) or 1)):
+                result.append(relative)
+        return result
+
+    def warm(self, items, concurrency=8):
         """Start a WarmJob over [(relative key, [(start, length)] or None)]."""
         parsed = []
         for relative, ranges in items:
@@ -659,7 +660,7 @@ class ChunkStoreNode:
                 raise ValueError("warm ranges must be [start, length] pairs within 256 MiB")
             parsed.append((identity, ranges))
         with self._guard:
-            job = WarmJob(next(self._ids), parsed, max(1, min(64, concurrency)), keep)
+            job = WarmJob(next(self._ids), parsed, max(1, min(64, concurrency)))
             self._jobs[job.id] = job
             while len(self._jobs) > 64:
                 self._jobs.popitem(last=False)
@@ -687,14 +688,11 @@ class ChunkStoreNode:
             with job.guard:
                 job.counts["extents"] += 1
             if self.cache.contains(ident):
-                if job.keep:
-                    self.cache.touch(ident)  # Warmed means kept: also a builder's cold extent.
                 with job.guard:
                     job.counts["cached"] += 1
             else:
                 with self._warm_slots:
-                    extent = self.extent(ident, background=True, keep=job.keep).result(
-                        timeout=FILL_DEADLINE_SECONDS + 5)
+                    extent = self.extent(ident, background=True).result(timeout=FILL_DEADLINE_SECONDS + 5)
                 with job.guard:
                     job.counts["done"] += 1
                     job.counts["bytes"] += extent.size
@@ -744,7 +742,8 @@ class ChunkStoreNode:
             s3 = dict(self.source.counters)
         return {**counters, "inflight_fills": inflight, "warm_jobs_active": active, "extent_bytes": self.extent_bytes,
                 "fill_wait": self.fill_wait.summary(), "cache": self.cache.stats(),
-                "s3": {**s3, "ttfb": self.source.ttfb.summary(), "fill": self.source.latency.summary()}}
+                "s3": {**s3, "ttfb": self.source.ttfb.summary(), "fill": self.source.latency.summary()},
+                **({"mirror": dict(self.mirror.state)} if self.mirror is not None else {})}
 
     def close(self):
         for pool in (self._fills, self._background_fills):
@@ -752,6 +751,58 @@ class ChunkStoreNode:
 
 
 # --- HTTP ---
+
+class ReplicaMirror:
+    """Keeps a replica node a copy of its S3 prefix (the permanent store):
+    every ``interval`` it lists the prefix and fills what is not resident.
+    A fresh or replaced node refills itself the same way."""
+
+    def __init__(self, node, list_objects, prefix, *, interval=600, concurrency=16, sleep=None):
+        self.node, self.list_objects, self.prefix = node, list_objects, prefix.strip("/") + "/"
+        self.interval, self.concurrency = interval, concurrency
+        self._stop = threading.Event()
+        self._sleep = sleep or self._stop.wait
+        self.state = {"rounds": 0, "last_at": None, "seconds": None, "listed": 0, "missing": 0, "filled": 0,
+                      "failed": 0, "errors": []}
+
+    def round(self):
+        started = time.monotonic()
+        objects = []
+        for key, info in self.list_objects(self.prefix):
+            relative = key[len(self.prefix):]
+            try:
+                object_identity(relative)
+            except LookupError:
+                continue  # Not a served kind (stored locators): the index reads those.
+            objects.append((relative, info.size))
+        missing = self.node.missing(objects)
+        done = {"done": 0, "failed": 0, "errors": []}
+        if missing:
+            job = self.node.warm([(key, None) for key in missing], self.concurrency)
+            while job.progress()["state"] == "running" and not self._stop.is_set():
+                self._sleep(1.0)
+            done = job.progress()
+        self.state.update(rounds=self.state["rounds"] + 1, last_at=time.time(),
+                          seconds=round(time.monotonic() - started, 1), listed=len(objects), missing=len(missing),
+                          filled=done["done"], failed=done["failed"], errors=list(done["errors"])[:5])
+        return dict(self.state)
+
+    def run(self):
+        while not self._stop.is_set():
+            try:
+                self.round()
+            except Exception as exc:  # noqa: BLE001 - S3 listing outage: the next round retries
+                _LOG.warning("chunk store replica round failed: %s: %s", type(exc).__name__, exc)
+                self.state["errors"] = [f"{type(exc).__name__}: {exc}"[:200]]
+            self._sleep(self.interval)
+
+    def start(self):
+        threading.Thread(target=self.run, name="chunk-store-mirror", daemon=True).start()
+        return self
+
+    def stop(self):
+        self._stop.set()
+
 
 class VirtualBlobs:
     """nydusd's blobs, rebuilt from packs (spike, docs/benchmarks/nydusd-spike-2026-10-03).
@@ -958,6 +1009,15 @@ class ChunkStoreServer:
         if method == "GET" and match:
             job = node.job(int(match.group(1)))
             return await _reply(writer, 200, job.progress()) if job else await _reply(writer, 404, {"error": "no job"})
+        if method == "POST" and path == "/v1/resident":
+            try:
+                keys = json.loads(body)["keys"]
+                if not isinstance(keys, list) or len(keys) > 100_000 or not all(isinstance(k, str) for k in keys):
+                    raise ValueError("resident takes up to 100,000 keys")
+                missing = node.missing([(key, None) for key in keys])
+            except (ValueError, KeyError, TypeError, LookupError) as exc:
+                return await _reply(writer, 400, {"error": str(exc)[:200]})
+            return await _reply(writer, 200, {"missing": missing})
         if method == "POST" and path == "/v1/warm":
             try:
                 request = json.loads(body)
@@ -965,9 +1025,7 @@ class ChunkStoreServer:
                          for item in request["objects"]]
                 if not 0 < len(items) <= 100_000:
                     raise ValueError("warm takes 1 to 100,000 objects")
-                if not isinstance(request.get("keep", True), bool):
-                    raise ValueError("keep must be a boolean")
-                job = node.warm(items, int(request.get("concurrency", 8)), request.get("keep", True))
+                job = node.warm(items, int(request.get("concurrency", 8)))
             except (ValueError, KeyError, TypeError, LookupError) as exc:
                 return await _reply(writer, 400, {"error": str(exc)[:200]})
             return await _reply(writer, 202, job.progress())
@@ -1066,10 +1124,13 @@ class ChunkStoreClient:
         return json.loads(self._request(method, self.base_url + path, headers=headers, body=payload,
                                         timeout=self.timeout, max_bytes=4 * MIB)[2])
 
-    def warm(self, objects, *, concurrency=8, keep=True):
-        """``objects``: [{"key": relative key, "ranges": [[start, length], ...] or None}];
-        ``keep`` false fills them first-to-evict (a converter's verification)."""
-        return self._call("POST", "/v1/warm", {"objects": objects, "concurrency": concurrency, "keep": keep})
+    def warm(self, objects, *, concurrency=8):
+        """``objects``: [{"key": relative key, "ranges": [[start, length], ...] or None}]."""
+        return self._call("POST", "/v1/warm", {"objects": objects, "concurrency": concurrency})
+
+    def missing(self, keys):
+        """The keys not wholly resident on the node (never fills)."""
+        return self._call("POST", "/v1/resident", {"keys": list(keys)})["missing"]
 
     def progress(self, job):
         return self._call("GET", f"/v1/warm/{int(job)}")
@@ -1113,7 +1174,7 @@ def locator_objects(locator, base_url, token=None):
 def build_node(store, environ=None):
     node_config = store.store_node
     source = S3Source(store.presigner(environ), store.prefix, concurrency=node_config.s3_concurrency)
-    return ChunkStoreNode(ExtentCache(node_config.cache_dir, node_config.cache_bytes), source,
+    return ChunkStoreNode(ExtentCache(node_config.cache_dir, node_config.cache_bytes, node_config.replica), source,
                           extent_bytes=node_config.extent_bytes,
                           warm_concurrency=max(1, node_config.s3_concurrency // 4))
 
@@ -1127,6 +1188,9 @@ def serve_chunk_store(args):
         return 78
     tokens = [read_token(path) for path in (store.read_token_file, store.write_token_file)]
     node = build_node(store)
+    if store.store_node.replica:  # The permanent store's copy: mirror S3, never evict.
+        node.mirror = ReplicaMirror(node, store.object_store().client.list_objects, store.prefix,
+                                    interval=store.store_node.mirror_seconds).start()
     blobs = None
     if store.nydusd is not None:  # C2.1: workers' nydusd reads blobs rebuilt from packs.
         from .chunk_index import ChunkIndexClient

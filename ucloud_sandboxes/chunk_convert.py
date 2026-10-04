@@ -616,7 +616,7 @@ def mount_verifier(*, devices, trusted_keys, work_root, store_node=None):
             objects = {item["key"]: item for *_, locator in signed for item in locator_objects(locator, base_url)}
             client = ChunkStoreClient(base_url, token)
             if objects:
-                client.wait(client.warm(list(objects.values()), keep=False)["job"], timeout=1800)
+                client.wait(client.warm(list(objects.values()))["job"], timeout=1800)
         images = [RafsImage(None, component, bootstrap, chunk_map, locator, **options)
                   for component, bootstrap, chunk_map, locator in signed]
         with TemporaryDirectory(dir=work_root) as temporary, \

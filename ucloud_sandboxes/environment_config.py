@@ -105,11 +105,17 @@ class StoreNodeConfig:
     extent_bytes: int  # Fill unit: a power of two, 1-64 MiB (64 MiB = whole packs).
     s3_concurrency: int
     serve_index: bool
+    # A full replica of the S3 prefix, not a cache: it mirrors every object,
+    # never evicts, and refuses fills past cache_bytes (S3 stays the permanent
+    # store; the deduplicated corpus fits). Off: a read-through LRU cache.
+    replica: bool = False
+    mirror_seconds: int = 600
 
     @classmethod
     def from_dict(cls, raw):
         from dataclasses import fields
-        if not isinstance(raw, dict) or set(raw) != {field.name for field in fields(cls)}:
+        names = {field.name for field in fields(cls)}
+        if not isinstance(raw, dict) or not names - {"replica", "mirror_seconds"} <= set(raw) <= names:
             raise ValueError("immutable_environments.chunk_store.store_node fields do not match schema")
         result = cls(**raw)
         _origin(result.url, "store_node.url")
@@ -124,8 +130,11 @@ class StoreNodeConfig:
                                        ("s3_concurrency", result.s3_concurrency, 1, 512)):
             if type(value) is not int or not low <= value <= high:
                 raise ValueError(f"immutable_environments.chunk_store.store_node.{name} must be in [{low}, {high}]")
-        if extent & (extent - 1) or not isinstance(result.serve_index, bool):
-            raise ValueError("immutable_environments.chunk_store.store_node extent_bytes or serve_index is invalid")
+        if extent & (extent - 1) or not isinstance(result.serve_index, bool) or not isinstance(result.replica, bool):
+            raise ValueError("immutable_environments.chunk_store.store_node extent_bytes, serve_index or replica "
+                             "is invalid")
+        if type(result.mirror_seconds) is not int or not 60 <= result.mirror_seconds <= 86400:
+            raise ValueError("immutable_environments.chunk_store.store_node.mirror_seconds must be in [60, 86400]")
         return replace(result, url=result.url.rstrip("/"))
 
 
@@ -239,6 +248,9 @@ class ChunkStoreConfig:
         for name in ("store_node", "nydusd"):
             if raw[name] is None:
                 del raw[name]  # Older releases reject unknown fields.
+        if raw.get("store_node") and not raw["store_node"]["replica"]:
+            for name in ("replica", "mirror_seconds"):
+                del raw["store_node"][name]
         return raw
 
     def credentials(self, environ=None):

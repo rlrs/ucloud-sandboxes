@@ -270,6 +270,31 @@ journal.
 - **Volumes scale out:** one Volume caps at ~320 MB/s (1 MiB, QD64); two read
   together gave 321 + 319. Latency is per request: 4 KiB 0.7-1.1 ms, 128 KiB
   1.3-1.6 ms, 1 MiB 5 ms at QD1. Price is per GB, so striping is free.
+- **The limit was Python, not the Volume (0.9.12 timings):** in a warm burst
+  the node served ~1,400 small reads/s (~60 KiB: nydusd fetches one 256 KiB
+  chunk per request) at a flat ~15% CPU, one of eight cores. Queue and read
+  were ~1 ms p50; the send waited 7-12 ms p50, 120-240 ms p99, on the GIL.
+- **0.9.13: reads in Go (`ucloud-chunk-serve`, `runtime/chunk_serve`).** It
+  answers resident reads with sendfile on every core and passes misses, errors
+  and control to the Python node on loopback (tested byte for byte against it).
+  First command p50/p95 (s), CCX43 local NVMe → CX43 Volume with Go:
+  - Warm fleet: SWE-smith 1.5/9.3 → 0.9/3.9, TMax 5.2/8.8 → 1.0/1.5, OpenSWE
+    1.0/1.8 → 0.6/0.9, Terminal-Lego 0.8/4.4 → 0.6/1.1.
+  - Cold fleet: SWE-smith 0.7/6.7 → 0.8/4.5, TMax 4.7/9.8 → 1.0/2.2.
+  - It served 208,570 reads (15.4 GB) itself, passed none through as misses,
+    and peaked at 16% CPU. The store node costs €73/month instead of €276.
+- **Not needed now:** nydusd read merging on workers (fewer, larger requests).
+  Keep it for a later worker release if the request rate grows.
+- **Incidents in this work:**
+  - A diagnostic run as root constructed an `ExtentCache` on the live cache
+    (14:41Z). It recreated `cache/tmp` as root, so every fill failed until
+    15:00Z (5,443 failures). Wave 3 conversions in that window failed with EIO
+    and rerun with the wave. docs/hetzner.md now says never to do this.
+  - Stopping converters mid-verification leaked their NBD devices and EROFS
+    mounts (30 and 26). Conversions then failed with "no free NBD device" and
+    EIO. `build/m2-20261003/nbd_reap.py` unmounts and disconnects devices whose
+    owner is dead. Follow-up: `chunk-migrate convert` should reap its own
+    `--verify-device` list at start.
 
 ### 4.2 Conversion capacity
 

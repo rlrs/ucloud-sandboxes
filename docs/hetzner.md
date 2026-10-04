@@ -792,19 +792,33 @@ the private network instead, a read-through NVMe cache over S3 that also hosts
 [chunk-store-design.md §2](chunk-store-design.md#c26-store-node-as-built),
 [benchmarks/chunk-store-node-2026-10-02](benchmarks/chunk-store-node-2026-10-02/README.md).
 
-**Shape:** one CCX43 (16 dedicated vCPUs, 64 GB RAM, 360 GB NVMe) at
-`10.42.0.200`, booted from the worker snapshot. In production since 0.9.0, as
-`sandboxes-store-1`.
-- **RAM** holds the index resident (31 GB at the full corpus), plus the page
-  cache of hot extents.
-- **Disk** holds the hot set, not the corpus (`cache_bytes` 240 GiB). It gets a
-public IPv4 for S3 fills only: both services bind the private address, and
-the worker firewall applies. Check the account's dedicated-core limit first
-(S12 was refused CPX clients with `resource_limit_exceeded`).
+**Shape (since 2026-10-04):** one CX43 (8 shared vCPUs, 16 GB RAM) at
+`10.42.0.200`, booted from the worker snapshot, as `sandboxes-store-1`. Its
+data lives on a 1 TB Volume (`sandboxes-store-replica`,
+`store_node.data_device`), not the server's disk. In production since 0.9.0;
+until 2026-10-04 it was a CCX43 with the replica on local NVMe.
+- **The Volume** holds the full replica (`cache_bytes` 850 GiB) and the index
+  database. Store init mounts it at `/mnt/store-replica` and binds `cache_dir`
+  and the index directory from it, and the services require those mounts. It
+  outlives the server: a replacement attaches it (`hz.py attach-volume`) and
+  needs no refill from S3.
+- **Volume limits:** ~320 MB/s per Volume (several add up), and ~1 ms per
+  small read, ~5 ms per 1 MiB read. RAM page cache serves the hot set.
+- **Reads go through `ucloud-chunk-serve`** (Go, `runtime/chunk_serve`,
+  `store_node.native_server_sha256`). It holds `listen` and answers resident
+  reads on every core. The Python node answers on `127.0.0.1` at the same
+  port for misses, errors and control.
+- **Never open the live cache as root** (for example by constructing an
+  `ExtentCache` in a diagnostic). It recreates `cache/tmp` as root, and every
+  fill then fails with `PermissionError` (2026-10-04: 5,443 failed fills and
+  failed conversions until `chown ucloud:ucloud cache/tmp`).
+- The node gets a public IPv4 for S3 fills only: the services bind the private
+  address (and loopback), and the worker firewall applies.
 
 **Bring-up** (from the gateway, as root, unless noted):
 
-1. `hz.py server sandboxes-store-1 ccx43 <worker-snapshot-id> 10.42.0.200 public`.
+1. `hz.py server sandboxes-store-1 cx43 <worker-snapshot-id> 10.42.0.200 public`, then
+   `hz.py attach-volume sandboxes-store-replica sandboxes-store-1` (or `hz.py volume` for a new one).
 2. Add the `chunk_store` block to the live config. In production this was
    done by `set_chunk_store_090.py`, derived from the live
    `deployment.json` (docs/rollout-0.8.0.md, "0.9.0"). On a fresh

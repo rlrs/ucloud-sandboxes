@@ -99,9 +99,12 @@ import unittest
 # mounted and bound by store init; the node becomes a small, replaceable type).
 # +10 net: a response's ranges are faulted in on a read thread before the loop's
 # sendfile (a Volume read stalled every request), less the on-loop hit path,
-# +10 served reads' queue, read and send times (the store node only timed S3).
+# +10 served reads' queue, read and send times (the store node only timed S3),
+# +27 ucloud-chunk-serve wiring: store_node.native_server_sha256, store init
+# verifying and running the Go read server, the node on loopback behind it (the
+# server itself is runtime/chunk_serve, Go: one GIL capped reads near one core).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 113_406
+PACKAGE_LINE_BUDGET = 113_433
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

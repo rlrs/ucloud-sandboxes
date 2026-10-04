@@ -58,6 +58,11 @@ if command -v go >/dev/null 2>&1; then
       go test ./...
     )
   fi
+  (
+    cd runtime/chunk_serve
+    CGO_ENABLED=0 GOTOOLCHAIN=local go vet ./...
+    CGO_ENABLED=0 GOTOOLCHAIN=local go test ./...
+  )
 else
   echo "Go is required for the managed-process contract tests" >&2
   exit 1

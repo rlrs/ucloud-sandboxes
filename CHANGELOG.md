@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.9.13 - 2026-10-04 (gateway and store node)
+
+- **The store node's reads move to Go: `ucloud-chunk-serve`** (`runtime/chunk_serve`), enabled by pinning its sha256 in `store_node.native_server_sha256`.
+  - Why: the Python node is bound by one GIL, near one core. In a warm 512-rollout burst it served ~1,400 small reads a second at ~15% of the CX43's CPU, and first commands waited 7-12 ms p50 (240 ms p99) to be sent.
+  - It answers what it can from verified, resident extents: virtual nydusd blobs and plain objects, with the same statuses, headers and bytes. It hashes each extent on its first open, as the Python node does, never serves a torn one, and uses sendfile on all cores.
+  - Everything else goes to the Python node on 127.0.0.1 at the same port: misses (it fills from S3), bad tokens, malformed or unsatisfiable ranges, warm jobs, residency, health. `/v1/metrics` returns the Python node's metrics with a `native` section beside them.
+  - Store init extracts it from the bundle (`runtime/chunk_serve`, added by `repack_node_bundle.add_chunk_serve` from `build_pinned.sh`), refuses a binary that does not match the pin, and runs it as `ucloud-chunk-serve.service`.
+
 ## 0.9.12 - 2026-10-04 (store node only)
 
 - **The store node times the reads it serves** (`serve` in `/v1/metrics`): the wait for a read thread, the read (fills, layout lookups, page faults) and the send, each as p50/p90/p99/max over recent requests. It used to time only its S3 fills, which hid where a warm burst's requests waited.

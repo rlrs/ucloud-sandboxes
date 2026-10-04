@@ -414,9 +414,11 @@ class StoreNodeConfigTests(unittest.TestCase):
         import subprocess
         syntax = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
         self.assertEqual(syntax.returncode, 0, syntax.stderr)
-        from ucloud_sandboxes.chunk_store_node import _unit
-        self.assertIn("serve-chunk-store --chunk-store-config /etc/ucloud-sandboxes/chunk-store.json",
-                      _unit("d", "serve-chunk-store", "/work/bin/ucloud-sandboxes", "ucloud"))
+        import base64
+        import re
+        units = lambda text: "".join(base64.b64decode(blob).decode() for blob in re.findall(  # noqa: E731
+            r"printf %s '?([A-Za-z0-9+/=]+)'? \| base64 -d \| \$SUDO tee /etc/systemd/system/", text))
+        self.assertIn("serve-chunk-store --chunk-store-config /etc/ucloud-sandboxes/chunk-store.json", units(script))
         for invalid in ({"chunk_store_write_token": READ}, {"chunk_store_s3_secret_access_key": "has space"},
                         {"chunk_store_config_json": json.dumps(ChunkStoreConfig.from_dict(self.raw()).to_dict()
                                                                | {"store_node": None})}):
@@ -426,10 +428,6 @@ class StoreNodeConfigTests(unittest.TestCase):
             render_vm_init_script(vm_fixtures.VmInitTests._options(chunk_store_read_token=READ))
         # With a data device (a Volume), the replica and the index live on it, and
         # the services start only once it is mounted.
-        import base64
-        import re
-        units = lambda text: "".join(base64.b64decode(blob).decode() for blob in re.findall(  # noqa: E731
-            r"printf %s '?([A-Za-z0-9+/=]+)'? \| base64 -d \| \$SUDO tee /etc/systemd/system/", text))
         self.assertNotIn("RequiresMountsFor", units(script))
         volume = ChunkStoreConfig.from_dict(self.raw(data_device="/dev/disk/by-id/scsi-0HC_Volume_1"))
         script = render_vm_init_script(vm_fixtures.VmInitTests._options(
@@ -443,6 +441,22 @@ class StoreNodeConfigTests(unittest.TestCase):
         self.assertLess(script.index("mount /mnt/store-replica"), script.index("read.token"))
         syntax = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
         self.assertEqual(syntax.returncode, 0, syntax.stderr)
+        # ucloud-chunk-serve: only when pinned, checked against the pin, its own unit.
+        from ucloud_sandboxes.chunk_store_node import NATIVE_SERVER
+        self.assertNotIn("ucloud-chunk-serve.service", units(script))
+        self.assertIn("disable --now ucloud-chunk-serve.service", script)
+        pin = "ab" * 32
+        native = ChunkStoreConfig.from_dict(self.raw(listen="10.42.0.10:5091", native_server_sha256=pin))
+        script = render_vm_init_script(vm_fixtures.VmInitTests._options(
+            **{**options.__dict__, "chunk_store_config_json": json.dumps(native.to_dict())}))
+        self.assertIn(f"{NATIVE_SERVER} --config /etc/ucloud-sandboxes/chunk-store.json", units(script))
+        self.assertIn(f"= {pin} ]", script)
+        self.assertLess(script.index("runtime/chunk_serve/ucloud-chunk-serve"), script.index("daemon-reload"))
+        syntax = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+        for bad in ({"native_server_sha256": "short", "listen": "10.42.0.10:5091"}, {"native_server_sha256": pin}):
+            with self.subTest(native=bad), self.assertRaises(ValueError):  # A pin, and an address to hold.
+                ChunkStoreConfig.from_dict(self.raw(**bad))
 
     def test_the_index_runs_only_where_serve_index_puts_it(self):
         from types import SimpleNamespace

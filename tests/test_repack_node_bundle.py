@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from scripts.repack_node_bundle import (
+    add_chunk_serve,
     add_nydusd,
     add_runtime_debs,
     replace_direct_runtime,
@@ -44,6 +45,30 @@ class RepackNodeBundleTests(unittest.TestCase):
             self.assertTrue(os.access(root / "runtime/nydusd/nydusd", os.X_OK))
             with self.assertRaises(ValueError):  # Builders never carry it.
                 add_nydusd(root, {"runtime": {"role": "builder"}}, build)
+
+    def test_chunk_serve_is_added_only_from_its_build_manifest(self):
+        with TemporaryDirectory() as raw:
+            root, build = Path(raw, "bundle"), Path(raw, "build")
+            build.mkdir()
+            (build / "ucloud-chunk-serve").write_bytes(b"server")
+
+            def built(**changes):
+                payload = {"schema": 1, "target": "linux/amd64", "source_tree": "a" * 40, "source_commit": "b" * 40,
+                           "go_version": "go1.27.1", "artifact_sha256": sha256_file(build / "ucloud-chunk-serve"),
+                           **changes}
+                (build / "build-manifest.json").write_text(json.dumps(payload))
+            for changes in ({"target": "linux/arm64"}, {"source_tree": ""}, {"artifact_sha256": "0" * 64}):
+                built(**changes)
+                with self.subTest(changes=changes), self.assertRaises(ValueError):
+                    add_chunk_serve(root, {"runtime": {"role": "sandbox"}}, build)
+            built()
+            manifest = {"runtime": {"role": "sandbox"}}
+            entry = add_chunk_serve(root, manifest, build)
+            self.assertEqual((entry["file"], entry["sha256"], manifest["runtime"]["chunk_serve"]),
+                             ("runtime/chunk_serve/ucloud-chunk-serve", sha256_file(build / "ucloud-chunk-serve"), entry))
+            self.assertTrue(os.access(root / entry["file"], os.X_OK))
+            with self.assertRaises(ValueError):
+                add_chunk_serve(root, {"runtime": {"role": "builder"}}, build)
 
     def test_explicit_debian_extension_keeps_prior_closure_and_rejects_upgrade(self):
         with TemporaryDirectory() as temporary:

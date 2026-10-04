@@ -904,11 +904,10 @@ def parse_range(header):
 class ChunkStoreServer:
     """HTTP/1.1 keep-alive on one asyncio loop (docs/benchmarks/chunk-store-node-2026-10-02).
 
-    A request whose extents are on disk and verified is answered in the loop
-    with sendfile(2); anything that needs a fill (or a first hash after a
-    restart) waits in a thread pool, never in the loop. Thread-per-connection
-    served the same bytes but accepted a 256-connection burst in seconds
-    under a busy GIL; the loop accepts it in tens of milliseconds.
+    Every read is resolved, filled and faulted into the page cache in a thread
+    pool; the loop only accepts and sends with sendfile(2). One GIL bounds it
+    near one core: with ``native_server_sha256`` ucloud-chunk-serve answers
+    resident reads in front of it, and this server sees misses and control.
     """
 
     def __init__(self, address, node, *, read_token, write_token, read_threads=512, blobs=None):
@@ -1216,6 +1215,8 @@ def serve_chunk_store(args):
         from .chunk_index import ChunkIndexClient
         blobs = VirtualBlobs(node, ChunkIndexClient(store.index_url, tokens[1].decode()))
     host, port = store.store_node.listen.rsplit(":", 1)
+    if store.store_node.native_server_sha256:  # ucloud-chunk-serve holds the address; misses come here.
+        host = "127.0.0.1"
     with ChunkStoreServer((host, int(port)), node, read_token=tokens[0], write_token=tokens[1],
                           blobs=blobs) as server:
         server.serve_forever()
@@ -1258,6 +1259,7 @@ def add_commands(subparsers):
 STORE_CONFIG = "/etc/ucloud-sandboxes/chunk-store.json"
 STORE_ENV = "/etc/ucloud-sandboxes/chunk-store.env"  # The S3 key; root-only, read by systemd.
 STORE_DATA_MOUNT = "/mnt/store-replica"  # data_device; cache_dir and the index directory bind from it.
+NATIVE_SERVER = "/usr/local/libexec/ucloud-sandboxes/ucloud-chunk-serve"  # From the bundle's runtime/chunk_serve.
 _SAFE_SECRET = re.compile(r"[A-Za-z0-9+/=_.:-]{8,4096}")
 
 
@@ -1281,7 +1283,7 @@ def validate_store_options(options):
         raise ValueError("a store node takes no immutable-environment worker or builder material")
 
 
-def _unit(description, command, agent_bin, user, mounts=()):
+def _unit(description, exec_start, user, mounts=()):
     requires = f"RequiresMountsFor={' '.join(mounts)}\n" if mounts else ""
     return f"""[Unit]
 Description={description}
@@ -1293,7 +1295,7 @@ Type=simple
 User={user}
 Group={user}
 EnvironmentFile={STORE_ENV}
-ExecStart={agent_bin} {command} --chunk-store-config {STORE_CONFIG}
+ExecStart={exec_start}
 Restart=always
 RestartSec=2
 # Exit 78: not configured to run here; stay stopped.
@@ -1326,15 +1328,28 @@ def store_init_script(options):
                     f"{store.secret_access_key_env}={options.chunk_store_s3_secret_access_key}\n")
     binds = {"cache": node.cache_dir} | ({"index": str(Path(store.index_database).parent)} if node.serve_index else {})
     mounts = tuple(binds.values()) if node.data_device else ()
+    command = lambda name: f"{agent_bin} {name} --chunk-store-config {STORE_CONFIG}"  # noqa: E731
     units = {"ucloud-chunk-store.service": _unit("UCloud chunk store node (chunk_store.store_node)",
-                                                 "serve-chunk-store", agent_bin, user, mounts)}
+                                                 command("serve-chunk-store"), user, mounts)}
     if node.serve_index:
         units["ucloud-chunk-index.service"] = _unit("UCloud chunk store index on the store node",
-                                                    "serve-chunk-index", agent_bin, user, mounts)
+                                                    command("serve-chunk-index"), user, mounts)
+    if node.native_server_sha256:
+        units["ucloud-chunk-serve.service"] = _unit("UCloud chunk store reads (runtime/chunk_serve)",
+                                                    f"{NATIVE_SERVER} --config {STORE_CONFIG}", user, mounts)
     lines = [f"printf %s {b64(text)} | base64 -d | $SUDO tee /etc/systemd/system/{name} >/dev/null"
              for name, text in units.items()]
-    if not node.serve_index:
-        lines.append("$SUDO systemctl disable --now ucloud-chunk-index.service >/dev/null 2>&1 || true")
+    for name, wanted in (("ucloud-chunk-index", node.serve_index), ("ucloud-chunk-serve", node.native_server_sha256)):
+        if not wanted:
+            lines.append(f"$SUDO systemctl disable --now {name}.service >/dev/null 2>&1 || true")
+    native = "" if not node.native_server_sha256 else "\n".join([  # Verified against the pin, then installed.
+        '$SUDO tar --no-same-owner -xzf "$UCLOUD_PACKAGE_SPEC" -C "$UCLOUD_BUNDLE_TMP" '
+        "runtime/chunk_serve/ucloud-chunk-serve",
+        f'[ "$(sha256sum "$UCLOUD_BUNDLE_TMP/runtime/chunk_serve/ucloud-chunk-serve" | awk \'{{print $1}}\')" = '
+        f'{quote(node.native_server_sha256)} ] || {{ echo "ucloud-chunk-serve does not match '
+        f'store_node.native_server_sha256" >&2; exit 1; }}',
+        f'$SUDO install -D -m 0755 -o root -g root "$UCLOUD_BUNDLE_TMP/runtime/chunk_serve/ucloud-chunk-serve" '
+        f"{NATIVE_SERVER}"])
     directories = list(binds.values())
     data = ""
     if node.data_device:  # Never formatted here: a Volume arrives as ext4 and may already hold the replica.
@@ -1363,7 +1378,7 @@ def store_init_script(options):
         package=quote(options.package_spec), sha=quote(options.package_sha256), user=quote(user), work=quote(work),
         runtime=quote(runtime), agent=quote(agent_bin), node_id=quote(options.normalized_node_id()),
         config=b64(json.dumps(store.to_dict(), indent=2, sort_keys=True)), config_path=STORE_CONFIG,
-        env=b64(secrets_file), env_path=STORE_ENV, data=data, tokens=tokens, units="\n".join(lines), names=" ".join(units),
+        env=b64(secrets_file), env_path=STORE_ENV, data=data, native=native, tokens=tokens, units="\n".join(lines), names=" ".join(units),
         directories=" ".join(quote(path) for path in directories), probe=quote(probe), url=quote(node.url))
 
 
@@ -1415,6 +1430,7 @@ $SUDO mv "$UCLOUD_RUNTIME.tmp" "$UCLOUD_RUNTIME"
 printf '#!/bin/sh\nexec env PYTHONPATH=%s/site-packages /usr/bin/python3 -m ucloud_sandboxes.cli "$@"\n' "$UCLOUD_RUNTIME" \
   | $SUDO tee "$UCLOUD_AGENT_BIN" >/dev/null
 $SUDO chmod 0755 "$UCLOUD_AGENT_BIN"
+{native}
 log_init_phase runtime
 printf %s {config} | base64 -d | $SUDO tee {config_path} >/dev/null
 $SUDO chmod 0644 {config_path}

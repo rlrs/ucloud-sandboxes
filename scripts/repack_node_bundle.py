@@ -168,6 +168,15 @@ def validate_source_bundle(root: Path, manifest: dict[str, object]) -> None:
                 raise ValueError(f"invalid nydusd {file_key}")
             validate_digest(root / NYDUSD_FILES[file_key], str(nydusd.get(key)), f"nydusd {file_key}")
 
+    serve = runtime.get("chunk_serve")
+    if serve is not None:  # Optional: the store node's read server (runtime/chunk_serve).
+        if role != "sandbox" or not isinstance(serve, dict):
+            raise ValueError("invalid chunk_serve section")
+        for key, file_key in (("sha256", "file"), ("manifest_sha256", "manifest_file")):
+            if serve.get(file_key) != CHUNK_SERVE_FILES[file_key]:
+                raise ValueError(f"invalid chunk_serve {file_key}")
+            validate_digest(root / CHUNK_SERVE_FILES[file_key], str(serve.get(key)), f"chunk_serve {file_key}")
+
     kernel = runtime.get("kernel")
     if not isinstance(kernel, dict) or not isinstance(kernel.get("files"), list):
         raise ValueError("source bundle has no kernel-module closure")
@@ -376,6 +385,34 @@ def add_nydusd(root: Path, manifest: dict, build_dir: Path) -> dict:
         entry.update({key: NYDUSD_FILES[key], digest_key: sha256_file(target)})
     entry["size"] = (root / NYDUSD_FILES["file"]).stat().st_size
     manifest["runtime"]["nydusd"] = entry
+    return entry
+
+
+CHUNK_SERVE_FILES = {"file": "runtime/chunk_serve/ucloud-chunk-serve",
+                     "manifest_file": "runtime/chunk_serve/build-manifest.json"}
+
+
+def add_chunk_serve(root: Path, manifest: dict, build_dir: Path) -> dict:
+    """runtime/chunk_serve from runtime/chunk_serve/build_pinned.sh's output:
+    the binary its build manifest names, for store nodes (store init installs
+    it when store_node.native_server_sha256 pins it)."""
+    if manifest["runtime"].get("role") != "sandbox":
+        raise ValueError("only sandbox bundles carry ucloud-chunk-serve")
+    built = {"file": build_dir / "ucloud-chunk-serve", "manifest_file": build_dir / "build-manifest.json"}
+    payload = json.loads(built["manifest_file"].read_text(encoding="utf-8"))
+    if payload.get("schema") != 1 or payload.get("target") != "linux/amd64" or not payload.get("source_tree"):
+        raise ValueError("unsupported ucloud-chunk-serve build manifest")
+    validate_digest(built["file"], str(payload.get("artifact_sha256")), "ucloud-chunk-serve")
+    entry = {"source_commit": payload.get("source_commit"), "source_tree": payload["source_tree"],
+             "go_version": payload.get("go_version")}
+    for key, digest_key in (("file", "sha256"), ("manifest_file", "manifest_sha256")):
+        target = root / CHUNK_SERVE_FILES[key]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(built[key], target)
+        target.chmod(0o755 if key == "file" else 0o644)
+        entry.update({key: CHUNK_SERVE_FILES[key], digest_key: sha256_file(target)})
+    entry["size"] = (root / CHUNK_SERVE_FILES["file"]).stat().st_size
+    manifest["runtime"]["chunk_serve"] = entry
     return entry
 
 

@@ -114,12 +114,16 @@ class StoreNodeConfig:
     # /dev/disk/by-id/...), so the server can be replaced or resized without
     # refilling from S3. Store init mounts it; it must already be ext4.
     data_device: str | None = None
+    # ucloud-chunk-serve (runtime/chunk_serve, Go) pinned by sha256: it holds
+    # ``listen`` and answers reads from resident extents on every core; this
+    # node then answers on 127.0.0.1 at the same port, behind it.
+    native_server_sha256: str | None = None
 
     @classmethod
     def from_dict(cls, raw):
         from dataclasses import fields
         names = {field.name for field in fields(cls)}
-        if not isinstance(raw, dict) or not names - {"replica", "mirror_seconds", "data_device"} <= set(raw) <= names:
+        if not isinstance(raw, dict) or not names - {"replica", "mirror_seconds", "data_device", "native_server_sha256"} <= set(raw) <= names:
             raise ValueError("immutable_environments.chunk_store.store_node fields do not match schema")
         result = cls(**raw)
         _origin(result.url, "store_node.url")
@@ -143,6 +147,12 @@ class StoreNodeConfig:
                                                    and re.fullmatch(r"/dev/disk/by-id/[A-Za-z0-9._:-]+",
                                                                     result.data_device)):
             raise ValueError("immutable_environments.chunk_store.store_node.data_device must be a /dev/disk/by-id/ path")
+        if result.native_server_sha256 is not None and (
+                not isinstance(result.native_server_sha256, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", result.native_server_sha256)
+                or host in ("0.0.0.0", "::", "[::]", "127.0.0.1", "localhost")):
+            raise ValueError("immutable_environments.chunk_store.store_node.native_server_sha256 must be a sha256, "
+                             "with listen on a specific non-loopback address")
         return replace(result, url=result.url.rstrip("/"))
 
 
@@ -259,8 +269,9 @@ class ChunkStoreConfig:
         if raw.get("store_node") and not raw["store_node"]["replica"]:
             for name in ("replica", "mirror_seconds"):
                 del raw["store_node"][name]
-        if raw.get("store_node") and raw["store_node"]["data_device"] is None:
-            del raw["store_node"]["data_device"]
+        for name in ("data_device", "native_server_sha256"):
+            if raw.get("store_node") and raw["store_node"][name] is None:
+                del raw["store_node"][name]
         return raw
 
     def credentials(self, environ=None):

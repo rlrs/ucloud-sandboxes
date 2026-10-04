@@ -30,6 +30,7 @@ _LOG = logging.getLogger(__name__)
 MAX_RPC_BYTES = 64 * 1024
 # Per socket op: a stalled backend costs a heartbeat half the gateway's 2 s wake read.
 METRICS_TIMEOUT_SECONDS = 1.0
+RAFS_ATTACH_CONCURRENCY = 8
 NO_BLOCK_DEVICE = "no available environment block device"
 
 
@@ -144,6 +145,10 @@ class EnvironmentBackend:
         if type(attach_concurrency) is not int or attach_concurrency < 1:
             raise ValueError("attach concurrency must be a positive integer")
         self._attach_slots = BoundedSemaphore(attach_concurrency)
+        # RAFS attaches (nydusd) never queue behind the EROFS limit: serial
+        # nydusd attaches cost a 20-sandbox burst about 30 s (M2 wave 1), and
+        # 8 at once is what the nydusd spike and M1 gate measured.
+        self._rafs_attach_slots = BoundedSemaphore(RAFS_ATTACH_CONCURRENCY)
         self._reserved = set()  # Devices being bound outside the guard.
         self._released = Condition(self._guard)
         self._active = {}
@@ -236,8 +241,10 @@ class EnvironmentBackend:
         if not owner:
             return pending.result()
         try:
-            with self._attach_slots:
-                target = self._attach_owned(digest)
+            component = self.registry.load(digest)  # Signature before any privileged operation.
+            rafs = isinstance(component, RafsEnvironmentComponent)
+            with self._rafs_attach_slots if rafs else self._attach_slots:
+                target = self._attach_owned(digest, component)
         except BaseException as exc:
             with self._guard:
                 self._attaching.pop(digest, None)
@@ -248,8 +255,7 @@ class EnvironmentBackend:
         pending.set_result(target)
         return target
 
-    def _attach_owned(self, digest):
-        component = self.registry.load(digest)  # Signature before any privileged operation.
+    def _attach_owned(self, digest, component):
         if isinstance(component, RafsEnvironmentComponent):
             if self._rafs is None:
                 raise RuntimeError("chunk-store environments need a chunk index on this worker")

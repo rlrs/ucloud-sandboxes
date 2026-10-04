@@ -6,6 +6,7 @@ from pathlib import Path
 import threading
 import time
 import unittest
+from unittest import mock
 
 from tempfile import TemporaryDirectory
 
@@ -182,8 +183,8 @@ class ConcurrentAttachTests(unittest.TestCase):
         self.digest = self.registry.publish(image, sign_component(image, source_image="sha256:" + "1" * 64,
                                                                   signing_key=self.key), tag="fixture")
 
-    def backend(self, devices=2, attach_concurrency=2):
-        self.loads, self.gates, self.factory_calls = [], {}, []
+    def backend(self, devices=2, attach_concurrency=2, rafs=None):
+        self.loads, self.gates, self.factory_calls, self.device_gate = [], {}, [], None
         load = self.registry.load
 
         def gated(digest):
@@ -199,6 +200,8 @@ class ConcurrentAttachTests(unittest.TestCase):
             def __init__(self, path, *args, **kwargs):
                 test.factory_calls.append(path)
                 self.path = path
+                if test.device_gate is not None and len(test.factory_calls) == 1:
+                    test.device_gate.wait(5)  # The first bind is slow (a cold miss path).
 
             def close(self):
                 pass
@@ -206,7 +209,7 @@ class ConcurrentAttachTests(unittest.TestCase):
                                      devices=[Path(f"/dev/nbd{index}") for index in range(devices)],
                                      device_factory=Device, mount=lambda device, target: None,
                                      unmount=lambda target: None, mounted=lambda path: False,
-                                     attach_concurrency=attach_concurrency)
+                                     attach_concurrency=attach_concurrency, rafs=rafs)
         self.addCleanup(backend.close)
         return backend
 
@@ -232,15 +235,28 @@ class ConcurrentAttachTests(unittest.TestCase):
 
     def test_the_default_attaches_one_component_at_a_time(self):
         backend, other = self.backend(attach_concurrency=1), self.other()
-        self.gates[self.digest] = threading.Event()
+        self.device_gate = threading.Event()
         with ThreadPoolExecutor(2) as pool:
             slow = pool.submit(backend.ensure, self.digest)
             time.sleep(.2)
             blocked = pool.submit(backend.ensure, other)
             time.sleep(.3)
             self.assertFalse(blocked.done())  # 0.8.2's serial attach (0.8.3 burst regression)
-            self.gates[self.digest].set()
+            self.device_gate.set()
             self.assertTrue(slow.result(5) and blocked.result(5))
+
+    def test_rafs_attaches_never_queue_behind_the_erofs_limit(self):
+        # M2 wave 1: serial nydusd attaches cost a 20-sandbox burst about 30 s.
+        backend, other = self.backend(attach_concurrency=1, rafs=lambda digest, component: component), self.other()
+        self.device_gate = threading.Event()
+        with mock.patch("ucloud_sandboxes.environment_backend.RafsEnvironmentComponent",
+                        type(self.registry.load(self.digest))), ThreadPoolExecutor(2) as pool:
+            slow = pool.submit(backend.ensure, self.digest)
+            time.sleep(.2)
+            self.assertTrue(backend.ensure(other))  # Its own RAFS slot.
+            self.assertFalse(slow.done())
+            self.device_gate.set()
+            self.assertTrue(slow.result(5))
 
     def test_concurrent_callers_of_one_component_share_one_attach(self):
         backend = self.backend()

@@ -30,6 +30,15 @@ from .environment_nbd import CLEAR_SOCK, DISCONNECT, ReadOnlyEnvironmentDevice
 from .environment_rafs import RafsImage
 
 READY_SECONDS = 30.0
+# One read must never reach the kernel's NBD timeout: each expiry marks one of
+# nydusd's connections dead for good, and the last one fails the device (M2
+# wave 1). nydusd sets 60 s; a stalled S3 key outlasts that (Hetzner: ~2% of
+# GETs stall 6-60 s, often again on retry). So nydusd retries the store node
+# for up to BACKEND_TIMEOUT * (BACKEND_RETRIES + 1) = 270 s, every retry joins
+# the node's in-flight fill, and the device waits NBD_TIMEOUT_SECONDS: a stall
+# is latency, not EIO, and a dead store node still fails within the bound.
+BACKEND_TIMEOUT, BACKEND_RETRIES, NBD_TIMEOUT_SECONDS = 30, 8, 600
+NBD_SET_TIMEOUT = 0xAB09  # _IO(0xab, 9)
 
 
 class NydusdFactory:
@@ -117,7 +126,8 @@ class NydusdDevice:
                 "version": 2, "id": hexdigest[:16],
                 "backend": {"type": "registry", "registry": {
                     "scheme": url.scheme, "host": url.netloc, "repo": f"virtual/{hexdigest}",
-                    "registry_token": factory.token, "timeout": 30, "connect_timeout": 5, "retry_limit": 2}},
+                    "registry_token": factory.token, "timeout": BACKEND_TIMEOUT, "connect_timeout": 5,
+                    "retry_limit": BACKEND_RETRIES}},
                 "cache": {"type": "filecache", "validate": True, "filecache": {"work_dir": str(factory.cache)}},
                 "metadata_path": str(component.bootstrap.path)}}
             descriptor = os.open(self._work / "config.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
@@ -130,6 +140,7 @@ class NydusdDevice:
                      "--threads", str(factory.threads), "--log-level", "warn"],
                     stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
                 self._await_ready(component.image_size)
+            fcntl.ioctl(self._fd, NBD_SET_TIMEOUT, NBD_TIMEOUT_SECONDS)  # After nydusd's own 60 s.
         except BaseException:
             self.close()
             raise

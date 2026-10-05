@@ -107,6 +107,37 @@ The adapter only solves compute provisioning. A deployment also needs:
 - stable node identities and enough metadata or labels to recover provider
   operations after ambiguous API responses.
 
+### Provider-neutral services with host requirements
+
+These services are not provider-specific, but each one requires something of
+the host or of the storage behind it.
+
+- **Kernel modules.** Workers load `erofs` and `nbd` (immutable environments
+  and RAFS over NBD), `nft_log` and `nfnetlink_log` (node-local model waits),
+  and `ublk_drv` and `virtiofs`. The bundle carries the module closure
+  (`RUNTIME_KERNEL_MODULES` in `vm_init.py`). On an image without a full
+  modules package, verify the modules before admitting a worker.
+- **Chunk store.** This is an S3 bucket plus an optional store node.
+  - S3 can live at a different provider from compute: production on UCloud
+    keeps Hetzner Object Storage.
+  - A store node without `store_node.data_device` keeps its replica and index
+    on its root disk.
+  - Store and worker init log in as the provider's bootstrap user. Root on
+    Hetzner, `ucloud` on UCloud. Init scripts must reach anything under a
+    root-only temporary directory through `$SUDO`.
+- **Registry disk guard.** The `registry_disk_*_percent` thresholds measure
+  `statvfs` of the registry's filesystem, so they only mean something on a
+  filesystem the registry owns, such as a Hetzner Volume.
+  - UCloud's `/work/data` is a shared multi-petabyte drive whose usage is
+    mostly other projects'. Default thresholds would evict images
+    immediately.
+  - Set all three to `100` there, and size retention by
+    `registry_retention_days` and `registry_keep_per_repository` instead.
+- **PostgreSQL.** The gateway uses a local PostgreSQL 18 over its Unix socket
+  with peer authentication. The DSN is
+  `host=/var/run/postgresql dbname=ucloud user=ucloud`, so the database role
+  must match the service user.
+
 The in-tree `deploy-all-in-one`, UCloud resource helpers, and session handling
 remain UCloud-specific operator conveniences. A different cloud should provide
 its own deployment automation, but it reuses the same gateway and worker

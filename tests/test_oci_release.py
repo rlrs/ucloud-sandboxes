@@ -14,7 +14,7 @@ from urllib.parse import unquote, urlparse
 from tests import test_environment_artifact as artifact_fixtures
 from tests.harness import LocalFleet
 from ucloud_sandboxes.capabilities import ENVIRONMENT_RAFS_CAPABILITY, ENVIRONMENT_ROOT_CAPABILITY
-from ucloud_sandboxes.chunk_migrate import release_oci
+from ucloud_sandboxes.chunk_migrate import drop_staged, release_oci
 from ucloud_sandboxes.environment_artifact import OCI_IMAGE, canonical_bytes, content_digest, publish_environment
 from ucloud_sandboxes.environment_dependencies import EnvironmentDependencyResolver
 from ucloud_sandboxes.environment_manifest import EnvironmentManifest
@@ -207,6 +207,26 @@ class OciReleaseTests(unittest.TestCase):
         again = release(True)
         self.assertEqual((again["released"], again["gone"]), (0, 2))
         self.assertIn(("ucloud-managed/e", images["e"]), roots.oci_released())
+
+    def test_drop_staged_deletes_only_sources_no_other_lease_holds(self):
+        usage, client = RegistryUsageStore(self.root / "usage.sqlite"), RegistryClient(self.oci.url)
+        staged = {name: self.oci.push("ucloud-upstream", f"sha256-{name}", self.source, ((D[str(i + 1)], 10),))
+                  for i, name in enumerate("abc")}
+        for name in "abc":
+            usage.acquire_reference("ucloud-upstream", f"sha256-{name}", f"upstream-source:{name}", digest=staged[name])
+        usage.acquire_reference("ucloud-upstream", "sha256-b", "prepared-build:v1:z", digest=staged["b"])
+        other = self.oci.push("ucloud-managed/x", "v1", self.source)
+        usage.acquire_reference("ucloud-managed/x", "v1", "upstream-source:c", digest=other)  # Kept whole.
+        dry = drop_staged(client, usage, "upstream")
+        self.assertEqual((dry["dropped"], dry["held"], dry["layer_bytes"]),
+                         (1, {"prepared-build": 1, "upstream-source": 1}, 10))
+        self.assertEqual(len(self.oci.manifests), 4)
+        done = drop_staged(client, usage, "upstream", execute=True)
+        self.assertEqual((done["dropped"], done["released_leases"]), (1, 2))  # a's and b's staging leases.
+        self.assertEqual({tag for repository, tag in self.oci.tags if repository == "ucloud-upstream"},
+                         {"sha256-b", "sha256-c"})
+        owners = {lease.owner for lease in usage.snapshot().leases.values()}
+        self.assertEqual(owners, {"prepared-build:v1:z", "upstream-source:c"})
 
     def test_creates_by_tag_and_digest_dispatch_the_root_after_the_manifest_is_deleted(self):
         self.client.ensure_digest_protection_tag = lambda *_args: None  # The environments repository's.

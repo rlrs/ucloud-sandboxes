@@ -537,6 +537,69 @@ def release_oci(roots, client, usage, wave, *, catalog_file, routing_store, keys
     return summary
 
 
+# Staged copies a preparation builds FROM and nothing reads after it (plan §5.4):
+# repository -> the durable lease owner prefix that keeps them.
+STAGED = {"upstream": ("ucloud-upstream", "upstream-source:"),
+          "shared": ("ucloud-shared-sources", "shared-source:")}
+
+
+def drop_staged(client, usage, kind, *, execute=False):
+    """Delete a staging repository's manifests: staged upstream sources (the
+    catalog keeps the original reference, and re-preparing an unfinished
+    source stages it again) or shared-task sources (re-running that prepare
+    script fails, as it does on a released anchor). Each digest's staging
+    leases go first; then, in the usage store's writer transaction, its
+    manifest is deleted unless any lease holds it, so a racing re-stage keeps
+    its copy. Bytes are manifest layer sizes, an upper bound."""
+    from datetime import datetime, timezone
+    from .managed_registry import RegistryRequestError
+    from .registry_retention import REFERENCE_PRUNE_BATCH, list_repository_tags
+    repository, prefix = STAGED[kind]
+    digests = sorted({record.digest for record in list_repository_tags(client, repository)})
+    summary = {"kind": kind, "repository": repository, "execute": execute, "manifests": len(digests),
+               "held": {}, "dropped": 0, "released_leases": 0, "layer_bytes": 0, "unique_layer_bytes": 0,
+               "errors": {}}
+    now, staging, elsewhere = datetime.now(timezone.utc), {}, set()
+    for lease in usage.snapshot().leases.values():
+        if lease.owner.startswith(prefix):
+            if lease.repository == repository:
+                staging.setdefault(lease.digest, set()).add(lease.owner)
+            else:  # release_owner drops all of an owner's rows: keep such owners whole.
+                elsewhere.add(lease.owner)
+    sizes = {}
+    for start in range(0, len(digests), REFERENCE_PRUNE_BATCH):
+        batch, deleted = digests[start:start + REFERENCE_PRUNE_BATCH], []
+        if execute:
+            for digest in batch:
+                for owner in sorted(staging.get(digest, set()) - elsewhere):
+                    summary["released_leases"] += usage.release_owner(owner)
+        with usage.lease_fence() if execute else nullcontext(usage.snapshot()) as snapshot:
+            holders = {}
+            for lease in snapshot.leases.values():
+                if lease.repository == repository and lease.is_active(now) and \
+                        (execute or not lease.owner.startswith(prefix) or lease.owner in elsewhere):
+                    holders.setdefault(lease.digest, lease.owner.split(":", 1)[0])
+            for digest in batch:
+                if digest in holders:
+                    summary["held"][holders[digest]] = summary["held"].get(holders[digest], 0) + 1
+                    continue
+                try:
+                    layers = client.manifest_layers(repository, digest)
+                    if execute:
+                        client.delete_manifest(repository, digest)
+                except (OSError, ValueError, RegistryRequestError) as exc:
+                    if getattr(exc, "status_code", None) != 404:
+                        summary["errors"][digest] = f"{type(exc).__name__}: {exc}"[:300]
+                    continue
+                deleted.append(layers)
+        for layers in deleted:
+            summary["dropped"] += 1
+            summary["layer_bytes"] += layers.total_size
+            sizes.update((layer.digest, layer.size) for layer in layers.layers)
+    summary["unique_layer_bytes"] = sum(sizes.values())
+    return summary
+
+
 def verify_regenerations(rows, *, verify, receipts, parallel):
     """Volume-free builds (plan §5.4), on a converter before release: each
     image's root must regenerate its OCI tree exactly (M1's rollback check).
@@ -810,6 +873,10 @@ def gateway_command(args):
                              include_build_inputs=args.include_build_inputs, receipts=receipts)
     elif command == "regenerate":
         result = regenerate_command(config, roots, environments, args.image)
+    elif command == "drop-staged":
+        from .managed_registry import RegistryClient, RegistryUsageStore
+        result = drop_staged(RegistryClient(config.registry_url), RegistryUsageStore(config.registry_usage_file()),
+                             args.kind, execute=args.execute)
     else:
         if args.out:  # The rows a converter verifies regenerations of.
             args.out.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in roots.rows()))
@@ -863,6 +930,8 @@ def add_commands(subparsers):
                        ("release-oci", "Delete released, non-build-input images' OCI manifests, remembering their "
                                        "tags (dry run unless --execute)."),
                        ("regenerate", "Push an OCI-released image's verified regeneration for builds (gateway)."),
+                       ("drop-staged", "Delete staged upstream or shared-task sources and their staging leases (dry "
+                                       "run unless --execute)."),
                        ("status", "image_roots rows per wave and state.")):
         command = commands.add_parser(name, help=text)
         command.add_argument("--config", type=Path, required=True)
@@ -870,8 +939,10 @@ def add_commands(subparsers):
             command.add_argument("--results", type=Path, required=True)
         if name in ("switch", "revert", "release", "release-oci"):
             command.add_argument("--family", default="", help="only this inventory family (needs --rows)")
-        if name in ("release", "release-oci"):
+        if name in ("release", "release-oci", "drop-staged"):
             command.add_argument("--execute", action="store_true", help="release; without it, only count")
+        if name == "drop-staged":
+            command.add_argument("--kind", choices=sorted(STAGED), required=True)
         if name == "revert":
             command.add_argument("--reason", default="")
         if name == "release-oci":

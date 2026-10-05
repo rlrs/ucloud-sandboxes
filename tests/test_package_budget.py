@@ -136,8 +136,10 @@ import unittest
 # the build inputs' OCI on the registry Volume (~1.2 TB), not code.
 # +46 M2 converters reap the NBD devices a killed converter leaked (each
 # slot, before each image): wave 4 lost images to "no free NBD" otherwise.
+# +71 chunk-migrate drop-staged: the staged upstream (502 GB) and shared-task
+# sources (150 GB) nothing reads after preparation, fenced like release-oci.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 115_683
+PACKAGE_LINE_BUDGET = 115_754
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

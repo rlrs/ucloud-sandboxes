@@ -85,7 +85,8 @@ from tests.test_package_budget import package_lines
 # diff ID), release-oci's receipt fence, the regeneration single-flight, and a
 # gateway build answering 503 then building with the copy as a named context.
 # +17 the NBD reaper: only dead owners, their mounts and stacked overlay.
-SUITE_LINE_BUDGET = 98_992
+# +23 drop-staged: only sources no other lease holds; owners leasing elsewhere stay whole.
+SUITE_LINE_BUDGET = 99_015
 SUITE = Path(__file__).resolve().parent
 
 

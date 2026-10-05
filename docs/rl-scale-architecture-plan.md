@@ -1951,9 +1951,17 @@ on 32 sandboxes at once.
   `upload_files`, and `write_many` in verifiers and verifiers-ucloud.
   - The 40-file harness on 128 sandboxes takes 1.5 s, or 3,418 files/s, against
     61 s (84 files/s) uploading one file at a time.
-  - Shell-helper sandboxes extract with the image's `tar`. The Go
-    `files extract` helper for managed sandboxes waits for a native bundle
-    build; until then they fall back to per-file uploads.
+  - Shell-helper sandboxes extract with the image's `tar`.
+- **0.9.31: the managed init rebuilt with `files extract`.** Built from
+  `runtime/managed_process` at a8541f3 with Go 1.27.1 (`785c16f9…`) and swapped
+  into the sandbox bundle; every other native file is byte-identical. The 0.9.6
+  binary's source and toolchain were not recorded, and a rebuild of the prior
+  source did not reproduce it.
+  - Managed-process sandboxes, 32 on a fresh worker: exec at 191/s with p99
+    263 ms; per-file harness at 375 files/s; the archive harness in 0.45 s
+    (2,839 files/s); 8 MB uploads at 443 MB/s.
+  - Relay-mode rollout smoke: 14 of 16. The 2 failures are images without
+    Python 3, the harness limit seen in the 2026-10-03 relay baseline.
 
 ## Appendix: evidence index
 

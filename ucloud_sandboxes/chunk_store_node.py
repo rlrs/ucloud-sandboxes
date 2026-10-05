@@ -1345,7 +1345,7 @@ def store_init_script(options):
     native = "" if not node.native_server_sha256 else "\n".join([  # Verified against the pin, then installed.
         '$SUDO tar --no-same-owner -xzf "$UCLOUD_PACKAGE_SPEC" -C "$UCLOUD_BUNDLE_TMP" '
         "runtime/chunk_serve/ucloud-chunk-serve",
-        f'[ "$(sha256sum "$UCLOUD_BUNDLE_TMP/runtime/chunk_serve/ucloud-chunk-serve" | awk \'{{print $1}}\')" = '
+        f'[ "$($SUDO sha256sum "$UCLOUD_BUNDLE_TMP/runtime/chunk_serve/ucloud-chunk-serve" | awk \'{{print $1}}\')" = '
         f'{quote(node.native_server_sha256)} ] || {{ echo "ucloud-chunk-serve does not match '
         f'store_node.native_server_sha256" >&2; exit 1; }}',
         f'$SUDO install -D -m 0755 -o root -g root "$UCLOUD_BUNDLE_TMP/runtime/chunk_serve/ucloud-chunk-serve" '

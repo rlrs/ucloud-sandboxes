@@ -452,6 +452,12 @@ class StoreNodeConfigTests(unittest.TestCase):
         self.assertIn(f"{NATIVE_SERVER} --config /etc/ucloud-sandboxes/chunk-store.json", units(script))
         self.assertIn(f"= {pin} ]", script)
         self.assertLess(script.index("runtime/chunk_serve/ucloud-chunk-serve"), script.index("daemon-reload"))
+        # The bundle is unpacked into a root-only mktemp directory; a non-root
+        # login (UCloud's ucloud user) reads it only through $SUDO.
+        for line in script.splitlines():
+            if '"$UCLOUD_BUNDLE_TMP/' in line and "rm -rf" not in line:
+                with self.subTest(line=line):
+                    self.assertRegex(line, r"\$SUDO (sha256sum|install|tar|python3)\b")
         syntax = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
         self.assertEqual(syntax.returncode, 0, syntax.stderr)
         for bad in ({"native_server_sha256": "short", "listen": "10.42.0.10:5091"}, {"native_server_sha256": pin}):

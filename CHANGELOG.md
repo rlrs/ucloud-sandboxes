@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.32 - 2026-10-05 (gateway and workers; production on UCloud)
+
+- **The sandbox bundle carries `ucloud-chunk-serve` again** (`runtime/chunk_serve`, the pinned 0.9.13 build, sha256 a8ff310b…). Releases 0.9.14 to 0.9.31 repacked the 0.9.6 bundles, which predate it, so a fresh store node could not be initialized from the current release; Hetzner's store node had been initialized once, at 0.9.13.
+- **Store init reads `ucloud-chunk-serve`'s digest through `$SUDO`.** The bundle unpacks into a root-only directory. Hetzner's init logs in as root; UCloud's logs in as `ucloud`, and the pin check failed with Permission denied.
+- **Worker init loads `erofs`, `nbd`, `nft_log` and `nfnetlink_log`** with the other runtime modules (immutable environments, RAFS over NBD, node-local model waits). The repacked bundles keep the 0.9.6 module closure, so the host must ship these modules; UCloud's vm-ubuntu 26.04 image (kernel 7.0.0-30-generic) does.
+
 ## 0.9.31 - 2026-10-05 (workers)
 
 - **The sandbox bundle carries a managed init built from this repository** (`runtime/managed_process`, commit a8541f3, Go 1.27.1, sha256 785c16f9…), replacing the 0.9.6 bundle's binary (cedddb16…, whose source and toolchain are not recorded). It adds `files extract`, so managed-process and static-helper sandboxes created on these workers extract archive uploads with one exec instead of answering 501. Every other native file in the bundle is unchanged.

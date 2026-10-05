@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.37 - 2026-10-05 (gateway and workers)
+
+Create throughput, from traces and `py-spy --gil` of the 0.9.35 and 0.9.36 1,024-rollout rehearsals. Creates held a node startup slot about 3.4 s (p50) for well under 1 s of work, which bounded two workers near 19 creates/s.
+- **Growth forecasts are cached per owner.** Every admission (create, exec start, wake, launch) recomputed every active sandbox's forecast and re-summed the ledger under the node-wide capacity guard: about a fifth of the node agent's GIL in a burst. An owner's forecast now changes with its intent, all of them once per sampler pass, and in admission only when the oldest credited sample passes the 30 s credit age. The ledger keeps running totals, so a projection costs O(in-flight claims).
+- **Pool interface checks no longer run modprobe.** `if_nametoindex` on a not-yet-created interface makes the kernel call `request_module` twice as root, with the GIL held (6% of it). sysfs answers instead.
+- **Virtual block devices are skipped before resolving them.** The once-a-second disk sampler resolved all 1,024 nbd devices and every ublk and loop device (5.6% of the GIL).
+- **The gateway's registry-lease lock is per owner.** One host-wide key serialized every create's lease I/O across the six API processes: p50 0.56 s and p90 4.1 s per create.
+- **Soft-drain waits out recent creates.** The autoscaler drained one of two workers four minutes into a rollout step, because by memory claims everything fit on one. It stopped once idle, and the next step's burst ran on one worker while a replacement provisioned. A busy worker is now selected only after no create has been placed for the effective `scale_down_idle_seconds`.
+
 ## 0.9.36 - 2026-10-05 (gateway and workers)
 
 - **Local-wait growth bookkeeping is queued off the pause and thaw paths.** 0.9.35 recorded each local wait's forecast inline: a durable registry write under the sandbox's lifecycle lock, on the wait scheduler's threads. In a create burst the registry's one writer is busy. Thaws queued behind those pauses past the relay's 5 s local-wake grace, and 571 of 7,872 answers took about 10 s through the gateway wake (none before 0.9.35). One background thread now records waits and resumes in order.

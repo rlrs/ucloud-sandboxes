@@ -1913,6 +1913,34 @@ worker snapshot, then an autoscaled canary
   - a full-scale rehearsal in relay mode;
   - operational readiness.
 
+### 2026-10-05 (afternoon): exec and harness-upload throughput per node
+
+Measured on one worker through the gateway, against M2's target of
+≥ 1,000 exec starts per second per node. The client ran on the store node.
+Workload: `true` execs, and the harness pattern, 40 files of 4 KB per sandbox
+on 32 sandboxes at once.
+
+| Release | Exec/s (concurrency 32 → 512) | Harness files/s |
+| --- | --- | --- |
+| 0.9.26 | 34–38, p99 25 s | 42 |
+| 0.9.27 | 147 → 104, p99 0.38 s at 32 | 5.6 |
+| 0.9.28 | 123 → 110 | 69 |
+
+- **0.9.27.** A node keeps at most 1,024 exec sessions, and held each finished
+  one for 30 s. Short commands therefore capped a node at 1,024 / 30 s. The rest
+  got 503 `node_active_exec_deferred`, and SDK backoff turned those into stalls
+  of 20–25 s. Delivered results are now evicted first.
+- **0.9.28.** Exec admission and file writes took the per-sandbox request lock.
+  File writes refused concurrent ones outright. A running sandbox now runs them
+  under the shared lifecycle fence.
+- **Still open, from traces of a 0.9.28 burst (CPU about 5 ms per start):**
+  - `warden.inspect` of the lifecycle journal: p50 331 ms;
+  - the per-sandbox exec-start fence: `command_ms` p50 469 ms, p95 2.6 s.
+
+  Both are waiting, not work. Next: answer the running check from the node's
+  in-memory lifecycle state, and narrow the start fence. C5.1, the in-guest
+  agent, removes the `runsc exec` per command altogether.
+
 ## Appendix: evidence index
 
 - Image path:

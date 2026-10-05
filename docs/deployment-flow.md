@@ -124,6 +124,10 @@ transaction. `"power_of_k"` samples three capable workers from the heartbeats
 and lets the worker's admission decide, trying the next on a definite reject
 ([c43-placement-wiring-plan.md](c43-placement-wiring-plan.md), phase 1).
 Workers older than the switch ignore its shorter admission wait.
+With PostgreSQL routing and `"power_of_k"`, every gateway process claims queued
+creates and groups and runs them itself, and the placement service claims
+wakes only (phase 2). Each process reads the switch at start, so change it
+only by restarting the gateway and placement units together.
 Group create (`/v1/sandboxes:batch`, C3.2) needs `"power_of_k"`, and on
 PostgreSQL one routing `migrate()` for its tables and command kind.
 

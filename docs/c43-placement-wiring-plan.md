@@ -5,7 +5,9 @@ in [rl-scale-architecture-plan.md](rl-scale-architecture-plan.md) ("C4.3",
 "C3.2") and [rl-state-primitives.md §4](rl-state-primitives.md). Phase 1
 wired the `placement_choice.py` library behind the switch (2026-10-04, not
 deployed; see "Phase 1 (implemented)"). C3.2 group create followed on top of
-it, also not deployed (see "C3.2 (implemented)").
+it, also not deployed (see "C3.2 (implemented)"). Phase 2 moved queued creates
+and groups into the API processes (2026-10-05, not deployed; see "Phase 2
+(implemented)").
 
 ## Findings
 
@@ -345,6 +347,100 @@ Ranked mode answers a group with 501 `sandbox_group_create_unavailable`.
   repeat of the group recreates it, as a client's single-create retry would.
 - **Pending rows expire** after 300 s; the members stay unplaced and a
   repeat still places them.
+
+**Phase 2 (implemented, 2026-10-05).** Nothing deployed; only in
+`power_of_k`. Ranked mode is unchanged: API processes claim nothing, and the
+placement process claims every kind and replays it to its loopback.
+- **Claims.** An API process built with the durable queue
+  (`build_server(queue_placement=True)`) and `power_of_k` starts an
+  `InProcessPlacementWorker` (`shared_control/placement_queue.py`) on the
+  queue client's own event loop (`placement-queue-io`). It is the placement
+  worker with one change: `_send` runs the claimed command on a daemon thread
+  instead of POSTing it to a loopback port. Claim (`SKIP LOCKED`), lease
+  renewal, the expired-deadline 504, the 408/425/429/5xx requeue with backoff
+  until the deadline, deferral logging and completion with NOTIFY are the
+  inherited code. Closing the queue client's loop cancels the claim loop.
+- **Running a command.** `_command_dispatch` (`control_plane.py`) feeds the
+  command's request (path, stored headers, body, the claim and command
+  headers, the gateway token) to a subclass of the process's own handler,
+  reading from and writing to memory, and parses the answer. The subclass is
+  the placement process's handler: `placement_worker` is set, so the request
+  enters `command_execution` (the claim token and unexpired lease, the stored
+  path and body, the generation binding); `placement_queue` is unset, so it
+  never queues again; asynchronous detached responses are off. An exception
+  in the handler reads as a lost connection, which requeues until the
+  deadline, as a crashed loopback request did.
+- **Kinds.** `placement_kinds(create_placement)`: the placement process claims
+  `wake` only in `power_of_k`; API processes claim `create` and `group`.
+  Wakes keep their path, budget (64) and fences.
+- **Budget.** `create_concurrency(policy, processes)` = max(32, ⌈per-node
+  create target × `max_nodes` / processes⌉) per API process: an even share of
+  every node's startup slots, never below the old executor's 32. Production
+  (32 × 3 nodes, 6 processes) gets 6 × 32 = 192 in flight, against 96 node
+  slots. It is fixed at start from the deployment config. Groups keep 32 per
+  process. The placement process's create budget (ranked) is unchanged
+  (`processes` = 1).
+- **Why many placing processes are safe in `power_of_k`.** Checked in
+  `routing_repository.py`:
+  - `reserve_create_intent` and `retarget_create_intent` run under READ
+    COMMITTED, take `pg_advisory_xact_lock` on the sandbox id, then `FOR
+    UPDATE` on its route row, so two processes' creates of one id queue, and
+    the second reads the first's route (or none after a delete). Each also
+    takes the command row `FOR UPDATE` with the claim token and an unexpired
+    lease (`_command_row`), and binds the generation as before.
+  - `confirm_create` and `confirm_creates` lock the route rows before the
+    incarnation check.
+  - Group intents lock their members in id order (advisory lock, then row),
+    then the command row, then the group row `FOR SHARE`; a group delete
+    updates that row. Two transactions never take member locks in opposite
+    orders. Worker revision rows can be taken in different orders by two
+    multi-worker re-plans; PostgreSQL then aborts one with a deadlock, which
+    `_transactional` retries (no I/O happens inside).
+  - Deletes and other lifecycle writes stay SERIALIZABLE; a concurrent
+    intent on the same row makes them retry.
+  - No process allocates a ranked route in `power_of_k`:
+    `allocate_sandbox_create_with_pending` is reached only through
+    `reserve_create_intent` and the ranked block, which this mode skips.
+- **No mixing.** `gateway_create_placement` is read once at process start,
+  from the deployment config, by the API processes and the placement
+  process alike. Deploy stops both units and starts them on one config. Flip
+  it only by restarting both units together: a ranked placement process
+  beside `power_of_k` API processes would claim creates and allocate without
+  the advisory lock (phase 1's mixed-modes risk), and a `power_of_k`
+  placement process beside ranked API processes would claim no creates.
+
+**Deviations:**
+- **In process through the handler, not a new use case.** The command runs
+  through the HTTP handler with an in-memory request, not a socket-free
+  create call: the resolution, existing-route and warmup steps are handler
+  methods, and the command's durable form is already a request.
+- **API processes still enqueue every create.** The fast path that skips the
+  queue for creates that need not wait (step 2) is not in this phase.
+- **Package +117 lines** (plan: about 65): the per-process budget, the kinds
+  split, and the handler run without a socket.
+
+**Residual risks:**
+- **More in flight than node slots.** 192 against 96: the excess waits in
+  node admission (1 s on all but the last candidate) or is turned away and
+  requeued. A burst therefore requeues more than at 96.
+- **Image pulls are deduplicated per process.** `create_image_pull_tasks`
+  and `_image_pull_lock` are process-local, so up to 6 processes can ask one
+  worker for the same pull at once. One placing process used to collapse them.
+- **The overlay is per process.** Each process sees only its own unconfirmed
+  creates; the chooser's `api_processes` extrapolation (phase 1) now matches
+  what runs. Node admission stays the authority.
+- **A lost lease frees the slot first.** Its thread finishes the handler
+  (its writes are then fenced), so threads can briefly exceed the budget, as
+  the loopback's request threads could.
+- **A claim loop that cannot open its pool at start** logs "placement claims
+  stopped" and does not retry; that process claims nothing until restarted,
+  while the others still claim. The placement process has the same failure
+  mode.
+- **Every claiming process prunes** done commands once a minute (7 instead of
+  1); the batched deletes overlap harmlessly.
+- **More PostgreSQL sessions.** Each API process's claim loop has its share
+  of a 16-connection pool (4 with 6 processes) and one LISTEN session, for
+  claims, renewals and completions of up to 64 commands.
 
 **Budget.** Phases 1–2 need a temporary raise of about 445 lines, repaid by
 phase 3, which leaves the package about 515 lines lower. P4 then fits with

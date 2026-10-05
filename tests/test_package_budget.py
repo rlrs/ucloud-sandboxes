@@ -136,10 +136,15 @@ import unittest
 # the build inputs' OCI on the registry Volume (~1.2 TB), not code.
 # +46 M2 converters reap the NBD devices a killed converter leaked (each
 # slot, before each image): wave 4 lost images to "no free NBD" otherwise.
-# +74 chunk-migrate drop-staged (and release-oci closing its routing store): the staged upstream (502 GB) and shared-task
-# sources (150 GB) nothing reads after preparation, fenced like release-oci.
+# +74 chunk-migrate drop-staged: staged upstream and shared-task sources nothing
+# reads after preparation, fenced like release-oci (which closes its store).
+# +117 C4.3 phase 2 (plan: ~65): in power_of_k every API process claims queued
+# creates and groups and runs them through its own handler, from memory, not
+# the loopback; the placement process claims wakes. Over the plan: the claim
+# budget per process and the handler run without a socket. C4.3b deletes the
+# loopback branch and the placement process with the wakes.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 115_757
+PACKAGE_LINE_BUDGET = 115_874
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

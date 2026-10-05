@@ -6,6 +6,7 @@ import socket
 import struct
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+import threading
 import unittest
 
 from ucloud_sandboxes.direct_registry import DirectRegistryConflictError
@@ -261,16 +262,23 @@ class RuntimeTests(unittest.TestCase):
         runtime.service.observe_managed_wait = lambda *args: calls.append(("wait", *args))
         runtime.service.resume_managed_continuation = lambda *args: calls.append(("resume", *args))
         runtime.wake_with_activity_revision = lambda *args, **kwargs: calls.append(("wake", args[0]))
+        written = threading.Event()  # A slow registry write blocks neither the pause nor the thaw.
+        runtime.service.observe_managed_wait = lambda *args: (written.wait(5), calls.append(("wait", *args)))
         runtime.pause_model_wait(("agent", 1))
         request_id = runtime._paused[("agent", 1)].local_request_id
         self.assertTrue(request_id.startswith("local-wait-"))
         runtime._thaw_model_wait(("agent", 1))
-        self.assertEqual(calls, [("wait", "agent", 1, request_id), ("wake", "agent"),
+        self.assertEqual(calls, [("wake", "agent")])
+        written.set()
+        runtime._growth_executor.shutdown(wait=True)  # In order: the wait before its resume.
+        self.assertEqual(calls, [("wake", "agent"), ("wait", "agent", 1, request_id),
                                  ("resume", "agent", 1, request_id)])
         def refuse(*_args):
             raise DirectRegistryConflictError("growth wait was superseded by wake")
+        runtime._growth_executor = None
         runtime.service.resume_managed_continuation = refuse  # Bookkeeping never fails a thaw.
         runtime._thaw_model_wait(("agent", 1))
+        runtime._growth_executor.shutdown(wait=True)
 
     def test_candidates_are_managed_sandboxes_with_their_lease_and_cgroup(self):
         runtime, _ = self.runtime()

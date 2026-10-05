@@ -309,6 +309,7 @@ class DirectNodeRuntime:
         # truth. With the flag on it replaces WarmParkPolicy's park role.
         self._paused = {} if getattr(warden_config, "pause_tier", False) else None
         self._paused_forecast_since: float | None = None
+        self._growth_executor: ThreadPoolExecutor | None = None
         self._reclaim_budget = ReclaimBudget() if self._paused is not None else None
         self._warm_parks = WarmParkPolicy(
             PressureSampler(memory_backing_root=memory_backing_root).sample,
@@ -414,6 +415,7 @@ class DirectNodeRuntime:
         one: reclaim, escalation and thaw prefetch all apply.
         """
         sandbox_id, generation = key
+        request_id = None
         with self.lifecycle.exclusive(sandbox_id):
             if self.service.warden.is_paused(sandbox_id, generation):
                 return
@@ -422,15 +424,16 @@ class DirectNodeRuntime:
                 return
             self.service.park(sandbox_id, operation_id=f"local-wait-{uuid4().hex}", pause=True)
             if self.service.warden.is_paused(sandbox_id, generation):
-                # The guest is blocked on its model call: suspend its growth
-                # forecast as a relay park's wait does. Without this every
-                # agent kept its launch's whole memory bound through its waits,
-                # and launches stopped at ~160 sandboxes on a 192 GB worker.
                 request_id = f"local-wait-{uuid4().hex}"
-                self._growth_bookkeeping("observe_managed_wait", key, request_id)
                 with self._relay_parking_guard:
                     self._paused[key] = PausedWait(time.monotonic(), local_request_id=request_id)
             self.service.advance_lifecycle_activity_revision()
+        if request_id is not None:
+            # The guest is blocked on its model call: suspend its growth
+            # forecast as a relay park's wait does. Without this every agent
+            # kept its launch's whole memory bound through its waits, and
+            # launches stopped at ~160 sandboxes on a 192 GB worker.
+            self._growth_bookkeeping("observe_managed_wait", key, request_id)
 
     def _thaw_model_wait(self, key) -> None:
         with self._relay_parking_guard:
@@ -440,12 +443,26 @@ class DirectNodeRuntime:
             self._growth_bookkeeping("resume_managed_continuation", key, wait.local_request_id)
 
     def _growth_bookkeeping(self, method, key, request_id) -> None:
-        # Forecasts are admission accounting; a lost wait or wake fence must
-        # never fail the pause or the thaw it describes.
-        try:
-            getattr(self.service, method)(key[0], key[1], request_id)
-        except Exception as exc:  # noqa: BLE001
-            _LOG.warning("local wait growth bookkeeping for %s skipped: %s", key[0], exc)
+        """Queue a forecast update; never on the pause's or the thaw's path.
+
+        Each is a durable registry write, which waits for the node's one writer.
+        Done inline in a create burst, pauses held their sandbox's lifecycle lock
+        and the scheduler's threads through it, and answers waited out the
+        relay's 5 s local-wake grace (~10 s answers for 9% of calls). One thread
+        keeps every sandbox's wait before its resume; a late forecast only
+        delays accounting. A lost wait or wake fence must never fail either.
+        """
+        def record():
+            try:
+                getattr(self.service, method)(key[0], key[1], request_id)
+            except Exception as exc:  # noqa: BLE001
+                _LOG.warning("local wait growth bookkeeping for %s skipped: %s", key[0], exc)
+        with self._relay_parking_guard:
+            if self._growth_executor is None:
+                self._growth_executor = ThreadPoolExecutor(
+                    max_workers=1, thread_name_prefix="ucloud-local-wait-growth")
+            executor = self._growth_executor
+        executor.submit(record)
 
     def stop(self) -> None:
         self._background_stop.set()
@@ -462,10 +479,14 @@ class DirectNodeRuntime:
         self._relay_parking_thread = None
         with self._relay_parking_guard:
             executor, self._relay_park_executor = self._relay_park_executor, None
+            growth, self._growth_executor = self._growth_executor, None
         if executor is not None:
             # Do not cancel an in-flight checkpoint mid-transaction. Queued
             # rechecks may be cancelled; their durable relay intent survives.
             executor.shutdown(wait=False, cancel_futures=True)
+        if growth is not None:
+            # A dropped update is stale only until the sandbox's next wait or resume.
+            growth.shutdown(wait=False, cancel_futures=True)
 
     def resident_wait_snapshot(self):
         snapshot = {**self._warm_parks.snapshot(), **self.service.resident_demand_snapshot()}

@@ -107,7 +107,8 @@ from tests.test_package_budget import package_lines
 # +28 local-wait growth bookkeeping tests; +2 budget notes.
 # +8 queued bookkeeping blocks neither pause nor thaw; +2 budget notes.
 # +18 registry-lease owners do not wait for each other; +2 budget notes.
-SUITE_LINE_BUDGET = 99_668
+# +33 forecast caching: running totals recount, credit ageing, sampler publishing; +2 notes.
+SUITE_LINE_BUDGET = 99_703
 SUITE = Path(__file__).resolve().parent
 
 

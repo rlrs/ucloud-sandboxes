@@ -298,12 +298,18 @@ class ManagedGrowthTests(unittest.TestCase):
             dirty_bytes=0, writeback_bytes=0, refault_file_pages=0, cgroup_path='/owned',
             cgroup_device=1, cgroup_inode=2, sentry_pid=10, sentry_start_time_ticks=20,
             sampled_at=time.monotonic(), shared_memory_bytes=2 << 30)
-        self.service._resident_memory._samples[('one', 7)] = sample
+        self.observe(('one', 7), sample)
         self.assertEqual(self.service.warm_park_demand().physical_bytes, 2 << 30)
-        self.service._resident_memory._samples[('one', 7)] = replace(sample, sampled_at=0)
+        self.observe(('one', 7), replace(sample, sampled_at=0))
         self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
-        self.service._resident_memory._samples[('one', 8)] = sample
+        self.observe(('one', 8), sample)
         self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+
+    def observe(self, key, sample):
+        """What a sampler pass publishes: the sample, then refreshed forecasts."""
+        self.service._resident_memory._samples[key] = sample
+        with self.service._capacity_guard:
+            self.service._refresh_growth_forecasts_locked()
 
     def sample(self, *, current, peak=0, shared=None, age=0.0, swap=0):
         return ResidentMemorySample(current_bytes=current, anonymous_bytes=0, file_bytes=current,
@@ -318,15 +324,15 @@ class ManagedGrowthTests(unittest.TestCase):
             self.service.observe_managed_wait('one', 7, 'wait-1')
             self.service.admit_managed_continuation('one', 7, 'wait-1')
             # A 3.5 GiB peak, 3 GiB of it reclaimed to swap by a pause.
-            self.service._resident_memory._samples[('one', 7)] = self.sample(
-                current=1 << 29, peak=7 << 29, swap=3 << 30)
+            self.observe(('one', 7), self.sample(
+                current=1 << 29, peak=7 << 29, swap=3 << 30))
             demand = self.service.warm_park_demand()
             # The thaw's bounded prefetch now; faults bring the rest back.
             self.assertEqual(demand.physical_bytes, pause_tier.PREFETCH_MAX_BYTES)
             # Swapped tmpfs blocks stay allocated: no RAM-backing debt.
             self.assertEqual(demand.ram_backing_bytes, 0)
             # Without swap the same runtime owes its way back to the peak.
-            self.service._resident_memory._samples[('one', 7)] = self.sample(current=1 << 29, peak=7 << 29)
+            self.observe(('one', 7), self.sample(current=1 << 29, peak=7 << 29))
             self.assertEqual(self.service.warm_park_demand().physical_bytes, 3 << 30)
 
     def test_continuation_forecasts_physical_growth_to_its_demonstrated_peak(self):
@@ -335,8 +341,8 @@ class ManagedGrowthTests(unittest.TestCase):
             self.service.start_managed_process('one', self.spec)
             self.service.observe_managed_wait('one', 7, 'wait-1')
             self.service.admit_managed_continuation('one', 7, 'wait-1')
-            self.service._resident_memory._samples[('one', 7)] = self.sample(
-                current=1 << 30, peak=3 << 29)
+            self.observe(('one', 7), self.sample(
+                current=1 << 30, peak=3 << 29))
             demand = self.service.warm_park_demand()
             # Both projections expect a return to the 1.5 GiB peak, not the
             # whole 4 GiB bound.
@@ -344,17 +350,22 @@ class ManagedGrowthTests(unittest.TestCase):
             self.assertEqual(demand.ram_backing_bytes, 1 << 29)
             # A launch has no safe wait yet and keeps its whole bound.
             self.service.start_managed_process('two', self.spec)
-            self.service._resident_memory._samples[('two', 7)] = self.sample(
-                current=1 << 30, peak=3 << 29)
+            self.observe(('two', 7), self.sample(
+                current=1 << 30, peak=3 << 29))
             demand = self.service.warm_park_demand()
             self.assertEqual(demand.physical_bytes, (1 << 29) + (3 << 30))
             self.assertEqual(demand.ram_backing_bytes, (1 << 29) + (3 << 30))
 
     def test_growth_credit_survives_a_slow_refresh_pass(self):
         self.service.start_managed_process('one', self.spec)
-        self.service._resident_memory._samples[('one', 7)] = self.sample(current=3 << 30, age=10)
+        self.observe(('one', 7), self.sample(current=3 << 30, age=10))
         self.assertEqual(self.service.warm_park_demand().physical_bytes, 1 << 30)
-        self.service._resident_memory._samples[('one', 7)] = self.sample(current=3 << 30, age=40)
+        self.observe(('one', 7), self.sample(current=3 << 30, age=40))
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+        # Cached forecasts drop a credited sample as it ages out, pass or not.
+        self.observe(('one', 7), self.sample(current=3 << 30, age=29.9))
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 1 << 30)
+        time.sleep(0.2)
         self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
 
     def test_terminal_and_delete_release_only_matching_primary_generation(self):
@@ -376,11 +387,11 @@ class ManagedGrowthTests(unittest.TestCase):
         with patch.object(self.service.warden, 'application_memory_mode', return_value='file'):
             self.service.admit_managed_continuation('one', 7, 'file-wait')
             for resident in (3 << 30, 64 << 20, 0):
-                self.service._resident_memory._samples[('one', 7)] = ResidentMemorySample(
+                self.observe(('one', 7), ResidentMemorySample(
                     current_bytes=resident, anonymous_bytes=0, file_bytes=resident,
                     dirty_bytes=0, writeback_bytes=0, refault_file_pages=0,
                     cgroup_path='/owned', cgroup_device=1, cgroup_inode=2,
-                    sentry_pid=10, sentry_start_time_ticks=20, sampled_at=time.monotonic())
+                    sentry_pid=10, sentry_start_time_ticks=20, sampled_at=time.monotonic()))
                 demand = self.service.warm_park_demand()
                 self.assertEqual((demand.physical_bytes, demand.ram_backing_bytes), (0, 0))
                 self.assertEqual(self.service.resident_demand_snapshot()['unknown_transition_memory_costs'], 1)

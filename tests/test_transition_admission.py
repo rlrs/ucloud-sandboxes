@@ -75,6 +75,29 @@ class TransitionLedgerTests(unittest.TestCase):
         self.assertEqual(ledger.projected_memory_bytes(("new", 1), start), 1024 + 4096 + 4096 + 2048)
         ledger.release(claim)
 
+    def test_running_growth_totals_match_a_full_recount(self):
+        import random
+        rng, ledger, owners = random.Random(7), TransitionLedger(), [("s", i) for i in range(6)]
+        values = (None, 0, 512, 1024, 4096)
+        cost = lambda: TransitionCost(rng.choice(list(TransitionKind)), rng.choice(values),
+                                      ram_backing_bytes=rng.choice(values))
+        claims, forecasts = [], {}
+        for _ in range(400):
+            owner, step = rng.choice(owners), rng.random()
+            if step < 0.4:
+                forecasts[owner] = rng.choice([None, cost()])
+                ledger.set_growth_forecast(owner, forecasts[owner])
+            elif step < 0.7 or not claims:
+                claims.append(ledger.claim(owner, cost()))
+            else:
+                ledger.release(claims.pop(rng.randrange(len(claims))))
+            for resource in ("memory_bytes", "ram_backing_bytes"):
+                peaks = {}
+                for item in [*((o, c) for o, c in forecasts.items() if c), *((c.owner, c.cost) for c in claims)]:
+                    if getattr(item[1], resource) is not None:
+                        peaks[item[0]] = max(peaks.get(item[0], 0), getattr(item[1], resource))
+                self.assertEqual(ledger._total(resource), sum(peaks.values()))
+
     def test_unknown_cost_and_exact_token_lifetime(self):
         ledger = TransitionLedger()
         cost = TransitionCost(TransitionKind.PUBLICATION, None)

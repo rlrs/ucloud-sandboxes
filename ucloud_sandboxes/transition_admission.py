@@ -10,6 +10,9 @@ from enum import Enum
 from .models import ResourceQuantity
 
 
+_RESOURCES = ("memory_bytes", "ram_backing_bytes")
+
+
 class TransitionKind(str, Enum):
     STARTUP = "startup"
     RESTORE = "restore"
@@ -62,6 +65,10 @@ class TransitionLedger:
         self._claims: dict[int, TransitionClaim] = {}
         self._waiting: dict[int, TransitionClaim] = {}
         self._growth: dict[tuple[str, int], TransitionCost] = {}
+        # Running sums over the forecasts: a projection costs O(in-flight
+        # claims), not O(sandboxes on the node), under the admission guard.
+        self._growth_totals = dict.fromkeys(_RESOURCES, 0)
+        self._growth_unknown = 0
 
     def wait(self, owner, cost):
         self._next += 1
@@ -98,30 +105,44 @@ class TransitionLedger:
             if item.requested is not None
         }
 
-    def set_growth_forecasts(self, forecasts):
-        """Residual primary-process growth; durable ownership stays in registry."""
-        self._growth = dict(forecasts)
+    def set_growth_forecast(self, owner, cost):
+        """One owner's residual primary-process growth; None forgets it.
 
-    def _memory_by_owner(self, resource="memory_bytes"):
-        owners = {owner: getattr(cost, resource) for owner, cost in self._growth.items()
-                  if getattr(cost, resource) is not None}
-        for claim in self._claims.values():
-            value = getattr(claim.cost, resource)
-            if value is not None:
-                owners[claim.owner] = max(
-                    owners.get(claim.owner, 0), value
-                )
-        return owners
+        Durable ownership stays in the registry.
+        """
+        previous = self._growth.pop(owner, None)
+        for sign, item in ((-1, previous), (1, cost)):
+            if item is not None:
+                for resource in _RESOURCES:
+                    self._growth_totals[resource] += sign * (getattr(item, resource) or 0)
+                self._growth_unknown += sign * (item.memory_bytes is None)
+        if cost is not None:
+            self._growth[owner] = cost
+
+    def set_growth_forecasts(self, forecasts):
+        for owner in list(self._growth):
+            self.set_growth_forecast(owner, None)
+        for owner, cost in forecasts.items():
+            self.set_growth_forecast(owner, cost)
+
+    def _total(self, resource="memory_bytes", extra=()):
+        """Sum over owners of the largest of its forecast, claims and ``extra``."""
+        peaks = {}
+        for owner, value in [*((item.owner, getattr(item.cost, resource)) for item in self._claims.values()), *extra]:
+            if value is not None and value > peaks.get(owner, 0):
+                peaks[owner] = value
+        total = self._growth_totals[resource]
+        for owner, value in peaks.items():
+            forecast = self._growth.get(owner)
+            total += max(0, value - ((getattr(forecast, resource) or 0) if forecast is not None else 0))
+        return total
 
     @property
     def known_memory_bytes(self):
-        return sum(self._memory_by_owner().values())
+        return self._total()
 
     def projected_memory_bytes(self, owner, cost, *, resource="memory_bytes"):
-        owners = self._memory_by_owner(resource)
-        value = getattr(cost, resource)
-        if value is not None:
-            owners[owner] = max(owners.get(owner, 0), value)
+        extra = [(owner, getattr(cost, resource))]
         if cost.kind == TransitionKind.STARTUP:
             # Rollouts already running come first (DSec): a new sandbox may
             # spend only the headroom that every queued continuation and
@@ -129,12 +150,8 @@ class TransitionLedger:
             # slip in while later waking owners wait, and a timed-out wake
             # re-queues behind them. This reserves no execution slot: all may
             # proceed at once when their combined cost fits.
-            for pending in self._pending(TransitionKind.RESTORE):
-                if getattr(pending.cost, resource) is not None:
-                    owners[pending.owner] = max(
-                        owners.get(pending.owner, 0), getattr(pending.cost, resource)
-                    )
-        return sum(owners.values())
+            extra += [(item.owner, getattr(item.cost, resource)) for item in self._pending(TransitionKind.RESTORE)]
+        return self._total(resource, extra)
 
     def _pending(self, kind):
         active = {
@@ -166,22 +183,16 @@ class TransitionLedger:
         still grant every operation that fits; each grant updates these claims
         before another decision. Existing continuations precede new launches.
         """
-        owners = self._memory_by_owner(resource)
         for kind in (TransitionKind.RESTORE, TransitionKind.STARTUP):
             item = self._next_pending(kind, limits.get(kind, 0))
             if item is not None:
-                value = getattr(item.cost, resource)
-                if value is not None:
-                    owners[item.owner] = max(
-                        owners.get(item.owner, 0), value
-                    )
-                break
-        return sum(owners.values())
+                return self._total(resource, [(item.owner, getattr(item.cost, resource))])
+        return self._total(resource)
 
     def demand_snapshot(self, limits):
         admitted = self.known_memory_bytes
         unknown = sum(item.cost.memory_bytes is None for item in self._claims.values())
-        unknown += sum(cost.memory_bytes is None for cost in self._growth.values())
+        unknown += self._growth_unknown
         unknown += sum(
             item.cost.memory_bytes is None
             for kind in limits for item in self._pending(kind)
@@ -190,9 +201,9 @@ class TransitionLedger:
             "admitted_demand_bytes": admitted,
             "pending_demand_bytes": max(0, self.next_memory_demands(limits) - admitted),
             "unknown_transition_memory_costs": unknown,
-            "admitted_ram_backing_bytes": sum(self._memory_by_owner("ram_backing_bytes").values()),
+            "admitted_ram_backing_bytes": self._total("ram_backing_bytes"),
             "pending_ram_backing_bytes": max(0, self.next_memory_demands(limits, resource="ram_backing_bytes")
-                                             - sum(self._memory_by_owner("ram_backing_bytes").values())),
+                                             - self._total("ram_backing_bytes")),
         }
 
     def snapshot(self):

@@ -90,6 +90,7 @@ _FILE_ADMISSION_RETRY_WINDOW_SECONDS = 5.0
 _MANAGED_CONTROL_DEADLINE_SECONDS = 15.0
 # Growth credit may use an observation this old; see _growth_sample.
 _GROWTH_OBSERVATION_MAX_AGE_SECONDS = 30.0
+_FETCH = object()  # _growth_sample: look the owner's sample up
 # A just-parked sandbox may still stream its memory file to the Registry under
 # a shared read lease. Delete commits phase deleting first; the publisher sees
 # that at its next chunk, but only while the lifecycle lock is free.
@@ -373,6 +374,9 @@ class DirectSandboxService:
         # Admitted growth whose durable commit is still in flight: charged to
         # the ledger exactly like an active intent until the commit settles.
         self._provisional_growth: dict[tuple[str, int], TransitionCost] = {}
+        # When the oldest sample a cached forecast credits ages out (see
+        # _current_growth_forecasts_locked).
+        self._growth_credit_expires = float("-inf")
         self._growth_turns: dict[tuple[str, int], list] = {}
         self._growth_turns_guard = threading.Lock()
 
@@ -1717,19 +1721,19 @@ class DirectSandboxService:
         self._observe_managed_terminal(result)
         return result
 
-    def _growth_sample(self, owner):
+    def _growth_sample(self, owner, sample=_FETCH):
         # Park and restore forget samples, so any sample is this runtime's.
         # Headroom is sampled fresh: growth since the sample is double-charged
         # (conservative) and release is bounded by the age fence. The 2.5 s
         # live fence made every sandbox look empty whenever one refresh pass
         # over a dense node took longer, charging each its whole memory bound.
-        sample = self._resident_memory.historical(owner)
+        sample = self._resident_memory.historical(owner) if sample is _FETCH else sample
         if sample is None or time.monotonic() - sample.sampled_at > _GROWTH_OBSERVATION_MAX_AGE_SECONDS:
             return None
         return sample
 
-    def _growth_remaining(self, owner, bound):
-        sample = self._growth_sample(owner)
+    def _growth_remaining(self, owner, bound, sample=_FETCH):
+        sample = self._growth_sample(owner, sample)
         # Credit only observed resident pages. On RAM backing shmem is the
         # common charge shared by physical memory and tmpfs capacity;
         # filesystem page cache cannot buy future tmpfs allocation space.
@@ -1739,7 +1743,7 @@ class DirectSandboxService:
             else sample.current_bytes)
         return max(0, bound - observed)
 
-    def _continuation_growth(self, owner, bound):
+    def _continuation_growth(self, owner, bound, sample=_FETCH):
         """(physical, RAM-backing) growth a continuation needs: back to its peak.
 
         The memory bound is a maximum, not a reservation. After a safe wait the
@@ -1749,9 +1753,9 @@ class DirectSandboxService:
         grows past its peak while RAM backing is nearly full can SIGBUS before
         pressure parking frees space. Launches keep the full bound.
         """
-        sample = self._growth_sample(owner)
+        sample = self._growth_sample(owner, sample)
         if sample is None or not sample.peak_bytes:
-            remaining = self._growth_remaining(owner, bound)
+            remaining = self._growth_remaining(owner, bound, sample)
             return remaining, remaining
         ceiling = min(bound, sample.peak_bytes)
         shared = min(sample.current_bytes, sample.shared_memory_bytes)
@@ -1776,7 +1780,7 @@ class DirectSandboxService:
             **kwargs,
         )
 
-    def _growth_cost(self, owner, bound, *, kind=TransitionKind.RESTORE, request_id=""):
+    def _growth_cost(self, owner, bound, *, kind=TransitionKind.RESTORE, request_id="", sample=_FETCH):
         file_backed = self.warden.application_memory_mode(*owner) == "file"
         # After a safe wait, file-backed application pages can be evicted and
         # refaulted. They are not permanent unswappable growth debt. Private
@@ -1787,21 +1791,39 @@ class DirectSandboxService:
                 provenance="reclaimable-file-growth")
         if not request_id:
             # Launches keep the whole bound until their first safe wait.
-            return self._transition_memory_cost(kind, owner, self._growth_remaining(owner, bound),
+            return self._transition_memory_cost(kind, owner, self._growth_remaining(owner, bound, sample),
                 provenance="primary-process-growth-forecast")
-        physical, ram_backing = self._continuation_growth(owner, bound)
+        physical, ram_backing = self._continuation_growth(owner, bound, sample)
         return self._transition_memory_cost(kind, owner, physical,
             ram_backing_bytes=ram_backing,
             provenance="primary-process-growth-forecast")
 
+    def _update_growth_forecast_locked(self, key):
+        """Recompute one owner's forecast after its intent changed."""
+        item, cost = self._growth_intents.get(key), self._provisional_growth.get(key)
+        if item is not None and item.phase == "active":
+            sample = self._growth_sample(key)
+            cost = self._growth_cost(key, item.memory_bytes, request_id=item.request_id, sample=sample)
+            if sample is not None:
+                self._growth_credit_expires = min(
+                    self._growth_credit_expires, sample.sampled_at + _GROWTH_OBSERVATION_MAX_AGE_SECONDS)
+        self._transitions.set_growth_forecast(key, cost)
+
     def _refresh_growth_forecasts_locked(self):
-        forecasts = {
-            key: self._growth_cost(key, item.memory_bytes, request_id=item.request_id)
-            for key, item in self._growth_intents.items() if item.phase == "active"
-        }
-        for key, cost in self._provisional_growth.items():
-            forecasts.setdefault(key, cost)
-        self._transitions.set_growth_forecasts(forecasts)
+        """Recompute every forecast: once per sampler pass, not per admission.
+
+        Recomputing every owner inside each admission was O(sandboxes) under
+        the node-wide guard, about a fifth of the agent's GIL in a 1,024 burst.
+        """
+        self._growth_credit_expires = float("inf")
+        self._transitions.set_growth_forecasts({})
+        for key in self._growth_intents.keys() | self._provisional_growth.keys():
+            self._update_growth_forecast_locked(key)
+
+    def _current_growth_forecasts_locked(self):
+        """What a full refresh would charge now: one only once credit ages out."""
+        if time.monotonic() > self._growth_credit_expires:
+            self._refresh_growth_forecasts_locked()
 
     @contextmanager
     def _growth_turn(self, key):
@@ -1835,7 +1857,7 @@ class DirectSandboxService:
             with self._capacity_guard:
                 if intent is not None:
                     self._growth_intents[key] = intent
-                self._refresh_growth_forecasts_locked()
+                self._update_growth_forecast_locked(key)
                 self._admission_changed.notify_all()
             return intent
 
@@ -1844,7 +1866,7 @@ class DirectSandboxService:
         with self._growth_turn(key), self._capacity_guard:
             self._growth_intents.pop(key, None)
             self._provisional_growth.pop(key, None)
-            self._refresh_growth_forecasts_locked()
+            self._update_growth_forecast_locked(key)
             self._admission_changed.notify_all()
 
     def _observe_managed_park(self, registration):
@@ -1955,7 +1977,7 @@ class DirectSandboxService:
                 # concurrent admission cannot spend the same headroom while
                 # this commit fsyncs outside the node-wide lock.
                 self._provisional_growth[key] = current_cost()
-                self._refresh_growth_forecasts_locked()
+                self._update_growth_forecast_locked(key)
             try:
                 job_id, launch_sha256 = launch
                 return self._record_growth_intent(
@@ -1964,7 +1986,7 @@ class DirectSandboxService:
             finally:
                 with self._capacity_guard:
                     self._provisional_growth.pop(key, None)
-                    self._refresh_growth_forecasts_locked()
+                    self._update_growth_forecast_locked(key)
                     self._admission_changed.notify_all()
 
     @staticmethod
@@ -2186,7 +2208,7 @@ class DirectSandboxService:
         with self._capacity_guard:
             for stale in self._growth_intents.keys() - registrations.keys():
                 self._growth_intents.pop(stale, None)
-            self._refresh_growth_forecasts_locked()
+                self._update_growth_forecast_locked(stale)
         keys = (
             set(keys)
             if keys is not None
@@ -2208,6 +2230,8 @@ class DirectSandboxService:
             registration = registrations.get(key)
             if registration is not None and registration.phase == "owned":
                 self._sample_resident(key, registration.to_direct_sandbox())
+        with self._capacity_guard:
+            self._refresh_growth_forecasts_locked()  # Credit this pass's samples.
 
     def _sample_resident(self, key, sandbox):
         lifecycle = self.warden.inspect_snapshot(sandbox)
@@ -2607,7 +2631,7 @@ class DirectSandboxService:
         with self._capacity_guard:
             if not self._admission_open:
                 return MemoryDemand(1 << 63, 1 << 63)
-            self._refresh_growth_forecasts_locked()
+            self._current_growth_forecasts_locked()
             limits = {
                 TransitionKind.STARTUP: self._startup_slots.capacity,
                 TransitionKind.RESTORE: self._restore_slots.capacity,
@@ -2620,7 +2644,7 @@ class DirectSandboxService:
     def resident_demand_snapshot(self):
         """Observed ledger costs, never another resource reservation."""
         with self._capacity_guard:
-            self._refresh_growth_forecasts_locked()
+            self._current_growth_forecasts_locked()
             return self._transitions.demand_snapshot({
                 TransitionKind.STARTUP: self._startup_slots.capacity,
                 TransitionKind.RESTORE: self._restore_slots.capacity,
@@ -2831,7 +2855,7 @@ class DirectSandboxService:
                     # allocates; preserve the existing physical 2 GiB floor.
                     headroom = (max(0, metrics.memory_available_mb - 2048) * 1024 ** 2
                                 if metrics.memory_total_mb > 0 else 0)
-                    self._refresh_growth_forecasts_locked()
+                    self._current_growth_forecasts_locked()
                     if transition_cost_provider is not None:
                         self._transitions.refresh_wait_cost(transition_owner, transition_cost)
                     projected = self._transitions.projected_memory_bytes(transition_owner, transition_cost)

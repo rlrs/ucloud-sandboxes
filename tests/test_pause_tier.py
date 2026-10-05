@@ -1060,8 +1060,12 @@ class PauseNodeRuntimeTests(unittest.TestCase):
         service.admission_open = False
         runtime._reclaim_paused_tick()
         service.reclaim_paused.assert_not_called()
-        service.admission_open = True  # The same demand from open admission is real.
-        runtime._reclaim_paused_tick()
+        service.admission_open = True  # The same demand from open admission is real,
+        service.warden.paused.update({("agent2", 1), ("agent3", 1)})
+        runtime._reclaim_paused_tick()  # but only forecasts: a burst gets 1 s to settle,
+        service.reclaim_paused.assert_not_called()
+        runtime._paused_forecast_since -= 1.0
+        runtime._reclaim_paused_tick()  # then waits are released one at a time.
         runtime._relay_park_executor.shutdown(wait=True)
         service.reclaim_paused.assert_called_once()
 

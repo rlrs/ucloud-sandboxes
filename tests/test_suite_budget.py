@@ -103,7 +103,8 @@ from tests.test_package_budget import package_lines
 # +2 the package budget's notes.
 # +5 nbd's options precede init's module loads; +1 the package budget's note.
 # +22 private-network bootstrap and launch-slot tests; +2 budget notes.
-SUITE_LINE_BUDGET = 99_601
+# +4 forecast-only paused reclaim settles first; +2 budget notes.
+SUITE_LINE_BUDGET = 99_607
 SUITE = Path(__file__).resolve().parent
 
 

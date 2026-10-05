@@ -305,6 +305,7 @@ class DirectNodeRuntime:
         # C1.1: disposable pause scheduling metadata; Warden markers are the
         # truth. With the flag on it replaces WarmParkPolicy's park role.
         self._paused = {} if getattr(warden_config, "pause_tier", False) else None
+        self._paused_forecast_since: float | None = None
         self._reclaim_budget = ReclaimBudget() if self._paused is not None else None
         self._warm_parks = WarmParkPolicy(
             PressureSampler(memory_backing_root=memory_backing_root).sample,
@@ -497,7 +498,19 @@ class DirectNodeRuntime:
                   else MemoryDemand())
         pressure = self._warm_parks.pressure()
         decision = decide_resident_wait(pressure, demand)
-        if not decision.reclaim or not waits:
+        # Growth forecasts are guarantees, not allocated pages. As warm parking
+        # does, give a burst one second to settle into safe waits and then
+        # release one wait at a time; only measured pressure reclaims in
+        # parallel. Swapping paused waits out for forecasts alone made their
+        # thaws prefetch (0.76 s each) with most RAM free.
+        forecast_only = decision.reclaim and not decide_resident_wait(pressure, MemoryDemand()).reclaim
+        now = time.monotonic()
+        if not forecast_only:
+            self._paused_forecast_since = None
+        elif self._paused_forecast_since is None:
+            self._paused_forecast_since = now
+        if not decision.reclaim or not waits or (
+                forecast_only and now - self._paused_forecast_since < 1.0):
             return
         for key, wait in waits:  # Sampled each second by refresh_resident_memory.
             sample = self.service.resident_memory_sample(*key)
@@ -510,7 +523,8 @@ class DirectNodeRuntime:
                 decision, self._paused, now=time.monotonic(), swap_room=swap_room_bytes(pressure))
             reclaiming = sum(bool(wait.reclaiming) for wait in self._paused.values())
             escalating = sum(wait.escalating for wait in self._paused.values())
-            for key, target in reclaims[:max(0, self._reclaim_budget.concurrency - reclaiming)]:
+            concurrency = 1 if forecast_only else self._reclaim_budget.concurrency
+            for key, target in reclaims[:max(0, concurrency - reclaiming)]:
                 self._paused[key].reclaiming = target
                 self._park_executor().submit(self._reclaim_paused, key, target)
             for key in escalations[:max(0, ESCALATION_CONCURRENCY - escalating)]:

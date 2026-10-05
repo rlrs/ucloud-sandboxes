@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.34 - 2026-10-05 (gateway, workers and builders)
+
+- **UCloud workers are bootstrapped over the private network.** A worker that shares the control plane's private network is reached as `ssh ucloud@<hostname>` there. UCloud's public SSH proxy, announced in the job's status, is the fallback. In a 1,024-rollout rehearsal the proxy reset and refused a fresh worker for minutes while its private address answered at once, so the first wave ran on one worker.
+- **A managed launch no longer takes a startup slot.** Launching the primary process of a running sandbox queued FIFO behind cold creates for the node's 8 startup slots. In the burst, 315 agent starts waited out the 30 s deadline behind hundreds of creates until the client gave up. The launch's memory guard still bounds it.
+
 ## 0.9.33 - 2026-10-05 (workers and builders; gateway only carries the release)
 
 - **The node bundles' kernel module closure carries `erofs`, `nbd`, `nft_log` and `nfnetlink_log`**, the modules 0.9.32's init loads. Init requires the bundle's load list to equal `RUNTIME_KERNEL_MODULES`, and the 0.9.32 repacks kept the 0.9.6 list, so every 0.9.32 worker and builder stopped at "bundled kernel module load list does not match this runtime". (0.9.32's note that the host's modules would do was wrong.) The four files come from `linux-modules-7.0.0-30-generic` 7.0.0-30.30, the build whose other 25 files the bundle already pins, byte for byte.

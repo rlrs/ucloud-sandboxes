@@ -1059,11 +1059,10 @@ class DirectNetworkManager:
 
     @staticmethod
     def _interface_present(name: str) -> bool:
-        try:
-            socket.if_nametoindex(name)
-        except OSError:
-            return False
-        return True
+        # Not if_nametoindex: for a missing name the kernel's SIOCGIFINDEX runs
+        # request_module("netdev-<name>") and request_module("<name>") as root,
+        # two modprobe execs per pool refill, with the GIL held throughout.
+        return "/" not in name and os.path.lexists(f"/sys/class/net/{name}")
 
     def _lease(
         self,

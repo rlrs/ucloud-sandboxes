@@ -14,6 +14,12 @@ from ucloud_sandboxes.direct_network import (
 
 
 class DirectNetworkManagerTests(unittest.TestCase):
+    def test_interface_presence_never_asks_the_kernel_to_load_a_module(self):
+        with patch("socket.if_nametoindex", side_effect=AssertionError("SIOCGIFINDEX autoloads")):
+            self.assertTrue(DirectNetworkManager._interface_present("lo"))
+            self.assertFalse(DirectNetworkManager._interface_present("ucsb-absent0"))
+            self.assertFalse(DirectNetworkManager._interface_present("../lo"))
+
     def manager(self, root: Path) -> DirectNetworkManager:
         return DirectNetworkManager(
             root / "network-slots.json",

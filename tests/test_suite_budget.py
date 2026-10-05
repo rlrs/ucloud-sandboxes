@@ -109,7 +109,8 @@ from tests.test_package_budget import package_lines
 # +18 registry-lease owners do not wait for each other; +2 budget notes.
 # +33 forecast caching: running totals recount, credit ageing, sampler publishing; +2 notes.
 # +11 soft-drain selection waits for creates to stop; +2 notes.
-SUITE_LINE_BUDGET = 99_716
+# +6 interface presence never autoloads a module; +2 notes.
+SUITE_LINE_BUDGET = 99_724
 SUITE = Path(__file__).resolve().parent
 
 

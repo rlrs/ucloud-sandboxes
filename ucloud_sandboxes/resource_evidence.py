@@ -277,6 +277,10 @@ def read_leaf_disks(
             continue
         device = sys / "dev/block" / f"{parts[0]}:{parts[1]}"
         try:
+            # A worker lists 1,024 nbd devices plus ublk and loop ones, every
+            # second: one readlink rejects them before pathlib's resolve.
+            if "virtual" in os.readlink(device).split("/"):
+                continue
             resolved = device.resolve(strict=True)
             if (resolved / "partition").exists() or "virtual" in resolved.parts:
                 continue

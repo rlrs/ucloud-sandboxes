@@ -1,5 +1,6 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -9,7 +10,8 @@ from ucloud_sandboxes.environment_artifact import OCI_IMAGE, attach_environment_
 from ucloud_sandboxes.environment_dependencies import EnvironmentDependencyResolver
 from ucloud_sandboxes.environment_manifest import EnvironmentManifest
 
-from ucloud_sandboxes.gateway.registry_refs import _persist_registry_image_protection, _release_registry_reference_keys
+from ucloud_sandboxes.gateway.registry_refs import (
+    _persist_registry_image_protection, _registry_lease_coordination, _release_registry_reference_keys)
 from ucloud_sandboxes.managed_registry import RegistryUsageStore, digest_protection_tag
 
 
@@ -53,6 +55,22 @@ class EnvironmentDependencyTests(unittest.TestCase):
                                                dependency_resolver=resolver)
             self.assertEqual(tuple(ensured), references)
 
+    def test_owners_do_not_wait_for_each_other(self):
+        # One host-wide key serialized every create's lease I/O on the gateway.
+        with TemporaryDirectory() as temporary:
+            store = RegistryUsageStore(Path(temporary) / "usage.sqlite")
+            image = "registry.example/source:latest@sha256:" + "1" * 64
+            persist = lambda owner: threading.Thread(target=_persist_registry_image_protection,
+                args=(store, image, owner), kwargs={"touch": True, "persistent": True})
+            with _registry_lease_coordination("first-owner"):
+                other, same = persist("second-owner"), persist("first-owner")
+                other.start(), same.start()
+                other.join(10)
+                same.join(0.2)
+                self.assertEqual((other.is_alive(), same.is_alive()), (False, True))
+            same.join(10)
+            self.assertIsNotNone(store.get_lease("source", "latest", "second-owner"))
+            self.assertIsNotNone(store.get_lease("source", "latest", "first-owner"))
 
 if __name__ == "__main__":
     unittest.main()

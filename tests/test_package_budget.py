@@ -166,8 +166,9 @@ import unittest
 # +14 paused waits are swapped out for forecasts only after a 1 s settle, one at a time.
 # +34 local model waits suspend and resume growth forecasts (and a module logger).
 # +21 that bookkeeping is queued off the pause and thaw paths.
+# +2 the gateway's registry-lease lock is per owner, not one host-wide key.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 116_532
+PACKAGE_LINE_BUDGET = 116_534
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

@@ -162,7 +162,7 @@ class RegistryReferences:
                               for ref in snapshot.references]
             # Partial acquisition leaks protection conservatively; never release
             # uncertain dependencies before a complete route transition commits.
-            with _registry_lease_coordination():
+            with _registry_lease_coordination(owner):
                 for ref_repository, ref_tag, ref_digest in references:
                     store.acquire_reference(ref_repository, ref_tag, owner, digest=ref_digest)
         except (OSError, TypeError, ValueError) as exc:
@@ -198,13 +198,13 @@ def _portable_snapshot_for_route(route: SandboxRoute) -> StorageNativeMigration:
     return snapshot
 
 
-def _registry_lease_coordination():
-    """The registry-GC fence for multi-step lease and dependency changes.
+def _registry_lease_coordination(owner: str):
+    """One owner's check-then-push-then-lease sequences, across gateway processes.
 
-    Each registry-usage transaction is atomic, but check-then-push-then-lease
-    sequences are not; every gateway process on the host shares this fence.
+    Owners are disjoint, so creates never wait for each other's registry I/O.
+    Prune and OCI release fence through the usage store's ``lease_fence``.
     """
-    return HOST_LOCKS.hold("registry-leases", "")
+    return HOST_LOCKS.hold("registry-leases", owner)
 
 
 def _private_registry_image_coordinates(
@@ -287,6 +287,7 @@ def _persist_registry_image_protection(
     now: Any | None = None,
     ttl_seconds: float = REGISTRY_IMAGE_LEASE_TTL_SECONDS,
     dependency_resolver: Any = None,
+    lease_key: str = "",
 ) -> bool:
     """Persist either a durable reference or a finite transient lease."""
 
@@ -295,7 +296,8 @@ def _persist_registry_image_protection(
         return False
     repository, tag = coordinates
     digest = manifest_digest_from_image_ref(image_ref)
-    with _registry_lease_coordination():
+    lease_key = lease_key or owner  # The primary's lock covers its dependency owner.
+    with _registry_lease_coordination(lease_key):
         # Acquire artifact closure before publishing its primary image owner.
         # Exact persisted dependency-owner rows survive tag/annotation changes;
         # release never has to ask a mutable source what used to be retained.
@@ -308,7 +310,7 @@ def _persist_registry_image_protection(
                 _persist_registry_image_protection(
                     store, f"{registry_host_from_image_ref(image_ref)}/{dependency_repository}:{dependency_tag}@{dependency_digest}",
                     dependency_owner, touch=touch, persistent=persistent, now=now,
-                    ttl_seconds=ttl_seconds,
+                    ttl_seconds=ttl_seconds, lease_key=lease_key,
                 )
         if touch:
             usage_refs = [image_ref]
@@ -476,7 +478,7 @@ def _release_registry_reference_keys(
 ) -> None:
     for repository, tag, owner in sorted(references):
         try:
-            with _registry_lease_coordination():
+            with _registry_lease_coordination(owner):
                 store.release_lease(repository, tag, owner)
                 if owner in image_owners:
                     store.release_owner(owner + ":environment")

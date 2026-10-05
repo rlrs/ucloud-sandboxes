@@ -446,6 +446,34 @@ placement process claims every kind and replays it to its loopback.
 phase 3, which leaves the package about 515 lines lower. P4 then fits with
 almost no headroom.
 
+## Production canary (2026-10-05): `power_of_k` on
+
+Gateway 0.9.23 through 0.9.26, placement switched with `gateway_upgrade_0925.py placement power_of_k`.
+
+| Run (512 rollouts or sandboxes) | Ready p50 / p95 / max (s) |
+| --- | --- |
+| Warm burst, single creates (`bench_rl_scale`) | 10.1 / 17.9 / 19.5, against ranked 19 / 36 / 44 |
+| From zero | 91 / 99 / 100 (mostly provisioning three CCX63) |
+
+**Group create first ran into a placement race.** The overlay charge came after
+the intent's database write, so concurrent choices all saw the same idle worker.
+`pack` put 504 of 512 sandboxes on one of three workers, at p95 27–29 s.
+
+**0.9.26 fixes it.** A choice now holds its worker under a per-process planning
+lock until its own reservation replaces the hold. A paired A/B, 64 × 8 on fresh
+image sets, then gave p95:
+
+| Mode | p95 by run (s) |
+| --- | --- |
+| pack | 17.9, 20.1 |
+| spread | 14.3, 14.6, 17.0 |
+| single creates | 15.0, 19.6, 18.5 |
+
+These are within run-to-run noise. Both group modes still leave one worker
+light, likely because the autoscaler soft-drains it during the idle gaps
+between bursts. verifiers-ucloud keeps `pack`: less attach and fetch work per
+node.
+
 ## Risks
 
 - **Fencing.** Phases 1–3 keep today's generation, operation-id and

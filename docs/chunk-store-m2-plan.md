@@ -807,6 +807,23 @@ signed root and components at attach (LRU-cached) and, with
   locally and a lost gateway is restored from S3, not rebuilt; decide after
   measuring what stays (`registry-gc` dry walk after the build-input release).
 
+**Run (2026-10-05).** The sequence above, with these additions.
+- **Verification.** 8,100 receipts from four CCX63, at about 40 images a minute.
+  Converter-local layer caching took the registry Volume off the critical path,
+  leaving the work CPU-bound.
+- **The first build canary was refused**, correctly: the copy differed from its
+  receipt only in tar owner names, which `nydus-image` takes from the host's
+  `/etc/passwd`. Fixed in 0.9.25 by pinned names. The canary then passed.
+- **OCI released:** 8,125 images.
+- **Further deletions:**
+  - `drop-staged` removed the staged upstream sources (502 GB unique once the
+    managed images went) and the shared-task sources;
+  - `release-originals` removed each released image's untagged pre-annotation
+    manifest. These kept 1.18 TB alive, because the registry API cannot list
+    untagged manifests.
+- **The registry now holds 123 GB** on a 250 GB Volume: park checkpoints,
+  metadata, the build cache, and the images never converted.
+
 ## 6. Gates
 
 | Gate | Measure | When |

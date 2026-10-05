@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.36 - 2026-10-05 (gateway and workers)
+
+- **Local-wait growth bookkeeping is queued off the pause and thaw paths.** 0.9.35 recorded each local wait's forecast inline: a durable registry write under the sandbox's lifecycle lock, on the wait scheduler's threads. In a create burst the registry's one writer is busy. Thaws queued behind those pauses past the relay's 5 s local-wake grace, and 571 of 7,872 answers took about 10 s through the gateway wake (none before 0.9.35). One background thread now records waits and resumes in order.
+
 ## 0.9.35 - 2026-10-05 (gateway and workers)
 
 - **Node-local model waits suspend and resume growth forecasts.** Growth bookkeeping saw only gateway relay parks. Node-local waits, which pause most waits in production, left every agent charged its launch's whole memory bound. A 192 GB worker then stopped admitting launches at about 160 sandboxes with about 160 GB free, and agent starts waited out 30 s deadlines (37 of the 0.9.34 rehearsal's failures). A local-wait pause now records the wait, suspending the forecast, and its thaw records the continuation, forecast back to its demonstrated peak. The thaw itself is not gated.

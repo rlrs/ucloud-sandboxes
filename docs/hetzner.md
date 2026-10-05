@@ -115,8 +115,9 @@ secrets come from `.env`.
 - Runs PostgreSQL 18, a registry on a Hetzner Volume (below), the relay,
   NAT and 6 gateway HTTP processes. Placement and autoscaling run separately.
 - The gateway retains its 160 GB local disk and a registry Volume: since 2026-10-05 the
-  2,000 GB `sandboxes-registry-interim` (the 4 TB one was swept after M2 release and
-  replaced; sized under the 70% cleanup threshold). It goes once the remaining OCI moves off.
+  250 GB `sandboxes-registry-small` (123 GB used). Images live in the chunk store; the
+  registry keeps park checkpoints (split memory backing publishes only there), metadata,
+  the build cache and regenerated build bases.
   The four-core, 16 GB shape was qualified after an actual resize and reboot
   with 512 agent sandboxes, inventory polling and concurrent registry/NAT
   traffic. See the [qualification report](benchmarks/gateway-capacity-2026-09-28/README.md)

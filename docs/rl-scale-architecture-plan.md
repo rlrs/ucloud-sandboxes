@@ -1889,6 +1889,30 @@ worker snapshot, then an autoscaled canary
   4. Converters reap their own leaked NBD devices; nydusd read merging if the
      request rate grows.
 
+### 2026-10-05: the registry Volume released, power-of-k and group create in production
+
+- **M2 is complete for the training corpus** ([chunk-store-m2-plan.md](chunk-store-m2-plan.md) §5.4).
+  - 8,136 images released to the chunk store, 8,125 of their OCI manifests too.
+  - Build inputs are released only with a verified regeneration receipt; 8,100 were verified on four CCX63 converters.
+  - A build naming a released base gets a regenerated copy as a BuildKit named context. Canary: 503 once, then built in 5 s.
+  - **Found by the build canary (0.9.25).** `nydus-image unpack` names tar owners from the host's `/etc/passwd`, so the gateway's regeneration missed the receipt. Regenerations now write the converters' pinned names.
+  - Left out: 5 images that do not convert (tree mismatches, store timeouts), one whose unpack crashes, and 10 leased.
+- **The registry Volume: 4 TB → 2 TB interim → 250 GB.**
+  - The prune and sweep freed 1.8 TB.
+  - `drop-staged` deleted 3,584 staged upstream and shared-task sources.
+  - `release-originals` deleted 8,125 untagged pre-annotation build outputs, which kept 1.18 TB of layers alive.
+  - A registry stays for park checkpoints, which split memory backing publishes only there, and for metadata and the build cache: 123 GB.
+- **Placement (0.9.23–0.9.26, now `power_of_k` in production).**
+  - **Phase 2:** every API process claims and runs creates.
+  - **Fix (0.9.26):** a choice holds its worker in the overlay at once. Before, concurrent group plans all saw the same idle worker, and `pack` put 504 of 512 sandboxes on one of three.
+  - **Warm 512-rollout burst:** ready p50/p95/max 10.1/17.9/19.5 s, against 19/36/44 s ranked. From zero: 91/99/100 s, mostly provisioning.
+  - **Group create:** SDK 0.4.35, and verifiers-ucloud coalesces a task's rollouts into one group (default `pack`).
+  - **Paired A/B, 512 as 64 × 8:** pack, spread and single creates land within run-to-run noise (p95 14–20 s). The remaining imbalance is likely the autoscaler soft-draining a worker between bursts.
+- **Next toward the training gate** (M2 exit with slack; harnesses come from verifiers-ucloud at run time; no SWE-bench Pro):
+  - the exec and upload throughput per node at burst start;
+  - a full-scale rehearsal in relay mode;
+  - operational readiness.
+
 ## Appendix: evidence index
 
 - Image path:

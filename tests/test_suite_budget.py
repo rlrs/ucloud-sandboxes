@@ -110,7 +110,8 @@ from tests.test_package_budget import package_lines
 # +33 forecast caching: running totals recount, credit ageing, sampler publishing; +2 notes.
 # +11 soft-drain selection waits for creates to stop; +2 notes.
 # +6 interface presence never autoloads a module; +2 notes.
-SUITE_LINE_BUDGET = 99_724
+# +17 a queued batch commits together and each item fails alone; +2 notes.
+SUITE_LINE_BUDGET = 99_743
 SUITE = Path(__file__).resolve().parent
 
 

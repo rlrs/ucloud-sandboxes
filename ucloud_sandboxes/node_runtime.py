@@ -310,6 +310,7 @@ class DirectNodeRuntime:
         self._paused = {} if getattr(warden_config, "pause_tier", False) else None
         self._paused_forecast_since: float | None = None
         self._growth_executor: ThreadPoolExecutor | None = None
+        self._growth_queue: list[tuple[str, tuple[str, int], str]] = []
         self._reclaim_budget = ReclaimBudget() if self._paused is not None else None
         self._warm_parks = WarmParkPolicy(
             PressureSampler(memory_backing_root=memory_backing_root).sample,
@@ -452,17 +453,37 @@ class DirectNodeRuntime:
         keeps every sandbox's wait before its resume; a late forecast only
         delays accounting. A lost wait or wake fence must never fail either.
         """
-        def record():
-            try:
-                getattr(self.service, method)(key[0], key[1], request_id)
-            except Exception as exc:  # noqa: BLE001
-                _LOG.warning("local wait growth bookkeeping for %s skipped: %s", key[0], exc)
         with self._relay_parking_guard:
+            self._growth_queue.append((method, key, request_id))
             if self._growth_executor is None:
                 self._growth_executor = ThreadPoolExecutor(
                     max_workers=1, thread_name_prefix="ucloud-local-wait-growth")
             executor = self._growth_executor
-        executor.submit(record)
+        executor.submit(self._record_growth_queue)
+
+    def _record_growth_queue(self) -> None:
+        """Commit everything queued since the last commit, as one batch.
+
+        One commit per item (tens per second per worker) kept the registry's
+        one writer busy in create bursts; a batch grows while it is busy.
+        """
+        with self._relay_parking_guard:
+            items, self._growth_queue = self._growth_queue, []
+        if not items:
+            return
+        def one(method, key, request_id):
+            try:
+                getattr(self.service, method)(key[0], key[1], request_id)
+            except Exception as exc:  # noqa: BLE001
+                return exc
+        batch = getattr(self.service, "record_local_wait_growth", None)
+        try:
+            errors = batch(items) if batch is not None else [one(*item) for item in items]
+        except Exception as exc:  # noqa: BLE001
+            errors = [exc] * len(items)
+        for (_, key, _), error in zip(items, errors):
+            if isinstance(error, Exception):
+                _LOG.warning("local wait growth bookkeeping for %s skipped: %s", key[0], error)
 
     def stop(self) -> None:
         self._background_stop.set()

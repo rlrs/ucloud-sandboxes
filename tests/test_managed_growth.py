@@ -92,6 +92,23 @@ class ManagedGrowthTests(unittest.TestCase):
         intent = self.service._growth_intents[('one', 7)]
         self.assertEqual((intent.phase, intent.request_id), ('active', 'local-wait-a'))
 
+    def test_queued_local_waits_commit_together_and_fail_alone(self):
+        self.available = 16384
+        for sid in ('one', 'two'):
+            self.service.start_managed_process(sid, self.spec)
+        errors = self.service.record_local_wait_growth([
+            ('observe_managed_wait', ('one', 7), 'a'), ('observe_managed_wait', ('two', 7), 'b'),
+            ('resume_managed_continuation', ('one', 7), 'a'),
+            ('observe_managed_wait', ('one', 7), 'a'),  # Its wake fence superseded it.
+            ('observe_managed_wait', ('gone', 7), 'c')])
+        self.assertEqual([type(error).__name__ for error in errors],
+                         ['NoneType', 'NoneType', 'NoneType', 'DirectRegistryConflictError', 'DirectWardenError'])
+        phases = {key[0]: (item.phase, item.request_id) for key, item in self.service._growth_intents.items()}
+        self.assertEqual(phases, {'one': ('active', 'a'), 'two': ('safe', 'b')})
+        self.assertEqual({(item.sandbox_id, item.phase) for item in self.registry.growth_intents()},
+                         {('one', 'active'), ('two', 'safe')})
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+
     def test_memory_blocked_continuation_does_not_occupy_restore_slot(self):
         self.service.start_managed_process('one', self.spec)
         self.service.observe_managed_wait('one', 7, 'request-one')

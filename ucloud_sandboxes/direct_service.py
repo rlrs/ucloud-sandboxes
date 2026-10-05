@@ -1894,6 +1894,34 @@ class DirectSandboxService:
         if registration.spec.managed_process and registration.sandbox_generation == generation:
             self._record_growth_intent((sandbox_id, generation), action="activate", request_id=request_id)
 
+    def record_local_wait_growth(self, items):
+        """Node-local waits and resumes, ``(method, key, request_id)`` in order, as one commit.
+
+        Returns each item's error or None. Turns are taken in key order, never
+        under the capacity guard, as _record_growth_intent takes one.
+        """
+        actions = {"observe_managed_wait": "wait", "resume_managed_continuation": "activate"}
+        operations, errors = [], [None] * len(items)
+        for index, (method, key, request_id) in enumerate(items):
+            registration = self.provisioner.registry.get(key[0])
+            if registration is None or registration.phase != "owned":
+                errors[index] = DirectWardenError("direct sandbox is unavailable")
+            elif registration.spec.managed_process:
+                operations.append((index, (key, actions[method], request_id)))
+        with ExitStack() as turns:
+            for key in sorted({operation[0] for _, operation in operations}):
+                turns.enter_context(self._growth_turn(key))
+            results = self.provisioner.registry.growth_intent_batch([operation for _, operation in operations])
+            with self._capacity_guard:
+                for (index, (key, _, _)), result in zip(operations, results):
+                    if isinstance(result, Exception):
+                        errors[index] = result
+                    elif result is not None:
+                        self._growth_intents[key] = result
+                    self._update_growth_forecast_locked(key)
+                self._admission_changed.notify_all()
+        return errors
+
     def _observe_managed_terminal(self, record):
         if not record.terminal:
             return

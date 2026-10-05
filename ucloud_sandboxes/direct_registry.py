@@ -1321,83 +1321,108 @@ class DirectSandboxRegistry:
         initially have unknown job identity; their existing lifecycle authority
         still fences wait and continuation observations.
         """
+        with self._transaction(write=True) as connection:
+            return self._growth_intent(connection, sandbox_id, generation, action=action,
+                                       job_id=job_id, launch_sha256=launch_sha256, request_id=request_id)
+
+    def growth_intent_batch(self, operations):
+        """(key, action, request_id) transitions as one commit, in order.
+
+        Each item is a result or the exception it raised alone (a SAVEPOINT
+        undoes just that item). Node-local waits and resumes arrive tens per
+        second per worker; one commit each queued them on the one writer.
+        """
+        results = []
+        with self._transaction(write=True) as connection:
+            for (sandbox_id, generation), action, request_id in operations:
+                connection.execute("SAVEPOINT growth")
+                try:
+                    results.append(self._growth_intent(connection, sandbox_id, generation,
+                                                       action=action, request_id=request_id))
+                except (DirectRegistryError, ValueError) as exc:
+                    connection.execute("ROLLBACK TO growth")
+                    results.append(exc)
+                connection.execute("RELEASE growth")
+        return results
+
+    def _growth_intent(self, connection, sandbox_id, generation, *, action, job_id="", launch_sha256="",
+                       request_id=""):
         if action not in {"launch", "bind", "activate", "wait", "park", "terminal"}:
             raise ValueError("invalid growth action")
-        with self._transaction(write=True) as connection:
-            owner = self._require(connection, sandbox_id)
-            if owner.sandbox_generation != generation or owner.phase != "owned":
-                raise DirectRegistryConflictError("growth intent lost incarnation ownership")
-            row = connection.execute("SELECT * FROM managed_growth WHERE sandbox_id=?", (sandbox_id,)).fetchone()
-            intent = ManagedGrowthIntent(*row) if row else None
-            if intent is not None and intent.generation != generation:
-                raise DirectRegistryConflictError("growth intent has stale generation")
-            if action in {"launch", "bind"}:
-                if not job_id or not _DIGEST.fullmatch(launch_sha256):
-                    raise ValueError("invalid managed launch identity")
-                if intent is not None:
-                    if not intent.job_id:
-                        if action == "launch":
-                            return intent  # Imported primary: only supervisor can bind it.
-                        intent = replace(intent, job_id=job_id, launch_sha256=launch_sha256)
-                        connection.execute("INSERT OR REPLACE INTO managed_growth VALUES (?,?,?,?,?,?,?)", tuple(vars(intent).values()))
-                        return intent
-                    if (intent.job_id, intent.launch_sha256) == (job_id, launch_sha256):
-                        return intent
-                    if action == "bind" or intent.phase != "queued":
-                        raise ManagedPrimaryOwnedError(intent.job_id)
-                    # An admission timeout left this launch queued and the SDK's
-                    # next start chose a fresh job id. Nothing reached the
-                    # supervisor; the old caller's activation now fails its fence.
+        owner = self._require(connection, sandbox_id)
+        if owner.sandbox_generation != generation or owner.phase != "owned":
+            raise DirectRegistryConflictError("growth intent lost incarnation ownership")
+        row = connection.execute("SELECT * FROM managed_growth WHERE sandbox_id=?", (sandbox_id,)).fetchone()
+        intent = ManagedGrowthIntent(*row) if row else None
+        if intent is not None and intent.generation != generation:
+            raise DirectRegistryConflictError("growth intent has stale generation")
+        if action in {"launch", "bind"}:
+            if not job_id or not _DIGEST.fullmatch(launch_sha256):
+                raise ValueError("invalid managed launch identity")
+            if intent is not None:
+                if not intent.job_id:
+                    if action == "launch":
+                        return intent  # Imported primary: only supervisor can bind it.
                     intent = replace(intent, job_id=job_id, launch_sha256=launch_sha256)
-                else:
-                    intent = ManagedGrowthIntent(sandbox_id, generation, job_id, launch_sha256,
-                        int(owner.spec.memory_mb * 1024**2), "queued", "")
+                    connection.execute("INSERT OR REPLACE INTO managed_growth VALUES (?,?,?,?,?,?,?)", tuple(vars(intent).values()))
+                    return intent
+                if (intent.job_id, intent.launch_sha256) == (job_id, launch_sha256):
+                    return intent
+                if action == "bind" or intent.phase != "queued":
+                    raise ManagedPrimaryOwnedError(intent.job_id)
+                # An admission timeout left this launch queued and the SDK's
+                # next start chose a fresh job id. Nothing reached the
+                # supervisor; the old caller's activation now fails its fence.
+                intent = replace(intent, job_id=job_id, launch_sha256=launch_sha256)
             else:
-                if action == "terminal":
-                    if intent is None or not job_id or (intent.job_id and intent.job_id != job_id):
-                        return intent
-                    # An imported primary has no local launch identity yet.
-                    # The supervisor's authoritative terminal response still
-                    # proves this generation's sole primary cannot grow again.
-                    intent = replace(intent, phase="terminal")
-                elif action == "park":
-                    # A queued launch has no primary to capture. Parking it
-                    # would let a later wake activate growth never dispatched.
-                    if intent is None or intent.phase in {"terminal", "queued"}:
-                        return intent
-                    intent = replace(intent, phase="parked")
-                elif action == "wait":
-                    if not request_id or connection.execute(
-                        "SELECT 1 FROM relay_wake_fences WHERE sandbox_id=? AND generation=? AND request_id=?",
-                        (sandbox_id, generation, request_id)).fetchone():
-                        raise DirectRegistryConflictError("growth wait was superseded by wake")
-                    if intent is None:
-                        intent = ManagedGrowthIntent(sandbox_id, generation, "", "",
-                            int(owner.spec.memory_mb * 1024**2), "safe", request_id)
-                    elif intent.phase in {"active", "safe", "parked"}:
-                        intent = replace(intent, phase="parked" if intent.phase == "parked" else "safe", request_id=request_id)
-                elif action == "activate":
-                    if intent is None:
-                        intent = ManagedGrowthIntent(sandbox_id, generation, "", "",
-                            int(owner.spec.memory_mb * 1024**2), "active", request_id)
-                    elif intent.phase == "queued":
-                        # Only this launch's own admission charges it. A wake or
-                        # a replaced launch's late admission leaves it queued.
-                        if (intent.job_id, intent.launch_sha256) == (job_id, launch_sha256):
-                            intent = replace(intent, phase="active", request_id=request_id)
-                    elif intent.phase == "parked" or (
-                        intent.phase == "safe" and (not intent.request_id or intent.request_id == request_id)):
+                intent = ManagedGrowthIntent(sandbox_id, generation, job_id, launch_sha256,
+                    int(owner.spec.memory_mb * 1024**2), "queued", "")
+        else:
+            if action == "terminal":
+                if intent is None or not job_id or (intent.job_id and intent.job_id != job_id):
+                    return intent
+                # An imported primary has no local launch identity yet.
+                # The supervisor's authoritative terminal response still
+                # proves this generation's sole primary cannot grow again.
+                intent = replace(intent, phase="terminal")
+            elif action == "park":
+                # A queued launch has no primary to capture. Parking it
+                # would let a later wake activate growth never dispatched.
+                if intent is None or intent.phase in {"terminal", "queued"}:
+                    return intent
+                intent = replace(intent, phase="parked")
+            elif action == "wait":
+                if not request_id or connection.execute(
+                    "SELECT 1 FROM relay_wake_fences WHERE sandbox_id=? AND generation=? AND request_id=?",
+                    (sandbox_id, generation, request_id)).fetchone():
+                    raise DirectRegistryConflictError("growth wait was superseded by wake")
+                if intent is None:
+                    intent = ManagedGrowthIntent(sandbox_id, generation, "", "",
+                        int(owner.spec.memory_mb * 1024**2), "safe", request_id)
+                elif intent.phase in {"active", "safe", "parked"}:
+                    intent = replace(intent, phase="parked" if intent.phase == "parked" else "safe", request_id=request_id)
+            elif action == "activate":
+                if intent is None:
+                    intent = ManagedGrowthIntent(sandbox_id, generation, "", "",
+                        int(owner.spec.memory_mb * 1024**2), "active", request_id)
+                elif intent.phase == "queued":
+                    # Only this launch's own admission charges it. A wake or
+                    # a replaced launch's late admission leaves it queued.
+                    if (intent.job_id, intent.launch_sha256) == (job_id, launch_sha256):
                         intent = replace(intent, phase="active", request_id=request_id)
-            if action == "activate" and request_id:
-                # Admission and revocation of this safe wait are one commit.
-                # Before this commit a queued continuation remains reclaimable;
-                # after it an old park cannot erase the admitted growth claim.
-                connection.execute("INSERT OR IGNORE INTO relay_wake_fences VALUES (?,?,?)",
-                                   (sandbox_id, generation, request_id))
-            encoded = tuple(vars(intent).values())
-            if row != encoded:
-                connection.execute("INSERT OR REPLACE INTO managed_growth VALUES (?,?,?,?,?,?,?)", encoded)
-            return intent
+                elif intent.phase == "parked" or (
+                    intent.phase == "safe" and (not intent.request_id or intent.request_id == request_id)):
+                    intent = replace(intent, phase="active", request_id=request_id)
+        if action == "activate" and request_id:
+            # Admission and revocation of this safe wait are one commit.
+            # Before this commit a queued continuation remains reclaimable;
+            # after it an old park cannot erase the admitted growth claim.
+            connection.execute("INSERT OR IGNORE INTO relay_wake_fences VALUES (?,?,?)",
+                               (sandbox_id, generation, request_id))
+        encoded = tuple(vars(intent).values())
+        if row != encoded:
+            connection.execute("INSERT OR REPLACE INTO managed_growth VALUES (?,?,?,?,?,?,?)", encoded)
+        return intent
 
     def _view(self) -> _RegistryIndex:
         """The owner's index; any other instance reads and validates every row."""

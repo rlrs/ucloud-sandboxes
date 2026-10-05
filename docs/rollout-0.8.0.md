@@ -631,3 +631,45 @@ The findings are in [chunk-store-m2-plan.md](chunk-store-m2-plan.md) §5.2.
   65536, and the canary.
 - **512 bursts after 0.9.6:** 511/512 from zero and 511/512 on a warm fleet.
   The one failure is the catalog gap. env-io peaked at 1217 descriptors.
+
+## Production moves to UCloud: 0.9.31 to 0.9.33 (2026-10-05)
+
+**What moved.**
+- **Gateway:** job 12412561, `cpu-amd-zen5-8-vcpu`, private address 10.36.101.16.
+- **Store node:** job 12412562, with a 2,000 GB disk, at 10.36.103.152.
+- **Workers:** autoscaled on `cpu-amd-zen5-64-vcpu`.
+- **Stayed at Hetzner:** the chunk store's S3 bucket. The store node refilled its replica from it in under 2 hours (331 GB).
+
+**How the state moved.**
+- The Hetzner gateway's state was restored on the new gateway: PostgreSQL 18 from `pg_dump`, plus the state directory, tokens and signing keys.
+- The registry went to `/work/data/ucloud-sandboxes-prod/registry`; all copies were compared byte for byte.
+- The Hetzner autoscaler state stayed behind: deleted servers and 324 stale drain intents.
+- **Registry disk guard off.** `/work/data` is shared and multi-petabyte, so the `registry_disk_*_percent` thresholds are 100 there. Retention is 365 days, keeping 8 per repository.
+
+**Hetzner-only assumptions this exposed.**
+- **Store init's digest check lacked `$SUDO`** (0.9.32). Hetzner init logs in as root.
+- **Releases after 0.9.13 lacked `ucloud-chunk-serve`** (0.9.32 restores it). They repacked the 0.9.6 bundles, which predate it.
+- **The builder bundle lacked erofs-utils** (0.9.32). Hetzner's builder image shipped it.
+- **The gateway's `nydus-image` v2.4.5** had been installed by hand. It was copied over with its pinned digest.
+- **Stored image references named `10.42.0.2:5000`.** `scripts/rehome_registry_host.py` rewrote about 47,000 of them in the gateway databases and PostgreSQL. The training selection's `prepared_reference` values need the same rewrite; the canaries used a rewritten copy. verifiers-ucloud sends source images and is unaffected.
+- **0.9.32 nodes could not initialize.** Its repacked bundles kept the 0.9.6 module load list, which init must match. 0.9.33 adds `erofs`, `nbd`, `nft_log` and `nfnetlink_log` from the pinned kernel build. It also declares nbd's 1024-device pool in modprobe.d, because init now loads nbd before environment bootstrap would.
+- **The upgrade check is strict about the venv.** It compares venv bytes, and the installer's `bin/pip` wrote `python3` shebangs, so the first 0.9.32 apply rolled back by itself. A reinstall through `bin/python -m pip` normalized them.
+
+**Canaries.** All ran through the private address: UCloud's public links answered 449 for every new link, an SDU-side issue reported on 2026-10-05.
+
+| Canary | Result |
+|---|---|
+| 512 warm | 511/512, ready p50/p95/max 9.3/17.5/20 s |
+| 512 from zero | 511/512, 93/102/103 s, including VM provisioning |
+| 512 group | 512/512, 30/44/46 s |
+| Managed-process (32) | exec 308/s at p50 101 ms; archive upload 7,101 files/s |
+| Relay round trip | through an SSH tunnel |
+| Build on a released base | 44.5 s, on a 0.9.33 builder |
+
+- **The one burst failure** is the known catalog gap: `prime/primeintellect/pycqa-pyflakes:374-7c74ab0` is not pullable.
+- **0.9.33 nodes:** sandbox workers show `nbds_max` 1024 and the four modules loaded. Builders have erofs-utils 1.9.1, with `curl` upgraded rather than removed.
+- **Store node:** re-initialized from the 0.9.33 bundle, with `ucloud-chunk-serve` at the pin.
+
+**Hetzner afterwards.**
+- **Deleted:** the gateway server, the 250 GB registry Volume, the primary IP and 11 superseded worker snapshots.
+- **Kept:** the S3 bucket, plus snapshots `439434667` (0.9.6 worker) and `436561313` (builder) as a minimal rollback.

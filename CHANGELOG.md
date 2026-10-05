@@ -3,6 +3,7 @@
 ## 0.9.34 - 2026-10-05 (gateway, workers and builders)
 
 - **UCloud workers are bootstrapped over the private network.** A worker that shares the control plane's private network is reached as `ssh ucloud@<hostname>` there. UCloud's public SSH proxy, announced in the job's status, is the fallback. In a 1,024-rollout rehearsal the proxy reset and refused a fresh worker for minutes while its private address answered at once, so the first wave ran on one worker.
+- **Paused waits are swapped out for growth forecasts only after a 1 s settle, one at a time.** The pause tier's reclaim tick billed growth forecasts (guarantees, not allocated pages) as pressure. In the rehearsal a launch burst's forecasts swapped out 393 paused waits (31.6 GB) on a worker with 155 GB free, and their thaws then prefetched for 0.76 s each, making relay overhead p95 3.0 s. Measured pressure still reclaims in parallel.
 - **A managed launch no longer takes a startup slot.** Launching the primary process of a running sandbox queued FIFO behind cold creates for the node's 8 startup slots. In the burst, 315 agent starts waited out the 30 s deadline behind hundreds of creates until the client gave up. The launch's memory guard still bounds it.
 
 ## 0.9.33 - 2026-10-05 (workers and builders; gateway only carries the release)

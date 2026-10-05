@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.9.23 - 2026-10-05 (gateway and workers)
 
+- **`chunk-migrate drop-staged --kind upstream|shared [--execute]`** deletes the staged upstream sources (`ucloud-upstream`) and shared-task sources (`ucloud-shared-sources`), which nothing reads once their prepared images exist. Each digest's staging leases go first, then its manifest is deleted in the usage store's writer transaction unless any other lease holds it. `release-oci` closes its routing store (no PostgreSQL pool traceback at exit).
+- **The upgrade runs the routing schema's additive migration**, which C3.2 groups need on PostgreSQL (`sandbox_groups`, `sandbox_group_members`, the `group` command kind).
 - **C4.3 phase 2: creates leave the loopback (only with `gateway_create_placement: "power_of_k"`, which is off).** Each API process claims queued creates and groups from `gateway_commands` and runs them on its own handler, from memory instead of a loopback HTTP request, under the same claim token, lease, command fence and 503 requeue. The placement service then claims wakes only. Each API process keeps up to `max(32, ⌈create_target_concurrency_per_node × max_nodes / gateway_processes⌉)` creates in flight: 32 each, 192 in all, in production. Ranked mode is unchanged: API processes claim nothing and the placement service replays every kind to its loopback. The switch is read at process start, so flip it by restarting the gateway and placement units together (a deploy does); see `docs/c43-placement-wiring-plan.md`.
 
 ## 0.9.22 - 2026-10-05 (gateway, workers and builders)

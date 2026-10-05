@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.29 - 2026-10-05 (gateway and workers)
+
+- **A command's running check no longer waits for the sandbox's other exec starts.** It read the lifecycle journal under the warden's per-sandbox fence, which every streaming exec's lease holds until its `runsc exec` child starts (`manager.inspect` p50 331 ms in a 0.9.28 burst). Under the node's shared lifecycle fence no transition is in flight or can start, so it now reads the atomically replaced journal revision and checks the Sentry's identity without the warden fence.
+
 ## 0.9.28 - 2026-10-05 (gateway and workers)
 
 - **A running sandbox's commands and file writes no longer take its request lock.** Exec admission held the per-sandbox lock to inspect the lifecycle journal, so one sandbox's commands queued behind each other's inspections (`lifecycle_ms` p50 612 ms at 128 concurrent execs, about 114 execs/s per node). File writes held it, without waiting, for the whole write, so concurrent writes to one sandbox were refused (`node_startup_busy`): the harness pattern, 40 small files per sandbox at once, ran at 5.6 files/s per node. Both now run under the lifecycle coordinator's shared fence, which already excludes park and delete; the request lock remains for a sandbox that must be reconciled or restored, where it waits instead of refusing for exec. An upload still checks its sandbox generation first and answers a conflict when it was replaced.

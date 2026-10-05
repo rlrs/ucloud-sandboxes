@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.27 - 2026-10-05 (gateway and workers)
+
+- **Delivered exec results free their session slot first.** A node keeps at most 1,024 exec sessions and held each finished one for 30 s, so short commands capped a node near 34 execs/s; the rest answered 503 `node_active_exec_deferred`, which the SDK retried with backoff (20-25 s stalls). A session whose start response carried its final event now goes at once at capacity (a lost start response leaves no session id to ask by); one whose final event an events poll returned goes after a 2 s grace for a re-poll. Other finished sessions keep the 30 s retention.
+- **`chunk-migrate release-originals [--execute]`** deletes an OCI-released image's untagged manifests of the same config (the build output before the environment annotation moved its tags), fenced by leases.
+
 ## 0.9.26 - 2026-10-05 (gateway only)
 
 - **Power-of-k choices hold their workers at once.** A create, and every member of a group, is charged to this process's overlay when it is chosen, under a per-process planning lock with no I/O, until its own reservation (or failure) replaces the hold. Before, the charge came after the intent's database write, so a burst's concurrent choices all saw the same idle-looking worker: in a 64 x 8 group burst, `pack` put 504 of 512 sandboxes on one of three workers.

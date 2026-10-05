@@ -191,6 +191,29 @@ class SandboxExecProtocolTests(unittest.TestCase):
         self.assertIsNone(manager.get(completed.id))
         self.assertIs(manager.get(running.id), running)
 
+    def test_capacity_evicts_delivered_results_first(self) -> None:
+        # 2026-10-05: every short command held its slot for 30 s after its start
+        # response carried the result, capping a node near 1,024 / 30 s.
+        manager = ExecSessionManager(FakeSandboxManager(), max_sessions=3)
+        running = _install_session(manager, BlockingStdin())
+        by_start, by_poll = (_install_session(manager, BlockingStdin()) for _ in range(2))
+        for session in (by_start, by_poll):
+            session.status = "exited"
+            manager._append_stream_chunk(session.id, "stdout", "done")
+            session.final_sequence = session.next_sequence - 1
+        manager.initial_events(by_start.id, wait_seconds=0)  # Lost, it leaves no id to ask by.
+        self.assertEqual(manager.events_after(by_poll.id)[0].data, "done")  # A lost reply is re-polled.
+        with manager._lock:
+            manager._make_session_room_locked()
+        self.assertIsNone(manager.get(by_start.id))
+        self.assertIs(manager.get(by_poll.id), by_poll)
+        replacement = _install_session(manager, BlockingStdin())
+        by_poll.delivered_at -= manager.delivered_grace_seconds
+        with manager._lock:
+            manager._make_session_room_locked()
+        self.assertIsNone(manager.get(by_poll.id))
+        self.assertEqual([manager.get(s.id) for s in (running, replacement)], [running, replacement])
+
     def test_session_capacity_rejection_never_starts_a_process_and_releases_leases(self) -> None:
         sandbox_manager = FakeSandboxManager()
         manager = ExecSessionManager(sandbox_manager, max_sessions=1)

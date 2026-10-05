@@ -155,6 +155,10 @@ class ExecSession:
     output_progress_at: float = field(default_factory=time.monotonic)
     output_closed: bool = False
     final_sequence: int | None = None
+    # Monotonic time a response carried the final event: the session may go
+    # after a short grace (a re-poll after a lost response), at once (0.0)
+    # when it was the start response, whose loss leaves no session id to ask by.
+    delivered_at: float | None = None
     process: subprocess.Popen[str] | None = field(
         default=None, repr=False, compare=False
     )
@@ -190,6 +194,7 @@ class ExecSessionManager:
         max_sessions: int = 1024,
         max_events_per_session: int = 512,
         completed_retention_seconds: float = 30.0,
+        delivered_grace_seconds: float = 2.0,
         output_idle_timeout_seconds: float = 300.0,
         telemetry: Telemetry | None = None,
     ) -> None:
@@ -197,6 +202,7 @@ class ExecSessionManager:
         self.max_sessions = max(1, max_sessions)
         self.max_events_per_session = max(1, max_events_per_session)
         self.completed_retention_seconds = max(0.0, completed_retention_seconds)
+        self.delivered_grace_seconds = max(0.0, delivered_grace_seconds)
         self.output_idle_timeout_seconds = max(0.01, output_idle_timeout_seconds)
         self.telemetry = telemetry or Telemetry.disabled("exec-session-manager")
         self._sessions: dict[str, ExecSession] = {}
@@ -302,7 +308,9 @@ class ExecSessionManager:
                     or session.status in {"exited", "failed"}
                     or wait_seconds <= 0
                 ):
-                    return events[: max(0, limit)]
+                    returned = events[: max(0, limit)]
+                    self._mark_delivered(session, returned, time.monotonic())
+                    return returned
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     return []
@@ -323,10 +331,19 @@ class ExecSessionManager:
                 if remaining <= 0 or session.spec.stdin or session.spec.tty:
                     break
                 session.condition.wait(timeout=remaining)
+            returned = list(session.events)[:100]
+            self._mark_delivered(session, returned, 0.0)
             return {
                 "session": session.to_dict(),
-                "events": [event.to_dict() for event in list(session.events)[:100]],
+                "events": [event.to_dict() for event in returned],
             }
+
+    @staticmethod
+    def _mark_delivered(session: ExecSession, returned: list[ExecEvent], at: float) -> None:
+        """Called under the lock with the events a response will carry."""
+        if (session.final_sequence is not None and returned
+                and returned[-1].sequence >= session.final_sequence and session.delivered_at is None):
+            session.delivered_at = at
 
     def write_stdin(self, session_id: str, data: str) -> ExecSession:
         with self._lock:
@@ -680,6 +697,16 @@ class ExecSessionManager:
         return session
 
     def _make_session_room_locked(self) -> None:
+        if len(self._sessions) < self.max_sessions:
+            return
+        # Delivered results go first, all at once (one scan per refill): a
+        # 30 s hold on every short command capped a node near 1,024 / 30 s.
+        cutoff = time.monotonic() - self.delivered_grace_seconds
+        for session in [item for item in self._terminal.values()
+                        if item.delivered_at is not None and item.delivered_at <= cutoff]:
+            del self._terminal[session.id]
+            self._sessions.pop(session.id, None)
+            session.condition.notify_all()
         if len(self._sessions) < self.max_sessions:
             return
         now = utc_now()

@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.9.22 - 2026-10-05 (gateway, workers and builders)
 
+- **M2 converters free the NBD devices a killed converter leaked.** Before each image, a slot disconnects its devices whose owning process is dead, after unmounting their EROFS mounts and the overlay stacked on them. Before, every later image on that slot failed with "no free NBD device".
 - **Volume-free builds (M2 plan §5.4, not run).** A build that names an image whose OCI manifest was released gets that image's regenerated copy as a BuildKit named context (`--build-context <ref>=docker-image://ucloud-regenerated:…`); the context and Dockerfile bytes, catalog pins and decisions are unchanged. The copy is one layer with the verified tree and the original config (ONBUILD, SHELL, labels kept). The gateway regenerates a missing copy with `chunk-migrate regenerate` and answers `503 base_regenerating` (retryable) until it exists; `409 base_released` when it cannot. Off unless `immutable_environments.regenerate_bases` is set (needs `nydus-image` on the gateway).
   - `chunk-migrate verify-regeneration` (converter) writes a receipt per image: its regenerated tree equals its OCI layers, with the layer's diff ID and the config bytes. Regeneration must reproduce that diff ID.
   - `chunk-migrate release-oci --include-build-inputs --receipts …` also releases build inputs that have a receipt, recording it first. `chunk-migrate status --out` lists the rows to verify.

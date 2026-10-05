@@ -22,6 +22,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 import random
 from threading import Lock
+from uuid import uuid4
 import time
 from typing import Any, Callable, Iterable, Mapping, NamedTuple
 
@@ -195,6 +196,16 @@ class InflightOverlay:
                 record, heartbeat.node_epoch, now + self._ttl,
             )
 
+    def hold(self, heartbeat: NodeHeartbeat, request: PlacementRequest) -> SandboxIncarnation:
+        """A provisional charge from the choice until the create's own
+        reservation (or failure) releases it: concurrent choices in this
+        process see it at once, where the intent's database write would leave
+        them all choosing the same idle-looking worker. No heartbeat reports
+        it; the TTL bounds a lost release."""
+        key = SandboxIncarnation(f"hold-{uuid4().hex}", -1, "", "")
+        self.reserve(heartbeat, key, request)
+        return key
+
     def release(self, job_id: str, incarnation: SandboxIncarnation) -> None:
         with self._lock:
             entries = self._by_job.get(job_id, {})
@@ -249,6 +260,9 @@ class PowerOfKChooser:
             raise ValueError("k, the per-node create target and api_processes must be positive")
         self.overlay, self._rng, self._k = overlay, rng, k
         self._target, self._processes = target_creates_per_node, api_processes
+        # Held over a choice and its overlay holds (no I/O), so this process's
+        # concurrent creates and groups each see the others' choices.
+        self.planning = Lock()
 
     def choose(
         self, fleet: FleetView, request: PlacementRequest, *, include_job_ids: frozenset[str] = frozenset(),

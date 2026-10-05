@@ -231,12 +231,25 @@ class GroupCreate:
             node.job_id for node in view.nodes
             if _heartbeat_has_image(node, request.image, require_digest=require_digest)
         )
-        slices = self.creates.chooser.plan_group(
-            view, replace(
-                request, excluded_job_ids=frozenset(excluded),
-                residency={node.node_id: 1.0 for node in view.nodes if node.job_id in resident},
-            ), len(members), per_node_budget=self.budget, policy=policy, include_job_ids=resident,
-        )
+        with self.creates.chooser.planning:  # The plan and its holds at once: concurrent groups see them.
+            slices = self.creates.chooser.plan_group(
+                view, replace(
+                    request, excluded_job_ids=frozenset(excluded),
+                    residency={node.node_id: 1.0 for node in view.nodes if node.job_id in resident},
+                ), len(members), per_node_budget=self.budget, policy=policy, include_job_ids=resident,
+            )
+            holds = [(item.heartbeat.job_id, self.creates.overlay.hold(item.heartbeat, request))
+                     for item in slices for _member in range(item.count)]
+        try:
+            return self._write_plan(slices, request, members, group, results)
+        finally:
+            for hold in holds:  # Each placed member holds its own reservation by now.
+                self.creates.overlay.release(*hold)
+
+    def _write_plan(
+        self, slices: tuple[Any, ...], request: PlacementRequest, members: list[_Member], group: SandboxGroup,
+        results: dict[str, dict[str, Any]],
+    ) -> tuple[list[tuple[NodeHeartbeat, list[_Member]]], list[_Member]]:
         batches, remaining = [], list(members)
         for item in slices:
             chosen, remaining = remaining[:item.count], remaining[item.count:]

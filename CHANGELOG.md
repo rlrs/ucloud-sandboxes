@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.26 - 2026-10-05 (gateway only)
+
+- **Power-of-k choices hold their workers at once.** A create, and every member of a group, is charged to this process's overlay when it is chosen, under a per-process planning lock with no I/O, until its own reservation (or failure) replaces the hold. Before, the charge came after the intent's database write, so a burst's concurrent choices all saw the same idle-looking worker: in a 64 x 8 group burst, `pack` put 504 of 512 sandboxes on one of three workers.
+
 ## 0.9.25 - 2026-10-05 (gateway only)
 
 - **A regenerated base matches its receipt on any host.** `nydus-image unpack` names each tar entry's owner and group from the host's `/etc/passwd` and `/etc/group`, and uid 100 is `postgres` on the gateway but unnamed on the M2 converters that wrote the receipts. So the gateway's regeneration missed the verified diff ID, and the first build on an OCI-released base answered 409 `base_released`. Regenerations now rewrite each name the host looked up to the converters' pinned table, in place, fixing only those header fields and their checksums.

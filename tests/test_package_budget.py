@@ -147,8 +147,10 @@ import unittest
 # client starts them (verifiers-ucloud's group create needs it).
 # +65 regenerations write the converters' owner and group names (nydus-image
 # takes them from the host), so a gateway regeneration matches its receipt.
+# +41 a create's or group's choice holds its workers in the overlay at once
+# (2026-10-05: concurrent groups packed 504 of 512 sandboxes onto one worker).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 115_956
+PACKAGE_LINE_BUDGET = 115_997
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

@@ -366,6 +366,27 @@ class GroupPackTests(unittest.TestCase):
 # Simulation -----------------------------------------------------------------
 
 
+class HoldTests(unittest.TestCase):
+    def test_held_choices_steer_concurrent_groups_apart(self):
+        # 2026-10-05: groups planned before any intent was written all packed
+        # onto one worker (504 of 512 sandboxes): the least loaded, every time.
+        view = FleetView(tuple(heartbeat(f"n{index}", creating=index) for index in range(3)))
+        for held in (False, True):
+            overlay = InflightOverlay(clock=FakeClock())
+            choose, holds, chosen = chooser(k=3, overlay=overlay, api_processes=6), [], []
+            for _group in range(6):
+                with choose.planning:
+                    (item,) = choose.plan_group(view, PlacementRequest(SHAPE, image="img"), 8, per_node_budget=32)
+                    chosen.append(item.heartbeat.node_id)
+                    if held:
+                        holds += [(item.heartbeat.job_id, overlay.hold(item.heartbeat, PLAIN)) for _ in range(8)]
+            with self.subTest(held=held):
+                self.assertEqual(len(set(chosen)), 3 if held else 1)
+            for hold in holds:
+                overlay.release(*hold)
+            self.assertEqual(overlay.reservation_count(), 0)
+
+
 class LexicographicRanking:
     """The essence of gateway Placement.rank (lexicographic min
     over every candidate) given the same inputs as power-of-k: the fleet view

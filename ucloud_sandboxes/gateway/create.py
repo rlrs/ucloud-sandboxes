@@ -107,68 +107,82 @@ class CreatePlacement:
         route: SandboxRoute | None = None
         pending: PendingSandboxDemand | None = None
         root.set_attribute("sandbox.placement.mode", "power_of_k")
-        for _round in range(CREATE_ROUNDS):
-            with self.telemetry.span("gateway.sandbox_select_node", attributes={
-                "container.image.name": spec.image,
-            }) as span:
-                candidates = self.chooser.choose(
-                    self.view(), replace(request, excluded_job_ids=frozenset(excluded)),
-                )
-                span.set_attribute("candidate_count", len(candidates))
-            if not candidates:
-                break
-            for index, shared in enumerate(candidates):
-                excluded.add(shared.job_id)
-                heartbeat = detached_heartbeat(shared)
-                allocation = SandboxRouteAllocation(
-                    sandbox_id=spec.id, node_id=heartbeat.node_id, job_id=heartbeat.job_id,
-                    node_url=heartbeat.node_url or "", resources=request.resources,
-                    spec=dict(spec_dict), node_epoch=heartbeat.node_epoch,
-                    activity_epoch=heartbeat.activity_epoch,
-                )
-                operation_id = f"create-{uuid4().hex}"
-                if route is None:
-                    try:
-                        route, pending = self.routing_store.reserve_create_intent(
-                            allocation, spec_hash=spec_hash, create_operation_id=operation_id,
+        holds: list[tuple[str, Any]] = []  # This choice's provisional overlay charge.
+
+        def release_hold():
+            while holds:
+                self.overlay.release(*holds.pop())
+
+        try:
+            for _round in range(CREATE_ROUNDS):
+                with self.telemetry.span("gateway.sandbox_select_node", attributes={
+                    "container.image.name": spec.image,
+                }) as span:
+                    view = self.view()  # I/O, outside the planning lock.
+                    with self.chooser.planning:
+                        candidates = self.chooser.choose(
+                            view, replace(request, excluded_job_ids=frozenset(excluded)),
                         )
-                    except SandboxRouteConflictError:
-                        root.status = "error"
-                        root.set_attribute("outcome", "concurrent_spec_conflict")
-                        ex._write_json({
-                            "error": f"sandbox already exists with different spec: {spec.id}",
-                        }, status=HTTPStatus.CONFLICT)
-                        return
-                    if route.create_operation_id != operation_id:
-                        root.set_attribute("outcome", "concurrent_route_won")
-                        ex._retry_sandbox_create_on_assigned_node(route, spec)
-                        return
-                    self._ensure_reference(spec, route)
-                    root.set_attribute("reserved_route", True)
-                else:
-                    moved = self.routing_store.retarget_create_intent(
-                        route, allocation, create_operation_id=operation_id,
+                        if candidates:
+                            holds.append((candidates[0].job_id, self.overlay.hold(candidates[0], request)))
+                    span.set_attribute("candidate_count", len(candidates))
+                if not candidates:
+                    break
+                for index, shared in enumerate(candidates):
+                    excluded.add(shared.job_id)
+                    heartbeat = detached_heartbeat(shared)
+                    allocation = SandboxRouteAllocation(
+                        sandbox_id=spec.id, node_id=heartbeat.node_id, job_id=heartbeat.job_id,
+                        node_url=heartbeat.node_url or "", resources=request.resources,
+                        spec=dict(spec_dict), node_epoch=heartbeat.node_epoch,
+                        activity_epoch=heartbeat.activity_epoch,
                     )
-                    if moved is None:
-                        root.status = "error"
-                        root.set_attribute("outcome", "route_changed_during_reselect")
-                        ex._write_create_in_progress_response(spec.id)
-                        return
-                    route, previous = moved, route
-                    try:
+                    operation_id = f"create-{uuid4().hex}"
+                    if route is None:
+                        try:
+                            route, pending = self.routing_store.reserve_create_intent(
+                                allocation, spec_hash=spec_hash, create_operation_id=operation_id,
+                            )
+                        except SandboxRouteConflictError:
+                            root.status = "error"
+                            root.set_attribute("outcome", "concurrent_spec_conflict")
+                            ex._write_json({
+                                "error": f"sandbox already exists with different spec: {spec.id}",
+                            }, status=HTTPStatus.CONFLICT)
+                            return
+                        if route.create_operation_id != operation_id:
+                            root.set_attribute("outcome", "concurrent_route_won")
+                            ex._retry_sandbox_create_on_assigned_node(route, spec)
+                            return
                         self._ensure_reference(spec, route)
-                    finally:
-                        self.registry_refs.release_route_reference(previous)
-                self.overlay.reserve(shared, _incarnation(route), request)
-                rejected = self._attempt(
-                    ex, spec, route, heartbeat, pending, root,
-                    last=index == len(candidates) - 1,
-                )
-                if rejected is None:
-                    return
-                self.overlay.release(route.job_id, _incarnation(route))
-                reason, rejections = rejected, rejections + 1
-                root.set_attribute("rejected_jobs", rejections)
+                        root.set_attribute("reserved_route", True)
+                    else:
+                        moved = self.routing_store.retarget_create_intent(
+                            route, allocation, create_operation_id=operation_id,
+                        )
+                        if moved is None:
+                            root.status = "error"
+                            root.set_attribute("outcome", "route_changed_during_reselect")
+                            ex._write_create_in_progress_response(spec.id)
+                            return
+                        route, previous = moved, route
+                        try:
+                            self._ensure_reference(spec, route)
+                        finally:
+                            self.registry_refs.release_route_reference(previous)
+                    self.overlay.reserve(shared, _incarnation(route), request)
+                    release_hold()
+                    rejected = self._attempt(
+                        ex, spec, route, heartbeat, pending, root,
+                        last=index == len(candidates) - 1,
+                    )
+                    if rejected is None:
+                        return
+                    self.overlay.release(route.job_id, _incarnation(route))
+                    reason, rejections = rejected, rejections + 1
+                    root.set_attribute("rejected_jobs", rejections)
+        finally:
+            release_hold()  # Early returns and every rejected round.
         demand_fence: dict[str, Any] = {}
         if route is not None:
             removed = self.routing_store.delete_sandbox_if_current(

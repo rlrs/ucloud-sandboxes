@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.25 - 2026-10-05 (gateway only)
+
+- **A regenerated base matches its receipt on any host.** `nydus-image unpack` names each tar entry's owner and group from the host's `/etc/passwd` and `/etc/group`, and uid 100 is `postgres` on the gateway but unnamed on the M2 converters that wrote the receipts. So the gateway's regeneration missed the verified diff ID, and the first build on an OCI-released base answered 409 `base_released`. Regenerations now rewrite each name the host looked up to the converters' pinned table, in place, fixing only those header fields and their checksums.
+
 ## 0.9.24 - 2026-10-05 (gateway only)
 
 - **A queued group's 503 that created members finishes its command** (`X-UCloud-Group-Delivered`). Only the answer that created members carries their records; requeueing it held running members idle until the whole group was placed or its deadline passed. The client starts them and repeats the request, which places only unplaced members. A 503 that placed none still requeues.

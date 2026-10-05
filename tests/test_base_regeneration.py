@@ -285,3 +285,29 @@ class ReleaseAndBuildTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PinnedTarNamesTests(unittest.TestCase):
+    def test_names_this_host_looked_up_become_the_converters(self):
+        # 2026-10-05: uid 100 is "postgres" on the gateway and nobody on a
+        # converter, so the gateway's regeneration missed the receipt's diff ID.
+        import io
+        import tarfile
+
+        def tar(path, uname):
+            with tarfile.open(path, "w", format=tarfile.GNU_FORMAT) as archive:
+                for name, uid in (("var/cache/apt/archives/partial", 100), ("x" * 120, 0)):
+                    member = tarfile.TarInfo(name)
+                    member.uid, member.uname, member.gname, member.size, member.mtime = (
+                        uid, uname if uid == 100 else "root", "root", 3, 1685412244)
+                    archive.addfile(member, io.BytesIO(b"abc"))
+        with TemporaryDirectory() as directory:
+            gateway, converter = Path(directory, "gateway.tar"), Path(directory, "converter.tar")
+            tar(gateway, "postgres")
+            tar(converter, "")
+            hosts = {"host_user": {0: "root", 100: "postgres"}.get, "host_group": {0: "root"}.get}
+            chunk_convert.pin_tar_names(gateway, users={0: "root"}, groups={0: "root"}, **hosts)
+            self.assertEqual(gateway.read_bytes(), converter.read_bytes())
+            chunk_convert.pin_tar_names(converter, users={0: "root"}, groups={0: "root"}, **hosts)
+            self.assertEqual(gateway.read_bytes(), converter.read_bytes())  # Already the converters': unchanged.
+            self.assertEqual([member.uname for member in tarfile.open(gateway).getmembers()], ["", "root"])

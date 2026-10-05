@@ -145,8 +145,10 @@ import unittest
 # loopback branch and the placement process with the wakes.
 # +17 a queued group's 503 that delivered members finishes its command, so the
 # client starts them (verifiers-ucloud's group create needs it).
+# +65 regenerations write the converters' owner and group names (nydus-image
+# takes them from the host), so a gateway regeneration matches its receipt.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 115_891
+PACKAGE_LINE_BUDGET = 115_956
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

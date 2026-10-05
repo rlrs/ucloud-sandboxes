@@ -629,6 +629,70 @@ def mount_verifier(*, devices, trusted_keys, work_root, store_node=None):
 
 # --- Rollback: chunk store -> tar -> OCI push (design §7) ---
 
+# ``nydus-image unpack`` names each entry's owner and group from the host's
+# /etc/passwd and /etc/group (uid 100 is "postgres" on the gateway, nobody on
+# a converter), so the layer's bytes depend on the host. The verified receipts
+# were made on the M2 converters (worker snapshot 439434667); these are their
+# tables, and every regeneration writes their names.
+REGENERATION_USERS = {
+    0: "root", 1: "daemon", 2: "bin", 3: "sys", 4: "sync", 5: "games", 6: "man", 7: "lp", 8: "mail", 9: "news",
+    10: "uucp", 13: "proxy", 33: "www-data", 34: "backup", 38: "list", 39: "irc", 42: "_apt", 101: "pollinate",
+    102: "syslog", 103: "uuidd", 104: "landscape", 983: "sshd", 984: "fwupd-refresh", 985: "tss", 986: "tcpdump",
+    988: "polkitd", 989: "_chrony", 990: "systemd-resolve", 996: "messagebus", 997: "dhcpcd",
+    998: "systemd-network", 1000: "ucloud", 65534: "nobody"}
+REGENERATION_GROUPS = {
+    0: "root", 1: "daemon", 2: "bin", 3: "sys", 4: "adm", 5: "tty", 6: "disk", 7: "lp", 8: "mail", 9: "news",
+    10: "uucp", 12: "man", 13: "proxy", 15: "kmem", 20: "dialout", 21: "fax", 22: "voice", 24: "cdrom",
+    25: "floppy", 26: "tape", 27: "sudo", 29: "audio", 30: "dip", 33: "www-data", 34: "backup", 37: "operator",
+    38: "list", 39: "irc", 40: "src", 42: "shadow", 43: "utmp", 44: "video", 45: "sasl", 46: "plugdev",
+    50: "staff", 60: "games", 100: "users", 101: "lxd", 102: "_ssh", 103: "syslog", 104: "uuidd", 105: "rdma",
+    106: "landscape", 983: "docker", 984: "fwupd-refresh", 985: "tss", 986: "tcpdump", 987: "crontab",
+    988: "polkitd", 989: "_chrony", 990: "systemd-resolve", 991: "render", 992: "kvm", 993: "clock", 994: "sgx",
+    995: "input", 996: "messagebus", 997: "dhcpcd", 998: "systemd-network", 999: "systemd-journal",
+    1000: "ucloud", 65534: "nogroup"}
+
+
+def _host_name(lookup, ident):
+    try:
+        return lookup(ident)[0]
+    except KeyError:
+        return ""
+
+
+def pin_tar_names(path, users=REGENERATION_USERS, groups=REGENERATION_GROUPS, host_user=None, host_group=None):
+    """Rewrite, in place, each owner or group name this host's lookup wrote to
+    the pinned table's name for that id, and fix the header checksum. Only
+    names equal to the host's own lookup change; nothing else moves."""
+    import grp
+    import pwd
+    host_user = host_user or (lambda uid: _host_name(pwd.getpwuid, uid))
+    host_group = host_group or (lambda gid: _host_name(grp.getgrgid, gid))
+    with open(path, "r+b") as stream:
+        while len(header := bytearray(stream.read(512))) == 512 and any(header):
+            changed = False
+            for id_at, name_at, pinned, host in ((108, 265, users, host_user), (116, 297, groups, host_group)):
+                field = header[id_at:id_at + 8]
+                if field[0] & 0x80 or not field.strip(b"\0 "):
+                    continue  # Base-256 or empty: no lookup.
+                ident = int(field.strip(b"\0 "), 8)
+                written = bytes(header[name_at:name_at + 32]).rstrip(b"\0").decode("utf-8", "replace")
+                wanted = pinned.get(ident, "")
+                if written == host(ident) and written != wanted:
+                    header[name_at:name_at + 32] = wanted.encode().ljust(32, b"\0")
+                    changed = True
+            if changed:
+                old = header[148:156]
+                digits = len(old.rstrip(b"\0 "))
+                header[148:156] = b" " * 8
+                header[148:156] = (b"%0*o" % (digits, sum(header))) + old[digits:]
+                stream.seek(-512, os.SEEK_CUR)
+                stream.write(header)
+            size_field = header[124:136]
+            size = (int.from_bytes(size_field[1:], "big") if size_field[0] & 0x80
+                    else int(size_field.strip(b"\0 ") or b"0", 8))
+            stream.seek((size + 511) // 512 * 512, os.SEEK_CUR)
+
+
 def exact_symlinks(source, destination, targets):
     """``source`` with each symlink's target as the image has it (``targets``,
     by path): ``nydus-image unpack``'s tar writer drops '.' components
@@ -678,6 +742,7 @@ def regenerated_layer(registry, index, root, *, work_root, nydus_image="nydus-im
         subprocess.run([nydus_image, "unpack", "--bootstrap", str(patched), "--blob-dir", str(blobs),
                         "--output", str(scratch / "layer.tar")], check=True, capture_output=True, timeout=3600)
         shutil.rmtree(blobs)
+        pin_tar_names(scratch / "layer.tar")  # The same bytes on every host, as the receipts'.
         yield environment, exact_symlinks(scratch / "layer.tar", scratch / "exact.tar", symlink_targets(bootstrap))
 
 

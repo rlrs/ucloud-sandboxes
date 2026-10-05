@@ -90,7 +90,8 @@ from tests.test_package_budget import package_lines
 # and place creates once each, a group and a requeued 503 run in process, ranked
 # keeps the loopback, the per-process claim budget.
 # +23 a delivering group answer finishes its queue command.
-SUITE_LINE_BUDGET = 99_168
+# +29 pinned tar names: a host's own lookups become the converters'.
+SUITE_LINE_BUDGET = 99_197
 SUITE = Path(__file__).resolve().parent
 
 

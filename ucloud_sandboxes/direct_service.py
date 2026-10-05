@@ -1612,11 +1612,16 @@ class DirectSandboxService:
         max_stderr_bytes: int = 16 * 1024 * 1024,
         expected_generation: int | None = None,
         input_file: BinaryIO | None = None,
+        fenced: bool = False,
     ) -> DirectExecResult:
+        """``fenced``: the caller holds the lifecycle coordinator's shared fence
+        (DirectLifecycle.acquire_shared), which excludes park and delete and
+        ensured the sandbox runs. File operations on one sandbox then run
+        concurrently; without it, the request lock serializes and refuses them."""
         if max_stdout_bytes < 1 or max_stderr_bytes < 1:
             raise ValueError("direct exec output limits must be positive")
         registration = self._require_registration(sandbox_id)
-        with self._request_lock(sandbox_id, registration.sandbox_generation):
+        with nullcontext() if fenced else self._request_lock(sandbox_id, registration.sandbox_generation):
             if expected_generation is not None and (
                 registration.sandbox_generation != expected_generation
                 or self._require_registration(sandbox_id).sandbox_generation != expected_generation
@@ -1625,7 +1630,8 @@ class DirectSandboxService:
             self.mark_activity(sandbox_id, registration.sandbox_generation)
             sandbox = registration.to_direct_sandbox()
             try:
-                self._ensure_running(sandbox)
+                if not fenced:
+                    self._ensure_running(sandbox)
                 token = self.acquire_exec_capacity(
                     sandbox_id,
                     registration.sandbox_generation,
@@ -2303,10 +2309,11 @@ class DirectSandboxService:
         payload: bytes,
         *,
         expected_generation: int | None = None,
+        fenced: bool = False,
     ) -> None:
         self._write_file(
             sandbox_id, path, len(payload), input_bytes=payload,
-            expected_generation=expected_generation,
+            expected_generation=expected_generation, fenced=fenced,
         )
 
     def write_file_from_file(
@@ -2317,10 +2324,11 @@ class DirectSandboxService:
         size: int,
         *,
         expected_generation: int,
+        fenced: bool = False,
     ) -> None:
         self._write_file(
             sandbox_id, path, size, input_file=source,
-            expected_generation=expected_generation,
+            expected_generation=expected_generation, fenced=fenced,
         )
 
     def _write_file(
@@ -2332,6 +2340,7 @@ class DirectSandboxService:
         input_bytes: bytes | None = None,
         input_file: BinaryIO | None = None,
         expected_generation: int | None = None,
+        fenced: bool = False,
     ) -> None:
         validate_container_path("sandbox file path", path)
         registration = self._require_registration(sandbox_id)
@@ -2356,6 +2365,7 @@ class DirectSandboxService:
             input_file=input_file,
             max_stdout_bytes=64 * 1024,
             max_stderr_bytes=64 * 1024,
+            fenced=fenced,
         )
         if result.exit_code != 0:
             raise DirectWardenError(
@@ -2372,6 +2382,7 @@ class DirectSandboxService:
         max_stderr_bytes: int,
         input_bytes: bytes | None = None,
         input_file: BinaryIO | None = None,
+        fenced: bool = False,
     ) -> DirectExecResult:
         """Absorb transient admission pressure without replaying dispatched work.
 
@@ -2387,7 +2398,7 @@ class DirectSandboxService:
                 return self.exec(
                     sandbox_id, command, expected_generation=expected_generation,
                     input_bytes=input_bytes, max_stdout_bytes=max_stdout_bytes,
-                    max_stderr_bytes=max_stderr_bytes,
+                    max_stderr_bytes=max_stderr_bytes, fenced=fenced,
                     **({"input_file": input_file} if input_file is not None else {}),
                 )
             except SandboxExecAdmissionDeferredError:
@@ -2629,6 +2640,18 @@ class DirectSandboxService:
                     key = (registration.sandbox_id, registration.sandbox_generation)
                     self._record_growth_intent(key, action="activate")
                 return restored
+
+    def running_timings(self, sandbox) -> dict[str, float] | None:
+        """Timings when the sandbox already runs with a live Sentry, else None.
+        Its caller holds the lifecycle coordinator's shared fence, which keeps
+        a park or delete from starting, so no request lock is needed to read
+        it; anything else goes through ensure_running_with_timings under one."""
+        started = time.monotonic()
+        record = self.warden.inspect(sandbox)
+        if record is None or record.state != HibernationState.RUNNING or not self.warden.running_process_alive(sandbox):
+            return None
+        elapsed = (time.monotonic() - started) * 1000
+        return {"inspect": elapsed, "total": elapsed}
 
     def ensure_running_with_timings(self, sandbox) -> dict[str, float]:
         started = time.monotonic()

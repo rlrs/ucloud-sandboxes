@@ -153,8 +153,10 @@ import unittest
 # (same config) kept ~1.2 TB of layers alive through the sweep.
 # +27 delivered exec results free their session slot first (short commands
 # held 1,024 slots for 30 s each: ~34 execs/s per node).
+# +48 a running sandbox's commands and file writes skip its request lock
+# (the shared lifecycle fence excludes park and delete).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 116_102
+PACKAGE_LINE_BUDGET = 116_150
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

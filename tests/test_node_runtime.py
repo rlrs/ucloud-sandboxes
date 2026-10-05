@@ -8,6 +8,7 @@ from ucloud_sandboxes.node_runtime import DirectNodeRuntime
 from ucloud_sandboxes.sandbox import (
     NodeDrainState,
     SandboxBusyError,
+    SandboxConflictError,
     SandboxExecAdmissionDeferredError,
 )
 
@@ -74,6 +75,9 @@ class _WakeService(_IdleService):
         self.publication_pending = False
         self.activity_revision = 100
 
+    def running_timings(self, _sandbox):
+        return None  # Parked: the restore path, under the request lock.
+
     def storage_native_publication_pending(self, _sandbox_id: str) -> bool:
         return self.publication_pending
 
@@ -91,6 +95,25 @@ class _WakeService(_IdleService):
 
 
 class DirectNodeRuntimeTests(unittest.TestCase):
+    def test_running_sandbox_commands_and_uploads_skip_the_request_lock(self) -> None:
+        # 2026-10-05: every command and file write on a sandbox took its request
+        # lock; uploads were refused while one ran (5.6 harness files/s per node).
+        service = _WakeService()
+        registration = SimpleNamespace(sandbox_generation=1, to_direct_sandbox=lambda: "agent-1")
+        service._require_registration = Mock(return_value=registration)
+        service._request_lock = Mock(side_effect=AssertionError("request lock taken"))
+        service.mark_activity = Mock()
+        service.ensure_running_with_timings = Mock(side_effect=AssertionError("restore path taken"))
+        service.running_timings = Mock(return_value={"inspect": 1.0, "total": 1.0})
+        service.write_file = Mock()
+        manager = DirectNodeRuntime(service)
+        manager.lifecycle.acquire_shared("agent")
+        manager.lifecycle.release_shared("agent")
+        manager.upload_file("agent", "/tmp/x", b"x", expected_generation=1)
+        service.write_file.assert_called_once_with("agent", "/tmp/x", b"x", expected_generation=1, fenced=True)
+        with self.assertRaises(SandboxConflictError):
+            manager.upload_file("agent", "/tmp/x", b"x", expected_generation=2)  # Replaced while it arrived.
+
     def test_tool_joins_transition_before_reading_registration_or_restoring(self) -> None:
         for deleted in (False, True):
             with self.subTest(deleted=deleted):

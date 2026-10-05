@@ -227,20 +227,27 @@ class DirectLifecycle:
             raise SandboxExecAdmissionDeferredError(str(exc)) from exc
         try:
             registration = self.owner.service._require_registration(sandbox_id)
-            # Concurrent commands for one sandbox queue here for the same
-            # bounded wait. Rejecting them made each one retry a second later.
-            with self.owner.service._request_lock(
-                sandbox_id,
-                registration.sandbox_generation,
-                wait_seconds=wait_seconds,
-            ):
-                self.owner.service.mark_activity(
+            # The shared fence keeps park and delete out, so a running sandbox
+            # needs no request lock: holding it for every command serialized a
+            # sandbox's commands behind each other's inspection.
+            timings = self.owner.service.running_timings(registration.to_direct_sandbox())
+            if timings is not None:
+                self.owner.service.mark_activity(sandbox_id, registration.sandbox_generation)
+            else:
+                # Concurrent commands for one sandbox queue here for the same
+                # bounded wait. Rejecting them made each one retry a second later.
+                with self.owner.service._request_lock(
                     sandbox_id,
                     registration.sandbox_generation,
-                )
-                timings = self.owner.service.ensure_running_with_timings(
-                    registration.to_direct_sandbox()
-                )
+                    wait_seconds=wait_seconds,
+                ):
+                    self.owner.service.mark_activity(
+                        sandbox_id,
+                        registration.sandbox_generation,
+                    )
+                    timings = self.owner.service.ensure_running_with_timings(
+                        registration.to_direct_sandbox()
+                    )
             self.owner._set_exec_start_timings(timings)
         except Exception:
             self._coordinator.release_shared(sandbox_id)
@@ -1085,15 +1092,33 @@ class DirectNodeRuntime:
         *,
         expected_generation: int | None = None,
     ) -> None:
-        self.service.write_file(sandbox_id, path, content, expected_generation=expected_generation)
+        # The exec fence, not the request lock: one sandbox's harness files
+        # upload concurrently, where the lock refused all but one at a time.
+        with self._file_fence(sandbox_id, expected_generation):
+            self.service.write_file(sandbox_id, path, content, expected_generation=expected_generation, fenced=True)
 
     def upload_file_from_file(
         self, sandbox_id: str, path: str, source: BinaryIO, size: int,
         *, expected_generation: int,
     ) -> None:
-        self.service.write_file_from_file(
-            sandbox_id, path, source, size, expected_generation=expected_generation,
-        )
+        with self._file_fence(sandbox_id, expected_generation):
+            self.service.write_file_from_file(
+                sandbox_id, path, source, size, expected_generation=expected_generation, fenced=True,
+            )
+
+    @contextmanager
+    def _file_fence(self, sandbox_id: str, expected_generation: int | None):
+        """The shared lifecycle fence, after the generation check: a write whose
+        sandbox was replaced while its body arrived answers a conflict."""
+        if expected_generation is not None and (
+            self.service._require_registration(sandbox_id).sandbox_generation != expected_generation
+        ):
+            raise SandboxConflictError("file operation no longer owns direct sandbox generation")
+        self.lifecycle.acquire_shared(sandbox_id)
+        try:
+            yield
+        finally:
+            self.lifecycle.release_shared(sandbox_id)
 
     def download_file(
         self,

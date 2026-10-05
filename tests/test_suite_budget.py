@@ -94,7 +94,8 @@ from tests.test_package_budget import package_lines
 # +24 held choices steer concurrent groups apart.
 # +26 release-originals: same-config untagged only, leases fence.
 # +26 delivered exec results are evicted first.
-SUITE_LINE_BUDGET = 99_273
+# +26 running sandboxes skip the request lock.
+SUITE_LINE_BUDGET = 99_299
 SUITE = Path(__file__).resolve().parent
 
 

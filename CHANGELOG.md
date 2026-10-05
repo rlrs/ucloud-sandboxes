@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.28 - 2026-10-05 (gateway and workers)
+
+- **A running sandbox's commands and file writes no longer take its request lock.** Exec admission held the per-sandbox lock to inspect the lifecycle journal, so one sandbox's commands queued behind each other's inspections (`lifecycle_ms` p50 612 ms at 128 concurrent execs, about 114 execs/s per node). File writes held it, without waiting, for the whole write, so concurrent writes to one sandbox were refused (`node_startup_busy`): the harness pattern, 40 small files per sandbox at once, ran at 5.6 files/s per node. Both now run under the lifecycle coordinator's shared fence, which already excludes park and delete; the request lock remains for a sandbox that must be reconciled or restored, where it waits instead of refusing for exec. An upload still checks its sandbox generation first and answers a conflict when it was replaced.
+
 ## 0.9.27 - 2026-10-05 (gateway and workers)
 
 - **Delivered exec results free their session slot first.** A node keeps at most 1,024 exec sessions and held each finished one for 30 s, so short commands capped a node near 34 execs/s; the rest answered 503 `node_active_exec_deferred`, which the SDK retried with backoff (20-25 s stalls). A session whose start response carried its final event now goes at once at capacity (a lost start response leaves no session id to ask by); one whose final event an events poll returned goes after a 2 s grace for a re-poll. Other finished sessions keep the 30 s retention.

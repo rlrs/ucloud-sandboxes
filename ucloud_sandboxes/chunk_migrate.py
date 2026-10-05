@@ -537,6 +537,76 @@ def release_oci(roots, client, usage, wave, *, catalog_file, routing_store, keys
     return summary
 
 
+def linked_revisions(repositories_dir):
+    """(repository) -> the manifest digests Distribution still links in it, untagged
+    ones included: the registry API lists tags only."""
+    def revisions(repository):
+        path = Path(repositories_dir).joinpath(*repository.split("/"), "_manifests", "revisions", "sha256")
+        try:
+            return sorted("sha256:" + name for name in os.listdir(path) if (path / name / "link").exists())
+        except FileNotFoundError:
+            return []
+    return revisions
+
+
+def release_originals(roots, client, usage, *, revisions, execute=False):
+    """After release-oci: delete an OCI-released image's untagged manifests that
+    carry its exact config (the build's output before the environment
+    annotation moved its tags). Nothing names them, but each keeps the image's
+    layers alive through the sweep. Fenced like release-oci: a leased digest
+    stays. Other untagged manifests (another config) are left alone."""
+    from datetime import datetime, timezone
+    from .managed_registry import RegistryRequestError
+    from .registry_retention import REFERENCE_PRUNE_BATCH
+    configs = {(row["repository"], row["manifest_digest"]): row["config_digest"]
+               for row in roots.rows(state="released")}
+    summary = {"execute": execute, "images": 0, "originals": 0, "other_config": 0, "leased": 0, "released": 0,
+               "layer_bytes": 0, "errors": {}}
+    from .registry_retention import list_repository_tags
+    pending, listed = [], {}
+    for (repository, digest) in sorted(roots.oci_released()):
+        config = configs.get((repository, digest))
+        if config is None:
+            continue
+        summary["images"] += 1
+        for candidate in revisions(repository):
+            if candidate == digest:
+                continue
+            try:
+                document, _ = client.manifest_document(repository, candidate)
+                if repository not in listed:
+                    listed[repository] = list_repository_tags(client, repository)
+                tags = [record.tag for record in listed[repository] if record.digest == candidate]
+            except RegistryRequestError as exc:
+                if exc.status_code != 404:
+                    summary["errors"][f"{repository}@{candidate}"] = f"{type(exc).__name__}: {exc}"[:300]
+                continue
+            if tags or (document.get("config") or {}).get("digest") != config:
+                summary["other_config"] += not tags
+                continue
+            summary["originals"] += 1
+            pending.append((repository, candidate, sum(int(item.get("size", 0)) for item in document.get("layers", []))))
+    for start in range(0, len(pending), REFERENCE_PRUNE_BATCH):
+        batch = pending[start:start + REFERENCE_PRUNE_BATCH]
+        with usage.lease_fence() if execute else nullcontext(usage.snapshot()) as snapshot:
+            now = datetime.now(timezone.utc)
+            held = {(lease.repository, lease.digest) for lease in snapshot.leases.values() if lease.is_active(now)}
+            for repository, candidate, size in batch:
+                if (repository, candidate) in held:
+                    summary["leased"] += 1
+                    continue
+                if execute:
+                    try:
+                        client.delete_manifest(repository, candidate)
+                    except (OSError, RegistryRequestError) as exc:
+                        if getattr(exc, "status_code", None) != 404:
+                            summary["errors"][f"{repository}@{candidate}"] = f"{type(exc).__name__}: {exc}"[:300]
+                            continue
+                summary["released"] += 1
+                summary["layer_bytes"] += size
+    return summary
+
+
 # Staged copies a preparation builds FROM and nothing reads after it (plan §5.4):
 # repository -> the durable lease owner prefix that keeps them.
 STAGED = {"upstream": ("ucloud-upstream", "upstream-source:"),
@@ -876,6 +946,12 @@ def gateway_command(args):
             getattr(routing, "close", lambda: None)()
     elif command == "regenerate":
         result = regenerate_command(config, roots, environments, args.image)
+    elif command == "release-originals":
+        from .managed_registry import RegistryClient, RegistryUsageStore
+        revisions = linked_revisions(config.registry_data_dir() / "docker" / "registry" / "v2" / "repositories")
+        result = release_originals(roots, RegistryClient(config.registry_url),
+                                   RegistryUsageStore(config.registry_usage_file()), revisions=revisions,
+                                   execute=args.execute)
     elif command == "drop-staged":
         from .managed_registry import RegistryClient, RegistryUsageStore
         result = drop_staged(RegistryClient(config.registry_url), RegistryUsageStore(config.registry_usage_file()),
@@ -933,6 +1009,8 @@ def add_commands(subparsers):
                        ("release-oci", "Delete released, non-build-input images' OCI manifests, remembering their "
                                        "tags (dry run unless --execute)."),
                        ("regenerate", "Push an OCI-released image's verified regeneration for builds (gateway)."),
+                       ("release-originals", "Delete OCI-released images' untagged manifests of the same config "
+                                             "(dry run unless --execute)."),
                        ("drop-staged", "Delete staged upstream or shared-task sources and their staging leases (dry "
                                        "run unless --execute)."),
                        ("status", "image_roots rows per wave and state.")):
@@ -942,7 +1020,7 @@ def add_commands(subparsers):
             command.add_argument("--results", type=Path, required=True)
         if name in ("switch", "revert", "release", "release-oci"):
             command.add_argument("--family", default="", help="only this inventory family (needs --rows)")
-        if name in ("release", "release-oci", "drop-staged"):
+        if name in ("release", "release-oci", "drop-staged", "release-originals"):
             command.add_argument("--execute", action="store_true", help="release; without it, only count")
         if name == "drop-staged":
             command.add_argument("--kind", choices=sorted(STAGED), required=True)

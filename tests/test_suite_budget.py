@@ -92,7 +92,8 @@ from tests.test_package_budget import package_lines
 # +23 a delivering group answer finishes its queue command.
 # +29 pinned tar names: a host's own lookups become the converters'.
 # +24 held choices steer concurrent groups apart.
-SUITE_LINE_BUDGET = 99_221
+# +26 release-originals: same-config untagged only, leases fence.
+SUITE_LINE_BUDGET = 99_247
 SUITE = Path(__file__).resolve().parent
 
 

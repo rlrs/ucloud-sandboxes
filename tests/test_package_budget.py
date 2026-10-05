@@ -149,8 +149,10 @@ import unittest
 # takes them from the host), so a gateway regeneration matches its receipt.
 # +41 a create's or group's choice holds its workers in the overlay at once
 # (2026-10-05: concurrent groups packed 504 of 512 sandboxes onto one worker).
+# +78 chunk-migrate release-originals: released images' untagged build outputs
+# (same config) kept ~1.2 TB of layers alive through the sweep.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 115_997
+PACKAGE_LINE_BUDGET = 116_075
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

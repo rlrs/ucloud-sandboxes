@@ -14,7 +14,7 @@ from urllib.parse import unquote, urlparse
 from tests import test_environment_artifact as artifact_fixtures
 from tests.harness import LocalFleet
 from ucloud_sandboxes.capabilities import ENVIRONMENT_RAFS_CAPABILITY, ENVIRONMENT_ROOT_CAPABILITY
-from ucloud_sandboxes.chunk_migrate import drop_staged, release_oci
+from ucloud_sandboxes.chunk_migrate import drop_staged, release_oci, release_originals
 from ucloud_sandboxes.environment_artifact import OCI_IMAGE, canonical_bytes, content_digest, publish_environment
 from ucloud_sandboxes.environment_dependencies import EnvironmentDependencyResolver
 from ucloud_sandboxes.environment_manifest import EnvironmentManifest
@@ -227,6 +227,29 @@ class OciReleaseTests(unittest.TestCase):
                          {"sha256-b", "sha256-c"})
         owners = {lease.owner for lease in usage.snapshot().leases.values()}
         self.assertEqual(owners, {"prepared-build:v1:z", "upstream-source:c"})
+
+    def test_release_originals_deletes_untagged_same_config_manifests_only(self):
+        roots, usage = ImageRootsStore(self.root / "image-roots.sqlite3"), RegistryUsageStore(self.root / "usage.sqlite")
+        client, repo = RegistryClient(self.oci.url), "ucloud-managed/a"
+        released = self.oci.push(repo, "v1", self.source, ((D["1"], 100),))
+        original, leased, other, tagged = (self.oci.push(repo, tag, config, ((D[digit], size),)) for tag, config, digit, size
+                                           in (("o", self.source, "2", 30), ("l", self.source, "3", 5),
+                                               ("x", D["8"], "4", 7), ("keep", self.source, "5", 9)))
+        for tag in ("o", "l", "x"):
+            del self.oci.tags[(repo, tag)]  # Untagged, as the annotation's re-tag leaves the build output.
+        usage.acquire_reference(repo, "keep-l", "prepared-build:v1:z", digest=leased)
+        self.released(roots, repo, released)
+        self.oci.delete(repo, released)
+        roots.mark_oci_released(repo, released, layer_bytes=100)
+        revisions = lambda repository: sorted(d for r, d in self.oci.manifests if r == repository)  # noqa: E731
+        dry = release_originals(roots, client, usage, revisions=revisions)
+        self.assertEqual({key: dry[key] for key in ("images", "originals", "other_config", "leased", "released",
+                                                     "layer_bytes", "errors")},
+                         {"images": 1, "originals": 2, "other_config": 1, "leased": 1, "released": 1,
+                          "layer_bytes": 30, "errors": {}})
+        self.assertEqual(len(self.oci.manifests), 4)  # A dry run deletes nothing.
+        release_originals(roots, client, usage, revisions=revisions, execute=True)
+        self.assertEqual({d for r, d in self.oci.manifests if r == repo}, {leased, other, tagged})
 
     def test_creates_by_tag_and_digest_dispatch_the_root_after_the_manifest_is_deleted(self):
         self.client.ensure_digest_protection_tag = lambda *_args: None  # The environments repository's.

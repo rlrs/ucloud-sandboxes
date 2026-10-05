@@ -865,12 +865,15 @@ def gateway_command(args):
                              "chunk_store.nydus_image on this gateway: builds would lose their bases")
         receipts = {(row["repository"], row["manifest_digest"]): row for path in args.receipts
                     for row in read_jsonl(path) if row.get("verified") is True}
-        result = release_oci(roots, RegistryClient(config.registry_url),
-                             RegistryUsageStore(config.registry_usage_file()), args.wave,
-                             catalog_file=catalog_path(config.image_file()),
-                             routing_store=open_routing_store(config.routing_file()),
-                             keys=family_keys(args.rows, args.family), execute=args.execute,
-                             include_build_inputs=args.include_build_inputs, receipts=receipts)
+        routing = open_routing_store(config.routing_file())
+        try:
+            result = release_oci(roots, RegistryClient(config.registry_url),
+                                 RegistryUsageStore(config.registry_usage_file()), args.wave,
+                                 catalog_file=catalog_path(config.image_file()), routing_store=routing,
+                                 keys=family_keys(args.rows, args.family), execute=args.execute,
+                                 include_build_inputs=args.include_build_inputs, receipts=receipts)
+        finally:  # PostgreSQL's pool cannot join its threads at interpreter shutdown.
+            getattr(routing, "close", lambda: None)()
     elif command == "regenerate":
         result = regenerate_command(config, roots, environments, args.image)
     elif command == "drop-staged":

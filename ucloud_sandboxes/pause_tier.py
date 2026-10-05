@@ -112,6 +112,8 @@ class PausedWait:
     # Reclaims in a row that made no progress, and when the next may start.
     stalls: int = 0
     retry_at: float = 0.0
+    # A node-local model wait's growth-forecast identity (observe_managed_wait).
+    local_request_id: str = ""
 
 
 def swap_room_bytes(pressure):

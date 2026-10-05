@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 import time
@@ -45,6 +46,8 @@ from .sandbox import (
     validate_container_path,
 )
 from .upload_archive import ArchivePlan, normalized_archive, plan_archive
+
+_LOG = logging.getLogger(__name__)
 
 
 class NodeStateStore:
@@ -419,12 +422,30 @@ class DirectNodeRuntime:
                 return
             self.service.park(sandbox_id, operation_id=f"local-wait-{uuid4().hex}", pause=True)
             if self.service.warden.is_paused(sandbox_id, generation):
+                # The guest is blocked on its model call: suspend its growth
+                # forecast as a relay park's wait does. Without this every
+                # agent kept its launch's whole memory bound through its waits,
+                # and launches stopped at ~160 sandboxes on a 192 GB worker.
+                request_id = f"local-wait-{uuid4().hex}"
+                self._growth_bookkeeping("observe_managed_wait", key, request_id)
                 with self._relay_parking_guard:
-                    self._paused[key] = PausedWait(time.monotonic())
+                    self._paused[key] = PausedWait(time.monotonic(), local_request_id=request_id)
             self.service.advance_lifecycle_activity_revision()
 
     def _thaw_model_wait(self, key) -> None:
+        with self._relay_parking_guard:
+            wait = self._paused.get(key) if self._paused is not None else None
         self.wake_with_activity_revision(key[0], generation=key[1], operation_id=f"local-wake-{uuid4().hex}")
+        if wait is not None and wait.local_request_id:
+            self._growth_bookkeeping("resume_managed_continuation", key, wait.local_request_id)
+
+    def _growth_bookkeeping(self, method, key, request_id) -> None:
+        # Forecasts are admission accounting; a lost wait or wake fence must
+        # never fail the pause or the thaw it describes.
+        try:
+            getattr(self.service, method)(key[0], key[1], request_id)
+        except Exception as exc:  # noqa: BLE001
+            _LOG.warning("local wait growth bookkeeping for %s skipped: %s", key[0], exc)
 
     def stop(self) -> None:
         self._background_stop.set()

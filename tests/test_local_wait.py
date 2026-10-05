@@ -7,6 +7,8 @@ import struct
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
+
+from ucloud_sandboxes.direct_registry import DirectRegistryConflictError
 from unittest.mock import patch
 
 from ucloud_sandboxes import local_wait
@@ -252,6 +254,23 @@ class RuntimeTests(unittest.TestCase):
         runtime.service.warden.paused.clear()
         with runtime.lifecycle.exclusive("agent"), self.assertRaises(SandboxBusyError):
             runtime.pause_model_wait(("agent", 1))  # Another lifecycle operation holds it: skip, never wait.
+
+    def test_a_local_wait_suspends_the_growth_forecast_and_its_thaw_resumes_it(self):
+        runtime, _ = self.runtime()
+        calls = []
+        runtime.service.observe_managed_wait = lambda *args: calls.append(("wait", *args))
+        runtime.service.resume_managed_continuation = lambda *args: calls.append(("resume", *args))
+        runtime.wake_with_activity_revision = lambda *args, **kwargs: calls.append(("wake", args[0]))
+        runtime.pause_model_wait(("agent", 1))
+        request_id = runtime._paused[("agent", 1)].local_request_id
+        self.assertTrue(request_id.startswith("local-wait-"))
+        runtime._thaw_model_wait(("agent", 1))
+        self.assertEqual(calls, [("wait", "agent", 1, request_id), ("wake", "agent"),
+                                 ("resume", "agent", 1, request_id)])
+        def refuse(*_args):
+            raise DirectRegistryConflictError("growth wait was superseded by wake")
+        runtime.service.resume_managed_continuation = refuse  # Bookkeeping never fails a thaw.
+        runtime._thaw_model_wait(("agent", 1))
 
     def test_candidates_are_managed_sandboxes_with_their_lease_and_cgroup(self):
         runtime, _ = self.runtime()

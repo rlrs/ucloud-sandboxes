@@ -83,6 +83,15 @@ class ManagedGrowthTests(unittest.TestCase):
             for _ in range(slots.capacity):
                 slots.release()
 
+    def test_local_wait_suspends_growth_and_its_resume_forecasts_a_continuation(self):
+        self.service.start_managed_process('one', self.spec)
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+        self.service.observe_managed_wait('one', 7, 'local-wait-a')
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 0)
+        self.service.resume_managed_continuation('one', 7, 'local-wait-a')
+        intent = self.service._growth_intents[('one', 7)]
+        self.assertEqual((intent.phase, intent.request_id), ('active', 'local-wait-a'))
+
     def test_memory_blocked_continuation_does_not_occupy_restore_slot(self):
         self.service.start_managed_process('one', self.spec)
         self.service.observe_managed_wait('one', 7, 'request-one')

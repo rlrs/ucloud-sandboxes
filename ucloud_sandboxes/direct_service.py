@@ -1861,6 +1861,17 @@ class DirectSandboxService:
         self._record_growth_intent(
             (sandbox_id, generation), action="wait", request_id=request_id)
 
+    def resume_managed_continuation(self, sandbox_id, generation, request_id):
+        """A node-local wait's answer resumed the guest: forecast its continuation.
+
+        Not admission-gated: the answer is already in the guest's socket, and
+        running work goes first. The forecast (back to its demonstrated peak)
+        then bounds what later launches and wakes are admitted against.
+        """
+        registration = self._require_registration(sandbox_id)
+        if registration.spec.managed_process and registration.sandbox_generation == generation:
+            self._record_growth_intent((sandbox_id, generation), action="activate", request_id=request_id)
+
     def _observe_managed_terminal(self, record):
         if not record.terminal:
             return

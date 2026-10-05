@@ -164,8 +164,9 @@ import unittest
 # +3 nbd's pool size holds for init's own first load of the module.
 # +19 UCloud bootstrap over the private network; launches skip startup slots.
 # +14 paused waits are swapped out for forecasts only after a 1 s settle, one at a time.
+# +34 local model waits suspend and resume growth forecasts (and a module logger).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 116_477
+PACKAGE_LINE_BUDGET = 116_511
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

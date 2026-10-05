@@ -105,6 +105,11 @@ its waits. Roll the switch out with a full worker replacement, as for 0.8.5.
 
 - The packet watcher's cost at 500 sandboxes per node (one NFLOG message per
   relay packet).
-- The growth-forecast bookkeeping (`observe_managed_wait` and continuation
-  admission) does not see local waits. Thaws are not admission-gated;
-  DSec's "running work first" makes them the priority anyway.
+- Thaws are not admission-gated; DSec's "running work first" makes them the
+  priority anyway. Growth bookkeeping does see local waits (0.9.35): a pause
+  records the wait (`observe_managed_wait`, with a `local-wait-` request id),
+  which suspends the sandbox's growth forecast, and the thaw records its
+  continuation (`resume_managed_continuation`), forecast back to its
+  demonstrated peak. Before, every agent kept its launch's whole memory bound
+  through its waits, and launches stopped at about 160 sandboxes on a 192 GB
+  worker with most of its memory free.

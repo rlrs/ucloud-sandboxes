@@ -289,6 +289,8 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(signals.provisioning_samples, 1)
         self.assertGreaterEqual(signals.provisioning_p95_seconds or 0, 49)
         self.assertEqual(signals.scale_up_wait_p95_seconds, 72.0)
+        self.assertLessEqual(signals.latest_schedule_age_seconds, 1)
+        self.assertIsNone(build_live_scale_signals(events[:-1], ScalePolicy()).latest_schedule_age_seconds)
 
     def test_builder_pressure_does_not_drive_sandbox_scaling(self) -> None:
         now = self.frozen_now()

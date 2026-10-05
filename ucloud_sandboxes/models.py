@@ -952,6 +952,7 @@ class LiveScaleSignals:
     provisioning_p95_seconds: float | None = None
     scale_up_wait_samples: int = 0
     scale_up_wait_p95_seconds: float | None = None
+    latest_schedule_age_seconds: int | None = None
 
     def to_dict(self) -> dict[str, float | int | None]:
         return {
@@ -978,6 +979,7 @@ class LiveScaleSignals:
             "provisioning_p95_seconds": self.provisioning_p95_seconds,
             "scale_up_wait_samples": self.scale_up_wait_samples,
             "scale_up_wait_p95_seconds": self.scale_up_wait_p95_seconds,
+            "latest_schedule_age_seconds": self.latest_schedule_age_seconds,
         }
 
 

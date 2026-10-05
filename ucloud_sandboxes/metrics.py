@@ -1176,6 +1176,8 @@ def build_live_scale_signals(
         if (value := _optional_int(item.get("submit_to_first_heartbeat_ms")))
         is not None
     )
+    latest_schedule = max((_timestamp_epoch(event.timestamp) for event in events
+                           if event.kind == "sandbox_scheduled"), default=None)
     scale_wait_values = sorted(
         value / 1000.0
         for event in events
@@ -1214,6 +1216,9 @@ def build_live_scale_signals(
         provisioning_p95_seconds=_percentile_float(provisioning_values, 0.95),
         scale_up_wait_samples=len(scale_wait_values),
         scale_up_wait_p95_seconds=_percentile_float(scale_wait_values, 0.95),
+        latest_schedule_age_seconds=(
+            None if latest_schedule is None else max(0, int(now.timestamp() - latest_schedule))
+        ),
     )
 
 

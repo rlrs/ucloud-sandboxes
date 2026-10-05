@@ -18,6 +18,7 @@ from ucloud_sandboxes.control_state import SOFT_DRAIN, ControlStateStore
 from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.gateway import placement as placement_rules
 from ucloud_sandboxes.models import (
+    LiveScaleSignals,
     EPOCH_RETIREMENTS_LABEL,
     NodeHeartbeat,
     NodeRuntimeMetrics,
@@ -207,6 +208,14 @@ class SoftDrainSelectionTests(unittest.TestCase):
             ).job_id,
             "",
         )
+
+    def test_no_selection_while_creates_are_recent(self):
+        # The next rollout step needs the workers this one's creates used.
+        nodes = [worker("100", active=10), worker("200")]
+        for age, selected in ((None, "200"), (60, ""), (600, "200")):
+            decision = evaluate_scale(nodes, demand(), ScalePolicy(scale_down_idle_seconds=600), now=utc_now(),
+                                      live_signals=LiveScaleSignals(latest_schedule_age_seconds=age))
+            self.assertEqual(decision.soft_drain_job_id, selected)
 
     def test_keeps_one_selection_and_clears_it_when_surplus_disappears(self):
         kept = evaluate_scale(

@@ -559,7 +559,15 @@ def evaluate_scale(
                     )
                 )
                 reasons.append(reason)
-        if not pressure_cooldown and not soft_drain.job_id and not soft_drain_released:
+        # A busy worker is surplus by memory claims long before it is surplus
+        # for create throughput. Consolidating it in a rollout step's tail left
+        # the next step one worker short until a new one provisioned, so new
+        # creates hold selection off for the same idle time that stops wait.
+        recent_creates = bool(
+            live_signals is not None and live_signals.latest_schedule_age_seconds is not None
+            and live_signals.latest_schedule_age_seconds < effective_policy.scale_down_idle_seconds
+        )
+        if not pressure_cooldown and not recent_creates and not soft_drain.job_id and not soft_drain_released:
             selected = plan_soft_drain(
                 nodes,
                 policy,

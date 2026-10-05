@@ -184,8 +184,8 @@ if __name__ == "__main__":
         print(json.dumps({"id": volume["id"], "linux_device": volume["linux_device"], "server": volume["server"]}))
     elif command == "delete-volume":
         entry = ledger()["volumes"][args[0]]
-        detach = call("POST", f"/volumes/{entry['id']}/actions/detach")
-        wait_action(detach["action"]["id"])
+        if call("GET", f"/volumes/{entry['id']}")["volume"]["server"] is not None:
+            wait_action(call("POST", f"/volumes/{entry['id']}/actions/detach")["action"]["id"])
         call("DELETE", f"/volumes/{entry['id']}")
         forget("volumes", args[0])
         print("deleted volume", args[0])

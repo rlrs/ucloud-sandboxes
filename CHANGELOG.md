@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased (gateway and workers)
+
+- **`PUT /v1/sandboxes/{id}/archive?path=DIR` writes many files with one exec.** Each single-file upload is a helper exec in the sandbox, so a 40-file harness costs 40 execs per sandbox; at 0.9.28 that pattern ran near 69 files/s per worker, about 100 s for a 512-rollout burst. The body is a tar, plain or gzip (detected by its magic), within the file upload's 256 MiB limit; its files may total 256 MiB and it may have 10,000 members.
+  - The worker validates the whole archive before anything is written. Only regular files and directories are accepted. Names must be relative, without `..` or control characters (a leading `./` is fine). Links, devices, FIFOs, sparse files, duplicate paths and a file that is also a directory answer 400.
+  - The helper never parses the client's bytes: the worker passes it a fresh plain tar of the regular files and names empty directories as arguments. Static-helper and managed sandboxes run `/.ucloud-job-init files extract DIR MAX [DIR...]`, which replaces each file atomically. Shell-helper sandboxes run the image's `tar -x -m -o` under `umask 022`, which replaces files in place. Either way a file gets its member's permission bits (setuid, setgid and sticky dropped) and the exec identity as owner. Missing parents are created; existing directories keep their modes. The archive is not atomic as a whole: a failed extraction can leave some files written.
+  - The upload takes the same path as a fenced file write: the generation check, then the lifecycle shared fence, then a fenced exec. A sandbox replaced while the body arrived answers 409, and a parked one wakes.
+  - It answers 501 `archive_upload_unsupported` when extraction is impossible, and the SDK then uploads the files one by one. This happens when the owner's heartbeat lacks `sandbox-archive-upload-v1` (the gateway checks), when a shell-helper image has no `tar`, or when a sandbox's static helper predates `files extract`. The helper is installed in the rootfs at create, so sandboxes created before the deploy keep the old helper.
+  - SDK 0.4.36 `upload_files` uses this endpoint. Deploy workers with the gateway (or before it).
+
 ## 0.9.29 - 2026-10-05 (gateway and workers)
 
 - **A command's running check no longer waits for the sandbox's other exec starts.** It read the lifecycle journal under the warden's per-sandbox fence, which every streaming exec's lease holds until its `runsc exec` child starts (`manager.inspect` p50 331 ms in a 0.9.28 burst). Under the node's shared lifecycle fence no transition is in flight or can start, so it now reads the atomically replaced journal revision and checks the Sentry's identity without the warden fence.

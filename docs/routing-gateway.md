@@ -149,6 +149,17 @@ File transfer is separate from exec:
 Bodies are raw `application/octet-stream`. The node validates absolute paths
 and enforces the configured body limit in both directions.
 
+`PUT /v1/sandboxes/<sandbox-id>/archive?path=<absolute-directory>` takes a tar
+(plain or gzip) and writes its regular files below the directory with one
+helper exec. Only regular files and directories with relative names and no
+`..` are accepted; anything else answers 400 before a file is written. The node
+hands the helper a re-serialized plain tar of the regular files, never the
+client's bytes. Streaming, the generation header and fencing are those of a
+file upload. A worker without `sandbox-archive-upload-v1`, an image without
+`tar`, or a sandbox whose static helper predates `files extract` answers 501
+`archive_upload_unsupported`; clients then upload file by file. The response
+counts `files`, `directories` and file `bytes`.
+
 SSH-enabled sandboxes request SSH when created. The node returns the sandbox's
 node-local target through `GET /v1/sandboxes/<sandbox-id>/ssh`. Public clients
 must use the authenticated gateway/tunnel layer; VM-local SSH ports are never

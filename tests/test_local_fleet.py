@@ -6,10 +6,13 @@ overlay manager and storage-native daemon. Only the runtime binary, overlay
 mounts, block devices and image source are fakes; see tests/harness/README.md.
 """
 
+import io
 import signal
+import tarfile
 import unittest
 
 from tests.harness import LocalFleet, process_alive
+from tests.harness.fleet import _request
 
 
 class LocalFleetScenarioTests(unittest.TestCase):
@@ -65,6 +68,34 @@ class LocalFleetScenarioTests(unittest.TestCase):
     def test_create_exec_files_delete_with_postgres_routing(self):
         with LocalFleet(postgres=True) as fleet:
             self._create_exec_files_delete(fleet)
+
+    def test_archive_upload_writes_a_harness_in_one_request(self):
+        def archive(*members) -> bytes:
+            buffer = io.BytesIO()
+            with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+                for name, data, kind, mode in members:
+                    info = tarfile.TarInfo(name)
+                    info.type, info.mode, info.size, info.linkname = kind, mode, len(data), "/etc/passwd"
+                    tar.addfile(info, io.BytesIO(data))
+            return buffer.getvalue()
+
+        with LocalFleet() as fleet:
+            fleet.create("alpha")
+            path = "/v1/sandboxes/alpha/archive?path=/workspace/harness"
+            harness = archive(("run.sh", b"echo ran\n", tarfile.REGTYPE, 0o755),
+                              ("lib/notes.txt", b"notes", tarfile.REGTYPE, 0o644))
+            uploaded = fleet.request("PUT", path, body=harness, token="sandbox")
+            self.assertEqual((uploaded.status, uploaded.json()["files"]), (200, 2), uploaded.body)
+            result = fleet.exec("alpha", ["/bin/sh", "-c", "./run.sh; cat lib/notes.txt; stat -c %a run.sh"],
+                                working_dir="/workspace/harness")
+            self.assertEqual((result.exit_code, result.stdout), (0, "ran\nnotes755\n"))
+            unsafe = fleet.request("PUT", path, body=archive(("link", b"", tarfile.SYMTYPE, 0o777)), token="sandbox")
+            self.assertEqual(unsafe.status, 400, unsafe.body)
+            # The gateway names the generation it routed to; a replaced one conflicts.
+            node = fleet.node_for("alpha")
+            stale = _request(node.url, "PUT", path, fleet.tokens.node_control, body=harness,
+                             headers={"X-UCloud-Sandbox-Generation": "99"})
+            self.assertEqual(stale.status, 409, stale.body)
 
     def test_exec_session_events_stdin_and_signal(self):
         with LocalFleet() as fleet:

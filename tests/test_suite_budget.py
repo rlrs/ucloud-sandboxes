@@ -96,7 +96,9 @@ from tests.test_package_budget import package_lines
 # +26 delivered exec results are evicted first.
 # +26 running sandboxes skip the request lock.
 # +8 the running snapshot.
-SUITE_LINE_BUDGET = 99_307
+# +254 archive upload: unsafe members refused before any write, the shell and Go
+# helpers on one normalized tar, the worker's and gateway's 501, a fleet upload.
+SUITE_LINE_BUDGET = 99_561
 SUITE = Path(__file__).resolve().parent
 
 

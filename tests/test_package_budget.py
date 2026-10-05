@@ -156,8 +156,11 @@ import unittest
 # +48 a running sandbox's commands and file writes skip its request lock
 # (the shared lifecycle fence excludes park and delete).
 # +17 the running check reads the journal snapshot without the warden fence.
+# +263 archive upload (PUT /v1/sandboxes/{id}/archive, upload_archive.py): a
+# harness's files in one helper exec instead of one each (40 files per sandbox ran
+# near 69 files/s per worker). Single-file upload stays for single files.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 116_168
+PACKAGE_LINE_BUDGET = 116_431
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

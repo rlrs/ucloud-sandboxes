@@ -230,6 +230,7 @@ def _seed_gateway_node(
     *,
     node_url: str,
     sandbox_id: str,
+    capabilities: tuple[str, ...] = ("sandbox", "disk-quota"),
 ) -> tuple[Path, Path]:
     """Install one canonical heartbeat and matching route for proxy tests."""
 
@@ -252,7 +253,7 @@ def _seed_gateway_node(
             node_url=route.node_url,
             node_epoch=route.node_epoch,
             active_sandboxes=1,
-            capabilities=("sandbox", "disk-quota"),
+            capabilities=capabilities,
             inventory=(
                 SandboxInventoryEntry(
                     sandbox_id=route.sandbox_id,

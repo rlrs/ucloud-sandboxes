@@ -13,6 +13,7 @@ import time
 from dataclasses import replace
 from datetime import timedelta
 from http import HTTPStatus
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, unquote, urlparse
@@ -45,6 +46,7 @@ from .capabilities import (
     STORAGE_NATIVE_DETACH_CAPABILITY,
     STORAGE_NATIVE_MIGRATION_CAPABILITY,
     COMMIT_EXPORT_CAPABILITY,
+    ARCHIVE_UPLOAD_CAPABILITY,
 )
 from .commit_policy import CommitRefused
 from .deployment import service_health
@@ -58,7 +60,7 @@ from .http_server import (
     TRANSFER_CHUNK_BYTES,
     traced_http_request,
 )
-from .http_contract import match_sandbox_http_route
+from .http_contract import UPLOAD_ACTIONS, match_sandbox_http_route
 from .images import (
     DEFAULT_MAX_ACTIVE_IMAGE_BUILDS,
     DockerImageRuntime,
@@ -99,6 +101,7 @@ from .sandbox import (
     sandbox_spec_fingerprint,
 )
 from .sandbox_exec import ExecSessionCapacityError, ExecSessionManager, SandboxExecSpec
+from .upload_archive import SandboxArchiveUnsupportedError
 from .storage_native_migration import (
     SUPPORTED_STORAGE_NATIVE_MIGRATION_SCHEMAS,
     StorageNativeMigration,
@@ -539,8 +542,8 @@ class NodeAgentHandler(BuildContextHttpHandler):
             self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             return
         sandbox_route = match_sandbox_http_route("PUT", parsed.path)
-        if sandbox_route is not None and sandbox_route.action == "files":
-            self._upload_file(parsed)
+        if sandbox_route is not None and sandbox_route.action in UPLOAD_ACTIONS:
+            self._upload_file(parsed, archive=sandbox_route.action == "archive")
             return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
@@ -1324,8 +1327,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
             return
         self._write_json({"sandbox_id": sandbox_id, "ssh": ssh})
 
-    def _upload_file(self, parsed: Any) -> None:
-        sandbox_id = _sandbox_id_from_path(parsed.path, suffix="/files")
+    def _upload_file(self, parsed: Any, *, archive: bool = False) -> None:
+        """Write one file, or extract an archive's files below the path (directory)."""
+        sandbox_id = _sandbox_id_from_path(parsed.path, suffix="/archive" if archive else "/files")
         container_path = _file_path_from_query(parsed)
         if container_path is None:
             self._write_json(
@@ -1333,6 +1337,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 status=HTTPStatus.BAD_REQUEST,
             )
             return
+        plan = None
         try:
             size = self._request_content_length(max_bytes=self.max_file_body_bytes)
             registration = self.manager.service._require_registration(sandbox_id)
@@ -1340,27 +1345,39 @@ class NodeAgentHandler(BuildContextHttpHandler):
             supplied_generation = self.headers.get(SANDBOX_GENERATION_HEADER)
             if supplied_generation is not None and int(supplied_generation) != generation:
                 raise SandboxConflictError("file operation no longer owns direct sandbox generation")
+
+            def write(content: bytes, staged: Any = None) -> None:
+                nonlocal plan
+                with self.telemetry.span("node.file_upload.write"):
+                    if archive:
+                        plan = self.manager.upload_archive(
+                            sandbox_id, container_path, staged or BytesIO(content),
+                            expected_generation=generation, max_bytes=self.max_file_body_bytes,
+                        )
+                    elif staged is None:
+                        self.manager.upload_file(
+                            sandbox_id, container_path, content, expected_generation=generation,
+                        )
+                    else:
+                        self.manager.upload_file_from_file(
+                            sandbox_id, container_path, staged, size, expected_generation=generation,
+                        )
+
             with self.telemetry.span(
-                "node.file_upload", attributes={"sandbox.id": sandbox_id, "upload.bytes": size},
+                "node.archive_upload" if archive else "node.file_upload",
+                attributes={"sandbox.id": sandbox_id, "upload.bytes": size},
             ) as span:
                 receiving = time.monotonic()
                 if size <= TRANSFER_CHUNK_BYTES:
                     content = self._read_raw_body(max_bytes=TRANSFER_CHUNK_BYTES)
                     span.set_attribute("upload.receive_ms", _elapsed_ms(receiving))
-                    with self.telemetry.span("node.file_upload.write"):
-                        self.manager.upload_file(
-                            sandbox_id, container_path, content, expected_generation=generation,
-                        )
+                    write(content)
                 else:
                     stream = RequestBodyStream(self.rfile, size)
                     try:
                         with self.manager.service.upload_spool.receive(stream, size) as staged:
                             span.set_attribute("upload.receive_ms", _elapsed_ms(receiving))
-                            with self.telemetry.span("node.file_upload.write"):
-                                self.manager.upload_file_from_file(
-                                    sandbox_id, container_path, staged, size,
-                                    expected_generation=generation,
-                                )
+                            write(b"", staged)
                     except SandboxStartupBusyError:
                         # Finish consuming the bounded stream before returning
                         # a safe admission retry. Otherwise an early disk-space
@@ -1374,14 +1391,10 @@ class NodeAgentHandler(BuildContextHttpHandler):
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
-        self._write_json(
-            {
-                "ok": True,
-                "sandbox_id": sandbox_id,
-                "path": container_path,
-                "size": size,
-            }
-        )
+        result = {"ok": True, "sandbox_id": sandbox_id, "path": container_path, "size": size}
+        if plan is not None:
+            result.update(files=plan.files, directories=plan.directory_members, bytes=plan.total_bytes)
+        self._write_json(result)
 
     def _download_file(self, parsed: Any) -> None:
         sandbox_id = _sandbox_id_from_path(parsed.path, suffix="/files")
@@ -1712,6 +1725,11 @@ class NodeAgentHandler(BuildContextHttpHandler):
         return False
 
     def _write_exception(self, exc: RuntimeError | ValueError) -> None:
+        if isinstance(exc, SandboxArchiveUnsupportedError):
+            # Not retryable as is: the SDK uploads the files one by one.
+            self._write_json({"error": str(exc), "error_code": "archive_upload_unsupported", "retryable": False},
+                             status=HTTPStatus.NOT_IMPLEMENTED)
+            return
         if isinstance(exc, ManagedProcessReadUnavailable):
             self._write_json(
                 {"error": str(exc), "error_code": "managed_process_read_unavailable", "retryable": True},
@@ -2038,6 +2056,7 @@ def build_direct_node_agent_server(
         HIBERNATE_LOCAL_CAPABILITY,
         RELAY_WAKE_FENCE_CAPABILITY,
         RESOURCE_PHASE_CAPABILITY,
+        ARCHIVE_UPLOAD_CAPABILITY,
         "direct-runsc-v1",
     ]
     if service.provisioner.network_manager is not None:

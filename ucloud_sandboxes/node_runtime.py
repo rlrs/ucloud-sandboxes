@@ -42,7 +42,9 @@ from .sandbox import (
     SandboxSpec,
     _atomic_write_json,
     compose_activity_revision,
+    validate_container_path,
 )
+from .upload_archive import ArchivePlan, normalized_archive, plan_archive
 
 
 class NodeStateStore:
@@ -1105,6 +1107,20 @@ class DirectNodeRuntime:
             self.service.write_file_from_file(
                 sandbox_id, path, source, size, expected_generation=expected_generation, fenced=True,
             )
+
+    def upload_archive(
+        self, sandbox_id: str, directory: str, source: BinaryIO, *,
+        expected_generation: int, max_bytes: int,
+    ) -> ArchivePlan:
+        """Validate the whole archive, then extract it with one fenced exec."""
+        validate_container_path("sandbox archive directory", directory)
+        plan = plan_archive(source, max_bytes=max_bytes)
+        with normalized_archive(source, plan, self.service.upload_spool) as stdin:
+            with self._file_fence(sandbox_id, expected_generation):
+                self.service.extract_archive(
+                    sandbox_id, directory, plan, expected_generation=expected_generation, fenced=True, **stdin,
+                )
+        return plan
 
     @contextmanager
     def _file_fence(self, sandbox_id: str, expected_generation: int | None):

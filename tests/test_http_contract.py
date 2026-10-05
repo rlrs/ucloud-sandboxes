@@ -10,6 +10,7 @@ class SandboxHttpContractTests(unittest.TestCase):
             ("DELETE", "/v1/sandboxes/s1", "delete", False),
             ("GET", "/v1/sandboxes/s1/files", "files", True),
             ("PUT", "/v1/sandboxes/s1/files", "files", True),
+            ("PUT", "/v1/sandboxes/s1/archive", "archive", True),
             ("GET", "/v1/sandboxes/s1/ssh", "ssh", True),
             ("POST", "/v1/sandboxes/s1/exec", "exec", True),
             ("POST", "/v1/sandboxes/s1/jobs", "job_create", True),
@@ -50,6 +51,7 @@ class SandboxHttpContractTests(unittest.TestCase):
             ("POST", "/v1/sandboxes/s1%2Fother/exec"),
             ("GET", "/v1/sandboxes//files"),
             ("POST", "/v1/sandboxes/s1/snapshot"),
+            ("GET", "/v1/sandboxes/s1/archive"),
         ):
             with self.subTest(method=method, path=path):
                 self.assertIsNone(match_sandbox_http_route(method, path))

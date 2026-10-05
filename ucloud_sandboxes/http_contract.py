@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from urllib.parse import unquote, urlparse
 
+# PUT bodies the gateway streams to the worker, which acknowledges with JSON.
+UPLOAD_ACTIONS = frozenset({"files", "archive"})
+
 
 @dataclass(frozen=True)
 class SandboxHttpRoute:
@@ -44,6 +47,8 @@ def match_sandbox_http_route(method: str, path: str) -> SandboxHttpRoute | None:
         return SandboxHttpRoute("environment", sandbox_id, sdk_public=True)
     if suffix == ["files"] and method in {"GET", "PUT"}:
         return SandboxHttpRoute("files", sandbox_id, sdk_public=True, wakes=True)
+    if suffix == ["archive"] and method == "PUT":
+        return SandboxHttpRoute("archive", sandbox_id, sdk_public=True, wakes=True)
     if suffix == ["ssh"] and method == "GET":
         return SandboxHttpRoute("ssh", sandbox_id, sdk_public=True, wakes=True)
     if suffix == ["exec"] and method == "POST":

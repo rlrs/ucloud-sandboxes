@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/tar"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,13 @@ import (
 )
 
 const maxFileOperationBytes = 256 * 1024 * 1024
+
+// The node validates and re-serializes an uploaded archive before it reaches
+// `files extract` (ucloud_sandboxes/upload_archive.py); these repeat its bounds.
+const (
+	maxArchiveMembers   = 10000
+	maxArchiveNameBytes = 4096
+)
 
 var (
 	errFileInvalid    = errors.New("invalid file request")
@@ -89,24 +97,44 @@ func runFiles(args []string, input io.Reader, output io.Writer) error {
 		}
 		return statFile(args[1], output)
 	}
+	// Older helpers answer `extract` with exit 3 and "unsupported file
+	// operation" or the old usage line; the node reports those as unsupported.
+	if len(args) >= 3 && args[0] == "extract" {
+		if err := validateFilePath(args[1]); err != nil {
+			return err
+		}
+		limit, err := fileLimit(args[2])
+		if err != nil {
+			return err
+		}
+		return extractArchive(args[1], limit, args[3:], input)
+	}
 	if len(args) != 3 {
-		return fmt.Errorf("%w: usage: files read|write absolute-path max-bytes | stat absolute-path", errFileInvalid)
+		return fmt.Errorf("%w: usage: files read|write absolute-path max-bytes | extract directory max-bytes [directory...] | stat absolute-path", errFileInvalid)
 	}
 	operation, path := args[0], args[1]
 	if operation != "read" && operation != "write" {
-		return fmt.Errorf("%w: unsupported file operation", errFileInvalid)
+		return fmt.Errorf("%w: file operation must be read, write, extract or stat", errFileInvalid)
 	}
 	if err := validateFilePath(path); err != nil {
 		return err
 	}
-	limit, err := strconv.ParseInt(args[2], 10, 64)
-	if err != nil || limit < 1 || limit > maxFileOperationBytes {
-		return fmt.Errorf("%w: file limit must be 1..268435456 bytes", errFileInvalid)
+	limit, err := fileLimit(args[2])
+	if err != nil {
+		return err
 	}
 	if operation == "read" {
 		return readFile(path, limit, output)
 	}
 	return writeFile(path, limit, input)
+}
+
+func fileLimit(value string) (int64, error) {
+	limit, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || limit < 1 || limit > maxFileOperationBytes {
+		return 0, fmt.Errorf("%w: file limit must be 1..268435456 bytes", errFileInvalid)
+	}
+	return limit, nil
 }
 
 func readFile(path string, limit int64, output io.Writer) error {
@@ -136,6 +164,21 @@ func readFile(path string, limit int64, output io.Writer) error {
 }
 
 func writeFile(path string, limit int64, input io.Reader) error {
+	return replaceFile(path, 0600, func(file *os.File) error {
+		count, err := io.Copy(file, io.LimitReader(input, limit+1))
+		if err != nil {
+			return err
+		}
+		if count > limit {
+			return errFileTooLarge
+		}
+		return nil
+	})
+}
+
+// replaceFile fills a private temporary file beside path and renames it over
+// path, so readers see the old file or the whole new one.
+func replaceFile(path string, mode os.FileMode, fill func(*os.File) error) error {
 	if strings.HasSuffix(path, "/") || filepath.Clean(path) == "/" {
 		return fmt.Errorf("%w: file write requires a file destination", errFileInvalid)
 	}
@@ -150,12 +193,14 @@ func writeFile(path string, limit int64, input io.Reader) error {
 	temporary := file.Name()
 	defer os.Remove(temporary)
 	defer file.Close()
-	count, err := io.Copy(file, io.LimitReader(input, limit+1))
-	if err != nil {
+	if err := fill(file); err != nil {
 		return err
 	}
-	if count > limit {
-		return errFileTooLarge
+	// CreateTemp made it 0600; Chmod, unlike creation, ignores the umask.
+	if mode != 0600 {
+		if err := file.Chmod(mode); err != nil {
+			return err
+		}
 	}
 	// File upload promises atomic visibility, like the shell implementation.
 	// The lifecycle capture barrier owns durable workspace synchronization.
@@ -172,6 +217,78 @@ func writeFile(path string, limit int64, input io.Reader) error {
 			return fmt.Errorf("%w: file write destination is a directory", errFileNotRegular)
 		}
 		return fmt.Errorf("replace file: %w", err)
+	}
+	return nil
+}
+
+// validateArchiveName accepts the node's canonical member names: relative and
+// slash-separated, without empty, "." or ".." components.
+func validateArchiveName(name string) error {
+	if name == "" || len(name) > maxArchiveNameBytes || strings.HasPrefix(name, "/") {
+		return fmt.Errorf("%w: archive member %q must be a relative path", errFileInvalid, name)
+	}
+	for _, part := range strings.Split(name, "/") {
+		if part == "" || part == "." || part == ".." {
+			return fmt.Errorf("%w: archive member %q is not canonical", errFileInvalid, name)
+		}
+	}
+	for _, char := range name {
+		if char < 32 || char == 127 {
+			return fmt.Errorf("%w: archive member contains control characters", errFileInvalid)
+		}
+	}
+	return nil
+}
+
+// extractArchive writes each regular file of the tar on input below directory,
+// each replaced atomically with its member's permission bits, then creates the
+// named empty directories. Any other member type is refused. Existing
+// directories keep their modes. limit bounds the files' total bytes.
+func extractArchive(directory string, limit int64, directories []string, input io.Reader) error {
+	for _, name := range directories {
+		if err := validateArchiveName(name); err != nil {
+			return err
+		}
+	}
+	if err := os.MkdirAll(directory, 0755); err != nil {
+		return err
+	}
+	reader := tar.NewReader(input)
+	remaining := limit
+	for members := 0; ; members++ {
+		header, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("%w: archive: %v", errFileInvalid, err)
+		}
+		if members == maxArchiveMembers {
+			return fmt.Errorf("%w: archive has more than %d members", errFileInvalid, maxArchiveMembers)
+		}
+		if header.Typeflag != tar.TypeReg {
+			return fmt.Errorf("%w: archive member %q is not a regular file", errFileInvalid, header.Name)
+		}
+		if err := validateArchiveName(header.Name); err != nil {
+			return err
+		}
+		if header.Size > remaining {
+			return errFileTooLarge
+		}
+		remaining -= header.Size
+		mode := os.FileMode(header.Mode) & os.ModePerm
+		err = replaceFile(filepath.Join(directory, header.Name), mode, func(file *os.File) error {
+			_, err := io.CopyN(file, reader, header.Size)
+			return err
+		})
+		if err != nil {
+			return err
+		}
+	}
+	for _, name := range directories {
+		if err := os.MkdirAll(filepath.Join(directory, name), 0755); err != nil {
+			return err
+		}
 	}
 	return nil
 }

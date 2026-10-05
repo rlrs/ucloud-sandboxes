@@ -69,6 +69,9 @@ from .sandbox import (
 )
 from .telemetry import Telemetry
 from .upload_spool import UploadSpool
+from .upload_archive import (
+    ArchivePlan, SandboxArchiveUnsupportedError, archive_helper_unsupported, sandbox_archive_extract_script,
+)
 from .transition_admission import MemoryDemand, TransitionCost, TransitionKind, TransitionLedger
 from .warm_park import WarmParkDeferred
 from .disk_claims import next_grant
@@ -2371,6 +2374,28 @@ class DirectSandboxService:
             raise DirectWardenError(
                 f"sandbox file write failed with exit {result.exit_code}"
             )
+
+    def extract_archive(
+        self, sandbox_id: str, directory: str, plan: ArchivePlan, *,
+        expected_generation: int, fenced: bool = False, **stdin,
+    ) -> None:
+        """One helper exec writes a normalized archive's files below directory."""
+        validate_container_path("sandbox archive directory", directory)
+        registration = self._require_registration(sandbox_id)
+        static = registration.spec.managed_process or registration.spec.filesystem.management_helper == "static"
+        command = (
+            (MANAGED_PROCESS_BINARY, "files", "extract", directory, str(max(1, plan.total_bytes)))
+            if static else ("/bin/sh", "-c", sandbox_archive_extract_script(), "ucloud-extract", directory)
+        )
+        result = self._file_exec(
+            sandbox_id, (*command, *plan.empty_directories), expected_generation=expected_generation,
+            max_stdout_bytes=64 * 1024, max_stderr_bytes=64 * 1024, fenced=fenced, **stdin,
+        )
+        if archive_helper_unsupported(result.exit_code, result.stderr, static=static):
+            raise SandboxArchiveUnsupportedError("this sandbox cannot extract archives; upload files one by one")
+        if result.exit_code != 0:
+            detail = result.stderr.decode(errors="replace").strip()[-300:]
+            raise DirectWardenError(f"sandbox archive extraction failed with exit {result.exit_code}: {detail}")
 
     def _file_exec(
         self,

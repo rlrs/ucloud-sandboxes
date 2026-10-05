@@ -159,8 +159,9 @@ import unittest
 # +263 archive upload (PUT /v1/sandboxes/{id}/archive, upload_archive.py): a
 # harness's files in one helper exec instead of one each (40 files per sandbox ran
 # near 69 files/s per worker). Single-file upload stays for single files.
+# +7 module closure: erofs, nbd, nft_log, nfnetlink_log (UCloud images lack them).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 116_431
+PACKAGE_LINE_BUDGET = 116_438
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

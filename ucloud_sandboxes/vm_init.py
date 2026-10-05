@@ -149,6 +149,14 @@ RUNTIME_KERNEL_MODULES = (
     "xt_addrtype",
     "xt_conntrack",
     "xt_MASQUERADE",
+    # Immutable environments: EROFS components and RAFS images over NBD
+    # (environment_bootstrap, nydusd's block-nbd). Node-local model waits
+    # log relay replies to an NFLOG group (local_wait). Hetzner's held kernel
+    # package ships these; UCloud's minimal image has lacked such payloads.
+    "erofs",
+    "nbd",
+    "nft_log",
+    "nfnetlink_log",
 )
 DEFAULT_SSH_OPTIONS = (
     "-o",

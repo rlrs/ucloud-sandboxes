@@ -71,6 +71,18 @@ class ManagedGrowthTests(unittest.TestCase):
                 self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-one'))
                 self.assertEqual(self.service.get('one').state, 'running')
 
+    def test_launch_does_not_queue_behind_cold_creates_for_startup_slots(self):
+        slots = self.service._startup_slots  # A create burst holds every startup slot.
+        for index in range(slots.capacity):
+            self.assertTrue(slots.acquire(timeout=1, owner=(f'create-{index}', 1)))
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                self.assertEqual(pool.submit(self.service.start_managed_process, 'one', self.spec)
+                                 .result(1).state, 'running')
+        finally:
+            for _ in range(slots.capacity):
+                slots.release()
+
     def test_memory_blocked_continuation_does_not_occupy_restore_slot(self):
         self.service.start_managed_process('one', self.spec)
         self.service.observe_managed_wait('one', 7, 'request-one')

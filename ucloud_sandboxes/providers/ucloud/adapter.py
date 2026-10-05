@@ -216,7 +216,8 @@ class UCloudProvider:
         self,
         instance: ProviderInstance,
     ) -> InstanceBootstrapAccess:
-        return bootstrap_access(instance)
+        return bootstrap_access(instance, private_network_ids=frozenset(
+            profile.private_network_id for profile in self._profiles.values() if profile.private_network_id))
 
     def instance_is_eligible(self, instance: ProviderInstance) -> bool:
         private_network_ids = {

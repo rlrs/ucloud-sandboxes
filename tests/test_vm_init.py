@@ -741,6 +741,16 @@ else:
 
         payload["status"]["state"] = "IN_QUEUE"
         self.assertFalse(bootstrap_access_from_payload(payload).runnable)
+        # On the control plane's private network the hostname wins, announced or not.
+        from ucloud_sandboxes.providers.ucloud.bootstrap import bootstrap_access
+        from ucloud_sandboxes.providers.ucloud.models import instance_from_payload
+        payload.update(status={"state": "RUNNING"}, updates=[], specification={
+            "hostname": "sandbox-node-ab12-1", "resources": [{"type": "private_network", "id": "net"}]})
+        private = bootstrap_access(instance_from_payload(payload), private_network_ids=frozenset({"net"}))
+        self.assertEqual((private.runnable, private.command), (True, "ssh ucloud@sandbox-node-ab12-1"))
+        for networks, hostname in ((frozenset({"other"}), "sandbox-node-ab12-1"), (frozenset({"net"}), "x;rm -rf")):
+            payload["specification"]["hostname"] = hostname
+            self.assertIsNone(bootstrap_access(instance_from_payload(payload), private_network_ids=networks).command)
 
     def test_parses_machine_readable_phase_timings(self) -> None:
         phases, total = parse_vm_init_phases(

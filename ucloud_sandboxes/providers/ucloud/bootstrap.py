@@ -1,13 +1,22 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from ...models import ProviderInstance
 from ..base import InstanceBootstrapAccess
 
+# A VM on the control plane's private network answers SSH at its hostname
+# there; UCloud's public SSH proxy (ssh.cloud.sdu.dk) is a fallback only.
+_HOSTNAME = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
 
-def bootstrap_access(instance: ProviderInstance) -> InstanceBootstrapAccess:
-    command = extract_ssh_command(instance.raw)
+
+def bootstrap_access(
+    instance: ProviderInstance,
+    *,
+    private_network_ids: frozenset[str] = frozenset(),
+) -> InstanceBootstrapAccess:
+    command = private_ssh_command(instance, private_network_ids) or extract_ssh_command(instance.raw)
     if not instance.is_running:
         return InstanceBootstrapAccess(
             instance=instance,
@@ -37,6 +46,14 @@ def bootstrap_access(instance: ProviderInstance) -> InstanceBootstrapAccess:
         # retries with increasingly sparse probes.
         startup_probe_seconds=30,
     )
+
+
+def private_ssh_command(instance: ProviderInstance, private_network_ids: frozenset[str]) -> str | None:
+    """``ssh ucloud@<hostname>`` when the instance shares a private network."""
+    hostname = instance.hostname or ""
+    if not private_network_ids.intersection(instance.private_network_ids) or not _HOSTNAME.fullmatch(hostname):
+        return None
+    return f"ssh ucloud@{hostname}"
 
 
 def bootstrap_access_from_payload(payload: dict[str, Any]) -> InstanceBootstrapAccess:

@@ -1929,31 +1929,32 @@ class DirectSandboxService:
                     # its old park must be revoked in the same durable order.
                     self.provisioner.registry.relay_wake_fence(*key, request_id, record=True)
                 return previous
-        # Growth reserves bytes, not restore I/O. A resident continuation must
-        # not queue behind disk restores; actual restores acquire their permit
-        # in _restore_admission. Activation remains durable before returning.
+        # Growth reserves bytes, not restore I/O or startup work. A resident
+        # continuation must not queue behind disk restores (actual restores
+        # acquire their permit in _restore_admission), and a launch into a
+        # running sandbox must not queue behind cold creates for startup slots:
+        # in a burst it waited out the deadline behind hundreds of them. The
+        # memory guard below is the bound. Activation stays durable before returning.
         with self._transition_demand(key, current_cost()):
-            slot = self.startup_admission(owner=key) if startup else nullcontext()
-            with slot:
-                with self._active_admission_guard(
-                    ResourceQuantity(memory_mb=registration.spec.memory_mb), check_shape=True,
-                    check_cpu=False, transition_cost=current_cost(), transition_owner=key,
-                    transition_cost_provider=current_cost, validate_owner=validate_owner, deadline=deadline):
-                    # Charge the admitted bytes before releasing the guard, so a
-                    # concurrent admission cannot spend the same headroom while
-                    # this commit fsyncs outside the node-wide lock.
-                    self._provisional_growth[key] = current_cost()
+            with self._active_admission_guard(
+                ResourceQuantity(memory_mb=registration.spec.memory_mb), check_shape=True,
+                check_cpu=False, transition_cost=current_cost(), transition_owner=key,
+                transition_cost_provider=current_cost, validate_owner=validate_owner, deadline=deadline):
+                # Charge the admitted bytes before releasing the guard, so a
+                # concurrent admission cannot spend the same headroom while
+                # this commit fsyncs outside the node-wide lock.
+                self._provisional_growth[key] = current_cost()
+                self._refresh_growth_forecasts_locked()
+            try:
+                job_id, launch_sha256 = launch
+                return self._record_growth_intent(
+                    key, action="activate", request_id=request_id,
+                    job_id=job_id, launch_sha256=launch_sha256)
+            finally:
+                with self._capacity_guard:
+                    self._provisional_growth.pop(key, None)
                     self._refresh_growth_forecasts_locked()
-                try:
-                    job_id, launch_sha256 = launch
-                    return self._record_growth_intent(
-                        key, action="activate", request_id=request_id,
-                        job_id=job_id, launch_sha256=launch_sha256)
-                finally:
-                    with self._capacity_guard:
-                        self._provisional_growth.pop(key, None)
-                        self._refresh_growth_forecasts_locked()
-                        self._admission_changed.notify_all()
+                    self._admission_changed.notify_all()
 
     @staticmethod
     def _managed_workload_credentials(
@@ -2510,9 +2511,9 @@ class DirectSandboxService:
 
     @contextmanager
     def startup_admission(self, *, owner=None):
-        """Queue cold creates and buffered uploads before allocating resources.
+        """Queue cold creates before allocating resources.
 
-        Reentrant upload helpers reuse the outer request's reservation.
+        Reentrant helpers reuse the outer request's reservation.
         Restores and resident reads make progress independently of this queue.
         """
 

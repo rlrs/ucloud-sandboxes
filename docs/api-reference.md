@@ -208,6 +208,7 @@ The VM-side node agent exposes:
 - `DELETE /v1/sandboxes/<sandbox-id>`
 - `PUT /v1/sandboxes/<sandbox-id>/files?path=<absolute-container-path>`
 - `GET /v1/sandboxes/<sandbox-id>/files?path=<absolute-container-path>`
+- `PUT /v1/sandboxes/<sandbox-id>/archive?path=<absolute-container-directory>`
 - `GET /v1/sandboxes/<sandbox-id>/ssh`
 - `POST /v1/sandboxes/<sandbox-id>/exec`
 - `GET /v1/exec/<session-id>`

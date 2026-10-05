@@ -56,6 +56,7 @@ from .worker_receipts import (
 
 from .admission import FairCapacity
 from .capabilities import (
+    ARCHIVE_UPLOAD_CAPABILITY,
     REQUEST_BODY_KEEPALIVE_CAPABILITY,
     STORAGE_NATIVE_CAPABILITY,
     STORAGE_NATIVE_MIGRATION_CAPABILITY,
@@ -124,7 +125,7 @@ from .http_server import (
     TRANSFER_CHUNK_BYTES,
     traced_http_request,
 )
-from .http_contract import SandboxHttpRoute, match_sandbox_http_route
+from .http_contract import UPLOAD_ACTIONS, SandboxHttpRoute, match_sandbox_http_route
 from .gateway.base_regeneration import BaseRegenerating, BaseReleased
 from .images import (
     DockerImageRuntime,
@@ -3745,7 +3746,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         buffered_bulk = self.command in {"POST", "PUT", "PATCH"} and (
             weight > 64 * 1024
             or (action is not None and action.action == "files")
-        ) and not (self.command == "PUT" and action is not None and action.action == "files")
+        ) and not (self.command == "PUT" and action is not None and action.action in UPLOAD_ACTIONS)
         if buffered_bulk:
             with self._startup_request_admission(weight=weight) as admitted:
                 if admitted:
@@ -3838,7 +3839,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return
 
         try:
-            if self.command == "PUT" and sandbox_http_route is not None and sandbox_http_route.action == "files":
+            if self.command == "PUT" and sandbox_http_route is not None and sandbox_http_route.action in UPLOAD_ACTIONS:
                 length = self._request_content_length(max_bytes=DEFAULT_MAX_PROXY_BODY_BYTES)
                 # One transfer chunk is already the streaming adapter's memory
                 # bound. Buffer small tools/signals within that same bound so
@@ -3926,6 +3927,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return
             self._write_route_worker_unreachable(route)
             return
+        if sandbox_http_route is not None and sandbox_http_route.action == "archive":
+            owner = self._heartbeat_for_route(job_id=route.job_id, include_inventory=False)
+            if owner is not None and ARCHIVE_UPLOAD_CAPABILITY not in owner.capabilities:
+                # The SDK then uploads the files one by one.
+                self._write_json({"error": "the sandbox's worker predates archive upload",
+                                  "error_code": "archive_upload_unsupported", "retryable": False},
+                                 status=HTTPStatus.NOT_IMPLEMENTED)
+                return
 
         if implicit_wake:
             completed_wake = self._perform_implicit_wake(route)
@@ -3941,7 +3950,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             if self.command == "DELETE"
             else None
         )
-        if self.command == "PUT" and sandbox_http_route is not None and sandbox_http_route.action == "files":
+        if self.command == "PUT" and sandbox_http_route is not None and sandbox_http_route.action in UPLOAD_ACTIONS:
             extra_headers = {
                 "Content-Length": str(body.length if isinstance(body, RequestBodyStream) else len(body)),
                 SANDBOX_GENERATION_HEADER: str(route.generation),
@@ -3977,7 +3986,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             if proxy_body is None:
                 return
         if (self.command == "PUT" and sandbox_http_route is not None
-                and sandbox_http_route.action == "files" and isinstance(proxy_body, bytes)
+                and sandbox_http_route.action in UPLOAD_ACTIONS and isinstance(proxy_body, bytes)
                 and len(proxy_body) <= TRANSFER_CHUNK_BYTES
                 and self._defer_node_response(route.node_url, self.path, method="PUT",
                                              body=proxy_body, extra_headers=extra_headers)):

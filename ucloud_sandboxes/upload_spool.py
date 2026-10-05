@@ -19,8 +19,7 @@ class UploadSpool:
         self._lock = Lock()
         self._unwritten_bytes = 0
 
-    @contextmanager
-    def receive(self, source: BinaryIO, length: int) -> Iterator[BinaryIO]:
+    def _reserve(self, length: int) -> None:
         if length < 0:
             raise ValueError("upload length cannot be negative")
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -33,6 +32,21 @@ class UploadSpool:
             if available - self._unwritten_bytes - length < self.min_free_bytes:
                 raise SandboxStartupBusyError("node upload staging is waiting for disk space")
             self._unwritten_bytes += length
+
+    @contextmanager
+    def staging(self, length: int) -> Iterator[BinaryIO]:
+        """An empty unlinked file; up to ``length`` bytes stay reserved while it is open."""
+        self._reserve(length)
+        try:
+            with TemporaryFile(dir=self.directory, mode="w+b") as staged:
+                yield staged
+        finally:
+            with self._lock:
+                self._unwritten_bytes -= length
+
+    @contextmanager
+    def receive(self, source: BinaryIO, length: int) -> Iterator[BinaryIO]:
+        self._reserve(length)
         remaining = length
         staged = None
         try:

@@ -5,6 +5,7 @@ import os
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -190,6 +191,21 @@ if __name__ == "__main__":
         print("deleted volume", args[0])
     elif command == "delete-server":
         delete_server(args[0])
+    elif command == "adopt":
+        # Record an existing server or volume (made outside this ledger) by its name.
+        kind, name = args
+        if kind not in ("servers", "volumes"):
+            raise SystemExit("adopt servers|volumes <name>")
+        found = call("GET", f"/{kind}?name={urllib.parse.quote(name)}")[kind]
+        if len(found) != 1:
+            raise SystemExit(f"{len(found)} {kind} named {name}")
+        item = found[0]
+        if kind == "servers":
+            record(kind, name, {"id": item["id"]})
+        else:
+            server = next((key for key, value in ledger()["servers"].items() if value["id"] == item["server"]), None)
+            record(kind, name, {"id": item["id"], "size_gb": item["size"], "server": server})
+        print(json.dumps({"id": item["id"], "kind": kind, "name": name}))
     elif command == "list":
         print(json.dumps(ledger(), indent=2))
     else:

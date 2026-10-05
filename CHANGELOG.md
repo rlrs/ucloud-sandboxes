@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.24 - 2026-10-05 (gateway only)
+
+- **A queued group's 503 that created members finishes its command** (`X-UCloud-Group-Delivered`). Only the answer that created members carries their records; requeueing it held running members idle until the whole group was placed or its deadline passed. The client starts them and repeats the request, which places only unplaced members. A 503 that placed none still requeues.
+
 ## 0.9.23 - 2026-10-05 (gateway and workers)
 
 - **`chunk-migrate drop-staged --kind upstream|shared [--execute]`** deletes the staged upstream sources (`ucloud-upstream`) and shared-task sources (`ucloud-shared-sources`), which nothing reads once their prepared images exist. Each digest's staging leases go first, then its manifest is deleted in the usage store's writer transaction unless any other lease holds it. `release-oci` closes its routing store (no PostgreSQL pool traceback at exit).

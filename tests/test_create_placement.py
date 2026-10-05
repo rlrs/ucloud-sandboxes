@@ -1,11 +1,12 @@
-"""C4.3 phase 1: power-of-k creates behind ``gateway_create_placement``.
+"""C4.3 phases 1-2: power-of-k creates behind ``gateway_create_placement``.
 
 Tier: contract. Two gateways over one routing and heartbeat state place
 creates in both modes. Power-of-k moves a definitely rejected create to the
 next candidate as a fresh incarnation, keeps an ambiguous one where it is,
 and queues demand once every candidate rejects. A worker bounds its
 admission wait by the gateway's header. The route intent keeps today's
-generation, operation and spec-hash fences on SQLite and PostgreSQL.
+generation, operation and spec-hash fences on SQLite and PostgreSQL. With
+the durable queue, both gateways claim queued creates and run them.
 """
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -113,6 +114,90 @@ class TwoGatewayTests(unittest.TestCase):
             mapped.clear()
             self.assertEqual(fleet.create("plain")["state"], "running")
             self.assertNotIn("environment_root", fleet.route("plain").spec)
+
+
+def claimed(fleet, gate=None):
+    """Per gateway, the (kind, id) of each command it ran; ``gate`` runs first."""
+    seen = [[] for _ in fleet.gateways]
+    for index, (server, _thread) in enumerate(fleet.gateways):
+        claims = server.RequestHandlerClass.placement_claims
+
+        def dispatch(command, run=claims.dispatch, ran=seen[index]):
+            ran.append((command["kind"], command["sandbox_id"]))
+            if gate is not None:
+                gate()
+            return run(command)
+        claims.dispatch = dispatch
+    return seen
+
+
+def commands(fleet):
+    with fleet.gateway.RequestHandlerClass.routing_store.pool.connection() as conn:
+        return conn.execute("SELECT sandbox_id,kind,state,attempts,result_status FROM gateway_commands "
+                            "ORDER BY sandbox_id").fetchall()
+
+
+class QueuedCreateTests(unittest.TestCase):
+    """C4.3 phase 2: with the durable queue, every API process claims creates
+    and groups and runs them itself. Here two gateways are those processes."""
+
+    def fleet(self, nodes=2, **options):
+        return LocalFleet(nodes=nodes, gateways=2, postgres=True, create_placement="power_of_k",
+                          gateway_options={"queue_placement": True, **options})
+
+    def test_two_api_processes_claim_creates_and_place_each_once(self):
+        barrier = Barrier(4)
+        with self.fleet(create_claim_budget=2) as fleet:
+            # Four creates meet at the barrier only if each process holds two.
+            seen = claimed(fleet, gate=lambda: barrier.wait(timeout=10))
+            names = [f"q-{index}" for index in range(4)]
+            with ThreadPoolExecutor(4) as pool:
+                answers = list(pool.map(lambda name: fleet.request(
+                    "POST", "/v1/sandboxes", payload={"id": name, **SPEC}, token="sandbox",
+                    gateway=int(name[-1]) % 2), names))
+            self.assertEqual([answer.status for answer in answers], [201] * 4, answers[0].body)
+            self.assertEqual([len(ran) for ran in seen], [2, 2])
+            self.assertEqual(sorted(name for ran in seen for _kind, name in ran), names)
+            for name in names:
+                self.assertEqual((fleet.route(name).generation, fleet.route(name).state), (1, "running"))
+                self.assertEqual(sum(node.registration(name) is not None for node in fleet.nodes), 1)
+            self.assertEqual(sum(node.requests.count(("POST", "/v1/sandboxes")) for node in fleet.nodes), 4)
+            self.assertEqual({(row["state"], row["attempts"], row["result_status"]) for row in commands(fleet)},
+                             {("done", 1, 201)})
+
+    def test_a_group_command_runs_in_the_api_process_that_claims_it(self):
+        with self.fleet() as fleet:
+            seen = claimed(fleet)
+            created = fleet.request("POST", "/v1/sandboxes:batch", token="sandbox", gateway=1,
+                                    payload={"group_id": "g", "count": 3, "spec": SPEC})
+            self.assertEqual((created.status, created.json()["counts"]), (201, {"running": 3}), created.body)
+            self.assertEqual(seen[0] + seen[1], [("group", "g")])
+            self.assertEqual(fleet.gateway.RequestHandlerClass.routing_store.sandbox_group("g").placed,
+                             {"g-0000", "g-0001", "g-0002"})
+            self.assertEqual([(row["kind"], row["state"]) for row in commands(fleet)], [("group", "done")])
+
+    def test_a_retryable_answer_requeues_the_create_until_a_worker_takes_it(self):
+        with self.fleet(nodes=1) as fleet:
+            node = fleet.nodes[0]
+            fleet.create("seed")  # Its image is cached: the create itself is refused.
+            fleet.heartbeat()
+            self.assertEqual(node.drain("solo").status, 200)  # The gateway does not know.
+            seen = claimed(fleet)
+            with ThreadPoolExecutor(1) as pool:
+                answer = pool.submit(fleet.request, "POST", "/v1/sandboxes", token="sandbox",
+                                     payload={"id": "requeued", **SPEC})
+                deadline = time.monotonic() + 10
+                while len(seen[0] + seen[1]) < 2 and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertGreaterEqual(len(seen[0] + seen[1]), 2)  # The first was refused and requeued.
+                self.assertFalse(answer.done())  # The client waits through the requeues.
+                self.assertEqual(node.drain("solo", draining=False).status, 200)
+                self.assertEqual(answer.result(30).status, 201, answer.result().body)
+            # Each refused attempt was its own incarnation, deleted before the next.
+            self.assertGreater(fleet.route("requeued").generation, 1)
+            row = next(row for row in commands(fleet) if row["sandbox_id"] == "requeued")
+            self.assertEqual((row["state"], row["result_status"]), ("done", 201))
+            self.assertGreaterEqual(row["attempts"], 2)
 
 
 class CreateLoopTests(unittest.TestCase):

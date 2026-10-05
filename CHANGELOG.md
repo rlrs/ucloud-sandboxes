@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **C4.3 phase 2: creates leave the loopback (only with `gateway_create_placement: "power_of_k"`, which is off).** Each API process claims queued creates and groups from `gateway_commands` and runs them on its own handler, from memory instead of a loopback HTTP request, under the same claim token, lease, command fence and 503 requeue. The placement service then claims wakes only. Each API process keeps up to `max(32, ⌈create_target_concurrency_per_node × max_nodes / gateway_processes⌉)` creates in flight: 32 each, 192 in all, in production. Ranked mode is unchanged: API processes claim nothing and the placement service replays every kind to its loopback. The switch is read at process start, so flip it by restarting the gateway and placement units together (a deploy does); see `docs/c43-placement-wiring-plan.md`.
+
 ## 0.9.22 - 2026-10-05 (gateway, workers and builders)
 
 - **M2 converters free the NBD devices a killed converter leaked.** Before each image, a slot disconnects its devices whose owning process is dead, after unmounting their EROFS mounts and the overlay stacked on them. Before, every later image on that slot failed with "no free NBD device".

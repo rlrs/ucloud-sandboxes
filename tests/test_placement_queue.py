@@ -451,6 +451,13 @@ class PlacementConcurrencyTests(unittest.TestCase):
     def test_creates_in_flight_cover_every_nodes_startup_slots(self):
         self.assertEqual(placement_queue.create_concurrency(Mock(create_target_concurrency_per_node=32, max_nodes=3)), 96)
         self.assertEqual(placement_queue.create_concurrency(Mock(create_target_concurrency_per_node=8, max_nodes=2)), 32)
+        # C4.3 phase 2: each API process keeps its share, and at least 32.
+        self.assertEqual(placement_queue.create_concurrency(Mock(create_target_concurrency_per_node=32, max_nodes=3), 6),
+                         32)
+        self.assertEqual(placement_queue.create_concurrency(Mock(create_target_concurrency_per_node=32, max_nodes=10),
+                                                            6), 54)
+        self.assertEqual(placement_queue.placement_kinds("ranked"), ("create", "wake", "group"))
+        self.assertEqual(placement_queue.placement_kinds("power_of_k"), ("wake",))
 
 
 async def _chunks(body):

@@ -23,6 +23,7 @@ from ucloud_sandboxes.models import ResourceQuantity
 from ucloud_sandboxes.shared_control.placement_queue import (
     PlacementQueue,
     PlacementQueueWorker,
+    placement_kinds,
 )
 from ucloud_sandboxes.shared_control.routing_repository import PostgresRoutingStore
 
@@ -148,6 +149,7 @@ class PlacementQueueHTTPTests(TestCase):
                 create_placement=create_placement,
             )
             self.public_queue = public.RequestHandlerClass.placement_queue.client
+            self.public_claims = public.RequestHandlerClass.placement_claims
             private = _gateway_server(
                 self.root, routing_file=self.routing_file, placement_worker=True,
                 create_placement=create_placement,
@@ -180,6 +182,7 @@ class PlacementQueueHTTPTests(TestCase):
                     origin=private_url,
                     token="test-gateway-secret",
                     create_concurrency=create_concurrency,
+                    kinds=placement_kinds(create_placement),
                 )
                 execute = worker.execute
 
@@ -256,12 +259,39 @@ class PlacementQueueHTTPTests(TestCase):
             self.assertEqual(command["state"], "done")
             self.assertEqual(command["generation"], route.generation)
 
-    def test_a_group_is_one_durable_command_of_the_placement_process(self):
+    def test_ranked_creates_stay_with_the_placement_process_loopback(self):
+        # C4.3 phase 2 changes nothing in ranked mode: API processes claim
+        # nothing, and the placement process replays every kind to itself.
+        self.release.set()
+        with self.pipeline() as public:
+            self.assertIsNone(self.public_claims)
+            self.assertEqual(list(self.queue_worker.budgets), ["create", "wake", "group"])
+            self.assertEqual(self.request(public + "/v1/sandboxes", self.spec("ranked-one"))[0], 201)
+            self.assertTrue(self.execution_finished.is_set())
+
+    def test_power_of_k_creates_run_in_the_api_process_and_wakes_stay(self):
+        self.release.set()
+        with self.pipeline(create_placement="power_of_k") as public:
+            self.assertEqual(list(self.queue_worker.budgets), ["wake"])
+            self.assertEqual(list(self.public_claims.budgets), ["create", "group"])
+            self.assertEqual(self.request(public + "/v1/sandboxes", self.spec("in-process"))[0], 201)
+            self.assertFalse(self.execution_finished.is_set())
+            route = self.running_route(public, "woken-one")
+            route = self.routing.upsert_sandbox(replace(route, state="parked"))
+            status, _body = self.request(
+                public + "/v1/sandboxes/woken-one/wake",
+                {"generation": route.generation, "operation_id": "wake-pok-1"},
+            )
+            self.assertEqual(status, 200)
+            self.assertTrue(self.execution_finished.is_set())  # The wake took the loopback.
+
+    def test_a_group_is_one_durable_command_an_api_process_runs(self):
         self.release.set()
         template = {key: value for key, value in self.spec("x").items() if key != "id"}
         with self.pipeline(create_placement="power_of_k") as public:
             status, body = self.request(
                 public + "/v1/sandboxes:batch", {"group_id": "q", "count": 3, "spec": template})
+            self.assertFalse(self.execution_finished.is_set())
         self.assertEqual((status, body["counts"]), (201, {"running": 3}), body)
         self.assertEqual(sorted(call["generation"] for call in self.create_calls), [1, 1, 1])
         with self.routing.pool.connection() as conn:

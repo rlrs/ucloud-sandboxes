@@ -5738,8 +5738,13 @@ def build_server(
     telemetry: Telemetry | None = None,
     process_count: int = 1,
     reuse_port: bool = False,
+    create_claim_budget: int | None = None,
 ) -> HighBacklogThreadingHTTPServer:
-    """One gateway process; ``process_count`` replicas share budgets and port."""
+    """One gateway process; ``process_count`` replicas share budgets and port.
+
+    Queued and in power_of_k, it runs ``create_claim_budget`` queued creates at
+    once (default: its ``create_concurrency`` share under the scale policy).
+    """
     credentials = {
         "gateway bearer token": gateway_bearer_token.strip(),
         "sandbox API token": sandbox_api_token.strip(),
@@ -5830,6 +5835,7 @@ def build_server(
                 (lambda loop: resolved_telemetry.observe_event_loop_lag(loop, "placement-queue-io"))
                 if resolved_telemetry.enabled else None))
     BoundHandler.placement_queue=placement_queue
+    BoundHandler.placement_claims=None
     BoundHandler.routing_write_process = routing_writer
     BoundHandler.gateway_bearer_token = gateway_bearer_token
     BoundHandler.sandbox_api_token = sandbox_api_token
@@ -5967,12 +5973,72 @@ def build_server(
             (host, port), BoundHandler, max_request_threads=max_http_request_threads,
         )
         loopback[1] = server.server_address[1]
+        if placement_queue is not None and create_placement == "power_of_k":
+            # Creates leave the loopback: every API process claims queued
+            # creates and groups; the placement process claims wakes only.
+            # Closing the queue's loop cancels the claim loop.
+            from .shared_control.placement_queue import InProcessPlacementWorker, create_concurrency
+            BoundHandler.placement_claims = InProcessPlacementWorker(
+                PlacementQueue(routing_store.pool.conninfo, deployment_id, schema=routing_store.schema,
+                               max_connections=process_pool_share(16)),
+                dispatch=_command_dispatch(BoundHandler, server),
+                create_concurrency=create_concurrency(BoundHandler.wake_consolidation_policy, max(1, process_count))
+                if create_claim_budget is None else create_claim_budget)
+            placement_queue.start(BoundHandler.placement_claims.run(asyncio.Event()))
         return server
     except BaseException:
         if routing_writer is not None:
             routing_writer.close()
         metrics_store.close()
         raise
+
+
+def _command_dispatch(handler_class, server):
+    """Run a claimed placement command on this process's own handler.
+
+    It is the placement process's handler: it enters the command fence and
+    never queues again. Only the socket differs: the request is read from
+    memory and the answer is parsed from memory.
+    """
+    from http.client import HTTPResponse
+    from io import BytesIO
+    from types import SimpleNamespace
+    from .shared_control.placement_queue import CLAIM_HEADER, COMMAND_HEADER
+
+    class CommandHandler(handler_class):
+        placement_worker = True
+        placement_queue = None
+        async_responses = None
+
+        def setup(self) -> None:
+            self.rfile, self.wfile = self.request
+
+        def finish(self) -> None:
+            pass
+
+    def dispatch(command: dict[str, Any]) -> tuple[int, dict[str, str], bytes]:
+        body = bytes(command["body"])
+        headers = {
+            **command["headers"], "Host": "placement",
+            "Authorization": "Bearer " + handler_class.gateway_bearer_token,
+            COMMAND_HEADER: str(command["command_id"]), CLAIM_HEADER: str(command["claim_token"]),
+            "Content-Type": "application/json", "Content-Length": str(len(body)),
+        }
+        head = f"POST {command['path']} HTTP/1.1\r\n" + "".join(
+            f"{key}: {value}\r\n" for key, value in headers.items()) + "\r\n"
+        written = BytesIO()
+        try:
+            CommandHandler((BytesIO(head.encode("latin-1") + body), written), ("127.0.0.1", 0), server)
+            response = HTTPResponse(SimpleNamespace(  # type: ignore[arg-type]
+                makefile=lambda _mode: BytesIO(written.getvalue())))
+            response.begin()
+            return response.status, dict(response.getheaders()), response.read()
+        except Exception as exc:
+            # As a loopback handler's crash dropped its connection: the queue
+            # retries the command until its deadline.
+            raise ConnectionError("placement command failed in process") from exc
+
+    return dispatch
 
 
 def _loopback_image_import(build_context_store, gateway_bearer_token, base_url):

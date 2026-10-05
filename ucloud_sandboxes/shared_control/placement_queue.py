@@ -509,6 +509,12 @@ class IsolatedPlacementResponses:
             asyncio.run_coroutine_threadsafe(self.client.open(), loop)
         )
 
+    def start(self, coroutine):
+        """Run ``coroutine`` on this loop until close cancels it."""
+        asyncio.run_coroutine_threadsafe(coroutine, self._running_loop()).add_done_callback(
+            lambda done: done.cancelled() or done.exception() is None
+            or LOGGER.error("placement claims stopped", exc_info=done.exception()))
+
     async def response(self, kind, sandbox_id, path, headers, body):
         try:
             loop = self._running_loop()
@@ -557,10 +563,19 @@ class IsolatedPlacementResponses:
 DEFERRAL_LOG_SECONDS = 10
 
 
-def create_concurrency(policy):
-    """Creates in flight fleet-wide: every node's startup slots, so the queue
-    is never the bound (a fixed 32 capped a 3-node burst near 6 creates/s)."""
-    return max(32, policy.create_target_concurrency_per_node * policy.max_nodes)
+def create_concurrency(policy, processes=1):
+    """Creates each of ``processes`` placing processes keeps in flight: an even
+    share of every node's startup slots, so the queue is never the bound (a
+    fixed 32 capped a 3-node burst near 6 creates/s), and at least the old
+    executor's 32. Production's 6 API processes keep 32 each, 192 in all
+    against 96 slots: node admission holds or turns away the rest."""
+    return max(32, -(-policy.create_target_concurrency_per_node * policy.max_nodes // processes))
+
+
+def placement_kinds(create_placement):
+    """What the placement process claims. In power_of_k the API processes
+    claim creates and groups themselves (C4.3 phase 2), so it claims wakes."""
+    return ("wake",) if create_placement == "power_of_k" else ("create", "wake", "group")
 
 
 def _error_code(body):
@@ -588,10 +603,12 @@ class PlacementQueueWorker:
         wake_concurrency=64,
         group_concurrency=32,
         lease_seconds=30,
+        kinds=("create", "wake", "group"),
     ):
         self.store, self.origin, self.token = store, origin.rstrip("/"), token
         # A group command places many sandboxes; its members share the node gate.
-        self.budgets = {"create": create_concurrency, "wake": wake_concurrency, "group": group_concurrency}
+        budgets = {"create": create_concurrency, "wake": wake_concurrency, "group": group_concurrency}
+        self.budgets = {kind: budgets[kind] for kind in kinds}
         self.lease = lease_seconds
         self.hints = None
         # Why commands were deferred, (status, error_code), logged every
@@ -611,26 +628,6 @@ class PlacementQueueWorker:
                 if not await self.store.renew(command, lease_seconds=self.lease):
                     raise RuntimeError("placement command lease was replaced")
 
-        async def request():
-            async with session.post(
-                self.origin + command["path"],
-                data=command["body"],
-                headers={
-                    **command["headers"],
-                    "Authorization": "Bearer " + self.token,
-                    COMMAND_HEADER: str(command["command_id"]),
-                    CLAIM_HEADER: str(command["claim_token"]),
-                    "Content-Type": "application/json",
-                },
-                allow_redirects=False,
-            ) as response:
-                body = bytearray()
-                async for part in response.content.iter_chunked(65536):
-                    body.extend(part)
-                    if len(body) > 16 * 1024 * 1024:
-                        raise RuntimeError("placement result exceeds metadata budget")
-                return response.status, dict(response.headers), bytes(body)
-
         if command["deadline"] <= utc_now() and command["generation"] is None:
             await self._complete(
                 command,
@@ -639,7 +636,7 @@ class PlacementQueueWorker:
                 b'{"error":"placement deadline expired; allocation not authorized","error_code":"placement_deadline_expired"}',
             )
             return
-        rpc = asyncio.create_task(request())
+        rpc = asyncio.create_task(self._send(session, command))
         lease = asyncio.create_task(renew())
         try:
             done, _ = await asyncio.wait(
@@ -676,6 +673,27 @@ class PlacementQueueWorker:
             await asyncio.gather(rpc, lease, return_exceptions=True)
             if self.hints is not None:
                 self.hints.poke()  # a budget slot is free for queued work
+
+    async def _send(self, session, command):
+        """Replay the command to this process's loopback listener."""
+        async with session.post(
+            self.origin + command["path"],
+            data=command["body"],
+            headers={
+                **command["headers"],
+                "Authorization": "Bearer " + self.token,
+                COMMAND_HEADER: str(command["command_id"]),
+                CLAIM_HEADER: str(command["claim_token"]),
+                "Content-Type": "application/json",
+            },
+            allow_redirects=False,
+        ) as response:
+            body = bytearray()
+            async for part in response.content.iter_chunked(65536):
+                body.extend(part)
+                if len(body) > 16 * 1024 * 1024:
+                    raise RuntimeError("placement result exceeds metadata budget")
+            return response.status, dict(response.headers), bytes(body)
 
     async def run(self, stop):
         await self.store.open()
@@ -741,3 +759,33 @@ class PlacementQueueWorker:
             await asyncio.gather(*pending, return_exceptions=True)
             await self.hints.close()
             await self.store.close()
+
+
+class InProcessPlacementWorker(PlacementQueueWorker):
+    """C4.3 phase 2: an API process claims creates and groups and runs each
+    through its own handler, under the loopback worker's claim, lease, requeue
+    and completion; the inherited HTTP session goes unused. ``dispatch`` maps
+    a claimed command to (status, headers, body) on the calling thread; a
+    failure reads as a lost connection.
+
+    Each command runs on its own daemon thread, as a loopback request did on
+    the server's. The claim budget bounds them; a command whose lease is lost
+    is released at once and its thread finishes the handler, as before.
+    """
+
+    def __init__(self, store, *, dispatch, **budgets):
+        super().__init__(store, origin="", token="", kinds=("create", "group"), **budgets)
+        self.dispatch = dispatch
+
+    async def _send(self, _session, command):
+        done = concurrent.futures.Future()
+        done.set_running_or_notify_cancel()  # A started handler cannot be cancelled.
+
+        def run():
+            try:
+                done.set_result(self.dispatch(command))
+            except BaseException as exc:
+                done.set_exception(exc)
+
+        threading.Thread(target=run, name="placement-command", daemon=True).start()
+        return await asyncio.wrap_future(done)

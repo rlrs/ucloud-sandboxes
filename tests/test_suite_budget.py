@@ -86,7 +86,10 @@ from tests.test_package_budget import package_lines
 # gateway build answering 503 then building with the copy as a named context.
 # +17 the NBD reaper: only dead owners, their mounts and stacked overlay.
 # +23 drop-staged: only sources no other lease holds; owners leasing elsewhere stay whole.
-SUITE_LINE_BUDGET = 99_015
+# +130 C4.3 phase 2 (with the package budget's note): two API processes claim
+# and place creates once each, a group and a requeued 503 run in process, ranked
+# keeps the loopback, the per-process claim budget.
+SUITE_LINE_BUDGET = 99_145
 SUITE = Path(__file__).resolve().parent
 
 

@@ -112,9 +112,11 @@ secrets come from `.env`.
 - CCX23 (4 dedicated vCPUs, 16 GB RAM) `sandboxes-gateway` at `10.42.0.2`, on Primary IP `77.42.92.27`
   (`auto_delete` off). The SDK URL is `https://77.42.92.27`, with a
   Let's Encrypt IP certificate.
-- Runs PostgreSQL 18, a registry on a 1,000 GB Hetzner Volume, the relay,
+- Runs PostgreSQL 18, a registry on a Hetzner Volume (below), the relay,
   NAT and 6 gateway HTTP processes. Placement and autoscaling run separately.
-- The gateway retains its 160 GB local disk and existing registry Volume.
+- The gateway retains its 160 GB local disk and a registry Volume: since 2026-10-05 the
+  2,000 GB `sandboxes-registry-interim` (the 4 TB one was swept after M2 release and
+  replaced; sized under the 70% cleanup threshold). It goes once the remaining OCI moves off.
   The four-core, 16 GB shape was qualified after an actual resize and reboot
   with 512 agent sandboxes, inventory polling and concurrent registry/NAT
   traffic. See the [qualification report](benchmarks/gateway-capacity-2026-09-28/README.md)

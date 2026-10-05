@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.31 - 2026-10-05 (workers)
+
+- **The sandbox bundle carries a managed init built from this repository** (`runtime/managed_process`, commit a8541f3, Go 1.27.1, sha256 785c16f9…), replacing the 0.9.6 bundle's binary (cedddb16…, whose source and toolchain are not recorded). It adds `files extract`, so managed-process and static-helper sandboxes created on these workers extract archive uploads with one exec instead of answering 501. Every other native file in the bundle is unchanged.
+
 ## 0.9.30 - 2026-10-05 (gateway and workers)
 
 - **This release repacks the Python agent only:** the node bundles keep the 0.9.6 managed init binary, so the Go `files extract` helper below is not deployed yet. Shell-helper sandboxes (the default; `tar` in the image) extract archives; managed and static-helper sandboxes answer 501 `archive_upload_unsupported`, and SDK 0.4.36 falls back to per-file uploads.

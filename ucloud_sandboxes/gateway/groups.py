@@ -113,6 +113,10 @@ class _Member:
         return self.spec.id
 
 
+# placement_queue finishes a group command whose 503 delivered members (same name there).
+GROUP_DELIVERED_HEADER = "X-UCloud-Group-Delivered"
+
+
 def _result(member_id: str, status: str, route: SandboxRoute | None = None, **extra: Any) -> dict[str, Any]:
     owner = {"generation": route.generation, "node_id": route.node_id} if route is not None else {}
     return {"id": member_id, "status": status, **owner, **extra}
@@ -208,7 +212,9 @@ class GroupCreate:
             return HTTPStatus.SERVICE_UNAVAILABLE, {
                 **payload, "error": "some group members are not placed yet; repeat the request",
                 "error_code": reason or "sandbox_group_incomplete", "retryable": True,
-            }, {"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"}
+            }, {"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true",
+                # The queue finishes a command that delivered members, rather than requeue it.
+                GROUP_DELIVERED_HEADER: str(sum(bool(item.get("sandbox")) for item in members))}
         return (HTTPStatus.CREATED if created else HTTPStatus.OK), payload, {}
 
     def _plan(

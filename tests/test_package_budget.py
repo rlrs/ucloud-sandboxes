@@ -143,8 +143,10 @@ import unittest
 # the loopback; the placement process claims wakes. Over the plan: the claim
 # budget per process and the handler run without a socket. C4.3b deletes the
 # loopback branch and the placement process with the wakes.
+# +17 a queued group's 503 that delivered members finishes its command, so the
+# client starts them (verifiers-ucloud's group create needs it).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 115_874
+PACKAGE_LINE_BUDGET = 115_891
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

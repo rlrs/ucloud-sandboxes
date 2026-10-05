@@ -89,7 +89,8 @@ from tests.test_package_budget import package_lines
 # +130 C4.3 phase 2 (with the package budget's note): two API processes claim
 # and place creates once each, a group and a requeued 503 run in process, ranked
 # keeps the loopback, the per-process claim budget.
-SUITE_LINE_BUDGET = 99_145
+# +23 a delivering group answer finishes its queue command.
+SUITE_LINE_BUDGET = 99_168
 SUITE = Path(__file__).resolve().parent
 
 

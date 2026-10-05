@@ -578,6 +578,17 @@ def placement_kinds(create_placement):
     return ("wake",) if create_placement == "power_of_k" else ("create", "wake", "group")
 
 
+GROUP_DELIVERED_HEADER = "X-UCloud-Group-Delivered"  # gateway.groups sets it
+
+
+def _delivers_members(command, headers):
+    """A group answer that created members finishes its command: only that
+    answer carries their records, and the client starts them while it repeats
+    the request for the rest (a repeat places only unplaced members)."""
+    return command.get("kind") == "group" and any(
+        name.lower() == GROUP_DELIVERED_HEADER.lower() and value not in ("", "0") for name, value in headers.items())
+
+
 def _error_code(body):
     """A deferred answer's error code (or transport ``code``) and the gist of
     its message, digits elided: node_active_admission_deferred covers both
@@ -646,7 +657,7 @@ class PlacementQueueWorker:
                 lease.result()
                 return
             status, headers, body = rpc.result()
-            if status in (408, 425, 429) or status >= 500:
+            if (status in (408, 425, 429) or status >= 500) and not _delivers_members(command, headers):
                 if command["deadline"] > utc_now():
                     self.deferrals[(command.get("kind"), status, _error_code(body))] += 1
                     await self.store.defer(

@@ -111,6 +111,7 @@ class GroupFleetTests(unittest.TestCase):
             self.assertEqual((refused.json()["error_code"], refused.json()["retryable"], refused.json()["counts"]),
                              ("node_admission_closed", True, {"pending": 2}))
             self.assertEqual(refused.headers["X-UCloud-Sandbox-Retryable"], "true")
+            self.assertEqual(refused.headers["X-UCloud-Group-Delivered"], "0")  # The queue requeues it.
             pending = fleet.gateway.RequestHandlerClass.routing_store.load().pending
             self.assertEqual({pending[f"later-{i:04d}"].failure_reason for i in range(2)}, {"node_admission_closed"})
             self.assertIsNone(fleet.route("later-0000"))

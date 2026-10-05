@@ -447,6 +447,25 @@ class PlacementDeferralTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((store.defer.await_count, store.complete.await_count), (4, 1))
 
 
+    async def test_a_group_answer_that_delivered_members_finishes_its_command(self):
+        # Only the answer that created members carries their records; the client
+        # starts them and repeats the request for the rest.
+        from ucloud_sandboxes.gateway.groups import GROUP_DELIVERED_HEADER
+        self.assertEqual(GROUP_DELIVERED_HEADER, placement_queue.GROUP_DELIVERED_HEADER)
+        store = Mock(defer=AsyncMock(), complete=AsyncMock(), renew=AsyncMock(return_value=True))
+        worker = PlacementQueueWorker(store, origin="http://gateway", token="t")
+        for kind, delivered in (("group", "0"), ("group", "3"), ("create", "3")):
+            response = AsyncMock(status=503, headers={"x-ucloud-group-delivered": delivered})
+            response.content.iter_chunked = lambda _size: _chunks(b'{"error_code":"sandbox_group_incomplete"}')
+            session = Mock(post=Mock(return_value=AsyncMock(__aenter__=AsyncMock(return_value=response),
+                                                             __aexit__=AsyncMock(return_value=False))))
+            command = {"command_id": uuid4(), "claim_token": uuid4(), "kind": kind, "path": "/v1/sandboxes:batch",
+                       "body": b"{}", "headers": {}, "attempts": 1, "generation": None,
+                       "deadline": utc_now() + timedelta(seconds=60)}
+            await worker.execute(session, command)
+        self.assertEqual((store.defer.await_count, store.complete.await_count), (2, 1))
+
+
 class PlacementConcurrencyTests(unittest.TestCase):
     def test_creates_in_flight_cover_every_nodes_startup_slots(self):
         self.assertEqual(placement_queue.create_concurrency(Mock(create_target_concurrency_per_node=32, max_nodes=3)), 96)

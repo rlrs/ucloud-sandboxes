@@ -1963,6 +1963,26 @@ on 32 sandboxes at once.
   - Relay-mode rollout smoke: 14 of 16. The 2 failures are images without
     Python 3, the harness limit seen in the 2026-10-03 relay baseline.
 
+### 2026-10-05 (night): production on UCloud, and the full relay rehearsal
+
+- **Production moved to UCloud.** It runs 0.9.31–0.9.33 on the same S3 chunk store; the gateway's state was restored there ([rollout-0.8.0.md](rollout-0.8.0.md)).
+- **The full-scale rehearsal in relay mode ran six times (0.9.34–0.9.37).** Each run: 1,024 rollouts over 128 images, 8 turns each, on at most 2 workers.
+  - **Relay overhead:** p95 10.09 s → 0.87 s.
+  - **Failed turns:** none in any run.
+  - **Warm ready:** p50/p95 31/82 s → 24/64 s.
+- **Fixes, each traced to a mechanism:**
+  - growth forecasts of node-local waits (0.9.35), with their bookkeeping off the pause and thaw paths (0.9.36);
+  - forecast recomputation, `if_nametoindex` and the disk sampler (0.9.37), which together took about a third of the node agent's GIL;
+  - the gateway's host-wide registry-lease lock (0.9.37);
+  - soft-drain consolidating a worker between rollout steps (0.9.37).
+- **The M2 gap is create throughput.** Two warm workers make about 20 creates/s, so 609 of 1,024 are ready at 30 s.
+  - A startup slot holds for about 3.8 s (mean): memory-admission waits 1.0 s, registry commits 0.74 s, runsc 0.77 s, storage prepare 0.5 s.
+  - The node agent's GIL is now about half busy. The largest remaining GIL holder is `posix_spawn` (15%).
+- **Next:**
+  1. Startup slots per node: 32 → 64 (a config bound, measured next).
+  2. The registry writer turn: a Python lock held across GIL-releasing SQLite calls. Under CPU contention each transaction waits for the GIL once per statement, about 8 times. Group commit or C4.4's journal-only SQLite would remove that.
+  3. Spawning outside the agent's GIL: runsc pause, resume and create, and `ip`.
+
 ## Appendix: evidence index
 
 - Image path:

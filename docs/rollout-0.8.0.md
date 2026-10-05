@@ -673,3 +673,59 @@ The findings are in [chunk-store-m2-plan.md](chunk-store-m2-plan.md) §5.2.
 **Hetzner afterwards.**
 - **Deleted:** the gateway server, the 250 GB registry Volume, the primary IP and 11 superseded worker snapshots.
 - **Kept:** the S3 bucket, plus snapshots `439434667` (0.9.6 worker) and `436561313` (builder) as a minimal rollback.
+
+## The full relay rehearsal on UCloud: 0.9.34 to 0.9.37 (2026-10-05)
+
+**Shape.** 1,024 relay-mode rollouts over 128 images (8 each), at most 2 workers
+(`cpu-amd-zen5-64-vcpu`, 192 GB). Each rollout creates a parkable managed-process
+sandbox, runs its family's first command, then 8 turns with 5–30 s model waits, as
+production training does. "Cold" starts from zero workers, "warm" on the two the cold run
+left. The 40 failures in every run are images without Python 3, which the harness needs.
+
+| Release | Run | Completed | Ready p50 / p95 / max | Relay overhead p95 / p99 |
+|---|---|---|---|---|
+| 0.9.34 | cold | 945 | 247 s / – / – | 3.55 s / – |
+| 0.9.35 | cold | 984 | 119 / 168 / – s | 10.09 s / – |
+| 0.9.35 | warm | 984 | 31 / 82 / 90 s | 10.09 s / – |
+| 0.9.36 | cold | 984 | 115 / 226 / 239 s | 1.96 / 4.26 s |
+| 0.9.36 | warm (one worker replaced) | 984 | 99 / 206 / 212 s | 0.26 / 1.97 s |
+| 0.9.37 | cold | 980 | 115 / 154 / 164 s | 0.78 / 2.79 s |
+| 0.9.37 | warm | 981 | 24 / 64 / 74 s | 0.87 / 2.92 s |
+
+Every turn of every completed rollout succeeded. 0.9.37's 7 other failures were the
+benchmark client running out of descriptors under `systemd-run`'s default limit of 1,024.
+
+**What each release fixed** (details in the CHANGELOG):
+- **0.9.34:** UCloud bootstrap over the private network (the public SSH proxy refused a
+  fresh worker for minutes). Agent launches no longer queue for startup slots. Forecast-only
+  pressure no longer swaps out paused waits.
+- **0.9.35:** node-local model waits suspend growth forecasts. Before this, a 192 GB worker
+  stopped admitting launches at about 160 sandboxes with about 160 GB free.
+- **0.9.36:** that bookkeeping moved off the pause and thaw paths. Inline, it put 571 of
+  7,872 answers on the 10 s gateway wake.
+- **0.9.37:** create throughput.
+
+**Create throughput (0.9.37).**
+- A create held one of a node's 32 startup slots for about 3.4 s (p50) for well under 1 s
+  of work. Two workers therefore made about 19 creates/s.
+- `py-spy --gil` on a worker during the burst showed where its time went:
+
+  | GIL consumer | Share of GIL |
+  |---|---|
+  | Recomputing every sandbox's growth forecast inside every admission | about 20% |
+  | `if_nametoindex` probes (as root, a missing name makes the kernel run modprobe twice) | 6% |
+  | The disk sampler resolving 1,024 nbd devices every second | 5.6% |
+
+  All three are fixed. The agent then held the GIL about half the time instead of most of it.
+- On the gateway, one host-wide registry-lease lock serialized every create: p50 0.56 s,
+  p90 4.1 s per create. It is now keyed by owner.
+- **0.9.36's warm run had one worker, not two.** The autoscaler soft-drained one of the two
+  workers four minutes into the cold step (by memory claims, everything fit on one). It
+  stopped once idle, and the next burst waited for a replacement. Soft-drain now waits until
+  no create has been placed for the effective `scale_down_idle_seconds`.
+- **Still open:** warm ready is p50 24 s against M2's 30 s for all 1,024, at a steady
+  ~20 creates/s (609 ready at 30 s). A slot still holds for about 3.8 s (mean). Of that:
+  - memory-admission waits: 1.0 s (launches carry their whole bound until their first wait);
+  - registry commits: 0.74 s;
+  - runsc: 0.77 s;
+  - storage prepare: 0.5 s.

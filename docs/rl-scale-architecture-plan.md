@@ -1937,9 +1937,23 @@ on 32 sandboxes at once.
   - `warden.inspect` of the lifecycle journal: p50 331 ms;
   - the per-sandbox exec-start fence: `command_ms` p50 469 ms, p95 2.6 s.
 
-  Both are waiting, not work. Next: answer the running check from the node's
-  in-memory lifecycle state, and narrow the start fence. C5.1, the in-guest
-  agent, removes the `runsc exec` per command altogether.
+  Both are waiting, not work.
+- **0.9.29.** The running check reads the journal snapshot under the shared
+  fence, without the warden fence. In the training shape (128 sandboxes on one
+  worker, at most one exec per sandbox), exec runs at 214–398/s at
+  concurrency 32 and 251–361/s at 128. Runs vary by about ±40%.
+  - Throughput falls past about 32–128 concurrent, which points at a node-wide
+    limit, plausibly the single Python agent: each start costs 2.5–5 ms of CPU.
+    C5.1 addresses it.
+  - The per-sandbox start fence only serializes concurrent execs on one
+    sandbox, which an agent does not issue, so it is left as it is.
+- **0.9.30: archive upload.** `PUT /v1/sandboxes/{id}/archive` with SDK 0.4.36
+  `upload_files`, and `write_many` in verifiers and verifiers-ucloud.
+  - The 40-file harness on 128 sandboxes takes 1.5 s, or 3,418 files/s, against
+    61 s (84 files/s) uploading one file at a time.
+  - Shell-helper sandboxes extract with the image's `tar`. The Go
+    `files extract` helper for managed sandboxes waits for a native bundle
+    build; until then they fall back to per-file uploads.
 
 ## Appendix: evidence index
 

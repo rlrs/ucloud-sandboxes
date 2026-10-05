@@ -756,6 +756,9 @@ else:
         self.assertIn('indexed_module_path="$(awk -F:', script)
         self.assertIn('echo "Reused matching kernel module index"', script)
         self.assertIn('$SUDO depmod -a "$UCLOUD_KERNEL_RELEASE"', script)
+        # Init loads nbd before environment_bootstrap; its pool size must hold for that first load.
+        nbd = script.index("options nbd nbds_max=1024 max_part=0")
+        self.assertLess(nbd, script.index('$SUDO modprobe "$module"'))
 
     def test_stages_bundle_with_digest(self) -> None:
         calls: list[tuple[tuple[str, ...], bytes | None]] = []

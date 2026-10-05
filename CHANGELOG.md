@@ -1,12 +1,17 @@
 # Changelog
 
+## 0.9.33 - 2026-10-05 (workers and builders; gateway only carries the release)
+
+- **The node bundles' kernel module closure carries `erofs`, `nbd`, `nft_log` and `nfnetlink_log`**, the modules 0.9.32's init loads. Init requires the bundle's load list to equal `RUNTIME_KERNEL_MODULES`, and the 0.9.32 repacks kept the 0.9.6 list, so every 0.9.32 worker and builder stopped at "bundled kernel module load list does not match this runtime". (0.9.32's note that the host's modules would do was wrong.) The four files come from `linux-modules-7.0.0-30-generic` 7.0.0-30.30, the build whose other 25 files the bundle already pins, byte for byte.
+- **nbd's device pool holds for init's first load.** Environment bootstrap loads `nbd nbds_max=1024 max_part=0` only when nbd is not loaded yet, and init now loads it earlier, which would have left a worker 16 devices and so 16 mounted components. Init writes the options to `/etc/modprobe.d/ucloud-sandboxes-nbd.conf` before loading any module.
+
 ## 0.9.32 - 2026-10-05 (gateway and workers; production on UCloud)
 
 - **The sandbox bundle carries `ucloud-chunk-serve` again** (`runtime/chunk_serve`, the pinned 0.9.13 build, sha256 a8ff310b…). Releases 0.9.14 to 0.9.31 repacked the 0.9.6 bundles, which predate it, so a fresh store node could not be initialized from the current release; Hetzner's store node had been initialized once, at 0.9.13.
 - **Store init reads `ucloud-chunk-serve`'s digest through `$SUDO`.** The bundle unpacks into a root-only directory. Hetzner's init logs in as root; UCloud's logs in as `ucloud`, and the pin check failed with Permission denied.
 - **Builders bundle erofs-utils** (1.9.1, with the 21 libraries of its closure the bundle lacked, and curl at the bundled libcurl's version so offline APT upgrades it instead of removing it). Immutable builders publish EROFS images with `mkfs.erofs`; Hetzner's builder image shipped it, UCloud's vm-ubuntu image does not, and builder init stopped at "immutable builder requires bundled erofs-utils". `BUILDER_RUNTIME_PACKAGES` names it, so the builder bundle's package list does too.
 - **`scripts/rehome_registry_host.py`** rewrites the managed registry's authority in gateway state after the gateway moves: image references are stored as `<gateway_private_host>:<registry_port>/ucloud-managed/...` in the image, prepared-image and registry-usage databases and in PostgreSQL (group specs, parked sandboxes' storage snapshots). Dry run by default; `--execute` refuses while gateway services run. Moving production to UCloud rewrote about 47,000 references from `10.42.0.2:5000`. Clients that stored prepared references (the training selection's `prepared_reference`) need the same rewrite; ones that send the task's source image do not.
-- **Worker init loads `erofs`, `nbd`, `nft_log` and `nfnetlink_log`** with the other runtime modules (immutable environments, RAFS over NBD, node-local model waits). The repacked bundles keep the 0.9.6 module closure, so the host must ship these modules; UCloud's vm-ubuntu 26.04 image (kernel 7.0.0-30-generic) does.
+- **Worker init loads `erofs`, `nbd`, `nft_log` and `nfnetlink_log`** with the other runtime modules (immutable environments, RAFS over NBD, node-local model waits). Not deployable as released: the repacked bundles kept the 0.9.6 module load list, which init must match exactly; 0.9.33 adds the modules to the closure.
 
 ## 0.9.31 - 2026-10-05 (workers)
 

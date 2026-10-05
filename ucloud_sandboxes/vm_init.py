@@ -1418,6 +1418,9 @@ PY
 fi
 log_init_phase "host-aliases"
 
+# nbd fixes its device pool at load and this init loads it first, so the
+# pool environment_bootstrap asks for applies to every load of the module.
+printf 'options nbd nbds_max=1024 max_part=0\n' | $SUDO tee /etc/modprobe.d/ucloud-sandboxes-nbd.conf >/dev/null
 UCLOUD_RUNTIME_KERNEL_MODULES=({runtime_kernel_modules_shell})
 UCLOUD_KERNEL_RELEASE="$(uname -r)"
 UCLOUD_KERNEL_MODULE_ROOT="/lib/modules/$UCLOUD_KERNEL_RELEASE"

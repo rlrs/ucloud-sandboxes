@@ -161,8 +161,9 @@ import unittest
 # near 69 files/s per worker). Single-file upload stays for single files.
 # +7 module closure: erofs, nbd, nft_log, nfnetlink_log (UCloud images lack them).
 # +3 builders bundle erofs-utils (UCloud's image lacks mkfs.erofs).
+# +3 nbd's pool size holds for init's own first load of the module.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 116_441
+PACKAGE_LINE_BUDGET = 116_444
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

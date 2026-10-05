@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.35 - 2026-10-05 (gateway and workers)
+
+- **Node-local model waits suspend and resume growth forecasts.** Growth bookkeeping saw only gateway relay parks. Node-local waits, which pause most waits in production, left every agent charged its launch's whole memory bound. A 192 GB worker then stopped admitting launches at about 160 sandboxes with about 160 GB free, and agent starts waited out 30 s deadlines (37 of the 0.9.34 rehearsal's failures). A local-wait pause now records the wait, suspending the forecast, and its thaw records the continuation, forecast back to its demonstrated peak. The thaw itself is not gated.
+
 ## 0.9.34 - 2026-10-05 (gateway, workers and builders)
 
 - **UCloud workers are bootstrapped over the private network.** A worker that shares the control plane's private network is reached as `ssh ucloud@<hostname>` there. UCloud's public SSH proxy, announced in the job's status, is the fallback. In a 1,024-rollout rehearsal the proxy reset and refused a fresh worker for minutes while its private address answered at once, so the first wave ran on one worker.

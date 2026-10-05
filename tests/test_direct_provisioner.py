@@ -372,6 +372,10 @@ class FakeWarden:
     def running_process_alive(self, sandbox):
         return self.records[self.key(sandbox)].state == HibernationState.RUNNING
 
+    def running_snapshot(self, sandbox):
+        record = self.records.get(self.key(sandbox))
+        return record is not None and record.state == HibernationState.RUNNING
+
     def thaw(self, _sandbox):
         return None  # These fixtures never pause.
 

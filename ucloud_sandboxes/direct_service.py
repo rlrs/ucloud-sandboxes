@@ -2647,8 +2647,7 @@ class DirectSandboxService:
         a park or delete from starting, so no request lock is needed to read
         it; anything else goes through ensure_running_with_timings under one."""
         started = time.monotonic()
-        record = self.warden.inspect(sandbox)
-        if record is None or record.state != HibernationState.RUNNING or not self.warden.running_process_alive(sandbox):
+        if not self.warden.running_snapshot(sandbox):
             return None
         elapsed = (time.monotonic() - started) * 1000
         return {"inspect": elapsed, "total": elapsed}

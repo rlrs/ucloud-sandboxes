@@ -716,6 +716,24 @@ class DirectRunscWarden:
             expected_mount_epoch=mount_epoch,
         )
 
+    def running_snapshot(self, sandbox: DirectSandbox) -> bool:
+        """running_process_alive without the lifecycle fence, for a caller that
+        holds the node's shared lifecycle fence: no transition is in flight or
+        can start, so the atomically replaced journal revision is current. A
+        streaming exec's lease holds this fence, and taking it here queued every
+        command behind the sandbox's other exec starts (p50 331 ms)."""
+        record = self._journal(sandbox).load_snapshot()
+        return bool(
+            record is not None
+            and record.state == HibernationState.RUNNING
+            and self._sentry_identity_matches(
+                sandbox,
+                record.sentry_pid,
+                record.sentry_start_time_ticks,
+                reuse_verified=True,
+            )
+        )
+
     def running_process_alive(self, sandbox: DirectSandbox) -> bool:
         """Prove that a RUNNING journal still owns the recorded sentry."""
         with self._locked(sandbox):

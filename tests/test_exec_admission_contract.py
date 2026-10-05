@@ -36,8 +36,8 @@ class ExecAdmissionContractTests(TestCase):
             patch.object(self.warden, "inspect", wraps=self.warden.inspect) as inspect,
             patch.object(
                 self.warden,
-                "running_process_alive",
-                wraps=self.warden.running_process_alive,
+                "running_snapshot",
+                wraps=self.warden.running_snapshot,
             ) as alive,
             patch.object(
                 self.sessions,
@@ -49,7 +49,9 @@ class ExecAdmissionContractTests(TestCase):
         ):
             session = self.sessions.start(self.spec)
         try:
-            inspect.assert_called_once()
+            # One journal read, without the warden fence: the node's shared
+            # lifecycle fence already excludes transitions.
+            inspect.assert_not_called()
             alive.assert_called_once()
             self.assertEqual(self.service.activity_snapshot().active_exec_operations, 1)
         finally:

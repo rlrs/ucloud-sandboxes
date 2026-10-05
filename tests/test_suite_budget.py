@@ -100,7 +100,8 @@ from tests.test_package_budget import package_lines
 # helpers on one normalized tar, the worker's and gateway's 501, a fleet upload.
 # +2 the package budget's notes.
 # +6 store init reads the root-only bundle directory through $SUDO.
-SUITE_LINE_BUDGET = 99_570
+# +2 the package budget's notes.
+SUITE_LINE_BUDGET = 99_572
 SUITE = Path(__file__).resolve().parent
 
 

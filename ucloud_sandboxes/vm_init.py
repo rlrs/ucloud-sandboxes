@@ -126,6 +126,9 @@ SANDBOX_RUNTIME_PACKAGES = (
 BUILDER_RUNTIME_PACKAGES = (
     *SANDBOX_RUNTIME_PACKAGES,
     "docker-buildx-plugin",
+    # Immutable builders publish EROFS images (mkfs.erofs, 1.9+ for layout 2).
+    # Hetzner's builder image shipped it; UCloud's vm-ubuntu image does not.
+    "erofs-utils",
 )
 RUNTIME_KERNEL_MODULES = (
     # UCloud project mounts use virtiofs.  The host may have loaded this module

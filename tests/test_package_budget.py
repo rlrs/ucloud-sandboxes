@@ -160,8 +160,9 @@ import unittest
 # harness's files in one helper exec instead of one each (40 files per sandbox ran
 # near 69 files/s per worker). Single-file upload stays for single files.
 # +7 module closure: erofs, nbd, nft_log, nfnetlink_log (UCloud images lack them).
+# +3 builders bundle erofs-utils (UCloud's image lacks mkfs.erofs).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 116_438
+PACKAGE_LINE_BUDGET = 116_441
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

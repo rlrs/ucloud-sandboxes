@@ -23,9 +23,18 @@ readonly BUILD_DIR="$(mktemp -d)"
 trap 'rm -rf "${BUILD_DIR}"' EXIT
 git -C "${SOURCE_DIR}" archive HEAD -- . | tar -x -C "${BUILD_DIR}"
 docker run --rm --network host -v "${BUILD_DIR}:/noded" -w /noded "${IMAGE}" sh -euc '
-  apk add --no-cache -q musl-dev >/dev/null
-  RUSTFLAGS="-C target-feature=+crt-static -C link-arg=-Wl,--build-id=none --remap-path-prefix=/noded=/noded \
+  apk add --no-cache -q musl-dev binutils >/dev/null
+  CARGO_PROFILE_RELEASE_STRIP=false RUSTFLAGS="-C target-feature=+crt-static -C link-arg=-Wl,--build-id=none --remap-path-prefix=/noded=/noded \
 --remap-path-prefix=/usr/local/cargo=/cargo" cargo build --release --locked --target '"${TARGET}"'
+  binary=target/'"${TARGET}"'/release/ucloud-noded
+  # A static link resolves a weak libc import it cannot satisfy to address 0
+  # (libc::getrandom crashed the 0.9.44 canary): every libc function the
+  # source calls must be defined in the binary.
+  nm "$binary" > target/symbols
+  for name in $(grep -rhoE "libc::[a-z_0-9]+\(" src | sed "s/libc:://; s/(\$//" | sort -u); do
+    grep -qE " [TtWw] ${name}\$" target/symbols || { echo "libc::${name} is not linked" >&2; exit 1; }
+  done
+  strip --strip-all "$binary"
   rustc --version > rustc-version
   chown -R '"$(id -u):$(id -g)"' target rustc-version'
 readonly RUSTC_VERSION="$(cat "${BUILD_DIR}/rustc-version") (${IMAGE})"

@@ -78,8 +78,10 @@ pub(crate) fn random_bytes<const N: usize>() -> io::Result<[u8; N]> {
     let mut bytes = [0u8; N];
     let mut filled = 0;
     while filled < N {
+        // The raw syscall: a static musl link resolved libc::getrandom, a weak
+        // import, to address 0 (the 0.9.44 canary's SIGSEGV).
         // SAFETY: the buffer is valid for N - filled bytes.
-        let read = unsafe { libc::getrandom(bytes[filled..].as_mut_ptr().cast(), N - filled, 0) };
+        let read = unsafe { libc::syscall(libc::SYS_getrandom, bytes[filled..].as_mut_ptr(), N - filled, 0) };
         if read < 0 {
             let error = io::Error::last_os_error();
             if error.kind() == io::ErrorKind::Interrupted {

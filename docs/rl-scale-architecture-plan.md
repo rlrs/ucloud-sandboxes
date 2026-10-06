@@ -2004,6 +2004,13 @@ Creates, execs, pause and local waits moved into `ucloud-noded` ([rust-node-daem
   2. Training runs need `policy.max_nodes ≥ 3`; production stays at 2 until that is decided.
   3. The create tail (`manager_create` p95 3.9 s): the warm image lease, `runsc create`, storage prepare and registry commit tails.
 
+### 2026-10-06 (evening): the harness dry run, with a stub model
+
+- **What ran:** `verifiers` (`rlrs/verifiers` `codex/runtime-providers`, `140d3696c`) with the `bash` harness and the gsm8k taskset, through `verifiers-ucloud` (`managed-agent-sandboxes`) on 0.9.50: group create, a managed parkable sandbox per rollout on a training image, the harness as its primary, and every model call through the relay. A scripted OpenAI-compatible stub answered: two `bash` tool calls, then a final answer. The client ran on the store node; results stayed local (`push = false`).
+- **Found:** every model call failed with 400 "relay endpoint must be an absolute path". verifiers builds the harness endpoint as `f"{base_url}/v1"`, and the SDK's tunnel URL ends in "/", so calls went to `…/_relay/<token>//v1/…`. `verifiers-ucloud` now hands over the URL without the trailing slash (`8d43f9a`).
+- **After the fix:** 8/8, then **64/64 rollouts succeeded**, 192 model calls (3 each), commands ran in the image (Ubuntu 22.04, `python3`), 30 s for the 64, every sandbox deleted.
+- **Not covered:** a real model, training's own environments and scoring, and model waits long enough to pause (the stub answers in milliseconds). That needs the trainer side.
+
 ## Appendix: evidence index
 
 - Image path:

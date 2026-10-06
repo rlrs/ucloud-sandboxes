@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.39 - 2026-10-06 (workers)
+
+- **Create timings split the registry's time.** `registry_turn_ms` (waiting for the one writer) and `registry_sync_ms` (the commit) are reported beside `registry_commit_ms`, which was 0.7–1.3 s per create in bursts for about 2 ms of SQL.
+
 ## 0.9.38 - 2026-10-06 (workers)
 
 - **A managed-process create is not charged the memory bound its launch carries.** A managed sandbox runs no workload until its launch, which keeps its whole bound until its first safe wait. Charging the bound at create as well counted it twice. With 64 startup slots, a 1,024-rollout burst's creates waited in memory admission for a mean 3.0 s (p95 16 s), on workers that never fell below 141 GB of 192 GB available. Live memory pressure and the shape check still gate each create. Other sandboxes keep the bound at create.

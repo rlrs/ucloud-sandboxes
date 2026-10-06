@@ -76,6 +76,11 @@ impl AgentClient {
         Ok(AgentClient { socket, authorization, session, timeout: Duration::from_secs(120), idle: Mutex::new(Vec::new()) })
     }
 
+    /// This daemon's session (`X-UCloud-Noded-Session`).
+    pub fn session(&self) -> &str {
+        self.session.to_str().unwrap_or_default()
+    }
+
     async fn sender(&self) -> Result<Sender, RpcError> {
         loop {
             let pooled = self.idle.lock().expect("pool lock").pop();

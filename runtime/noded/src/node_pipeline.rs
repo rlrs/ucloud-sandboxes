@@ -112,6 +112,8 @@ async fn blocking<T: Send + 'static>(
 
 pub struct NodePipeline {
     pause: Option<Arc<PauseTier>>,
+    /// The pause policy and local waits, while the daemon owns the pause tier.
+    _pause_runtime: Option<crate::pause_runtime::PauseRuntime>,
     config: CreateConfig,
     agent: Arc<AgentClient>,
     registry: Arc<Registry>,
@@ -211,12 +213,26 @@ impl NodePipeline {
             Arc::new(PauseTier::new(PauseConfig::new(warden_config.clone(), true), modes))
         });
         let warden = Warden::new(warden_config);
+        let registry = Arc::new(registry);
+        let pause_runtime = pause.as_ref().map(|tier| {
+            let settings = config.pause.as_ref().map(|block| block.settings.clone()).unwrap_or_default();
+            crate::pause_runtime::PauseRuntime::start(crate::pause_runtime::PauseInputs {
+                agent: agent.clone(),
+                tier: tier.clone(),
+                registry: registry.clone(),
+                state_root: config.state_root.clone(),
+                warden_locks_dir: config.runtime_root.join("warden-locks"),
+                cgroup_root: tier.config().cgroup_root.clone(),
+                settings,
+            })
+        });
         Ok(NodePipeline {
             pause,
+            _pause_runtime: pause_runtime,
             storage: StorageClient::new(&config.storage_native_socket),
             config,
             agent,
-            registry: Arc::new(registry),
+            registry,
             memory,
             network,
             images,

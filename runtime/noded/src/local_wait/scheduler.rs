@@ -104,6 +104,10 @@ pub trait LocalWaitEvents: Send + Sync {
     /// the way or a runtime that is not RUNNING and live. Python joins the
     /// transition and thaws or restores.
     fn wake(&self, sandbox_id: String, generation: u64, operation_id: String) -> BoxFuture<Result<(), String>>;
+    /// A local wait paused this incarnation under `request_id` (the pause
+    /// policy's paused table: escalation and reclaim). Called outside the
+    /// scheduler's lock; must not block.
+    fn paused(&self, _sandbox_id: &str, _generation: u64, _request_id: &str) {}
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -329,6 +333,7 @@ impl Scheduler {
             (Outcome::Done, _) => {}
         }
         let now = self.now();
+        let mut paused_request = None;
         {
             let mut guard = self.lock();
             let state = &mut *guard;
@@ -344,6 +349,7 @@ impl Scheduler {
                 // The guest is blocked on its model call: suspend its growth
                 // forecast as a relay park's wait does.
                 let request_id = request_id("local-wait");
+                paused_request = Some(request_id.clone());
                 self.emit(GrowthAction::Wait, &key, request_id.clone());
                 let answered = state.flows.get(&wait.guest).is_some_and(|flow| flow.last_in >= flow.last_out);
                 if answered {
@@ -352,6 +358,9 @@ impl Scheduler {
                     state.requests.insert(key.clone(), request_id);
                 }
             }
+        }
+        if let Some(request_id) = paused_request {
+            self.events.paused(&key.0, key.1, &request_id);
         }
         if kind == Kind::Pause && self.actions.is_paused(&key.0, key.1) {
             let answered = {

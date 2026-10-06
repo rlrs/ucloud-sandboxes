@@ -266,6 +266,29 @@ reaches the agent; the kernel carries the fence (`ucloud_sandboxes/exec_fence.py
   Drain readiness stays correct because it requires no records at all, and
   noded re-reads the drain row before each start.
 
+### What 0.9.45 measured (two 64-vCPU workers, 1,024 relay rollouts over 128 images)
+
+- **Warm, against 0.9.43 (Python creates):**
+  - ready by 30 s / 45 s / 60 s: 627 / 933 / 1,024 (0.9.43: 606 / 838 / 994);
+  - ready p95 47.6 s (52.6 s);
+  - node-side phases (p50): `registry_commit` 173 ms (635), `runtime_create`
+    392 ms (676), `storage_prepare` 522 ms (694), `network_ensure` 112 ms (155).
+- **Creates queue for slots:** `startup_admission` p50 1.5 s, p95 7.9 s, against
+  roughly 1.3 s of work per create in 32 slots.
+- **64 slots per node:** faster at first (517 ready by 20 s against 423), then
+  a stall (665 by 45 s) and a worse tail.
+  - `storage_prepare` p95 reaches 3.5 s: the storage daemon (Python) is the
+    next bound on creates.
+  - The fleet stays at 32.
+- **Relay overhead regressed:** answer→resume p95 1.4 s warm and 3.3 s cold,
+  against 0.4 s. Local-wait thaws are still Python's, sharing its GIL with the
+  admit and finish of every create (each finish refreshes the foreign index
+  with a full table scan).
+  - The structural fixes: 3a moves local waits to the daemon, and 3c moves
+    admission.
+- **In relay rollouts every exec meets a paused sandbox,** so phase 2a forwards
+  them all until thaw-on-exec is the daemon's (3a).
+
 ### Phase 2a: the daemon's half
 
 - **`src/exec/`:** Python's session semantics, ported and checked against Python

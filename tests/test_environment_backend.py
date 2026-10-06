@@ -184,13 +184,18 @@ class EnvironmentBackendTests(artifact_fixtures.EnvironmentArtifactTests):
         self.assertIn(first, mounts)
         self.assertEqual(sorted(backend._active), sorted([digests[0], digests[2]]))
         self.assertEqual(held["bytes"], 2 * MIB)
+        self.assertEqual(backend.pressure(), {"active_components": 2, "over_cache_budget": False})
+        held["bytes"] += MIB  # Idle images the agent keeps mounted hold it over: only the agent's sweep frees it.
+        self.assertEqual(backend.pressure(), {"active_components": 2, "over_cache_budget": True})
+        held["bytes"] -= MIB
         busy.clear()
         self.assertTrue(backend.ensure(digests[1]))  # Detached images attach again.
 
     def test_a_create_burst_is_queued_not_refused_with_eagain(self):
         # The server is not accepting yet: every call must wait in its backlog.
         endpoint = self.root / "burst.sock"
-        server = EnvironmentBackendServer(endpoint, SimpleNamespace(metrics=lambda: {"ok": 1}))
+        server = EnvironmentBackendServer(endpoint, SimpleNamespace(metrics=lambda: {"ok": 1},
+                                                                    pressure=lambda: {"pressure": 1}))
         self.addCleanup(server.server_close)
         results = []
         calls = [Thread(target=lambda: results.append(EnvironmentBackendClient(endpoint)._call({"method": "metrics"}, 10)))
@@ -203,6 +208,7 @@ class EnvironmentBackendTests(artifact_fixtures.EnvironmentArtifactTests):
         for call in calls:
             call.join(10)
         self.assertEqual(results, [{"ok": 1}] * 64)
+        self.assertEqual(EnvironmentBackendClient(endpoint).pressure(), {"pressure": 1})
 
     def test_client_retries_a_full_accept_queue(self):
         endpoint = str(self.root / "full.sock")

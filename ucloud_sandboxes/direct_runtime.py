@@ -13,6 +13,7 @@ from .direct_network import NETWORK_POOL_SIZE, DirectNetworkManager
 from .direct_oci import DirectOciConfigBuilder
 from .direct_provisioner import DirectSandboxProvisioner
 from .disk_claims import DiskClaimPolicy
+from .environment_config import DEFAULT_DEVICE_BUDGET_PERCENT
 from .direct_registry import DirectSandboxRegistry
 from .direct_service import DirectSandboxService
 from .direct_warden import DirectRunscWarden, DirectRunscWardenConfig, ensure_sandbox_cgroup_parent
@@ -57,6 +58,7 @@ def build_direct_runtime_service(
     environment_registry: object | None = None,
     environment_backend_socket: Path | None = None,
     environment_rafs: bool = False,
+    environment_device_budget_percent: int = DEFAULT_DEVICE_BUDGET_PERCENT,
     registry_foreign: bool = False,
     rust_creates: bool = False,
     telemetry: Telemetry | None = None,
@@ -170,6 +172,7 @@ def build_direct_runtime_service(
             environment_registry,
             EnvironmentBackendClient(environment_backend_socket),
             rafs=environment_rafs,
+            device_budget_percent=environment_device_budget_percent,
         )
     overlays = OverlayRootfsManager(
         image_store,

@@ -179,6 +179,15 @@ class EnvironmentBackend:
         return self.cache.metrics() | counters | {"active_components": len(self._active),
                                                   "prefetch_enabled": self.prefetch.enabled}
 
+    def pressure(self):
+        """What the agent's idle-image sweep reads: attached components, and
+        whether a device cache with no eviction of its own (nydusd) is over
+        ``cache_bytes``. Idle images keep their components referenced, so only
+        the agent collecting them frees that cache."""
+        usage = getattr(self._factory, "cache_bytes", None)
+        return {"active_components": len(self._active),
+                "over_cache_budget": usage is not None and usage() > self.cache.max_bytes}
+
     def ensure(self, digest):
         """Attach and mount a component, warming its metadata before return.
 
@@ -424,8 +433,8 @@ class _Handler(socketserver.StreamRequestHandler):
                 raise ValueError("environment request exceeds its bound")
             request = json.loads(raw)
             method = request.get("method") if isinstance(request, dict) else None
-            if method == "metrics" and set(request) == {"method"}:
-                result = self.server.backend.metrics()
+            if method in ("metrics", "pressure") and set(request) == {"method"}:
+                result = getattr(self.server.backend, method)()
             elif method in ("ensure", "drop") and set(request) == {"method", "digest"}:
                 result = getattr(self.server.backend, method)(request["digest"])
             else:
@@ -504,6 +513,9 @@ class EnvironmentBackendClient:
 
     def metrics(self):
         return self._call({"method": "metrics"}, METRICS_TIMEOUT_SECONDS)
+
+    def pressure(self):
+        return self._call({"method": "pressure"}, METRICS_TIMEOUT_SECONDS)
 
 
 def serve_backend(registry, *, root, socket_path, cache_bytes=1024 ** 3, prefetch=True, chunk_index=None,

@@ -447,8 +447,8 @@ class FakeProcessRunner:
 
 
 class DirectProvisionerTests(unittest.TestCase):
-    def make(self, root: Path):
-        images = FakeImageStore(root)
+    def make(self, root: Path, images: FakeImageStore | None = None):
+        images = images or FakeImageStore(root)
         overlays = FakeOverlays(images, root)
         storage = FakeStorage(overlays.writable_root)
         warden = FakeWarden(root, storage)
@@ -695,6 +695,26 @@ class DirectProvisionerTests(unittest.TestCase):
                 [images.image.image_id, images.image.image_id],
             )
             self.assertEqual(images.collection_reference_checks, [True, False])
+
+    def test_an_idle_image_store_keeps_a_deleted_sandboxs_image(self) -> None:
+        # The environment store keeps the composition mounted for the image's
+        # next sandbox; its own budget sweep, run by the reconciler, collects it.
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            images = FakeImageStore(root)
+            images.retains_idle_images, used, sweeps = True, [], []
+            images.note_used = used.append
+            images.collect_idle = lambda: sweeps.append(images.is_referenced(images.image.image_id)) or ()
+            provisioner, _, _, _, _ = self.make(root, images)
+            self.assertEqual(images.is_referenced, provisioner.image_referenced)
+            created = provisioner.create(spec=self.spec(), sandbox_generation=1, operation_id="create:1")
+            provisioner.note_image_used(None)  # A rollback before any rootfs.
+            provisioner.note_image_used(images.image.image_id)  # noded's finish.
+            provisioner.delete(created.sandbox_id)
+            self.assertEqual(images.collected_image_ids, [])
+            self.assertEqual(used, [images.image.image_id] * 2)
+            self.assertEqual(provisioner.evict_images_if_needed(), ())
+            self.assertEqual(sweeps, [False])
 
     def test_post_commit_image_collection_failure_is_deferred(self) -> None:
         with TemporaryDirectory() as raw:

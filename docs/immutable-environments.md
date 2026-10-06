@@ -668,6 +668,30 @@ would detach mounted filesystems. A change therefore applies to newly
 provisioned workers; replace workers to roll it out. To see the mode a node
 actually runs, read `prefetch_enabled` in its heartbeat (next section).
 
+### Idle image cache
+
+Deleting a sandbox leaves its image's composition mounted, with its components
+attached, for the next sandbox of that image. Materializing it again would
+cost a backend attach per component, an overlay mount and a receipt
+(`image_resolve` p50 0.3-0.5 s and p95 2.5-3.6 s when every delete collected
+it). The agent's deletion reconciler (every 5 s) runs a sweep that collects
+unregistered compositions, least recently used first, only while the node is
+over budget:
+
+* attached components exceed `immutable_environments.device_budget_percent`
+  (default 75) of the node's block devices, 768 of the 1,024 VM init loads; or
+* nydusd's shared device cache is over `cache_bytes`. Idle images keep their
+  components referenced, so the backend cannot detach them itself.
+
+An attach that finds every device taken runs the sweep at once and retries
+once. The sweep skips any image with a registration, an overlay user or a
+lease (a create, a materialization or a noded create holds one), and any image
+used in the last 60 s. "Used" means leased, or a sandbox of it was created
+(runtime/noded's creates included, at finish) or deleted. After an agent
+restart, reconciliation keeps a mounted composition whose I/O answers and
+collects the rest; the receipt's write time orders the sweep until the image
+is next used.
+
 ### Metrics
 
 `EnvironmentBackend.metrics()` merges the cache metrics with the attach

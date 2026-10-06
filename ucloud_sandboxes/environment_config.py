@@ -9,6 +9,10 @@ import stat
 
 from .managed_registry import RegistryClient
 
+# Idle image compositions stay mounted until attached components exceed this
+# share of the node's block devices (768 of the 1,024 VM init loads).
+DEFAULT_DEVICE_BUDGET_PERCENT = 75
+
 
 def load_trusted_keys(path):
     from .environment_artifact import content_digest
@@ -336,6 +340,10 @@ class EnvironmentDeploymentConfig:
     # Concurrent component attaches per worker backend. 1 keeps attach serial,
     # as before 0.8.3: a 48-way burst ran first commands 7x slower in parallel.
     attach_concurrency: int = 1
+    # A deleted sandbox's image stays mounted for the next sandbox of that
+    # image; the worker collects idle images, least recently used first, only
+    # while attached components exceed this percentage of its block devices.
+    device_budget_percent: int = DEFAULT_DEVICE_BUDGET_PERCENT
     # Chunk store M2: the gateway sets each create's environment root (from
     # image-roots.sqlite3, else the annotation). Only once every worker runs
     # 0.9.0 with a chunk store: a dispatched root needs both capabilities.
@@ -376,6 +384,8 @@ class EnvironmentDeploymentConfig:
                 raise ValueError(f"immutable environment {name} must be boolean")
         if type(result.attach_concurrency) is not int or not 1 <= result.attach_concurrency <= 256:
             raise ValueError("immutable environment attach_concurrency must be an integer from 1 to 256")
+        if type(result.device_budget_percent) is not int or not 1 <= result.device_budget_percent <= 100:
+            raise ValueError("immutable environment device_budget_percent must be an integer from 1 to 100")
         for name in ("trusted_keys_file", "signing_key_file"):
             value = getattr(result, name)
             if not isinstance(value, str) or any(c in value for c in "\0\r\n") or (value and not Path(value).is_absolute()):
@@ -401,6 +411,8 @@ class EnvironmentDeploymentConfig:
         for name in ("preserve_mtimes", "regenerate_bases"):
             if not raw[name]:
                 del raw[name]
+        if self.device_budget_percent == DEFAULT_DEVICE_BUDGET_PERCENT:
+            del raw["device_budget_percent"]
         if self.chunk_store is None:
             del raw["chunk_store"]
         else:

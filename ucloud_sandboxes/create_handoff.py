@@ -129,6 +129,8 @@ class CreateHandoff:
             if registration is None or (registration.sandbox_generation, registration.operation_id) != (
                     held.operation.generation, held.operation.operation_id):
                 raise RuntimeError("the finished create is not this operation's registration")
+            # The image cache's LRU learns of the daemon's creates here.
+            self.service.provisioner.note_image_used(registration.image_id)
             if registration.has_direct_sandbox and runtime_started:
                 # Growth monitor, workspace claim, memory placement: what
                 # warden.create records in this process.

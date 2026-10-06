@@ -154,6 +154,7 @@ class SplitMemoryWiringTests(unittest.TestCase):
         self.assertEqual(build.call_args.kwargs["memory_backing_hard_capacity_bytes"], 123456)
         self.assertEqual(build.call_args.kwargs["checkpoint_registry_url"], "http://registry:5000")
         self.assertEqual(build.call_args.kwargs["checkpoint_registry_repository"], "snapshots/memory-checkpoints")
+        self.assertEqual(build.call_args.kwargs["environment_device_budget_percent"], 75)
 
     def test_imported_split_workspace_discards_only_inactive_overlay_scratch(self):
         from tests.test_image_rootfs import Overlay2Runner, image_store

@@ -86,7 +86,8 @@ class EnvironmentBootstrapTests(unittest.TestCase):
         self.assertFalse(DeploymentConfig.from_dict(raw).immutable_environments.prefetch_enabled)
         for change in ({"worker_enabled": 1}, {"builder_enabled": True}, {"allow_paths": ["../runtime"]},
                        {"prefetch_enabled": "false"}, {"prefetch_enabled": 0}, {"attach_concurrency": 0},
-                       {"attach_concurrency": True}):
+                       {"attach_concurrency": True}, {"device_budget_percent": 0}, {"device_budget_percent": 101},
+                       {"device_budget_percent": True}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 EnvironmentDeploymentConfig.from_dict({"trusted_keys_file": "/etc/producers.json", **change})
 
@@ -180,9 +181,12 @@ class EnvironmentBootstrapTests(unittest.TestCase):
         with TemporaryDirectory() as temporary:
             trust = provision(Path(temporary) / "key")["public_trust_file"]
             base = DeploymentConfig.default(scope_id="test")
-            for enabled, attach in ((True, 1), (False, 4)):
+            for enabled, attach, budget in ((True, 1, 75), (False, 4, 60)):
                 selected = EnvironmentDeploymentConfig.from_dict({"trusted_keys_file": trust, "worker_enabled": True,
-                                                                  "prefetch_enabled": enabled, "attach_concurrency": attach})
+                                                                  "prefetch_enabled": enabled, "attach_concurrency": attach,
+                                                                  "device_budget_percent": budget})
+                # Written only once changed, so a rollback still reads the config.
+                self.assertEqual("device_budget_percent" in selected.to_dict(), budget != 75)
                 with self.subTest(enabled=enabled), patch.object(cli, "read_bearer_token_source", return_value="t"):
                     options = cli.vm_init_options_for_job(
                         replace(base, immutable_environments=selected), node("worker").job, "sandbox",
@@ -191,6 +195,9 @@ class EnvironmentBootstrapTests(unittest.TestCase):
                     script = render_vm_init_script(options)
                     self.assertEqual("--disable-prefetch" in script, not enabled)
                     self.assertEqual("--attach-concurrency 4" in script, attach == 4)  # Absent at the default.
+                    self.assertEqual(options.environment_device_budget_percent, budget)
+                    self.assertEqual("--environment-device-budget-percent" in script, budget != 75)
+                    self.assertEqual("--environment-device-budget-percent 60" in script, budget == 60)
 
     def test_worker_and_builder_lifetimes_and_key_separation(self):
         with TemporaryDirectory() as temporary:

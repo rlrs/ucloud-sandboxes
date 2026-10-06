@@ -18,7 +18,8 @@ from urllib.parse import urlsplit
 from .deployment import DEFAULT_INIT_VERSION, package_version
 from .direct_network import DirectNetworkTcpEgress
 from .models import ResourceQuantity
-from .environment_config import NYDUSD_FEATURES, NYDUSD_INSTALL_PATH, PINNED_NYDUS_COMMIT
+from .environment_config import (DEFAULT_DEVICE_BUDGET_PERCENT, NYDUSD_FEATURES, NYDUSD_INSTALL_PATH,
+                                 PINNED_NYDUS_COMMIT)
 from .gvisor_distribution import GVISOR_COMMIT, GVISOR_SIDECARS
 from .heartbeat_sender import DEFAULT_HEARTBEAT_INTERVAL_SECONDS
 from .storage_native_publication import DEFAULT_MAX_CONCURRENT_PUBLICATIONS
@@ -266,6 +267,7 @@ class VmInitOptions:
     environment_preserve_mtimes: bool = False
     environment_prefetch_enabled: bool = True
     environment_attach_concurrency: int = 1
+    environment_device_budget_percent: int = DEFAULT_DEVICE_BUDGET_PERCENT
     environment_shared_traces: bool = False
     # immutable_environments.chunk_store: workers read RAFS images through
     # presigned URLs from ucloud-chunk-index, with its read token only.

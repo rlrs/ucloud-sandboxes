@@ -3,6 +3,7 @@ import base64
 import json
 import shlex
 
+from .environment_config import DEFAULT_DEVICE_BUDGET_PERCENT
 
 TRUST_FILE = "/etc/ucloud-sandboxes/environment/producers.json"
 KEY_FILE = "/etc/ucloud-sandboxes/environment/producer.pem"
@@ -92,6 +93,9 @@ ENVIRONMENT_IO_SERVICE
     # Start (never restart): active filesystem devices outlive frontend upgrades.
     start = f"$SUDO systemctl enable {SERVICE}\n$SUDO systemctl start {SERVICE}\n"
     rafs = " --environment-rafs" if options.environment_chunk_store_url else ""
+    budget = options.environment_device_budget_percent
+    # Absent at the default, so the rendered init is unchanged.
+    rafs += "" if budget == DEFAULT_DEVICE_BUDGET_PERCENT else f" --environment-device-budget-percent {int(budget)}"
     return registry_flags + " --environment-backend-socket " + SOCKET + rafs, setup, start
 
 
@@ -112,6 +116,7 @@ def validate(options):
         "cache_bytes": options.environment_cache_bytes, "preserve_mtimes": options.environment_preserve_mtimes,
         "prefetch_enabled": options.environment_prefetch_enabled,
         "shared_traces": options.environment_shared_traces,
+        "device_budget_percent": options.environment_device_budget_percent,
     })
     from .environment_artifact import content_digest
     raw = json.loads(options.environment_trusted_keys_json)

@@ -88,6 +88,15 @@ class DirectSandboxProvisioner:
             ImageCacheEvictor(image_store, is_referenced=self.image_referenced)
             if callable(getattr(image_store, "evict_image", None)) else None
         )
+        # The environment store keeps a deleted sandbox's image mounted and
+        # collects idle images under its own node budget; its sweep (also run
+        # from inside a mount that found the device pool exhausted) needs the
+        # registry's ownership check.
+        self.idle_image_store = (
+            image_store if getattr(image_store, "retains_idle_images", False) else None
+        )
+        if self.idle_image_store is not None:
+            self.idle_image_store.is_referenced = self.image_referenced
         self._validate_layout()
 
     def start(self) -> tuple[DirectSandboxRegistration, ...]:
@@ -609,13 +618,26 @@ class DirectSandboxProvisioner:
         return True
 
     def evict_images_if_needed(self) -> tuple[str, ...]:
-        """Evict least recently used unreferenced images when the store is nearly full."""
+        """Evict least recently used unreferenced images when the node is over budget."""
 
+        if self.idle_image_store is not None:
+            return self.idle_image_store.collect_idle()
         if self.image_evictor is None:
             return ()
         return self.image_evictor.evict_if_needed()
 
+    def note_image_used(self, image_id: str | None) -> None:
+        """A sandbox of this image was just created (runtime/noded's included)."""
+
+        if self.idle_image_store is not None and image_id:
+            self.idle_image_store.note_used(image_id)
+
     def _collect_deleted_image(self, image_id: str) -> None:
+        if self.idle_image_store is not None:
+            # The composition stays mounted for the next sandbox of this
+            # image; the store's sweep collects it when the node is over budget.
+            self.idle_image_store.note_used(image_id)
+            return
         if self.image_evictor is not None:
             # The pulled image stays cached for the next sandbox of this task;
             # eviction under disk pressure starts from the least recently used.

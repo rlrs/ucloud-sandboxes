@@ -1,6 +1,7 @@
 import json
-import json
+import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 
@@ -9,7 +10,9 @@ from tests import test_environment_artifact as artifact_fixtures
 from ucloud_sandboxes.environment_artifact import (ENVIRONMENT_ANNOTATION, OCI_IMAGE,
     attach_environment_to_image, canonical_bytes, content_digest, load_environment, publish_environment)
 from ucloud_sandboxes.environment_manifest import EnvironmentManifest, HOST_EROFS_ABI
-from ucloud_sandboxes.environment_rootfs import EnvironmentImageRuntime, EnvironmentRootfsStore
+from ucloud_sandboxes.environment_backend import NO_BLOCK_DEVICE
+from ucloud_sandboxes.environment_rootfs import (EnvironmentDeviceCapacityError, EnvironmentImageRuntime,
+    EnvironmentRootfsStore)
 from ucloud_sandboxes.images import ImageManager, ImageStore
 from ucloud_sandboxes.image_rootfs import OverlayRootfsManager
 from ucloud_sandboxes.sandbox import SandboxSpec, sandbox_spec_fingerprint
@@ -159,6 +162,159 @@ class EnvironmentRootfsTests(artifact_fixtures.EnvironmentArtifactTests):
         self.assertNotEqual(sandbox_spec_fingerprint(pinned), sandbox_spec_fingerprint(plain))
         with self.assertRaisesRegex(ValueError, "sha256 digest"):
             SandboxSpec.from_dict({**raw, "environment_root": "latest"}).validate()
+
+
+class IdleImageSweepTests(unittest.TestCase):
+    """Idle compositions stay mounted; the sweep collects them LRU first, only over budget."""
+
+    def setUp(self):
+        directory = TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name).resolve()
+        self.now, self.over_cache, self.dead = 10_000.0, False, set()
+        self.mounts, self.dependents, self.referenced = set(), set(), set()
+        self.attached, self.ensured, self.environments = set(), [], {}
+
+    def store(self, devices=8, percent=50, pressure=True):
+        backend = SimpleNamespace(ensure=self.ensure, drop=self.drop)
+        if pressure:
+            backend.pressure = lambda: {"active_components": len(self.attached), "over_cache_budget": self.over_cache}
+        store = EnvironmentRootfsStore(self.root / "store", None, backend, runner=SimpleNamespace(run=self.execute),
+                                       referenced=lambda path: path in self.dependents, block_devices=devices,
+                                       device_budget_percent=percent, clock=lambda: self.now)
+        store.is_referenced = lambda image_id: image_id in self.referenced
+        store._load = lambda image_id: (self.environments[image_id], None)  # Signed receipts: other tests.
+        self.devices = devices
+        return store
+
+    def execute(self, command, **_kwargs):
+        if command[0] in ("mount", "env"):
+            self.mounts.add(Path(command[-1]))
+        elif command[0] == "umount":
+            self.mounts.discard(Path(command[-1]))
+        code = int(Path(command[-1]) not in self.mounts) if command[0] == "mountpoint" else 0
+        return SimpleNamespace(returncode=code, stdout="", stderr="")
+
+    def ensure(self, digest):
+        self.ensured.append(digest)
+        if digest in self.dead:
+            raise RuntimeError("environment block export failed; fence and drain affected sandboxes")
+        if digest not in self.attached and len(self.attached) >= self.devices:
+            raise RuntimeError(NO_BLOCK_DEVICE)
+        self.attached.add(digest)
+        return self.root / "components" / digest[7:]
+
+    def drop(self, digest):
+        # The backend refuses a component another mounted composition stacks (EBUSY).
+        if any(digest in environment.components and self.rootfs(image_id) in self.mounts
+               for image_id, environment in self.environments.items()):
+            return False
+        self.attached.discard(digest)
+        return True
+
+    def rootfs(self, image_id):
+        return self.root / "store" / "images" / image_id[7:] / "rootfs"
+
+    def image(self, store, name, *components, used=0.0, mount=True):
+        image_id = "sha256:" + name * 64
+        environment = SimpleNamespace(components=tuple("sha256:" + item * 64 for item in components))
+        self.environments[image_id] = environment
+        self.rootfs(image_id).mkdir(parents=True)
+        (self.rootfs(image_id).parent / "environment.json").write_text("{}")
+        if mount:
+            store._mount(image_id, environment)
+        store.note_used(image_id) if used is None else store._last_used.__setitem__(image_id, used)
+        return image_id
+
+    def present(self, store):
+        return {"sha256:" + path.name for path in store.images.iterdir()}
+
+    def test_the_sweep_runs_only_over_the_device_budget_least_recently_used_first(self):
+        store = self.store()  # 8 devices, budget 4.
+        images = [self.image(store, name, str(index), used=100.0 * index) for index, name in enumerate("abcd", 1)]
+        self.assertEqual(store.collect_idle(), ())  # 4 attached: within budget.
+        oldest = self.image(store, "e", "5", "6", used=50.0)  # Two components: 6 attached.
+        self.assertEqual(store.collect_idle(), (oldest,))  # Down to the budget, no further.
+        newest = self.image(store, "f", "7", "8", used=500.0)
+        self.assertEqual(store.collect_idle(), tuple(images[:2]))
+        self.assertEqual(self.present(store), {*images[2:], newest})
+        self.assertEqual(len(self.attached), 4)
+        self.assertEqual(store.operation_snapshot()["environment_devices_in_use"], 4)
+
+    def test_the_sweep_never_collects_a_referenced_leased_in_use_or_recent_image(self):
+        store = self.store(percent=1)  # Budget 0: every idle image is over it.
+        referenced, mounted, leased, recent, idle = (
+            self.image(store, name, str(index), used=used)
+            for index, (name, used) in enumerate(zip("abcde", (1.0, 2.0, 3.0, None, 4.0))))
+        self.referenced.add(referenced)  # A registration: noded's creates commit one too.
+        self.dependents.add(self.rootfs(mounted))  # A sandbox overlay stacks it.
+        with store._lease(leased):  # A create or materialization holds it.
+            self.assertEqual(store.collect_idle(), (idle,))
+        self.assertEqual(store._last_used[referenced], self.now)  # Seen in use now.
+        self.assertEqual(store.collect_idle(), (leased,))
+        self.assertEqual(self.present(store), {referenced, mounted, recent})
+        self.now += 60
+        self.assertEqual(store.collect_idle(), (recent,))
+        store.is_referenced = None  # No registry bound: no sweep.
+        self.dependents.clear()
+        self.assertEqual(store.collect_idle(), ())
+
+    def test_a_component_another_composition_stacks_stays_attached(self):
+        store = self.store(percent=1)
+        first = self.image(store, "a", "0", "1", used=1.0)
+        second = self.image(store, "b", "0", "2", used=None)
+        self.assertEqual(store.collect_idle(), (first,))
+        self.assertEqual(self.attached, {"sha256:" + "0" * 64, "sha256:" + "2" * 64})
+        self.assertIn(self.rootfs(second), self.mounts)
+
+    def test_a_device_cache_over_its_bytes_collects_idle_images_until_under(self):
+        store = self.store()
+        old, newer = self.image(store, "a", "1", used=1.0), self.image(store, "b", "2", used=2.0)
+        self.over_cache = True
+        original = self.drop
+
+        def drop(digest):
+            self.over_cache = False  # The last user of the blob detached.
+            return original(digest)
+        store.backend.drop = drop
+        self.assertEqual(store.collect_idle(), (old,))
+        self.assertEqual(self.present(store), {newer})
+
+    def test_device_exhaustion_collects_idle_images_and_retries_once(self):
+        store = self.store(devices=2, percent=75, pressure=False)  # An older backend: the mounted view.
+        idle = self.image(store, "a", "1", "2", used=1.0)
+        wanted = self.image(store, "b", "3", mount=False, used=None)
+        self.assertIsNotNone(store._mount(wanted, self.environments[wanted]))
+        self.assertEqual(self.present(store), {wanted})
+        self.assertEqual(self.attached, {"sha256:" + "3" * 64})
+        # Nothing collectable: the capacity error, after one attempt.
+        store = self.store(devices=1, percent=100)
+        self.referenced.add(wanted)
+        self.ensured.clear()
+        other = self.image(store, "c", "4", mount=False, used=None)
+        with self.assertRaises(EnvironmentDeviceCapacityError):
+            store._mount(other, self.environments[other])
+        self.assertEqual(self.ensured, ["sha256:" + "4" * 64])
+
+    def test_reconciliation_keeps_live_idle_images_and_collects_the_rest(self):
+        store = self.store(percent=1)
+        root, idle = self.image(store, "a", "1", used=1.0), self.image(store, "b", "2", used=2.0)
+        dead, unmounted = self.image(store, "c", "3", used=3.0), self.image(store, "d", "4", mount=False)
+        self.dead.add("sha256:" + "3" * 64)
+        restarted = self.store(percent=1)
+        self.assertEqual(restarted.reconcile_images((root,), is_referenced=lambda _: False),
+                         {"collected": 2, "retained": 1, "idle": 1})
+        self.assertEqual(self.present(restarted), {root, idle})
+        self.assertEqual(restarted.operation_snapshot()["environment_devices_in_use"], 2)
+        self.assertNotIn(dead, self.present(restarted))
+        self.assertNotIn(unmounted, self.present(restarted))
+        # After a restart the receipt's write time orders the sweep.
+        later = self.image(restarted, "e", "5")
+        del restarted._last_used[later]
+        os.utime(self.rootfs(idle).parent / "environment.json", (1.0, 1.0))
+        os.utime(self.rootfs(later).parent / "environment.json", (2.0, 2.0))
+        self.referenced.add(root)
+        self.assertEqual(restarted.collect_idle(), (idle, later))
 
 
 if __name__ == "__main__":

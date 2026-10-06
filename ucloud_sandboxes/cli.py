@@ -300,7 +300,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     inspect_job.set_defaults(func=cmd_inspect_job)
 
-    from .environment_config import add_environment_registry_args
+    from .environment_config import DEFAULT_DEVICE_BUDGET_PERCENT, add_environment_registry_args
 
     environment_key = subparsers.add_parser("provision-environment-key", help="Provision or recover an owned immutable image producer key.")
     environment_key.add_argument("--directory", type=Path, required=True)
@@ -433,6 +433,10 @@ def build_parser() -> argparse.ArgumentParser:
     direct_node_agent.add_argument("--environment-backend-socket", type=Path)
     direct_node_agent.add_argument("--environment-rafs", action="store_true",
                                    help="the environment backend reads chunk-store (RAFS) components")
+    direct_node_agent.add_argument("--environment-device-budget-percent", type=int,
+                                   default=DEFAULT_DEVICE_BUDGET_PERCENT,
+                                   help="collect idle environment images while attached components exceed "
+                                        "this percentage of the block devices")
     direct_node_agent.add_argument("--runsc", type=Path, required=True)
     direct_node_agent.add_argument("--runsc-commit", required=True)
     direct_node_agent.add_argument(
@@ -1377,6 +1381,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         environment_registry=environment_registry_from_args(args),
         environment_backend_socket=getattr(args, "environment_backend_socket", None),
         environment_rafs=getattr(args, "environment_rafs", False),
+        environment_device_budget_percent=args.environment_device_budget_percent,
         registry_foreign=args.registry_foreign,
         rust_creates=args.rust_creates,
         telemetry=telemetry,
@@ -6971,6 +6976,7 @@ def vm_init_options_for_job(
             "environment_cache_bytes": selected_environment.cache_bytes,
             "environment_prefetch_enabled": selected_environment.prefetch_enabled,
             "environment_attach_concurrency": selected_environment.attach_concurrency,
+            "environment_device_budget_percent": selected_environment.device_budget_percent,
             "environment_shared_traces": selected_environment.shared_traces,
             "environment_allow_paths": selected_environment.allow_paths,
         }

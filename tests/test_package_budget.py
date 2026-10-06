@@ -185,7 +185,9 @@ import unittest
 # +2 Rust execs require Rust creates (noded serves them from the create pipeline's node state).
 # +9 the agent's ops wait for a transition's T no longer than the admission wait, then defer.
 # +171 phase 4 storage prepare, steps 0-2: create step spans, a prepare admission class with queue-wait counters and its flag, mount(2) and BLKRASET, no owner inventory per acquisition.
-PACKAGE_LINE_BUDGET = 118_504
+# +216 idle environment images stay mounted for their next sandbox: an LRU sweep over a device budget (its setting
+# plumbed to VM init), retry on device exhaustion, the backend's pressure call; +9 2d7f071's netns pool left unbudgeted.
+PACKAGE_LINE_BUDGET = 118_729
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

@@ -1,4 +1,5 @@
 import json
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -95,6 +96,15 @@ class EnvironmentRootfsTests(artifact_fixtures.EnvironmentArtifactTests):
         with store.operation_lease(refs["a"]) as first, store.operation_lease(refs["b"]) as second:
             self.assertEqual((first.image_id, first.rootfs), (second.image_id, second.rootfs))
             self.assertEqual((first.image_config.command, second.image_config.command), (("/bin/a",), ("/bin/b",)))
+        self.assertEqual(len(mount_commands), 1)
+        # The node daemon leases the sibling by its resolution: the shared
+        # composition's receipt names the other root.
+        resolution = store.materialize_resolution(refs["b"])
+        receipt = json.loads((store.images / first.image_id[7:] / "environment.json").read_text())
+        self.assertEqual(resolution["source"], refs["b"])
+        self.assertEqual(receipt["source"], refs["a"])
+        self.assertNotEqual(resolution["root"], receipt["root"])
+        self.assertEqual(resolution["environment"]["image_config"]["Cmd"], ["/bin/b"])
         self.assertEqual(len(mount_commands), 1)
 
     def test_a_dispatched_root_pins_the_image_and_survives_its_release(self):

@@ -255,10 +255,12 @@ class CreateHandoffTests(unittest.TestCase):
         self.assertEqual(status, 404)
 
     def test_image_materialization_and_the_create_configuration(self) -> None:
+        resolution = {"root": "sha256:" + "c" * 64, "source": "image", "environment": {"schema": 1}}
+        requested = []
+        self.images.materialize_resolution = lambda image, root: requested.append((image, root)) or resolution
         status, _, image = self.call("POST", "/internal/v1/images/materialize",
                                      {"image": "image", "environment_root": None})
-        self.assertEqual((status, image), (200, {"image_id": "sha256:" + "a" * 64, "rootfs_identity_sha256": "b" * 64,
-                                                 "rootfs": str(self.root / "image-rootfs")}))
+        self.assertEqual((status, image, requested), (200, {"resolution": resolution}, [("image", None)]))
         config = self.warden.config
         config.runsc, config.runtime_root = Path("/opt/runsc"), self.root / "runsc"
         config.journal_root = self.root / "journals"

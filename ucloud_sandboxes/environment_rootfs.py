@@ -224,6 +224,17 @@ class EnvironmentRootfsStore:
     @contextmanager
     def operation_lease(self, image_ref, environment_root=None):
         environment, receipt = self._resolved(image_ref, environment_root)
+        with self._leased(image_ref, environment, receipt) as rootfs:
+            yield rootfs
+
+    def materialize_resolution(self, image_ref, environment_root=None):
+        """Mount the image and return the resolution the node daemon leases it by."""
+        environment, receipt = self._resolved(image_ref, environment_root)
+        with self._leased(image_ref, environment, receipt):
+            return receipt
+
+    @contextmanager
+    def _leased(self, image_ref, environment, receipt):
         image_id = "sha256:" + environment.environment.sha256
         while True:
             with self._lease(image_id):

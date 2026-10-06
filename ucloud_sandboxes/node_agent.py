@@ -713,9 +713,13 @@ class NodeAgentHandler(BuildContextHttpHandler):
         try:
             # Mount and receipt; the lease is released at once, so the
             # daemon's own image lock fences GC from here on.
-            with self.manager.service.provisioner.overlays.resolve(image, root) as rootfs:
-                payload = {"image_id": rootfs.image_id, "rootfs": str(rootfs.rootfs),
-                           "rootfs_identity_sha256": rootfs.rootfs_identity_sha256}
+            overlays = self.manager.service.provisioner.overlays
+            store = getattr(overlays, "image_store", None)
+            if not callable(getattr(store, "materialize_resolution", None)):
+                raise ValueError("image materialization requires the environment image store")
+            # The resolution (receipt shape) lets the daemon lease images
+            # whose composition another receipt holds (config-only siblings).
+            payload = {"resolution": store.materialize_resolution(image, root)}
         except DirectRegistryCapacityUnavailable as exc:
             # The block-device pool is full: the create's capacity rejection.
             raise SandboxCapacityUnavailableError(str(exc)) from exc

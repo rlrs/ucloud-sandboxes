@@ -248,6 +248,9 @@ impl CreateFront {
     ) -> Option<Response<Body>> {
         let manager_started = Instant::now();
         let mut timings = Timings::default();
+        // The agent's two requests, whole: its own phases (slot, capacity,
+        // lock) are inside admit; the rest is the RPC and the agent's GIL.
+        let admit_started = timings.start();
         let reply = match self.agent.call(Method::POST, "/internal/v1/creates/admit", Some(&admit)).await {
             Ok(reply) => reply,
             // Nothing reached the agent: it can still create this itself.
@@ -259,6 +262,7 @@ impl CreateFront {
             // Admission refusals and validation errors are the agent's answer.
             return Some(relay(&reply));
         }
+        timings.add("agent_admit", admit_started);
         let admitted = match admitted(&reply, sandbox_id, generation, operation_id, spec_hash) {
             Ok(admitted) => admitted,
             Err(error) => return Some(self.error(CreateError::Unavailable(error.to_string()))),
@@ -276,7 +280,9 @@ impl CreateFront {
                 json!({"outcome": "failed", "status": status.as_u16(), "body": body})
             }
         };
+        let finish_started = timings.start();
         let finished = self.finish(&admitted.token, &finish).await;
+        timings.add("agent_finish", finish_started);
         Some(match (result, finished) {
             (Ok(_), Ok(reply)) if reply.status == StatusCode::OK => {
                 let manager_ms = manager_started.elapsed().as_millis() as u64;

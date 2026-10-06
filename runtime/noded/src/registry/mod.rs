@@ -19,9 +19,9 @@ mod store;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, Mutex};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use rusqlite::{OptionalExtension, params};
 
@@ -142,6 +142,8 @@ fn mib(value: i64) -> i128 {
 /// The node registry; `Send + Sync`, shared by reference across threads.
 pub struct Registry {
     store: Store,
+    /// The last drain read and when it began; see [`Registry::drain_since`].
+    drain: Mutex<Option<(Instant, DrainState)>>,
 }
 
 impl Registry {
@@ -154,7 +156,7 @@ impl Registry {
         if hard_disk_capacity_mb < 0 {
             return Err(RegistryError::invalid("disk capacity cannot be negative"));
         }
-        Ok(Registry { store: Store::new(path, hard_disk_capacity_mb) })
+        Ok(Registry { store: Store::new(path, hard_disk_capacity_mb), drain: Mutex::new(None) })
     }
 
     /// The owner instance: it holds the file's exclusive owner lock for its
@@ -317,6 +319,23 @@ impl Registry {
 
     pub fn load_drain(&self) -> Result<DrainState> {
         self.store.read(|tx| Ok(tx.metadata()?.drain))
+    }
+
+    /// The drain state as of a read that began at or after `since`: callers
+    /// share one read at a time, so a burst of execs costs one SQLite read,
+    /// not one each (concurrent WAL readers back off for up to seconds), and
+    /// a drain committed before `since` is still seen.
+    pub fn drain_since(&self, since: Instant) -> Result<DrainState> {
+        let mut last = self.drain.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some((began, drain)) = last.as_ref()
+            && *began >= since
+        {
+            return Ok(drain.clone());
+        }
+        let began = Instant::now();
+        let drain = self.load_drain()?;
+        *last = Some((began, drain.clone()));
+        Ok(drain)
     }
 
     // Metadata writes (none bumps the clock).

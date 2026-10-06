@@ -801,6 +801,32 @@ fn runtime_compatibility_and_drain() {
 }
 
 #[test]
+fn a_shared_drain_read_never_misses_an_earlier_commit() {
+    let dir = TempDir::new("drain-since");
+    let owner = Registry::owner(dir.registry(), 0).unwrap();
+    let python = Registry::new(dir.registry(), 0).unwrap();
+    let open = owner.drain_since(Instant::now()).unwrap();
+    assert!(open.admission_open);
+    // A request that began before this read shares it.
+    let before = Instant::now() - Duration::from_secs(1);
+    let drain = DrainState { draining: true, token: "t".into(), drain_activity_epoch: 3, admission_open: false };
+    python.save_drain(&drain).unwrap();
+    assert_eq!(owner.drain_since(before).unwrap(), open);
+    // One that began after the commit reads again and sees it.
+    assert_eq!(owner.drain_since(Instant::now()).unwrap(), drain);
+    // Concurrent callers all see the commit.
+    let owner = Arc::new(owner);
+    let since = Instant::now();
+    let seen: Vec<_> = (0..16)
+        .map(|_| {
+            let owner = owner.clone();
+            std::thread::spawn(move || owner.drain_since(since).unwrap())
+        })
+        .collect();
+    assert!(seen.into_iter().all(|reader| reader.join().unwrap() == drain));
+}
+
+#[test]
 fn version7_upgrade_backfills_the_ledger_and_version8_keeps_claims_fixed() {
     for version in [7, 8] {
         let dir = TempDir::new("upgrade");

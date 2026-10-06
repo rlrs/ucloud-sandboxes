@@ -231,7 +231,8 @@ impl ExecFront {
             timings.manager.insert(format!("{name}_ms"), serde_json::json!(millis(now - step)));
             step = now;
         };
-        let (registration, drain) = tokio::task::spawn_blocking(move || (registry.get(&id), registry.load_drain()))
+        let since = Instant::now();
+        let (registration, drain) = tokio::task::spawn_blocking(move || (registry.get(&id), registry.drain_since(since)))
             .await
             .map_err(|_| Decline::Forward("registry worker"))?;
         mark(&mut timings, "registry");

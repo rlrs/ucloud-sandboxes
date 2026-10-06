@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.45 - 2026-10-06 (gateway; workers)
+
+- **Rust creates, fixed from the 0.9.44 canary.** Two defects stopped every create the daemon ran:
+  - it read the storage daemon's volume record as nested (`owner`), but the record is flat, so every create failed with "storage-native volume record does not match its workspace" (503, ambiguous);
+  - `libc::getrandom` in a static musl link resolved to address 0, so the first overlay prepare crashed the daemon (SIGSEGV; found from a core dump against the same commit's debug build). Random bytes now come from the raw syscall, and `build_pinned.sh` refuses a binary in which any libc function the source calls is not linked.
+  - On a hot-swapped worker, 60 of 64 relay rollouts succeeded (the 4 failures are images without Python). Ready p50 was 3.7 s and p95 5.4 s, with `runtime_create` p50 205 ms and `storage_prepare` 291 ms.
+- **Phase 2a: execs on running sandboxes run in `ucloud-noded`**, behind `sandbox.direct_node_rust_exec` (requires the front door and Rust creates).
+  - The daemon starts `runsc exec` for owned, running, unpaused sandboxes and serves the sessions it started (events, stdin, signal). Python's session semantics are ported exactly, against Python goldens.
+  - Python's lifecycle transitions and the daemon's execs exclude each other through two flock files per sandbox (`.<id>.transition`, `.<id>.activity`). A's mtime is the shared activity clock for idle park. There is no per-exec RPC.
+  - Everything else stays with the agent: paused or parked sandboxes, tty, drain, memory pressure, unknown sessions, files and jobs.
+- The gateway upgrade turns on both flags.
+
 ## 0.9.44 - 2026-10-06 (gateway; workers)
 
 - **Phase 1 of the Rust node daemon: creates run in `ucloud-noded`** ([docs/rust-node-daemon-plan.md](docs/rust-node-daemon-plan.md)), behind `sandbox.direct_node_rust_create` (requires the front door).

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.42 - 2026-10-06 (workers)
+
+- **Sandbox veths get one queue pair, not one per CPU.** veth allocates a TX and an RX queue per possible CPU by default, and each queue is a sysfs object with its own add and remove uevents. On a 64-vCPU worker, one sandbox's pair produced 280 uevents (create, up, delete), against 31 with `numtxqueues`/`numrxqueues` 1 on both ends. In a 1,024-rollout burst, D-state kernel stacks showed udev workers blocked on the sysfs root's lock (`kernfs_dop_revalidate`) about 3,250 times per worker, against a few dozen for anything else. That lock also serializes every device add on the create path. gVisor's netstack reads eth0 through one packet channel.
+
 ## 0.9.41 - 2026-10-06 (gateway renders node init; workers and builders)
 
 - **udev neither probes nor watches nbd and ublk devices.** A worker creating about 500 sandboxes ran 144 udev workers on 6–10 of its 64 cores. systemd's persistent-storage rules blkid-probe every nbd and ublk device (1,024 + ~500), and the block watch re-probes each one after every close-for-write, such as the storage daemon's mkfs. That mkfs also waits on udev's device lock. Init now installs rules setting `UDEV_DISABLE_PERSISTENT_STORAGE_RULES_FLAG` and `nowatch` for these devices before nbd loads, and masks udisks2 (a desktop service, 0.5 cores).

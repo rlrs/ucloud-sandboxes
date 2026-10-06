@@ -91,9 +91,16 @@ pub struct Sandbox {
     pub spec_sha256: String,
 }
 
+/// Cheap to clone: blocking steps run on a clone in `spawn_blocking`.
+#[derive(Clone)]
 pub struct Warden {
     config: WardenConfig,
     journal: JournalStore,
+}
+
+/// Run blocking filesystem work (flocks, fences, fsyncs) off the reactor.
+async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T, WardenError> + Send + 'static) -> Result<T, WardenError> {
+    tokio::task::spawn_blocking(work).await.map_err(|error| fail(format!("warden worker failed: {error}")))?
 }
 
 const SHARED_PARENT_CGROUP_BUSY: &str = "removing cgroup path";
@@ -142,17 +149,25 @@ impl Warden {
     }
 
     /// The per-incarnation warden flock, shared with the Python agent.
-    pub fn lock(&self, sandbox: &Sandbox) -> Result<FileLock, WardenError> {
+    pub async fn lock(&self, sandbox: &Sandbox) -> Result<FileLock, WardenError> {
         let directory = self.config.runtime_root.join("warden-locks");
-        ensure_private_dir(&directory)?;
         let name = format!(".{}.sandbox-{}.warden.lock", sandbox.sandbox_id, sandbox.generation);
-        Ok(FileLock::acquire(&directory.join(name), false)?)
+        blocking(move || {
+            ensure_private_dir(&directory)?;
+            Ok(FileLock::acquire(&directory.join(name), false)?)
+        })
+        .await
+    }
+
+    async fn journaled(&self, sandbox: &Sandbox) -> Result<bool, WardenError> {
+        let (journal, id, generation) = (self.journal.clone(), sandbox.sandbox_id.clone(), sandbox.generation);
+        blocking(move || Ok(journal.load(&id, generation)?.is_some())).await
     }
 
     /// Refuse if a journal exists; else delete any runtime this container id left.
     pub async fn discard_unjournaled(&self, sandbox: &Sandbox) -> Result<(), WardenError> {
-        let _lock = self.lock(sandbox)?;
-        if self.journal.load(&sandbox.sandbox_id, sandbox.generation)?.is_some() {
+        let _lock = self.lock(sandbox).await?;
+        if self.journaled(sandbox).await? {
             return Err(fail("refusing to discard a backend with a lifecycle journal"));
         }
         self.delete_runtime(sandbox, false).await
@@ -190,22 +205,32 @@ impl Warden {
         sandbox: &Sandbox,
         operation_id: &str,
         mode: MemoryMode,
-        require_memory: impl FnOnce() -> Result<(), WardenError>,
+        require_memory: impl FnOnce() -> Result<(), WardenError> + Send + 'static,
         timings: &mut crate::timings::Timings,
     ) -> Result<Map<String, Value>, WardenError> {
-        let _lock = self.lock(sandbox)?;
-        self.validate_bundle(sandbox)?;
-        require_memory()?;
+        let _lock = self.lock(sandbox).await?;
+        // Under the lock: an incarnation someone already journaled is never
+        // created again, nor deleted by this create's cleanup.
+        if self.journaled(sandbox).await? {
+            return Err(fail("refusing to create a backend with a lifecycle journal"));
+        }
         let active_root = match mode {
             MemoryMode::Ram => self.config.application_memory_root.clone().ok_or_else(|| fail("no application memory root"))?,
             MemoryMode::File => self.config.memory_root.clone(),
         };
-        let active = active_root.join(&sandbox.memory_directory);
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&active)?;
-        }
-        ensure_private_dir(&active)?;
+        let (this, checked) = (self.clone(), sandbox.clone());
+        blocking(move || {
+            this.validate_bundle(&checked)?;
+            require_memory()?;
+            let active = active_root.join(&checked.memory_directory);
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&active)?;
+            }
+            ensure_private_dir(&active)?;
+            Ok(())
+        })
+        .await?;
         let mut create = self.common(mode)?;
         create.extend(["create".into(), format!("--bundle={}", sandbox.bundle.display()), sandbox.container_id.clone()]);
         let started = timings.start();
@@ -216,7 +241,7 @@ impl Warden {
             Err(error) => Err(error.into()),
             Ok(_) => self.start_and_journal(sandbox, operation_id, timings).await,
         };
-        if result.is_err() {
+        if result.is_err() && !self.journaled(sandbox).await.unwrap_or(true) {
             let _ = self.delete_runtime(sandbox, false).await;
         }
         result
@@ -241,12 +266,19 @@ impl Warden {
         if status != "running" && status != "paused" {
             return Err(fail(format!("runsc state is not live: {status}")));
         }
-        let ticks = runsc::sentry_identity(&self.owner(sandbox), pid, None)
-            .map_err(|_| fail("cannot read sentry process identity"))?;
+        let (this, owned) = (self.clone(), sandbox.clone());
+        let ticks = blocking(move || {
+            runsc::sentry_identity(&this.owner(&owned), pid, None).map_err(|_| fail("cannot read sentry process identity"))
+        })
+        .await?;
         timings.add("runsc_state", started);
         let started = timings.start();
-        let record = self.journal.initialize_running(
-            &sandbox.sandbox_id, sandbox.generation, &sandbox.spec_sha256, operation_id, pid as u64, ticks)?;
+        let (journal, journaled, operation_id) = (self.journal.clone(), sandbox.clone(), operation_id.to_string());
+        let record = blocking(move || {
+            Ok(journal.initialize_running(
+                &journaled.sandbox_id, journaled.generation, &journaled.spec_sha256, &operation_id, pid as u64, ticks)?)
+        })
+        .await?;
         timings.add("journal_commit", started);
         Ok(record)
     }
@@ -254,7 +286,8 @@ impl Warden {
     /// `_delete_runtime`: fence runsc's metadata (kill verified owners, clear
     /// their PIDs), then `runsc delete --force`.
     pub async fn delete_runtime(&self, sandbox: &Sandbox, checked: bool) -> Result<(), WardenError> {
-        self.fence_delete_metadata(sandbox)?;
+        let (this, fenced) = (self.clone(), sandbox.clone());
+        blocking(move || this.fence_delete_metadata(&fenced)).await?;
         let mut argv = self.prefix();
         argv.extend(["delete".into(), "--force".into(), sandbox.container_id.clone()]);
         let result = runsc::run(&argv, self.config.command_timeout).await?;

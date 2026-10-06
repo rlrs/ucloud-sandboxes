@@ -6,6 +6,7 @@
 //! Until that answer arrives every create goes to the agent.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -94,47 +95,54 @@ pub fn spec_supported(spec: &Map<String, Value>) -> bool {
     helper.is_none_or(|helper| helper == "shell")
 }
 
-/// The pipeline once the configuration is known; creates go to the agent until then.
+/// The pipeline once the configuration is known; creates go to the agent
+/// until then, and for good once the agent reports another configuration.
 pub struct LazyPipeline {
-    inner: OnceLock<Arc<dyn Pipeline>>,
+    inner: OnceLock<(Arc<dyn Pipeline>, String)>,
+    stale: AtomicBool,
 }
 
 impl LazyPipeline {
     pub fn new() -> Arc<Self> {
-        Arc::new(LazyPipeline { inner: OnceLock::new() })
+        Arc::new(LazyPipeline { inner: OnceLock::new(), stale: AtomicBool::new(false) })
     }
 
-    /// Ask the agent for its configuration until it answers, then build the
-    /// pipeline with `build`. A node the daemon cannot serve keeps forwarding.
+    /// Ask the agent for its configuration until it is one the daemon
+    /// serves, then build the pipeline with `build`. Refusals are re-polled:
+    /// a re-initialized node restarts the agent after the daemon.
     pub async fn load(
         self: Arc<Self>,
         agent: Arc<AgentClient>,
-        build: impl FnOnce(CreateConfig) -> Result<Arc<dyn Pipeline>, String>,
+        build: impl Fn(CreateConfig) -> Result<Arc<dyn Pipeline>, String>,
     ) {
-        let config = loop {
-            match agent.call_json(Method::GET, "/internal/v1/creates/config", None).await {
-                Ok((StatusCode::OK, value)) => match serde_json::from_value::<CreateConfig>(value) {
-                    Ok(config) => break config,
-                    Err(error) => {
-                        eprintln!("ucloud-noded: the agent's create configuration is unusable ({error}); creates stay with the agent");
-                        return;
+        let mut last_refusal = String::new();
+        loop {
+            let refusal = match agent.call_json(Method::GET, "/internal/v1/creates/config", None).await {
+                Ok((StatusCode::OK, value)) => {
+                    let digest = value.get("config_sha256").and_then(Value::as_str).unwrap_or_default().to_string();
+                    match serde_json::from_value::<CreateConfig>(value) {
+                        Ok(config) => match config.refusal() {
+                            Some(reason) => format!("creates stay with the agent: {reason}"),
+                            None => match build(config) {
+                                Ok(pipeline) => {
+                                    let _ = self.inner.set((pipeline, digest));
+                                    eprintln!("ucloud-noded: creating sandboxes");
+                                    return;
+                                }
+                                Err(error) => format!("cannot create sandboxes ({error}); creates stay with the agent"),
+                            },
+                        },
+                        Err(error) => format!("the agent's create configuration is unusable ({error})"),
                     }
-                },
-                Ok((status, _)) => eprintln!("ucloud-noded: create configuration answered {status}; retrying"),
-                Err(error) => eprintln!("ucloud-noded: create configuration unavailable ({error}); retrying"),
+                }
+                Ok((status, _)) => format!("create configuration answered {status}"),
+                Err(error) => format!("create configuration unavailable ({error})"),
+            };
+            if refusal != last_refusal {
+                eprintln!("ucloud-noded: {refusal}; retrying");
+                last_refusal = refusal;
             }
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        };
-        if let Some(reason) = config.refusal() {
-            eprintln!("ucloud-noded: creates stay with the agent: {reason}");
-            return;
-        }
-        match build(config) {
-            Ok(pipeline) => {
-                let _ = self.inner.set(pipeline);
-                eprintln!("ucloud-noded: creating sandboxes");
-            }
-            Err(error) => eprintln!("ucloud-noded: cannot create sandboxes ({error}); creates stay with the agent"),
+            tokio::time::sleep(Duration::from_secs(2)).await;
         }
     }
 }
@@ -144,15 +152,26 @@ impl Pipeline for LazyPipeline {
         &'a self,
         admitted: &'a Admitted,
         timings: &'a mut Timings,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), CreateError>> + Send + 'a>> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<bool, CreateError>> + Send + 'a>> {
         match self.inner.get() {
-            Some(pipeline) => pipeline.create(admitted, timings),
-            None => Box::pin(async { Err(CreateError::Unavailable("the create pipeline is not ready".into())) }),
+            Some((pipeline, _)) => pipeline.create(admitted, timings),
+            None => Box::pin(async { Err(CreateError::Unsupported("the create pipeline is not ready".into())) }),
         }
     }
 
     fn supports(&self, spec: &Map<String, Value>) -> bool {
-        self.inner.get().is_some_and(|pipeline| pipeline.supports(spec))
+        !self.stale.load(Ordering::Relaxed) && self.inner.get().is_some_and(|(pipeline, _)| pipeline.supports(spec))
+    }
+
+    fn accepts_config(&self, config_sha256: &str) -> bool {
+        let Some((_, loaded)) = self.inner.get() else { return false };
+        if loaded == config_sha256 {
+            return true;
+        }
+        if !self.stale.swap(true, Ordering::Relaxed) {
+            eprintln!("ucloud-noded: the agent's create configuration changed; creates go to the agent until a restart");
+        }
+        false
     }
 }
 

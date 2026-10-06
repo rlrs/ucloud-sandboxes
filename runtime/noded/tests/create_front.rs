@@ -64,10 +64,12 @@ async fn agent(request: Request<Incoming>, seen: Seen) -> Result<Response<TestBo
                       json!({"error": "sandbox lifecycle is busy", "error_code": "node_active_admission_deferred", "retryable": true}),
                       &[("retry-after", "1"), ("x-ucloud-sandbox-retryable", "true")])
             } else {
+                let token = if body["sandbox_id"] == "full-expired" { "gone" } else { "t1" };
+                let config = if body["sandbox_id"] == "moved" { "config-2" } else { "config-1" };
                 reply(StatusCode::OK, json!({
-                    "token": "t1", "existing": null, "spec": body["spec"],
+                    "token": token, "existing": null, "spec": body["spec"],
                     "requested_resources": {"vcpu": 1.0, "memory_mb": 512, "disk_mb": 1024},
-                    "initial_claim": null, "split": false,
+                    "initial_claim": null, "split": false, "config_sha256": config,
                 }), &[])
             }
         }
@@ -82,6 +84,8 @@ async fn agent(request: Request<Incoming>, seen: Seen) -> Result<Response<TestBo
                 &[("retry-after", "1")]),
             _ => reply(StatusCode::OK, json!({}), &[]),
         },
+        "/internal/v1/creates/gone/finish" => reply(StatusCode::NOT_FOUND,
+            json!({"error": "unknown", "error_code": "create_token_unknown", "retryable": false}), &[]),
         // The agent's own create (forwarded requests).
         _ => reply(StatusCode::CREATED, json!({"forwarded": body}), &[]),
     })
@@ -94,15 +98,20 @@ impl Pipeline for FakePipeline {
         &'a self,
         admitted: &'a Admitted,
         timings: &'a mut Timings,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), CreateError>> + Send + 'a>> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<bool, CreateError>> + Send + 'a>> {
         Box::pin(async move {
             timings.add("runsc_create", timings.start());
             match admitted.sandbox_id.as_str() {
-                "full" => Err(CreateError::Capacity("combined workspace and memory backing capacity exhausted".into())),
+                "full" | "full-expired" => Err(CreateError::Capacity("combined workspace and memory backing capacity exhausted".into())),
                 "broken" => Err(CreateError::Unavailable("runsc create failed".into())),
-                _ => Ok(()),
+                "odd" => Err(CreateError::Unsupported("spec: unreadable".into())),
+                _ => Ok(true),
             }
         })
+    }
+
+    fn accepts_config(&self, config_sha256: &str) -> bool {
+        config_sha256 == "config-1"
     }
 
     fn supports(&self, spec: &Map<String, Value>) -> bool {
@@ -182,7 +191,7 @@ async fn a_supported_create_runs_between_admit_and_finish() {
     assert_eq!(admit["admission_wait_seconds"], 2.5);
     assert_eq!(admit["operation_id"], "create-1");
     assert!(admit["spec"].get("_ucloud_operation").is_none());
-    assert_eq!(seen[1], ("/internal/v1/creates/t1/finish".into(), json!({"outcome": "created"})));
+    assert_eq!(seen[1], ("/internal/v1/creates/t1/finish".into(), json!({"outcome": "created", "runtime_started": true})));
 }
 
 #[tokio::test]
@@ -249,4 +258,31 @@ async fn internal_endpoints_are_not_reachable_over_tcp() {
     let response = sender.send_request(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     assert!(harness.seen.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_capacity_answer_without_a_rollback_is_ambiguous() {
+    let harness = start().await;
+    let (status, headers, body) = post(harness.address, TOKEN, &create("full-expired")).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert!(!headers.contains_key("retry-after"));
+    assert!(body.get("error_code").is_none(), "{body}");
+}
+
+#[tokio::test]
+async fn unsupported_specs_and_changed_configurations_go_to_the_agent_after_release() {
+    let harness = start().await;
+    for id in ["odd", "moved"] {
+        let body = create(id);
+        let (status, _, answer) = post(harness.address, TOKEN, &body).await;
+        assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(answer["forwarded"], body);
+    }
+    let seen = harness.seen.lock().unwrap().clone();
+    let paths: Vec<&str> = seen.iter().map(|(path, _)| path.as_str()).collect();
+    assert_eq!(paths, [
+        "/internal/v1/creates/admit", "/internal/v1/creates/t1/finish", "/v1/sandboxes",
+        "/internal/v1/creates/admit", "/internal/v1/creates/t1/finish", "/v1/sandboxes",
+    ]);
+    assert!(seen.iter().filter(|(path, _)| path.ends_with("/finish")).all(|(_, body)| body["outcome"] == "failed"));
 }

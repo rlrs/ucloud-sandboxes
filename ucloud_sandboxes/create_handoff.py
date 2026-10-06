@@ -115,9 +115,10 @@ class CreateHandoff:
             "split": split,
         }
 
-    def finish_created(self, token: str) -> tuple[Any, bool, dict[str, int]]:
+    def finish_created(self, token: str, *, runtime_started: bool = True) -> tuple[Any, bool, dict[str, int]]:
         """Record the daemon's committed create; return (record, idempotent,
-        the phases Python timed for it)."""
+        the phases Python timed for it). Only a runtime the daemon started is
+        adopted; a replay of an owned sandbox keeps its claim as it is."""
         held = self._take(token)
 
         def created():
@@ -128,7 +129,7 @@ class CreateHandoff:
             if registration is None or (registration.sandbox_generation, registration.operation_id) != (
                     held.operation.generation, held.operation.operation_id):
                 raise RuntimeError("the finished create is not this operation's registration")
-            if registration.has_direct_sandbox:
+            if registration.has_direct_sandbox and runtime_started:
                 # Growth monitor, workspace claim, memory placement: what
                 # warden.create records in this process.
                 self.service.warden.adopt_created(registration.to_direct_sandbox())

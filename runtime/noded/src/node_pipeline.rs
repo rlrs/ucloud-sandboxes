@@ -228,7 +228,8 @@ impl NodePipeline {
         let request = json!({"image": image, "environment_root": root});
         let reply = self
             .agent
-            .call(Method::POST, "/internal/v1/images/materialize", Some(&request))
+            // A cold materialization pulls the image: the gateway's create budget.
+            .call_within(Duration::from_secs(600), Method::POST, "/internal/v1/images/materialize", Some(&request))
             .await
             .map_err(|error| unavailable(error.to_string()))?;
         let body = reply.json().map_err(|error| unavailable(error.to_string()))?;
@@ -244,9 +245,17 @@ impl NodePipeline {
         Ok(self.images.lease_resolved(image, root, resolution).await?)
     }
 
-    async fn run(&self, admitted: &Admitted, timings: &mut Timings) -> Result<(), CreateError> {
-        let spec = registry::SandboxSpec::from_dict(&admitted.spec).map_err(|error| CreateError::Invalid(error.to_string()))?;
-        let oci_spec = oci::SandboxSpec::from_value(&admitted.spec)?;
+    async fn run(&self, admitted: &Admitted, timings: &mut Timings) -> Result<bool, CreateError> {
+        // The agent validated this spec. If Rust reads it differently, or would
+        // store a row whose fingerprint Python does not reproduce, the agent
+        // creates it instead: a row Python cannot re-encode breaks its index.
+        let spec = registry::SandboxSpec::from_dict(&admitted.spec)
+            .map_err(|error| CreateError::Unsupported(format!("spec: {error}")))?;
+        if spec.sha256() != admitted.spec_hash {
+            return Err(CreateError::Unsupported("the daemon's spec fingerprint differs from the agent's".into()));
+        }
+        let oci_spec = oci::SandboxSpec::from_value(&admitted.spec)
+            .map_err(|error| CreateError::Unsupported(format!("spec: {error}")))?;
         let generation = admitted.generation;
         let started = timings.start();
         let image = self.lease_image(&oci_spec.image, oci_spec.environment_root.as_deref()).await?;
@@ -275,17 +284,22 @@ impl NodePipeline {
             return Err(unavailable("direct registration belongs to another runtime compatibility"));
         }
 
+        // Python ensures the network once per _advance, on every phase.
+        let mut networked = false;
         if matches!(registration.phase, Phase::Planned | Phase::QuotaReady) {
             registration = self.root(&registration, &oci_spec, &image, timings).await?;
+            networked = true;
+        }
+        if !networked {
+            self.ensure_network(&registration, timings).await?;
         }
         match registration.phase {
             Phase::RootfsReady => self.own(&registration, &oci_spec, timings).await,
             Phase::Owned => {
-                self.ensure_network(&registration, timings).await?;
                 let sandbox = self.sandbox(&registration);
                 let journal = self.warden.journal().load(&sandbox.sandbox_id, generation)?;
                 match journal.as_ref().and_then(|record| record.get("state")).and_then(Value::as_str) {
-                    Some("running" | "parked" | "recovery-required") => Ok(()),
+                    Some("running" | "parked" | "recovery-required") => Ok(false),
                     _ => Err(unavailable("owned sandbox has no settled lifecycle journal")),
                 }
             }
@@ -411,11 +425,11 @@ impl NodePipeline {
     }
 
     /// S5 and S9 to S13: guest files, the runtime, then `owned`.
-    async fn own(&self, registration: &Registration, spec: &oci::SandboxSpec, timings: &mut Timings) -> Result<(), CreateError> {
-        self.ensure_network(registration, timings).await?;
+    async fn own(&self, registration: &Registration, spec: &oci::SandboxSpec, timings: &mut Timings) -> Result<bool, CreateError> {
         let sandbox = self.sandbox(registration);
         let generation = sandbox.generation;
         let journaled = self.warden.journal().load(&sandbox.sandbox_id, generation)?;
+        let started_runtime = journaled.is_none();
         match journaled.as_ref().and_then(|record| record.get("state")).and_then(Value::as_str) {
             None => {
                 let rootfs = sandbox.bundle.join("rootfs");
@@ -482,7 +496,7 @@ impl NodePipeline {
         let (registry, id, revision) = (self.registry.clone(), sandbox.sandbox_id.clone(), registration.revision);
         blocking(move || Ok(registry.commit_owned(&id, revision).map(|_| ())?)).await?;
         timings.add("registry_commit", started);
-        Ok(())
+        Ok(started_runtime)
     }
 
     /// S12.3: the allocation's recorded mode, else RAM when the node has a RAM root.
@@ -519,7 +533,7 @@ impl Pipeline for NodePipeline {
         &'a self,
         admitted: &'a Admitted,
         timings: &'a mut Timings,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), CreateError>> + Send + 'a>> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<bool, CreateError>> + Send + 'a>> {
         Box::pin(self.run(admitted, timings))
     }
 

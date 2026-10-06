@@ -201,7 +201,7 @@ pub fn start_creates(upstream: &std::path::Path, token: &str) -> Result<Arc<crea
     let pipeline = pipeline::LazyPipeline::new();
     let pipeline_agent = agent.clone();
     tokio::spawn(pipeline.clone().load(agent.clone(), move |config| {
-        let pipeline = node_pipeline::NodePipeline::open(config, pipeline_agent)?;
+        let pipeline = node_pipeline::NodePipeline::open(config, pipeline_agent.clone())?;
         Ok(Arc::new(pipeline) as Arc<dyn create::Pipeline>)
     }));
     Ok(Arc::new(create::CreateFront::new(agent, pipeline, token)))

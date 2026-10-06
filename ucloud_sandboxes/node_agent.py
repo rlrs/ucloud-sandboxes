@@ -7,6 +7,8 @@ import logging
 import sqlite3
 import hmac
 import math
+import json
+import hashlib
 import shutil
 import sys
 import time
@@ -279,8 +281,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
             self._write_json({"heartbeat": heartbeat_to_dict(self.node_heartbeat())})
             return
         if parsed.path == "/internal/v1/creates/config" and self.internal_routes_enabled:
-            self._write_json(create_config(self.manager.service, node_epoch=self.node_epoch,
-                                           rust_creates_enabled=self.create_handoff is not None))
+            self._write_json(self._create_config())
             return
         if not self.sandboxes_enabled and (
             parsed.path.startswith("/v1/sandboxes")
@@ -638,6 +639,16 @@ class NodeAgentHandler(BuildContextHttpHandler):
         else:
             self._write_exception(exc)
 
+    def _create_config(self) -> dict[str, Any]:
+        """The node's create configuration and its digest; fixed after assembly."""
+        cached = type(self).__dict__.get("_create_config_cache")
+        if cached is None:
+            config = create_config(self.manager.service, node_epoch=self.node_epoch,
+                                   rust_creates_enabled=self.create_handoff is not None)
+            digest = hashlib.sha256(json.dumps(config, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            cached = type(self)._create_config_cache = dict(config, config_sha256=digest)
+        return cached
+
     def _internal_create_route(self, path: str) -> None:
         """runtime/noded's create handoff (ucloud_sandboxes/create_handoff.py)."""
         handoff = self.create_handoff
@@ -678,13 +689,18 @@ class NodeAgentHandler(BuildContextHttpHandler):
         if wait is not None and (isinstance(wait, bool) or not isinstance(wait, (int, float))
                                  or not math.isfinite(wait) or wait < 0):
             raise ValueError("admission_wait_seconds must be a non-negative number or null")
-        return handoff.admit(spec, operation, wait=None if wait is None else float(wait),
-                             session=self.headers.get(NODED_SESSION_HEADER))
+        admitted = handoff.admit(spec, operation, wait=None if wait is None else float(wait),
+                                 session=self.headers.get(NODED_SESSION_HEADER))
+        # The daemon compares it with the configuration it loaded.
+        return dict(admitted, config_sha256=self._create_config()["config_sha256"])
 
     def _finish_create(self, handoff: CreateHandoff, token: str, raw: dict[str, Any]) -> None:
         outcome = raw.get("outcome")
-        if outcome == "created" and set(raw) == {"outcome"}:
-            record, idempotent, phases = handoff.finish_created(token)
+        if outcome == "created" and set(raw) <= {"outcome", "runtime_started"}:
+            started = raw.get("runtime_started", True)
+            if not isinstance(started, bool):
+                raise ValueError("runtime_started must be a boolean")
+            record, idempotent, phases = handoff.finish_created(token, runtime_started=started)
             self._write_json({
                 "status": 200 if idempotent else 201,
                 "sandbox": dict(record.to_dict(), node_epoch=self.node_epoch,

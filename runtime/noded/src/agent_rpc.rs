@@ -22,9 +22,11 @@ pub const SESSION_HEADER: &str = "x-ucloud-noded-session";
 
 #[derive(Debug)]
 pub enum RpcError {
-    /// Nothing was sent, or the agent never answered: the create has no
-    /// admission and may be forwarded or retried.
+    /// Nothing reached the agent: safe to retry or forward.
     Unavailable(String),
+    /// The request was written but no answer came back: the agent may have
+    /// acted on it.
+    Lost(String),
     /// A response that is not the JSON the contract promises.
     Protocol(String),
 }
@@ -33,6 +35,7 @@ impl std::fmt::Display for RpcError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RpcError::Unavailable(message) => write!(f, "node agent is unavailable: {message}"),
+            RpcError::Lost(message) => write!(f, "node agent did not answer: {message}"),
             RpcError::Protocol(message) => write!(f, "node agent answered outside its contract: {message}"),
         }
     }
@@ -92,6 +95,12 @@ impl AgentClient {
     }
 
     pub async fn call(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Reply, RpcError> {
+        self.call_within(self.timeout, method, path, body).await
+    }
+
+    /// One request; a pooled connection the agent closed while idle is
+    /// replaced once, resending only what hyper proves was never written.
+    pub async fn call_within(&self, timeout: Duration, method: Method, path: &str, body: Option<&Value>) -> Result<Reply, RpcError> {
         let bytes = body.map(|value| Bytes::from(serde_json::to_vec(value).expect("JSON values encode"))).unwrap_or_default();
         let mut request = Request::builder()
             .method(method)
@@ -102,19 +111,27 @@ impl AgentClient {
         if body.is_some() {
             request = request.header(header::CONTENT_TYPE, "application/json");
         }
-        let request = request.body(Full::new(bytes)).map_err(|e| RpcError::Protocol(e.to_string()))?;
-        let mut sender = self.sender().await?;
+        let mut request = request.body(Full::new(bytes)).map_err(|e| RpcError::Protocol(e.to_string()))?;
         let exchange = async {
-            let response = sender.send_request(request).await.map_err(|e| RpcError::Unavailable(e.to_string()))?;
-            let (parts, body) = response.into_parts();
-            let body = body.collect().await.map_err(|e| RpcError::Unavailable(e.to_string()))?.to_bytes();
-            Ok::<_, RpcError>(Reply { status: parts.status, headers: parts.headers, body })
+            for attempt in 0..2 {
+                let mut sender = self.sender().await?;
+                match sender.try_send_request(request).await {
+                    Ok(response) => {
+                        let (parts, body) = response.into_parts();
+                        let body = body.collect().await.map_err(|e| RpcError::Lost(e.to_string()))?.to_bytes();
+                        self.idle.lock().expect("pool lock").push(sender);
+                        return Ok(Reply { status: parts.status, headers: parts.headers, body });
+                    }
+                    Err(mut failed) => match failed.take_message() {
+                        Some(unsent) if attempt == 0 => request = unsent,
+                        Some(_) => return Err(RpcError::Unavailable(failed.into_error().to_string())),
+                        None => return Err(RpcError::Lost(failed.into_error().to_string())),
+                    },
+                }
+            }
+            unreachable!("the second attempt always returns")
         };
-        let reply = tokio::time::timeout(self.timeout, exchange)
-            .await
-            .map_err(|_| RpcError::Unavailable("timed out".into()))??;
-        self.idle.lock().expect("pool lock").push(sender);
-        Ok(reply)
+        tokio::time::timeout(timeout, exchange).await.map_err(|_| RpcError::Lost("timed out".into()))?
     }
 
     pub async fn call_json(&self, method: Method, path: &str, body: Option<&Value>) -> Result<(StatusCode, Value), RpcError> {

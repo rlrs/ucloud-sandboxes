@@ -430,9 +430,15 @@ impl OverlayManager {
             }
             mounted = true;
             let config = finish_config(config_template, &container_id, &incarnation, memory_allocation_id)?;
-            write_replace(&bundle.join("config.json"), (json_indent2(&config) + "\n").as_bytes())?;
-            write_replace(&bundle.join(OVERLAY_METADATA), overlay_metadata(image).as_bytes())?;
-            fsync_dir(&bundle)?;
+            let (config, metadata, target) = (json_indent2(&config) + "\n", overlay_metadata(image), bundle.clone());
+            // Three fsyncs: off the reactor, which also serves the proxy.
+            tokio::task::spawn_blocking(move || -> io::Result<()> {
+                write_replace(&target.join("config.json"), config.as_bytes())?;
+                write_replace(&target.join(OVERLAY_METADATA), metadata.as_bytes())?;
+                fsync_dir(&target)
+            })
+            .await
+            .map_err(io::Error::other)??;
             Ok(())
         }
         .await;

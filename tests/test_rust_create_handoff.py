@@ -125,6 +125,11 @@ class CreateHandoffTests(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name).resolve()
         provisioner, _, self.storage, self.images, self.warden = self.fixture.make(self.root)
+        # What create_config reads from the real stores.
+        config = self.warden.config
+        config.runsc, config.runtime_root = Path("/opt/runsc"), self.root / "runsc"
+        config.journal_root = self.root / "journals"
+        self.storage.socket_path, self.images.root = Path("/run/storage.sock"), self.root / "cache"
         path = provisioner.registry.path
         provisioner.registry = DirectSandboxRegistry(path, cached_reads=True)
         self.provisioner = provisioner
@@ -206,8 +211,13 @@ class CreateHandoffTests(unittest.TestCase):
         status, _, again = self.call("POST", "/internal/v1/creates/admit", self.admission(spec))
         self.assertEqual(again["existing"]["generation"], 7)
         status, _, replay = self.call("POST", f"/internal/v1/creates/{again['token']}/finish",
-                                      {"outcome": "created"})
+                                      {"outcome": "created", "runtime_started": False})
         self.assertEqual((replay["status"], replay["sandbox"]["id"]), (200, "sandbox"))
+        # A replay the daemon did not start a runtime for keeps its claim.
+        self.assertEqual(len(self.adopted), 1)
+        # Admissions carry the configuration digest the daemon loaded.
+        _, _, config = self.call("GET", "/internal/v1/creates/config")
+        self.assertEqual((admitted["config_sha256"], again["config_sha256"]), (config["config_sha256"],) * 2)
 
     def test_refusals_and_rollbacks_match_the_create_endpoint(self) -> None:
         spec = self.fixture.spec()
@@ -261,10 +271,6 @@ class CreateHandoffTests(unittest.TestCase):
         status, _, image = self.call("POST", "/internal/v1/images/materialize",
                                      {"image": "image", "environment_root": None})
         self.assertEqual((status, image, requested), (200, {"resolution": resolution}, [("image", None)]))
-        config = self.warden.config
-        config.runsc, config.runtime_root = Path("/opt/runsc"), self.root / "runsc"
-        config.journal_root = self.root / "journals"
-        self.storage.socket_path, self.images.root = Path("/run/storage.sock"), self.root / "cache"
         status, _, effective = self.call("GET", "/internal/v1/creates/config")
         self.assertEqual(status, 200, effective)
         self.assertLessEqual({

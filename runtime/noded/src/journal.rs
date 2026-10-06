@@ -73,6 +73,7 @@ fn is_digest(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
+#[derive(Clone, Debug)]
 pub struct JournalStore {
     root: PathBuf,
 }

@@ -686,9 +686,10 @@ class DirectSandboxService:
         with ExitStack() as admitted:
             # Same nesting order as one compound with-statement; each entry is
             # timed because slot, pressure and lock waits are distinct causes.
-            admitted.enter_context(
-                self._startup_demand(spec.id, operation.generation, spec.requested_resources())
-            )
+            admitted.enter_context(self._startup_demand(
+                spec.id, operation.generation, spec.requested_resources(), managed=spec.managed_process))
+            startup_cost = self._startup_cost((spec.id, operation.generation), spec.requested_resources(),
+                                              managed=spec.managed_process)
             with phase_timings.phase("startup_admission"):
                 admitted.enter_context(
                     self.startup_admission(owner=(spec.id, operation.generation))
@@ -696,7 +697,7 @@ class DirectSandboxService:
             with phase_timings.phase("active_capacity"):
                 admitted.enter_context(
                     self._reserve_active_capacity(
-                        spec.id, operation.generation, spec.requested_resources()
+                        spec.id, operation.generation, spec.requested_resources(), cost=startup_cost,
                     )
                 )
             with phase_timings.phase("request_lock"):
@@ -2544,10 +2545,24 @@ class DirectSandboxService:
                 self._transitions.unwait(token)
                 self._admission_changed.notify_all()
 
-    def _startup_demand(self, sandbox_id, generation, requested):
+    def _startup_demand(self, sandbox_id, generation, requested, *, managed=False):
         owner = (sandbox_id, generation)
-        return self._transition_demand(owner, self._transition_memory_cost(
-            TransitionKind.STARTUP, owner, int(requested.memory_mb * 1024 ** 2), provenance="requested-memory-bound"))
+        return self._transition_demand(owner, self._startup_cost(owner, requested, managed=managed))
+
+    def _startup_cost(self, owner, requested, *, managed):
+        """A create's memory exposure until it settles.
+
+        A managed-process sandbox runs no workload until its launch, and the
+        launch carries the whole bound until its first safe wait. Charging the
+        bound at create too counted it twice: in a 1,024-rollout burst with 64
+        startup slots, creates waited on ~128 GB of startup forecasts on
+        workers with 141 GB free. Live memory pressure still gates each create.
+        """
+        if managed:
+            return self._transition_memory_cost(TransitionKind.STARTUP, owner, 0,
+                                                provenance="managed-guest-before-launch")
+        return self._transition_memory_cost(TransitionKind.STARTUP, owner, int(requested.memory_mb * 1024 ** 2),
+                                            provenance="requested-memory-bound")
 
     def _restore_cost(self, sandbox_id, generation, requested):
         # This small authenticated metadata read contains actual sparse capture

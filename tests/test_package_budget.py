@@ -171,8 +171,9 @@ import unittest
 # +15 soft-drain waits out recent creates (last-schedule age), like idle stops do.
 # +2 interface checks via sysfs (no modprobe); virtual disks skipped by readlink.
 # +74 node-local waits and resumes commit in batches (one registry transaction, SAVEPOINT each).
+# +15 a managed create is not charged the memory bound its launch carries.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 116_661
+PACKAGE_LINE_BUDGET = 116_676
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

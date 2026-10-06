@@ -92,6 +92,13 @@ class ManagedGrowthTests(unittest.TestCase):
         intent = self.service._growth_intents[('one', 7)]
         self.assertEqual((intent.phase, intent.request_id), ('active', 'local-wait-a'))
 
+    def test_managed_create_is_not_charged_the_bound_its_launch_carries(self):
+        self.service.start_managed_process('one', self.spec)  # Its launch forecasts all 4 GiB of headroom.
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+        self.fixture.create(self.service, replace(self.fixture.spec(), id='three', memory_mb=4096,
+                                                 parkable=True, managed_process=True))
+        self.assertEqual(self.registry.get('three').phase, 'owned')
+
     def test_queued_local_waits_commit_together_and_fail_alone(self):
         self.available = 16384
         for sid in ('one', 'two'):

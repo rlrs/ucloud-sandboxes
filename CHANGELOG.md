@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.48 - 2026-10-06 (gateway; workers)
+
+- **Images stay cached between sandboxes.** On every delete the environment store collected an image no sandbox referenced any more: it unmounted the composition and dropped its components. A rollout therefore kept re-materializing the same images, and `image_resolve` reached p50 0.5 s and p95 3.6 s in the 0.9.47 warm rehearsal (0.9.43, with Python creates: 0.33 s).
+  - Unused compositions now stay mounted. A sweep evicts the least recently used only above `immutable_environments.device_budget_percent` (default 75% of the NBD devices) or the backend's cache budget, and immediately on device exhaustion.
+  - The daemon makes one materialize request per image burst instead of one per create.
+- **Sandbox networking over netlink, with a prepared-pair pool in `ucloud-noded`.**
+  - No more `ip` processes.
+  - The pool of 32 pairs that Python's agent used to keep (off under Rust creates) now lives in the daemon.
+  - Creates share one durable write of the network state, and cold namespace creation is serialized.
+  - Locally, at 32 concurrent creates, p50 went from 113 ms to 16 ms pooled and 38 ms cold.
+- **IPv6 is off on sandbox veths.** Nothing in the sandbox contract uses it, and it reached host services on `[::]` past the IPv4-only INPUT rules.
+
 ## 0.9.47 - 2026-10-06 (gateway; workers)
 
 - **The create path's storage step.** 0.9.45's 64-slot rehearsal put `storage_prepare` at p95 3.5 s.

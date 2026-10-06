@@ -388,8 +388,9 @@ impl NodePipeline {
         let generation = registration.sandbox_generation as u64;
         let split = !registration.memory_allocation_id.is_empty();
         let quota = if registration.phase == Phase::Planned {
+            // Encloses disk_claim, memory_prepare and volume_prepare: their sum.
             let started = timings.start();
-            let quota = self.prepare_storage(registration, split).await?;
+            let quota = self.prepare_storage(registration, split, timings).await?;
             timings.add("storage_prepare", started);
             Some(quota)
         } else {
@@ -431,7 +432,7 @@ impl NodePipeline {
     }
 
     /// S3 and S4: the split memory allocation and the workspace volume.
-    async fn prepare_storage(&self, registration: &Registration, split: bool) -> Result<Quota, CreateError> {
+    async fn prepare_storage(&self, registration: &Registration, split: bool, timings: &mut Timings) -> Result<Quota, CreateError> {
         let id = registration.sandbox_id().to_string();
         let generation = registration.sandbox_generation;
         let requested_mb = registration.spec.requested_disk_mb().map_err(|error| CreateError::Invalid(error.to_string()))?;
@@ -439,14 +440,18 @@ impl NodePipeline {
         let claim = if split {
             let registry = self.registry.clone();
             let claim_id = id.clone();
+            let started = timings.start();
             let claim = blocking(move || Ok(registry.disk_claim(&claim_id, generation)?)).await?;
+            timings.add("disk_claim", started);
             let memory = self.memory.clone().ok_or_else(|| unavailable("split layout without memory backing"))?;
             let (allocation, quota_bytes) =
                 registration.memory_reference().ok_or_else(|| unavailable("split registration has no memory reference"))?;
             let reference = MemoryBackingRef::new(allocation, quota_bytes as u64)?;
             let limit = claim.map(|claim| ((claim.memory_mb as u64) * MIB as u64).min(quota_bytes as u64));
             let memory_id = id.clone();
+            let started = timings.start();
             blocking(move || Ok(memory.prepare(&reference, &memory_id, generation as u64, limit).map(|_| ())?)).await?;
+            timings.add("memory_prepare", started);
             claim
         } else {
             None
@@ -455,7 +460,9 @@ impl NodePipeline {
         let owner = VolumeOwner { volume_id: volume_id.clone(), sandbox_id: id.clone(), sandbox_generation: generation as u64 };
         let virtual_size = (if split { disk_mb } else { requested_mb }) as u64 * MIB as u64;
         let granted = claim.map(|claim| claim.workspace_mb as u64 * MIB as u64).filter(|granted| *granted < virtual_size);
+        let started = timings.start();
         let record = self.storage.prepare_volume(&owner, &registration.operation_id, virtual_size, granted, Map::new()).await?;
+        timings.add("volume_prepare", started);
         let owner = (volume_id.as_str(), id.as_str(), generation as u64);
         workspace_quota(&record, owner, virtual_size, &self.config.volume_mount_root, requested_mb)
     }

@@ -13,8 +13,8 @@ use rusqlite::Connection;
 use rusqlite::types::Value as SqlValue;
 use serde_json::{Value, json};
 use ucloud_noded::memory_backing::{
-    ActiveMode, MemoryBackingConfig, MemoryBackingError, MemoryBackingRef, MemoryBackingStore, MemoryQuota, Result,
-    XfsMemoryQuota, fsxattr, marker_bytes, FS_XFLAG_PROJINHERIT, MARKER,
+    ActiveMode, MemoryBackingConfig, MemoryBackingError, MemoryBackingRef, MemoryBackingStore, MemoryQuota, QuotaBackend,
+    Result, XfsMemoryQuota, fsxattr, marker_bytes, FS_XFLAG_PROJINHERIT, MARKER,
 };
 
 struct TempDir(PathBuf);
@@ -384,6 +384,40 @@ fn concurrent_prepares_get_distinct_projects() {
 }
 
 #[test]
+fn a_burst_of_prepares_group_commits_and_stays_exact() {
+    // 64 creates at once: every claim and every ready is durable before its
+    // prepare returns, but they share COMMITs; capacity stays exact.
+    let node = Node::new(64 * 4096, false);
+    let quota = FakeQuota::default();
+    let store = Arc::new(node.open(&quota).unwrap());
+    let before = store.journal_commits();
+    let barrier = Arc::new(std::sync::Barrier::new(65));
+    let threads: Vec<_> = (0..65)
+        .map(|i| {
+            let (store, barrier) = (store.clone(), barrier.clone());
+            std::thread::spawn(move || {
+                let id = format!("sb-{i}");
+                barrier.wait();
+                store.prepare(&reference(&id, 4096), &id, 1, None).map(|lease| lease.project_id)
+            })
+        })
+        .collect();
+    let outcomes: Vec<_> = threads.into_iter().map(|t| t.join().unwrap()).collect();
+    let mut projects: Vec<i64> = outcomes.iter().filter_map(|o| o.as_ref().ok().copied()).collect();
+    let refused: Vec<String> = outcomes.into_iter().filter_map(|o| o.err().map(|e| e.to_string())).collect();
+    // One more than fits: exactly one refusal, and it consumed no project id.
+    assert_eq!(refused, ["memory backing hard capacity exhausted"]);
+    projects.sort();
+    assert_eq!(projects, (600000..600064).collect::<Vec<_>>());
+    assert_eq!(counter(&node), 600064);
+    let ready: i64 = node.sql().query_row("SELECT COUNT(*) FROM allocations WHERE state='ready'", [], |r| r.get(0)).unwrap();
+    assert_eq!(ready, 64);
+    let commits = store.journal_commits() - before;
+    eprintln!("64 prepares, {commits} journal commits");
+    assert!(commits <= 128, "{commits} commits");
+}
+
+#[test]
 fn real_findmnt_checks_reject_the_wrong_filesystems() {
     let dir = temp_dir();
     let fstype = Command::new("findmnt").args(["-n", "-o", "FSTYPE", "--target"]).arg(&dir.0).output().unwrap();
@@ -577,34 +611,254 @@ print("null")
     assert_eq!(counter(&node), 600003);
 }
 
-/// A real XFS prjquota filesystem: set `UCLOUD_NODED_XFS_ROOT` to a new
-/// directory on one and run as root with `--ignored`.
+#[test]
+fn python_and_rust_group_commits_interleave_on_one_journal() {
+    // The agent's DurableSqliteBatch and our JournalWriter commit groups into
+    // the same file at once: SQLite's locks serialize them, and the shared
+    // counter and capacity stay exact.
+    let node = Node::new(1 << 30, false);
+    let store = Arc::new(node.open(&FakeQuota::default()).unwrap());
+    let ours = std::thread::spawn({
+        let store = store.clone();
+        move || {
+            let threads: Vec<_> = (0..16)
+                .map(|t| {
+                    let store = store.clone();
+                    std::thread::spawn(move || {
+                        for i in 0..4 {
+                            let id = format!("rs-{t}-{i}");
+                            store.prepare(&reference(&id, 4096), &id, 1, None).unwrap();
+                        }
+                    })
+                })
+                .collect();
+            threads.into_iter().for_each(|t| t.join().unwrap());
+        }
+    });
+    let theirs = python(
+        &node,
+        r#"
+from concurrent.futures import ThreadPoolExecutor
+s = store()
+def prepare(i):
+    return s.prepare(MemoryBackingRef(f"py-{i}.sandbox-1", 4096), sandbox_id=f"py-{i}", sandbox_generation=1).project_id
+with ThreadPoolExecutor(16) as pool:
+    projects = list(pool.map(prepare, range(64)))
+print(json.dumps({"projects": projects}))
+"#,
+    );
+    ours.join().unwrap();
+    let ready: i64 = node.sql().query_row("SELECT COUNT(*) FROM allocations WHERE state='ready'", [], |r| r.get(0)).unwrap();
+    let distinct: i64 = node.sql().query_row("SELECT COUNT(DISTINCT project_id) FROM allocations", [], |r| r.get(0)).unwrap();
+    let Some(theirs) = theirs else {
+        assert_eq!((ready, distinct, counter(&node)), (64, 64, 600064));
+        return;
+    };
+    assert_eq!(theirs["projects"].as_array().unwrap().len(), 64);
+    assert_eq!((ready, distinct, counter(&node)), (128, 128, 600128));
+    // Each side requires the other's allocations from the shared rows.
+    let trusting = node.open(&FakeQuota::default()).unwrap();
+    assert_eq!(trusting.require(&reference("py-7", 4096), "py-7", 1).unwrap().project_id, theirs["projects"][7].as_i64().unwrap());
+    let required = python(
+        &node,
+        r#"
+s = store()
+print(json.dumps([lease(s.require(MemoryBackingRef(f"rs-{t}-3.sandbox-1", 4096), sandbox_id=f"rs-{t}-3", sandbox_generation=1)) for t in range(16)]))
+"#,
+    )
+    .unwrap();
+    assert_eq!(required.as_array().unwrap().len(), 16);
+}
+
+// ---- A real XFS prjquota filesystem (root only). ----
+
+/// A sparse image on a direct-I/O loop device, mounted with prjquota, as the
+/// node's mount root is; unmounted and detached on drop.
+struct LoopXfs {
+    dir: TempDir,
+    device: String,
+}
+
+impl LoopXfs {
+    /// `None` (the test skips) unless root with mkfs.xfs, losetup and xfs_quota.
+    fn new() -> Option<LoopXfs> {
+        // SAFETY: geteuid has no preconditions.
+        if unsafe { libc::geteuid() } != 0 {
+            eprintln!("skipping: not root");
+            return None;
+        }
+        for tool in ["mkfs.xfs", "losetup", "xfs_quota", "mount", "umount"] {
+            if !Command::new("sh").args(["-c", &format!("command -v {tool}")]).output().unwrap().status.success() {
+                eprintln!("skipping: {tool} is absent");
+                return None;
+            }
+        }
+        let dir = temp_dir();
+        let image = dir.0.join("xfs.img");
+        fs::File::create(&image).unwrap().set_len(512 << 20).unwrap();
+        run(Command::new("mkfs.xfs").arg("-q").arg(&image));
+        let device = run(Command::new("losetup").args(["--direct-io=on", "-f", "--show"]).arg(&image)).trim().to_string();
+        let mounted = LoopXfs { dir, device };
+        fs::create_dir(mounted.mountpoint()).unwrap();
+        run(Command::new("mount").args(["-o", "prjquota", &mounted.device]).arg(mounted.mountpoint()));
+        Some(mounted)
+    }
+
+    fn mountpoint(&self) -> PathBuf {
+        self.dir.0.join("mnt")
+    }
+
+    fn store(&self, name: &str, backend: QuotaBackend) -> MemoryBackingStore {
+        let config = MemoryBackingConfig {
+            root: self.mountpoint().join(name),
+            journal: self.dir.0.join(format!("{name}.sqlite")),
+            hard_capacity_bytes: 1 << 30,
+            active_root: None,
+            ram_swappable: false,
+        };
+        MemoryBackingStore::open(config, Box::new(XfsMemoryQuota::with_backend(backend))).unwrap()
+    }
+
+    /// `(soft, hard)` KiB block limits from `xfs_quota report`.
+    fn limits(&self, project_id: i64) -> (u64, u64) {
+        let report = run(Command::new("xfs_quota").args(["-x", "-c", "report -p -N -b -n"]).arg(self.mountpoint()));
+        let line = report
+            .lines()
+            .find(|line| line.split_whitespace().next() == Some(&format!("#{project_id}")))
+            .unwrap_or_else(|| panic!("project {project_id} not reported:\n{report}"));
+        let fields: Vec<u64> = line.split_whitespace().skip(1).take(3).map(|f| f.parse().unwrap()).collect();
+        (fields[1], fields[2])
+    }
+}
+
+impl Drop for LoopXfs {
+    fn drop(&mut self) {
+        let _ = Command::new("umount").arg(self.mountpoint()).status();
+        let _ = Command::new("losetup").args(["-d", &self.device]).status();
+    }
+}
+
+fn run(command: &mut Command) -> String {
+    let output = command.output().unwrap();
+    assert!(output.status.success(), "{command:?}: {}", String::from_utf8_lossy(&output.stderr));
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+/// Project and PROJINHERIT of a path, as the kernel holds them.
+fn project_of(path: &Path) -> (i64, bool) {
+    let (flags, projid) = fsxattr(&fs::File::open(path).unwrap()).unwrap();
+    (i64::from(projid), flags & FS_XFLAG_PROJINHERIT != 0)
+}
+
+#[test]
+fn syscalls_provision_exactly_what_xfs_quota_does() {
+    let Some(xfs) = LoopXfs::new() else { return };
+    let mut probe = XfsMemoryQuota::new();
+    fs::DirBuilder::new().mode(0o700).create(xfs.mountpoint().join("probe")).unwrap();
+    probe.validate_root(&xfs.mountpoint().join("probe")).unwrap();
+    assert_eq!(probe.block_device().unwrap().to_str().unwrap(), xfs.device, "quotactl must address the loop device");
+
+    let syscalls = xfs.store("syscalls", QuotaBackend::Syscalls);
+    let processes = xfs.store("processes", QuotaBackend::XfsQuota);
+    // Projects are the filesystem's: keep the two journals' ids apart.
+    Connection::open(xfs.dir.0.join("processes.sqlite")).unwrap().execute_batch("UPDATE counter SET value=700000").unwrap();
+    let mut leases = Vec::new();
+    for (store, id) in [(&syscalls, "sys"), (&processes, "proc")] {
+        let r = MemoryBackingRef::new(format!("{id}.sandbox-1"), 64 << 20).unwrap();
+        // A limit that is not a whole number of basic blocks rounds down.
+        let lease = store.prepare(&r, id, 1, Some((16 << 20) + 1000)).unwrap();
+        assert_eq!(store.require(&r, id, 1).unwrap(), lease);
+        leases.push(lease);
+    }
+    let (ours, theirs) = (&leases[0], &leases[1]);
+    assert_eq!((ours.project_id, theirs.project_id), (600000, 700000));
+    // Same kernel state: directory and marker in the project, PROJINHERIT
+    // on the directory, whatever XFS keeps on the marker.
+    for lease in [ours, theirs] {
+        assert_eq!(project_of(&lease.path), (lease.project_id, true));
+        assert_eq!(project_of(&lease.path.join(MARKER)).0, lease.project_id);
+    }
+    assert_eq!(project_of(&ours.path.join(MARKER)).1, project_of(&theirs.path.join(MARKER)).1);
+    // Same limits: bsoft = bhard = the limit in basic blocks, which XFS
+    // rounds up to its 4 KiB blocks (16 MiB + 1000 B → 16388 KiB).
+    assert_eq!(xfs.limits(ours.project_id), (16388, 16388));
+    assert_eq!(xfs.limits(theirs.project_id), xfs.limits(ours.project_id));
+
+    // The agent's own XfsMemoryQuota accepts the syscall-provisioned directory.
+    let interpreter = repo().join(".venv/bin/python");
+    if interpreter.exists() {
+        let check = "import sys; from pathlib import Path; from ucloud_sandboxes.memory_backing import XfsMemoryQuota; \
+                     XfsMemoryQuota().validate_project(Path(sys.argv[1]), int(sys.argv[2])); print('ok')";
+        let output = run(Command::new(interpreter).current_dir(repo()).args(["-c", check]).arg(&ours.path).arg(ours.project_id.to_string()));
+        assert_eq!(output.trim(), "ok");
+    }
+
+    // A second project, then enforcement: XFS fails a write past a project
+    // limit with ENOSPC (EDQUOT is for user and group quotas).
+    let r = MemoryBackingRef::new("big.sandbox-1", 64 << 20).unwrap();
+    let lease = syscalls.prepare(&r, "big", 1, Some(4 << 20)).unwrap();
+    assert_eq!(xfs.limits(lease.project_id), (4096, 4096));
+    let mut file = fs::File::create(lease.path.join("memory")).unwrap();
+    let chunk = vec![7u8; 1 << 20];
+    let error = (0..8).try_for_each(|_| std::io::Write::write_all(&mut file, &chunk).and_then(|()| file.sync_all())).unwrap_err();
+    assert_eq!(error.raw_os_error(), Some(libc::ENOSPC));
+}
+
+/// Per-prepare cost on a real XFS prjquota filesystem: as root, set
+/// `UCLOUD_NODED_XFS_ROOT` to a directory on one and run with
+/// `--ignored --nocapture`. `UCLOUD_NODED_BENCH_COUNT` prepares per
+/// concurrency; `UCLOUD_NODED_QUOTA_BACKEND=xfs_quota` for the processes.
 #[test]
 #[ignore]
-fn xfs_project_quota_is_assigned_and_verified() {
-    let root = PathBuf::from(std::env::var("UCLOUD_NODED_XFS_ROOT").expect("UCLOUD_NODED_XFS_ROOT"));
-    let state = temp_dir();
-    let config = MemoryBackingConfig {
-        root: root.clone(),
-        journal: state.0.join("memory-backing.sqlite"),
-        hard_capacity_bytes: 1 << 30,
-        active_root: None,
-        ram_swappable: false,
+fn xfs_prepare_cost() {
+    let base = PathBuf::from(std::env::var("UCLOUD_NODED_XFS_ROOT").expect("UCLOUD_NODED_XFS_ROOT"));
+    let count: usize = std::env::var("UCLOUD_NODED_BENCH_COUNT").map(|v| v.parse().unwrap()).unwrap_or(256);
+    let backend = match std::env::var("UCLOUD_NODED_QUOTA_BACKEND").as_deref() {
+        Ok("xfs_quota") => QuotaBackend::XfsQuota,
+        _ => QuotaBackend::Syscalls,
     };
-    let store = MemoryBackingStore::open(config, Box::new(XfsMemoryQuota::new())).unwrap();
-    let r = MemoryBackingRef::new(format!("xfs-{}.sandbox-1", std::process::id()), 64 << 20).unwrap();
-    let id = r.allocation_id.trim_end_matches(".sandbox-1").to_string();
-    let lease = store.prepare(&r, &id, 1, Some(16 << 20)).unwrap();
-    let (flags, projid) = fsxattr(&fs::File::open(&lease.path).unwrap()).unwrap();
-    assert_eq!((i64::from(projid), flags & FS_XFLAG_PROJINHERIT), (lease.project_id, FS_XFLAG_PROJINHERIT));
-    assert_eq!(store.require(&r, &id, 1).unwrap(), lease);
-    // The project's hard limit is the journalled limit, not the ceiling.
-    let mountpoint = Command::new("findmnt").args(["-n", "-o", "TARGET", "--target"]).arg(&root).output().unwrap();
-    let report = Command::new("xfs_quota")
-        .args(["-x", "-c", &format!("quota -p -N -b {}", lease.project_id)])
-        .arg(String::from_utf8_lossy(&mountpoint.stdout).trim())
-        .output()
-        .unwrap();
-    let text = String::from_utf8_lossy(&report.stdout);
-    assert!(text.split_whitespace().any(|f| f == (16u64 << 10).to_string()), "{text}");
+    for concurrency in [1usize, 8, 32, 64] {
+        let state = temp_dir();
+        let config = MemoryBackingConfig {
+            root: base.join(format!("bench-{}-{concurrency}", std::process::id())),
+            journal: state.0.join("memory-backing.sqlite"),
+            hard_capacity_bytes: 1 << 50,
+            active_root: None,
+            ram_swappable: false,
+        };
+        let store = Arc::new(MemoryBackingStore::open(config, Box::new(XfsMemoryQuota::with_backend(backend))).unwrap());
+        let next = Arc::new(AtomicUsize::new(0));
+        let started = std::time::Instant::now();
+        let threads: Vec<_> = (0..concurrency)
+            .map(|_| {
+                let (store, next) = (store.clone(), next.clone());
+                std::thread::spawn(move || {
+                    let mut latencies = Vec::new();
+                    loop {
+                        let i = next.fetch_add(1, Ordering::SeqCst);
+                        if i >= count {
+                            return latencies;
+                        }
+                        let id = format!("bench-{i}");
+                        let begun = std::time::Instant::now();
+                        store.prepare(&reference(&id, 64 << 20), &id, 1, None).unwrap();
+                        latencies.push(begun.elapsed().as_secs_f64() * 1000.0);
+                    }
+                })
+            })
+            .collect();
+        let mut latencies: Vec<f64> = threads.into_iter().flat_map(|t| t.join().unwrap()).collect();
+        let wall = started.elapsed().as_secs_f64();
+        latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let at = |q: f64| latencies[((latencies.len() as f64 * q) as usize).min(latencies.len() - 1)];
+        println!(
+            "{backend:?} concurrency {concurrency:>2}: {count} prepares in {wall:.2} s ({:.0}/s); mean {:.1} ms, p50 {:.1} ms, p95 {:.1} ms, max {:.1} ms; {} commits",
+            count as f64 / wall,
+            latencies.iter().sum::<f64>() / latencies.len() as f64,
+            at(0.5),
+            at(0.95),
+            at(1.0),
+            store.journal_commits(),
+        );
+    }
 }

@@ -7,23 +7,25 @@
 //! prepares and requires allocations for the sandboxes it creates.
 //!
 //! Every method blocks (flock, SQLite busy waits of up to 30 s, fsync,
-//! `xfs_quota`): call them from a blocking thread.
+//! quota syscalls or `xfs_quota`): call them from a blocking thread.
 //!
 //! The journal's columns are read by position, as Python reads `SELECT *`:
 //! `0 allocation_id, 1 sandbox_id, 2 generation, 3 project_id, 4 quota_bytes,
-//! 5 state, 6 active_mode, 7 limit_bytes`. Python writes go through a group
-//! commit on its own connection; ours are plain `BEGIN IMMEDIATE`
-//! transactions, so SQLite's file locks serialize the two processes.
+//! 5 state, 6 active_mode, 7 limit_bytes`. Both processes group-commit
+//! their writes (savepoints in one `BEGIN IMMEDIATE` transaction per group,
+//! `JournalWriter` here) on their own connections, so SQLite's file locks
+//! serialize the two processes.
 
 use std::collections::HashMap;
-use std::ffi::{OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
-use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
+use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use rusqlite::types::Value as SqlValue;
@@ -42,9 +44,6 @@ pub const FIRST_PROJECT_ID: i64 = 600_000;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(30);
 /// Marker files are tiny; anything larger is not ours.
 const MAX_MARKER_BYTES: u64 = 64 * 1024;
-/// `_IOR('X', 31, struct fsxattr)`.
-const FS_IOC_FSGETXATTR: libc::c_ulong = 0x801C_581F;
-pub const FS_XFLAG_PROJINHERIT: u32 = 0x200;
 
 #[derive(Debug)]
 pub enum MemoryBackingError {
@@ -176,8 +175,9 @@ pub struct MemoryBackingLease {
     pub active_mode: ActiveMode,
 }
 
-/// The Linux boundary: `findmnt`, `xfs_quota` and `FS_IOC_FSGETXATTR`.
-/// [`XfsMemoryQuota`] is the real one; tests inject fakes.
+/// The Linux boundary: `findmnt`, the project-quota syscalls (or
+/// `xfs_quota`) and `FS_IOC_FSGETXATTR`. [`XfsMemoryQuota`] is the real one;
+/// tests inject fakes.
 pub trait MemoryQuota: Send + Sync {
     /// Called once on open, after `root` exists (Python `validate_root`).
     fn validate_root(&mut self, root: &Path) -> Result<()>;
@@ -188,10 +188,27 @@ pub trait MemoryQuota: Send + Sync {
     fn validate_project(&self, path: &Path, project_id: i64) -> Result<()>;
 }
 
+/// How [`XfsMemoryQuota::provision`] reaches the kernel.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum QuotaBackend {
+    /// `FS_IOC_FSSETXATTR` and `quotactl(Q_XSETQLIM)`, the calls `xfs_quota`
+    /// itself makes; `xfs_quota` when the kernel refuses them (ENOSYS,
+    /// EINVAL) or the filesystem's block device cannot be proven.
+    #[default]
+    Syscalls,
+    /// Python's two `xfs_quota` processes, always.
+    XfsQuota,
+}
+
 /// Python `XfsMemoryQuota` (create-path half).
 #[derive(Debug, Default)]
 pub struct XfsMemoryQuota {
+    backend: QuotaBackend,
     filesystem_root: Option<PathBuf>,
+    /// The filesystem's `st_dev` (the project walk stays on it, as
+    /// `nftw(FTW_MOUNT)` does) and a block device node proven to be it.
+    filesystem: Option<(u64, Option<CString>)>,
+    fallback_logged: AtomicBool,
 }
 
 impl XfsMemoryQuota {
@@ -199,13 +216,35 @@ impl XfsMemoryQuota {
         Self::default()
     }
 
+    pub fn with_backend(backend: QuotaBackend) -> Self {
+        XfsMemoryQuota { backend, ..Self::default() }
+    }
+
     /// The mountpoint `xfs_quota` runs against, once validated.
     pub fn filesystem_root(&self) -> Option<&Path> {
         self.filesystem_root.as_deref()
     }
 
+    /// The block device `quotactl` addresses, once validated and proven.
+    pub fn block_device(&self) -> Option<&CStr> {
+        self.filesystem.as_ref().and_then(|(_, device)| device.as_deref())
+    }
+
     fn mountpoint(&self) -> Result<&Path> {
         self.filesystem_root.as_deref().ok_or_else(|| MemoryBackingError::Backing("memory backing root was not validated".into()))
+    }
+
+    fn log_fallback(&self, reason: &dyn std::fmt::Display) {
+        if !self.fallback_logged.swap(true, Ordering::SeqCst) {
+            eprintln!("ucloud-noded: memory backing quotas fall back to xfs_quota: {reason}");
+        }
+    }
+
+    fn provision_xfs_quota(&self, path: &Path, project_id: i64, limit_bytes: i64) -> Result<()> {
+        for argv in provision_commands(self.mountpoint()?, path, project_id, limit_bytes) {
+            run_checked(&argv)?;
+        }
+        Ok(())
     }
 }
 
@@ -237,15 +276,207 @@ fn findmnt(columns: &str, target: &Path) -> Result<String> {
     run_checked(&["findmnt", "-n", "-o", columns, "--target"].map(OsString::from).into_iter().chain([target.as_os_str().to_owned()]).collect::<Vec<_>>())
 }
 
-/// `struct fsxattr`'s `(fsx_xflags, fsx_projid)` for an open file.
-pub fn fsxattr(file: &File) -> io::Result<(u32, u32)> {
-    let mut buffer = [0u8; 28];
-    // SAFETY: FS_IOC_FSGETXATTR writes one 28-byte struct fsxattr into the buffer.
-    if unsafe { libc::ioctl(file.as_raw_fd(), FS_IOC_FSGETXATTR as _, buffer.as_mut_ptr()) } != 0 {
+/// `struct fsxattr` (linux/fs.h), 28 bytes.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FsXattr {
+    pub xflags: u32,
+    pub extsize: u32,
+    pub nextents: u32,
+    pub projid: u32,
+    pub cowextsize: u32,
+    pub pad: [u8; 8],
+}
+
+/// `struct fs_disk_quota` (linux/dqblk_xfs.h), 112 bytes.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FsDiskQuota {
+    pub d_version: i8,
+    pub d_flags: i8,
+    pub d_fieldmask: u16,
+    pub d_id: u32,
+    pub d_blk_hardlimit: u64,
+    pub d_blk_softlimit: u64,
+    pub d_ino_hardlimit: u64,
+    pub d_ino_softlimit: u64,
+    pub d_bcount: u64,
+    pub d_icount: u64,
+    pub d_itimer: i32,
+    pub d_btimer: i32,
+    pub d_iwarns: u16,
+    pub d_bwarns: u16,
+    pub d_itimer_hi: i8,
+    pub d_btimer_hi: i8,
+    pub d_rtbtimer_hi: i8,
+    pub d_padding2: i8,
+    pub d_rtb_hardlimit: u64,
+    pub d_rtb_softlimit: u64,
+    pub d_rtbcount: u64,
+    pub d_rtbtimer: i32,
+    pub d_rtbwarns: u16,
+    pub d_padding3: i16,
+    pub d_padding4: [u8; 8],
+}
+
+const _: () = assert!(std::mem::size_of::<FsXattr>() == 28 && std::mem::size_of::<FsDiskQuota>() == 112);
+
+/// `_IOR('X', 31, struct fsxattr)`.
+pub const FS_IOC_FSGETXATTR: libc::c_ulong = 0x801C_581F;
+/// `_IOW('X', 32, struct fsxattr)`.
+pub const FS_IOC_FSSETXATTR: libc::c_ulong = 0x401C_5820;
+pub const FS_XFLAG_PROJINHERIT: u32 = 0x200;
+/// `XQM_CMD(4)`: set an XFS dquot's limits.
+pub const Q_XSETQLIM: u32 = ((b'X' as u32) << 8) + 4;
+pub const PRJQUOTA: u32 = 2;
+pub const FS_DQUOT_VERSION: i8 = 1;
+pub const FS_PROJ_QUOTA: i8 = 2;
+pub const FS_DQ_BSOFT: u16 = 1 << 2;
+pub const FS_DQ_BHARD: u16 = 1 << 3;
+/// XFS quota limits are in 512-byte basic blocks.
+const BBSHIFT: u32 = 9;
+
+/// `QCMD(cmd, type)` (linux/quota.h).
+pub const fn qcmd(cmd: u32, kind: u32) -> u32 {
+    (cmd << 8) | (kind & 0x00ff)
+}
+
+impl FsDiskQuota {
+    /// What `xfs_quota -c "limit -p bsoft=N bhard=N ID"` passes: both block
+    /// limits, in basic blocks rounded down (`extractb`).
+    pub fn project_block_limits(project_id: u32, limit_bytes: u64) -> FsDiskQuota {
+        let blocks = limit_bytes >> BBSHIFT;
+        FsDiskQuota {
+            d_version: FS_DQUOT_VERSION,
+            d_flags: FS_PROJ_QUOTA,
+            d_fieldmask: FS_DQ_BSOFT | FS_DQ_BHARD,
+            d_id: project_id,
+            d_blk_hardlimit: blocks,
+            d_blk_softlimit: blocks,
+            ..FsDiskQuota::default()
+        }
+    }
+}
+
+/// `struct fsxattr` for an open file.
+pub fn get_fsxattr(file: &File) -> io::Result<FsXattr> {
+    let mut attributes = FsXattr::default();
+    // SAFETY: FS_IOC_FSGETXATTR writes one struct fsxattr, which FsXattr is.
+    if unsafe { libc::ioctl(file.as_raw_fd(), FS_IOC_FSGETXATTR as _, &mut attributes as *mut FsXattr) } != 0 {
         return Err(io::Error::last_os_error());
     }
-    let word = |at: usize| u32::from_ne_bytes(buffer[at..at + 4].try_into().expect("four bytes"));
-    Ok((word(0), word(12)))
+    Ok(attributes)
+}
+
+/// `struct fsxattr`'s `(fsx_xflags, fsx_projid)` for an open file.
+pub fn fsxattr(file: &File) -> io::Result<(u32, u32)> {
+    get_fsxattr(file).map(|attributes| (attributes.xflags, attributes.projid))
+}
+
+/// `xfs_quota`'s `setup_project` for one inode: read the attributes, set the
+/// project and PROJINHERIT (XFS keeps the flag on directories only), write
+/// them back.
+fn assign_project(file: &File, project_id: u32) -> io::Result<()> {
+    let mut attributes = get_fsxattr(file)?;
+    attributes.projid = project_id;
+    attributes.xflags |= FS_XFLAG_PROJINHERIT;
+    // SAFETY: FS_IOC_FSSETXATTR reads one struct fsxattr, which FsXattr is.
+    if unsafe { libc::ioctl(file.as_raw_fd(), FS_IOC_FSSETXATTR as _, &attributes as *const FsXattr) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+/// `project -s -p PATH ID`: `nftw(PATH, FTW_PHYS | FTW_MOUNT)` in preorder,
+/// assigning every directory and regular file on the filesystem and
+/// skipping symlinks and special files. Unlike `xfs_quota`, the first
+/// failure stops the walk.
+fn assign_project_tree(path: &Path, filesystem: u64, project_id: u32) -> io::Result<()> {
+    let meta = fs::symlink_metadata(path)?;
+    let kind = meta.file_type();
+    if meta.dev() != filesystem || !(kind.is_dir() || kind.is_file()) {
+        return Ok(());
+    }
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NOCTTY | libc::O_NONBLOCK | libc::O_CLOEXEC)
+        .open(path)?;
+    // The open file must be the inode that was classified.
+    let opened = file.metadata()?;
+    if (opened.dev(), opened.ino()) != (meta.dev(), meta.ino()) {
+        return Err(io::Error::other(format!("{} changed during project assignment", path.display())));
+    }
+    assign_project(&file, project_id)?;
+    if kind.is_dir() {
+        for entry in fs::read_dir(path)? {
+            assign_project_tree(&entry?.path(), filesystem, project_id)?;
+        }
+    }
+    Ok(())
+}
+
+/// `quotactl(QCMD(Q_XSETQLIM, PRJQUOTA), device, id, &fs_disk_quota)`,
+/// through `syscall(2)`: musl's wrapper is not relied upon.
+fn set_project_limit(device: &CStr, project_id: u32, limit_bytes: u64) -> io::Result<()> {
+    let mut quota = FsDiskQuota::project_block_limits(project_id, limit_bytes);
+    // SAFETY: the kernel reads one struct fs_disk_quota, which FsDiskQuota
+    // is, and a NUL-terminated device path; both outlive the call.
+    let status = unsafe {
+        libc::syscall(
+            libc::SYS_quotactl,
+            qcmd(Q_XSETQLIM, PRJQUOTA) as libc::c_int,
+            device.as_ptr(),
+            project_id as libc::c_int,
+            &mut quota as *mut FsDiskQuota,
+        )
+    };
+    if status != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+/// The kernel cannot do this through the syscall path at all.
+pub fn syscall_unsupported(error: &io::Error) -> bool {
+    matches!(error.raw_os_error(), Some(libc::ENOSYS) | Some(libc::EINVAL))
+}
+
+/// Run `syscalls`; when the kernel refuses them as unsupported, run
+/// `fallback` instead (it redoes every step, which is idempotent) and log the
+/// first time. Any other failure is the caller's. True when it fell back.
+pub fn provision_with_fallback(
+    syscalls: impl FnOnce() -> io::Result<()>,
+    fallback: impl FnOnce() -> Result<()>,
+    log: impl FnOnce(&io::Error),
+) -> Result<bool> {
+    match syscalls() {
+        Ok(()) => Ok(false),
+        Err(error) if syscall_unsupported(&error) => {
+            log(&error);
+            fallback().map(|()| true)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// glibc's `gnu_dev_major`/`gnu_dev_minor`, in Rust: build_pinned.sh wants
+/// every `libc::` call linked, and libc's `major`/`minor` are not symbols.
+pub fn device_numbers(device: u64) -> (u64, u64) {
+    let major = ((device >> 32) & 0xffff_f000) | ((device >> 8) & 0x0fff);
+    let minor = ((device >> 12) & 0xffff_ff00) | (device & 0x00ff);
+    (major, minor)
+}
+
+/// A block device node whose `st_rdev` is the filesystem's `st_dev`: findmnt's
+/// SOURCE (less a bind mount's `[/path]`), else udev's `/dev/block/MAJ:MIN`.
+fn block_device(root: &Path, filesystem: u64) -> Option<CString> {
+    let source = findmnt("SOURCE", root).ok().map(|s| s.trim().split('[').next().unwrap_or("").to_string());
+    let (major, minor) = device_numbers(filesystem);
+    let fallback = format!("/dev/block/{major}:{minor}");
+    source.into_iter().chain([fallback]).find_map(|candidate| {
+        let meta = fs::metadata(&candidate).ok()?;
+        (meta.file_type().is_block_device() && meta.rdev() == filesystem).then(|| CString::new(candidate).ok()).flatten()
+    })
 }
 
 impl MemoryQuota for XfsMemoryQuota {
@@ -261,6 +492,14 @@ impl MemoryQuota for XfsMemoryQuota {
             return fail("memory backing mountpoint is invalid");
         }
         self.filesystem_root = Some(target);
+        if self.backend == QuotaBackend::Syscalls {
+            let filesystem = fs::metadata(root)?.dev();
+            let device = block_device(root, filesystem);
+            if device.is_none() {
+                self.log_fallback(&format_args!("no block device node for {}", root.display()));
+            }
+            self.filesystem = Some((filesystem, device));
+        }
         Ok(())
     }
 
@@ -273,9 +512,22 @@ impl MemoryQuota for XfsMemoryQuota {
         Ok(())
     }
 
+    /// `xfs_quota -c "project -s -p PATH ID"` then `-c "limit -p bsoft=L
+    /// bhard=L ID"`, as the syscalls those make, then the same validation.
     fn provision(&self, path: &Path, project_id: i64, limit_bytes: i64) -> Result<()> {
-        for argv in provision_commands(self.mountpoint()?, path, project_id, limit_bytes) {
-            run_checked(&argv)?;
+        let xfs_quota = || self.provision_xfs_quota(path, project_id, limit_bytes);
+        match &self.filesystem {
+            Some((filesystem, Some(device))) if self.backend == QuotaBackend::Syscalls => {
+                let syscalls = || {
+                    let invalid = |what| io::Error::new(io::ErrorKind::InvalidInput, format!("memory allocation {what} is out of range"));
+                    let project = u32::try_from(project_id).map_err(|_| invalid("project id"))?;
+                    let limit = u64::try_from(limit_bytes).map_err(|_| invalid("limit"))?;
+                    assign_project_tree(path, *filesystem, project)?;
+                    set_project_limit(device, project, limit)
+                };
+                provision_with_fallback(syscalls, xfs_quota, |error| self.log_fallback(error))?;
+            }
+            _ => xfs_quota()?,
         }
         self.validate_project(path, project_id)
     }
@@ -477,14 +729,206 @@ pub struct MemoryBackingStore {
     active_root: Option<PathBuf>,
     quota: Box<dyn MemoryQuota>,
     journal_identity: (u64, u64),
-    writer: Mutex<Connection>,
+    writer: JournalWriter,
     reader: Mutex<Connection>,
     active_modes: Mutex<HashMap<(String, u64), ActiveMode>>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    // A panic mid-transaction drops (rolls back) it; the connection stays usable.
+    // A panicking journal writer abandons its group, so the state stays usable.
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Writers one journal transaction serves at most (Python
+/// `DurableSqliteBatch`'s `max_operations`).
+pub const GROUP_COMMIT_MAX: usize = 64;
+
+/// The same failure for every writer of a lost group.
+fn duplicate(error: &MemoryBackingError) -> MemoryBackingError {
+    match error {
+        MemoryBackingError::Backing(m) => MemoryBackingError::Backing(m.clone()),
+        MemoryBackingError::Busy(m) => MemoryBackingError::Busy(m.clone()),
+        MemoryBackingError::Invalid(m) => MemoryBackingError::Invalid(m.clone()),
+        MemoryBackingError::Io(e) => MemoryBackingError::Io(io::Error::new(e.kind(), e.to_string())),
+        MemoryBackingError::Sqlite(rusqlite::Error::SqliteFailure(code, message)) => {
+            MemoryBackingError::Sqlite(rusqlite::Error::SqliteFailure(*code, message.clone()))
+        }
+        MemoryBackingError::Sqlite(other) => MemoryBackingError::Sqlite(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR),
+            Some(other.to_string()),
+        )),
+        MemoryBackingError::Command { argv, status, stderr } => {
+            MemoryBackingError::Command { argv: argv.clone(), status: *status, stderr: stderr.clone() }
+        }
+    }
+}
+
+/// One open journal transaction that queued writers share, and its outcome.
+#[derive(Default)]
+struct Group {
+    outcome: Mutex<Option<std::result::Result<(), MemoryBackingError>>>,
+    done: Condvar,
+}
+
+impl Group {
+    fn finish(&self, outcome: Result<()>) {
+        *lock(&self.outcome) = Some(outcome);
+        self.done.notify_all();
+    }
+
+    fn wait(&self) -> Result<()> {
+        let mut outcome = lock(&self.outcome);
+        loop {
+            match outcome.as_ref() {
+                Some(Ok(())) => return Ok(()),
+                Some(Err(error)) => return Err(duplicate(error)),
+                None => outcome = self.done.wait(outcome).unwrap_or_else(PoisonError::into_inner),
+            }
+        }
+    }
+}
+
+/// State behind the writer turn: the writer connection and its open group.
+#[derive(Default)]
+struct WriterTurn {
+    connection: Option<Connection>,
+    group: Option<Arc<Group>>,
+    members: usize,
+}
+
+/// The journal's group commit, as the registry's owner writes and Python's
+/// `DurableSqliteBatch` do: writers queue for one turn and share one open
+/// `BEGIN IMMEDIATE` transaction, each under its own SAVEPOINT. A failed
+/// writer undoes only its savepoint and returns at once; the others return
+/// after the one `synchronous=FULL` COMMIT holding their changes, which the
+/// last queued writer (or the 64th) issues. SQLite's file locks still
+/// serialize the group against the Python agent's writers.
+struct JournalWriter {
+    path: PathBuf,
+    turn: Mutex<WriterTurn>,
+    waiters: AtomicUsize,
+    commits: AtomicU64,
+}
+
+impl JournalWriter {
+    fn new(path: PathBuf, connection: Connection) -> Self {
+        JournalWriter {
+            path,
+            turn: Mutex::new(WriterTurn { connection: Some(connection), ..WriterTurn::default() }),
+            waiters: AtomicUsize::new(0),
+            commits: AtomicU64::new(0),
+        }
+    }
+
+    /// Run `body` as one durable journal write. `check` runs first, holding
+    /// the turn; its failure fails only this writer.
+    fn write<T>(&self, check: impl FnOnce() -> Result<()>, body: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
+        self.waiters.fetch_add(1, Ordering::SeqCst);
+        let mut turn = lock(&self.turn);
+        self.waiters.fetch_sub(1, Ordering::SeqCst);
+        let mut group = None;
+        let result = check().and_then(|()| {
+            let joined = self.join(&mut turn)?;
+            group = Some(joined);
+            self.member(&mut turn, body)
+        });
+        if result.is_ok() {
+            turn.members += 1;
+        }
+        // Whoever holds the turn last commits the open group, failed or not.
+        let committed = if turn.group.is_some()
+            && (self.waiters.load(Ordering::SeqCst) == 0 || turn.members >= GROUP_COMMIT_MAX)
+        {
+            self.commit(&mut turn)
+        } else {
+            Ok(())
+        };
+        drop(turn);
+        let value = result?;
+        committed?;
+        group.expect("a member joined a group").wait()?;
+        Ok(value)
+    }
+
+    /// The open group, else BEGIN IMMEDIATE a new one.
+    fn join(&self, turn: &mut WriterTurn) -> Result<Arc<Group>> {
+        if let Some(group) = &turn.group {
+            return Ok(group.clone());
+        }
+        if turn.connection.is_none() {
+            turn.connection = Some(connect(&self.path, true)?);
+        }
+        turn.connection.as_ref().expect("connected above").execute_batch("BEGIN IMMEDIATE")?;
+        turn.members = 0;
+        let group = Arc::new(Group::default());
+        turn.group = Some(group.clone());
+        Ok(group)
+    }
+
+    /// One member under its SAVEPOINT. A savepoint statement that fails
+    /// loses the whole group, as does a panic.
+    fn member<T>(&self, turn: &mut WriterTurn, body: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
+        let connection = turn.connection.as_ref().expect("an open group has a connection");
+        let (result, lost) = match connection.execute_batch("SAVEPOINT member") {
+            Err(error) => {
+                let error = MemoryBackingError::from(error);
+                let lost = duplicate(&error);
+                (Err(error), Some(lost))
+            }
+            Ok(()) => match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(connection))) {
+                Err(panic) => {
+                    let _ = connection.execute_batch("ROLLBACK TO member; RELEASE member");
+                    self.abandon(turn, MemoryBackingError::Backing("memory journal writer panicked".into()));
+                    std::panic::resume_unwind(panic);
+                }
+                Ok(Ok(value)) => match connection.execute_batch("RELEASE member") {
+                    Ok(()) => (Ok(value), None),
+                    Err(error) => {
+                        let error = MemoryBackingError::from(error);
+                        let lost = duplicate(&error);
+                        (Err(error), Some(lost))
+                    }
+                },
+                Ok(Err(failure)) => {
+                    let undone = connection.execute_batch("ROLLBACK TO member; RELEASE member");
+                    (Err(failure), undone.err().map(MemoryBackingError::from))
+                }
+            },
+        };
+        if let Some(cause) = lost {
+            self.abandon(turn, cause);
+        }
+        result
+    }
+
+    /// One COMMIT for the group. An uncertain COMMIT drops the connection.
+    fn commit(&self, turn: &mut WriterTurn) -> Result<()> {
+        let group = turn.group.take().expect("an open group");
+        let committed = match &turn.connection {
+            Some(connection) => connection.execute_batch("COMMIT").map_err(MemoryBackingError::from),
+            None => fail("memory journal writer was lost"),
+        };
+        match committed {
+            Ok(()) => {
+                self.commits.fetch_add(1, Ordering::SeqCst);
+                group.finish(Ok(()));
+                Ok(())
+            }
+            Err(error) => {
+                turn.connection = None;
+                group.finish(Err(duplicate(&error)));
+                Err(error)
+            }
+        }
+    }
+
+    /// Closing the connection rolls back the open group.
+    fn abandon(&self, turn: &mut WriterTurn, error: MemoryBackingError) {
+        turn.connection = None;
+        if let Some(group) = turn.group.take() {
+            group.finish(Err(error));
+        }
+    }
 }
 
 impl MemoryBackingStore {
@@ -586,13 +1030,13 @@ impl MemoryBackingStore {
         let reader = connect(&journal, false)?;
         Ok(MemoryBackingStore {
             root,
-            journal,
             lease_root,
             hard_capacity_bytes: hard_capacity_bytes as i64,
             active_root,
             quota,
             journal_identity: (meta.dev(), meta.ino()),
-            writer: Mutex::new(writer),
+            writer: JournalWriter::new(journal.clone(), writer),
+            journal,
             reader: Mutex::new(reader),
             active_modes: Mutex::new(modes),
         })
@@ -613,6 +1057,12 @@ impl MemoryBackingStore {
 
     pub fn active_root(&self) -> Option<&Path> {
         self.active_root.as_deref()
+    }
+
+    /// Durable journal COMMITs this store has issued: one per group of
+    /// writers, so at most two per prepare and fewer under concurrency.
+    pub fn journal_commits(&self) -> u64 {
+        self.writer.commits.load(Ordering::SeqCst)
     }
 
     fn parse_mode(ram_configured: bool, mode: Option<&str>) -> Result<ActiveMode> {
@@ -716,16 +1166,16 @@ impl MemoryBackingStore {
             fsync_dir(&self.root)?;
         }
         self.quota.provision(&path, row.project_id, row.limit_bytes)?;
-        {
-            let mut conn = lock(&self.writer);
-            self.check_journal_identity()?;
-            let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            tx.execute(
-                "UPDATE allocations SET state='ready' WHERE allocation_id=? AND state='preparing'",
-                [&reference.allocation_id],
-            )?;
-            tx.commit()?;
-        }
+        self.writer.write(
+            || self.check_journal_identity(),
+            |conn| {
+                conn.execute(
+                    "UPDATE allocations SET state='ready' WHERE allocation_id=? AND state='preparing'",
+                    [&reference.allocation_id],
+                )?;
+                Ok(())
+            },
+        )?;
         self.prepare_active(reference, mode)?;
         let active_mode = self.remember_mode(sandbox_id, sandbox_generation, mode)?;
         Ok(MemoryBackingLease { active_mode, ..probe })
@@ -739,10 +1189,22 @@ impl MemoryBackingStore {
         sandbox_generation: u64,
         limit_bytes: i64,
     ) -> Result<(AllocationRow, bool)> {
-        let mut conn = lock(&self.writer);
-        self.check_journal_identity()?;
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let mut row = select_allocation(&tx, &reference.allocation_id)?;
+        self.writer.write(
+            || self.check_journal_identity(),
+            |tx| self.claim_body(tx, reference, sandbox_id, sandbox_generation, limit_bytes),
+        )
+    }
+
+    /// `claim_allocation`'s group member: a failure undoes only its savepoint.
+    fn claim_body(
+        &self,
+        tx: &Connection,
+        reference: &MemoryBackingRef,
+        sandbox_id: &str,
+        sandbox_generation: u64,
+        limit_bytes: i64,
+    ) -> Result<(AllocationRow, bool)> {
+        let mut row = select_allocation(tx, &reference.allocation_id)?;
         let mut active_mode = Some(if self.active_root.is_some() { "ram" } else { "file" }.to_string());
         if let Some(deleted) = row.as_ref().filter(|r| r.state_is("deleted")) {
             if !deleted.owned_by(sandbox_id, sandbox_generation, reference.quota_bytes) {
@@ -794,7 +1256,6 @@ impl MemoryBackingStore {
                 }
             }
         };
-        tx.commit()?;
         Ok((row, created))
     }
 
@@ -907,6 +1368,301 @@ mod tests {
         assert!(MemoryBackingRef::new("a/b", 1).is_err());
         assert!(MemoryBackingRef::new("a", 0).is_err());
         assert!(has_space(Path::new("/a\u{1f}b")) && has_space(Path::new("/a b")) && !has_space(Path::new("/ab")));
+    }
+
+    #[test]
+    fn syscall_structs_have_the_kernel_layout() {
+        use std::mem::{offset_of, size_of};
+        assert_eq!(size_of::<FsXattr>(), 28);
+        assert_eq!((offset_of!(FsXattr, xflags), offset_of!(FsXattr, projid), offset_of!(FsXattr, pad)), (0, 12, 20));
+        assert_eq!(size_of::<FsDiskQuota>(), 112);
+        assert_eq!(std::mem::align_of::<FsDiskQuota>(), 8);
+        let offsets = [
+            offset_of!(FsDiskQuota, d_version),
+            offset_of!(FsDiskQuota, d_flags),
+            offset_of!(FsDiskQuota, d_fieldmask),
+            offset_of!(FsDiskQuota, d_id),
+            offset_of!(FsDiskQuota, d_blk_hardlimit),
+            offset_of!(FsDiskQuota, d_blk_softlimit),
+            offset_of!(FsDiskQuota, d_ino_hardlimit),
+            offset_of!(FsDiskQuota, d_ino_softlimit),
+            offset_of!(FsDiskQuota, d_bcount),
+            offset_of!(FsDiskQuota, d_icount),
+            offset_of!(FsDiskQuota, d_itimer),
+            offset_of!(FsDiskQuota, d_btimer),
+            offset_of!(FsDiskQuota, d_iwarns),
+            offset_of!(FsDiskQuota, d_bwarns),
+            offset_of!(FsDiskQuota, d_itimer_hi),
+            offset_of!(FsDiskQuota, d_btimer_hi),
+            offset_of!(FsDiskQuota, d_rtbtimer_hi),
+            offset_of!(FsDiskQuota, d_padding2),
+            offset_of!(FsDiskQuota, d_rtb_hardlimit),
+            offset_of!(FsDiskQuota, d_rtb_softlimit),
+            offset_of!(FsDiskQuota, d_rtbcount),
+            offset_of!(FsDiskQuota, d_rtbtimer),
+            offset_of!(FsDiskQuota, d_rtbwarns),
+            offset_of!(FsDiskQuota, d_padding3),
+            offset_of!(FsDiskQuota, d_padding4),
+        ];
+        // linux/dqblk_xfs.h, field by field.
+        assert_eq!(offsets, [0, 1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 60, 64, 66, 68, 69, 70, 71, 72, 80, 88, 96, 100, 102, 104]);
+    }
+
+    #[test]
+    fn syscall_numbers_match_the_kernel_macros() {
+        // _IOC(dir, 'X', nr, sizeof(struct fsxattr)): read 2, write 1.
+        let ioc = |dir: u64, nr: u64| ((dir << 30) | (28 << 16) | ((b'X' as u64) << 8) | nr) as libc::c_ulong;
+        assert_eq!((FS_IOC_FSGETXATTR, FS_IOC_FSSETXATTR), (ioc(2, 31), ioc(1, 32)));
+        // QCMD(Q_XSETQLIM, PRJQUOTA), as strace prints xfs_quota's call.
+        assert_eq!(Q_XSETQLIM, 0x5804);
+        assert_eq!(qcmd(Q_XSETQLIM, PRJQUOTA), 0x0058_0402);
+        assert_eq!(qcmd(Q_XSETQLIM, 0x1_02), 0x0058_0402);
+        assert_eq!((FS_DQ_BSOFT | FS_DQ_BHARD, FS_PROJ_QUOTA, FS_DQUOT_VERSION), (0xc, 2, 1));
+    }
+
+    #[test]
+    fn project_limits_are_what_xfs_quota_sends() {
+        // strace of `xfs_quota -x -c "limit -p bsoft=67108864 bhard=67108864 600123"`.
+        let quota = FsDiskQuota::project_block_limits(600123, 67_108_864);
+        assert_eq!(
+            quota,
+            FsDiskQuota {
+                d_version: 1,
+                d_flags: 2,
+                d_fieldmask: 0xc,
+                d_id: 600123,
+                d_blk_hardlimit: 131072,
+                d_blk_softlimit: 131072,
+                ..FsDiskQuota::default()
+            }
+        );
+        // extractb shifts bytes to basic blocks, rounding down.
+        assert_eq!(FsDiskQuota::project_block_limits(1, 1023).d_blk_hardlimit, 1);
+        assert_eq!(FsDiskQuota::project_block_limits(1, 511).d_blk_softlimit, 0);
+    }
+
+    #[test]
+    fn device_numbers_decode_st_rdev() {
+        let null = fs::metadata("/dev/null").unwrap();
+        assert_eq!(device_numbers(null.rdev()), (1, 3));
+        let makedev = |major: u64, minor: u64| {
+            ((major & 0xffff_f000) << 32) | ((major & 0x0fff) << 8) | ((minor & 0xffff_ff00) << 12) | (minor & 0x00ff)
+        };
+        for (major, minor) in [(7, 27), (259, 1), (0x12345, 0x6789a), (4095, 255), (4096, 256)] {
+            assert_eq!(device_numbers(makedev(major, minor)), (major, minor));
+        }
+    }
+
+    #[test]
+    fn only_unsupported_syscalls_fall_back_to_xfs_quota() {
+        let run = |errno: Option<i32>| {
+            let (fell_back, logged) = (std::cell::Cell::new(false), std::cell::Cell::new(None));
+            let result = provision_with_fallback(
+                || errno.map_or(Ok(()), |e| Err(io::Error::from_raw_os_error(e))),
+                || {
+                    fell_back.set(true);
+                    Ok(())
+                },
+                |error| logged.set(error.raw_os_error()),
+            );
+            (result.map_err(|e| e.python_class()), fell_back.get(), logged.get())
+        };
+        assert_eq!(run(None), (Ok(false), false, None));
+        assert_eq!(run(Some(libc::ENOSYS)), (Ok(true), true, Some(libc::ENOSYS)));
+        assert_eq!(run(Some(libc::EINVAL)), (Ok(true), true, Some(libc::EINVAL)));
+        // Anything else is the node's failure, as a failed xfs_quota was.
+        assert_eq!(run(Some(libc::EPERM)), (Err("OSError"), false, None));
+        assert_eq!(run(Some(libc::ENOTTY)), (Err("OSError"), false, None));
+        // The fallback's own failure is its CalledProcessError.
+        let failed = provision_with_fallback(
+            || Err(io::Error::from_raw_os_error(libc::ENOSYS)),
+            || Err(MemoryBackingError::Command { argv: vec!["xfs_quota".into()], status: Some(1), stderr: String::new() }),
+            |_| {},
+        );
+        assert_eq!(failed.unwrap_err().python_class(), "CalledProcessError");
+        let quota = XfsMemoryQuota::new();
+        quota.log_fallback(&"first");
+        quota.log_fallback(&"second");
+        assert!(quota.fallback_logged.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn xfs_quota_backend_never_resolves_a_device() {
+        let quota = XfsMemoryQuota::with_backend(QuotaBackend::XfsQuota);
+        assert_eq!((quota.block_device(), quota.filesystem_root()), (None, None));
+        assert_eq!(XfsMemoryQuota::new().backend, QuotaBackend::Syscalls);
+    }
+
+    // ---- The journal's group commit. ----
+
+    struct Journal {
+        dir: PathBuf,
+        writer: JournalWriter,
+    }
+
+    impl Drop for Journal {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    impl Journal {
+        fn new(name: &str) -> Journal {
+            let dir = std::env::temp_dir().join(format!("noded-journal-{name}-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).unwrap();
+            let path = dir.join("journal.sqlite");
+            let conn = connect(&path, true).unwrap();
+            conn.execute_batch("CREATE TABLE t (k TEXT PRIMARY KEY)").unwrap();
+            Journal { writer: JournalWriter::new(path, conn), dir }
+        }
+
+        fn insert(&self, key: &str) -> Result<()> {
+            self.writer.write(|| Ok(()), |c| Ok(c.execute("INSERT INTO t VALUES (?)", [key]).map(|_| ())?))
+        }
+
+        /// What a fresh connection sees: only committed rows.
+        fn committed(&self) -> Vec<String> {
+            let conn = Connection::open(self.dir.join("journal.sqlite")).unwrap();
+            let mut statement = conn.prepare("SELECT k FROM t ORDER BY k").unwrap();
+            statement.query_map([], |r| r.get(0)).unwrap().map(|k| k.unwrap()).collect()
+        }
+
+        fn wait_for_waiters(&self, count: usize) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            while self.writer.waiters.load(Ordering::SeqCst) < count {
+                assert!(std::time::Instant::now() < deadline, "writers never queued");
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        }
+    }
+
+    #[test]
+    fn queued_writers_share_one_commit_and_fail_alone() {
+        let journal = Journal::new("group");
+        let (inside_tx, inside_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+        let release_rx = Mutex::new(release_rx);
+        std::thread::scope(|scope| {
+            let first = scope.spawn(|| {
+                journal.writer.write(
+                    || Ok(()),
+                    |c| {
+                        c.execute("INSERT INTO t VALUES ('a')", [])?;
+                        inside_tx.send(()).unwrap();
+                        release_rx.lock().unwrap().recv().unwrap();
+                        Ok(())
+                    },
+                )
+            });
+            inside_rx.recv().unwrap();
+            let second = scope.spawn(|| journal.insert("b"));
+            let failing = scope.spawn(|| {
+                journal.writer.write(
+                    || Ok(()),
+                    |c| {
+                        c.execute("INSERT INTO t VALUES ('c')", [])?;
+                        Err::<(), _>(MemoryBackingError::Backing("changed my mind".into()))
+                    },
+                )
+            });
+            let refused = scope.spawn(|| journal.writer.write(|| fail("memory journal file was replaced"), |_| Ok(())));
+            journal.wait_for_waiters(3);
+            // Written but not committed: no other connection sees it.
+            assert!(journal.committed().is_empty());
+            release_tx.send(()).unwrap();
+            first.join().unwrap().unwrap();
+            second.join().unwrap().unwrap();
+            assert_eq!(failing.join().unwrap().unwrap_err().to_string(), "changed my mind");
+            assert_eq!(refused.join().unwrap().unwrap_err().to_string(), "memory journal file was replaced");
+        });
+        // One COMMIT (one fsync) for both durable writers; the failure undid only its own row.
+        assert_eq!(journal.writer.commits.load(Ordering::SeqCst), 1);
+        assert_eq!(journal.committed(), ["a", "b"]);
+    }
+
+    #[test]
+    fn a_refused_last_writer_still_commits_the_open_group() {
+        let journal = Journal::new("refused");
+        let (inside_tx, inside_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+        let release_rx = Mutex::new(release_rx);
+        std::thread::scope(|scope| {
+            let first = scope.spawn(|| {
+                journal.writer.write(
+                    || Ok(()),
+                    |c| {
+                        c.execute("INSERT INTO t VALUES ('a')", [])?;
+                        inside_tx.send(()).unwrap();
+                        release_rx.lock().unwrap().recv().unwrap();
+                        Ok(())
+                    },
+                )
+            });
+            inside_rx.recv().unwrap();
+            // The only queued writer fails its check: it must commit for the first.
+            let refused = scope.spawn(|| journal.writer.write(|| fail("refused"), |_| Ok(())));
+            journal.wait_for_waiters(1);
+            release_tx.send(()).unwrap();
+            first.join().unwrap().unwrap();
+            assert!(refused.join().unwrap().is_err());
+        });
+        assert_eq!(journal.committed(), ["a"]);
+        assert_eq!(journal.writer.commits.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn a_panicking_member_abandons_its_group_and_leaves_nothing() {
+        let journal = Journal::new("panic");
+        let (inside_tx, inside_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+        let release_rx = Mutex::new(release_rx);
+        std::thread::scope(|scope| {
+            let first = scope.spawn(|| {
+                journal.writer.write(
+                    || Ok(()),
+                    |c| {
+                        c.execute("INSERT INTO t VALUES ('a')", [])?;
+                        inside_tx.send(()).unwrap();
+                        release_rx.lock().unwrap().recv().unwrap();
+                        Ok(())
+                    },
+                )
+            });
+            inside_rx.recv().unwrap();
+            let panicking = scope.spawn(|| {
+                journal.writer.write(
+                    || Ok(()),
+                    |c| -> Result<()> {
+                        c.execute("INSERT INTO t VALUES ('p')", [])?;
+                        panic!("writer bug");
+                    },
+                )
+            });
+            journal.wait_for_waiters(1);
+            release_tx.send(()).unwrap();
+            // The group the first writer joined is lost, not half-committed.
+            assert_eq!(first.join().unwrap().unwrap_err().to_string(), "memory journal writer panicked");
+            assert!(panicking.join().is_err());
+        });
+        assert!(journal.committed().is_empty());
+        // The writer reconnects for the next group.
+        journal.insert("b").unwrap();
+        assert_eq!(journal.committed(), ["b"]);
+    }
+
+    #[test]
+    fn concurrent_writers_batch_and_all_commit() {
+        let journal = Journal::new("burst");
+        std::thread::scope(|scope| {
+            for i in 0..128 {
+                let journal = &journal;
+                scope.spawn(move || journal.insert(&format!("k{i:03}")).unwrap());
+            }
+        });
+        assert_eq!(journal.committed().len(), 128);
+        let commits = journal.writer.commits.load(Ordering::SeqCst);
+        assert!((2..=128).contains(&commits), "{commits} commits");
     }
 
     #[test]

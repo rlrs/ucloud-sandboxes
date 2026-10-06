@@ -238,7 +238,7 @@ class CreatePipelineTests(unittest.TestCase):
         self.assertEqual(self.storage.prepares, 1)
         self.assert_one_owned_sandbox(node, results[0])
 
-    def test_only_the_owned_commit_skips_fsync(self) -> None:
+    def test_owner_commits_are_durable_and_plain_owned_commits_skip_fsync(self) -> None:
         node = self.node()
         levels: list[tuple[str, int]] = []
         write = node.registry._write
@@ -250,8 +250,9 @@ class CreatePipelineTests(unittest.TestCase):
         node.registry._write = recorded_write
         self.create(node)
         node.provisioner.delete("sandbox")
-        # 2 is FULL, 1 is NORMAL; deletion's own commits are FULL.
-        self.assertEqual(levels, [("planned", 2), ("rootfs_ready", 2), ("owned", 1), ("deleting", 2)])
+        # 2 is FULL. The owner's writers share durable group commits, so its
+        # owned commit no longer skips an fsync of its own.
+        self.assertEqual(levels, [("planned", 2), ("rootfs_ready", 2), ("owned", 2), ("deleting", 2)])
         connections = [node.registry._owner_entry, *node.registry._connections]
         for entry in connections:
             self.assertEqual(entry.connection.execute("PRAGMA synchronous").fetchone()[0], 2)

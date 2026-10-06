@@ -11,7 +11,7 @@ import re
 import sqlite3
 import stat
 import time
-from threading import Lock
+from threading import Event, Lock
 import weakref
 from types import MappingProxyType
 from typing import Any, Iterator, Mapping
@@ -52,6 +52,9 @@ _DIRECT_REGISTRY_IDENTITY = (
 # connection use still compares the file's own identity, owner and mode.
 # Owner reads, which use no connection, revalidate at most this often.
 _FILE_RECHECK_SECONDS = 1.0
+# Writers one owner transaction (group commit) serves at most; bounds how
+# long its first writer waits for the shared COMMIT.
+_GROUP_COMMIT_MAX = 64
 # Schema stamp, metadata row and this connection's data version in one
 # statement, so one SQLite snapshot answers all of them. A connection's data
 # version moves on every other connection's commit (and WAL truncation), never its own.
@@ -424,6 +427,14 @@ class _RegistryIndex:
                               {key: row for key, row in rows.items() if row is not None})
 
 
+class _GroupCommit:
+    """One open owner transaction that queued writers share, and its outcome."""
+
+    def __init__(self, connection: sqlite3.Connection, revision: int) -> None:
+        self.connection, self.revision, self.members = connection, revision, 0
+        self.done, self.error = Event(), None
+
+
 @dataclass
 class _RegistryConnection:
     connection: sqlite3.Connection
@@ -557,6 +568,10 @@ class DirectSandboxRegistry:
         # The open owner transaction's changes, applied after its COMMIT.
         self._staged: dict[str, Any] | None = None
         self._bumps = 0
+        # The open group commit, and writers queued for the turn to join it.
+        self._group: _GroupCommit | None = None
+        self._turn_waiters = 0
+        self._turn_waiters_guard = Lock()
         if owner:
             self._own()
 
@@ -589,6 +604,8 @@ class DirectSandboxRegistry:
     def close(self) -> None:
         """Release ownership and idle connections; stragglers then use SQLite."""
         with self._writer_turn:
+            if self._group is not None:
+                self._abandon_group(DirectRegistryError("direct registry was closed"))
             entry, self._owner_entry = self._owner_entry, None
             self._index = self._claims = None
             _release_owner_lock(self._owner_lock)
@@ -1941,7 +1958,12 @@ class DirectSandboxRegistry:
         """One validated transaction; ``durable=False`` commits without fsync.
 
         synchronous=NORMAL in WAL mode keeps the commit atomic and loses it only
-        to an OS crash, never to process death. Only commit_owned uses it.
+        to an OS crash, never to process death. Only commit_owned uses it, and
+        the owner's writes are always durable: writers queued behind one share
+        its COMMIT (group commit). In a 1,024-rollout burst 25-42 writers queued
+        for the turn while each held it for its own fsync, about 1.2 s a create.
+        Each writer runs under a SAVEPOINT of the shared transaction, so a failure
+        undoes only its own changes; it returns once the COMMIT holding them does.
         """
         if not write:
             with self._borrow() as entry, self._validated(entry, write=False):
@@ -1949,15 +1971,47 @@ class DirectSandboxRegistry:
         elif self._owner_lock:
             with self._readable():
                 self._check_file()  # Its syscalls release the GIL: not under the turn.
-            # Waiting for the one writer and committing are timed apart: a
-            # create's registry time is one or the other, not SQL work.
             with phase_timings.phase("registry_turn"):
-                self._writer_turn.acquire()
+                with self._turn_waiters_guard:
+                    self._turn_waiters += 1
+                try:
+                    self._writer_turn.acquire()
+                finally:
+                    with self._turn_waiters_guard:
+                        self._turn_waiters -= 1
+            group = failure = None
             try:
-                with self._owner_transaction(write=True, durable=durable) as connection:
-                    yield connection
+                group = self._group or self._begin_group()
+                with self._readable():
+                    group.connection.execute("SAVEPOINT member")
+                staged, bumps = dict(self._staged), self._bumps
+                try:
+                    yield group.connection
+                except BaseException as exc:
+                    failure = exc
+                    with self._readable():
+                        group.connection.execute("ROLLBACK TO member")
+                        group.connection.execute("RELEASE member")
+                    self._staged, self._bumps = staged, bumps
+                else:
+                    with self._readable():
+                        group.connection.execute("RELEASE member")
+                    group.members += 1
+                if not self._turn_waiters or group.members >= _GROUP_COMMIT_MAX:
+                    with phase_timings.phase("registry_sync"):
+                        self._commit_group()
+            except BaseException as exc:
+                if group is not None and self._group is group:
+                    self._abandon_group(exc)
+                failure = failure or exc
             finally:
                 self._writer_turn.release()
+            if failure is not None:
+                raise failure
+            with phase_timings.phase("registry_sync"):
+                group.done.wait()
+            if group.error is not None:
+                raise DirectRegistryError("direct registry commit failed") from group.error
         else:
             with self._borrow() as entry, self._writer_turn:
                 with self._validated(entry, write=True, durable=durable):
@@ -1986,6 +2040,61 @@ class DirectSandboxRegistry:
                 # A failure here discards the connection, never pools it.
                 connection.execute("PRAGMA synchronous = FULL")
 
+    def _begin_group(self) -> _GroupCommit:
+        """BEGIN the owner's shared write transaction; the caller holds the turn.
+
+        The opening statement proves that no other connection committed since
+        the index was read, or the index is rebuilt from this snapshot first.
+        """
+        with self._readable():
+            if not self._owner_lock:
+                raise DirectRegistryError("direct registry ownership was released")
+            if self._owner_entry is None:
+                self._owner_entry = self._connect()
+            entry = self._owner_entry
+            connection = entry.connection
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                revision, data_version = self._checked_stamp(entry)
+                index = self._index
+                if index is None or (index.revision, index.data_version) != (revision, data_version):
+                    self._index = self._read_index(connection, revision, data_version)
+            except BaseException:
+                self._drop_owner_connection()
+                raise
+        self._index_checked_at = time.monotonic()
+        self._staged, self._bumps = {}, 0
+        self._group = _GroupCommit(connection, revision)
+        return self._group
+
+    def _commit_group(self) -> None:
+        """COMMIT the open group; its changes reach the index after COMMIT returns."""
+        group, self._group = self._group, None
+        staged, bumps, self._staged = self._staged, self._bumps, None
+        try:
+            with self._readable():
+                group.connection.commit()
+        except BaseException as exc:
+            # An uncertain COMMIT drops index and connection.
+            group.error = exc
+            self._drop_owner_connection()
+            group.done.set()
+            raise
+        if staged or bumps:
+            self._index = self._index.applied(staged, group.revision + bumps)
+        group.done.set()
+
+    def _abandon_group(self, error: BaseException) -> None:
+        group, self._group, self._staged = self._group, None, None
+        group.error = error
+        self._drop_owner_connection()
+        group.done.set()
+
+    def _drop_owner_connection(self) -> None:
+        entry, self._owner_entry, self._index = self._owner_entry, None, None
+        if entry is not None:
+            entry.connection.close()  # Closing rolls back any open transaction.
+
     def _owned_index(self) -> _RegistryIndex | None:
         """The owner's index, revalidated at most once a second; else None.
 
@@ -2006,20 +2115,18 @@ class DirectSandboxRegistry:
         try:
             if not self._owner_lock:
                 return None
-            with self._owner_transaction(write=False):
-                pass
+            if self._group is not None:
+                return self._index  # Validated at the group's BEGIN.
+            self._refresh_owned_index()
             return self._index
         finally:
             self._writer_turn.release()
 
-    @contextmanager
-    def _owner_transaction(self, *, write: bool, durable: bool = True) -> Iterator[sqlite3.Connection]:
-        """Run on the owner connection; the caller checked the file and holds the turn.
+    def _refresh_owned_index(self) -> None:
+        """Prove the index against the file; the caller holds the turn, no group is open.
 
         The opening statement proves that no other connection committed since
         the index was read, or the index is rebuilt from this snapshot first.
-        Changes reach the index after COMMIT returns, in commit order; an
-        uncertain COMMIT, or a ROLLBACK that failed open, drops index and connection.
         """
         with self._readable():
             if not self._owner_lock:
@@ -2027,28 +2134,15 @@ class DirectSandboxRegistry:
             if self._owner_entry is None:
                 self._owner_entry = self._connect()
             entry = self._owner_entry
-            connection = entry.connection
-            committing = False
             try:
-                with self._validated(entry, write=write, durable=durable) as stamp:
-                    revision, data_version = stamp
+                with self._validated(entry, write=False) as (revision, data_version):
                     index = self._index
                     if index is None or (index.revision, index.data_version) != (revision, data_version):
-                        index = self._index = self._read_index(connection, revision, data_version)
+                        self._index = self._read_index(entry.connection, revision, data_version)
                     self._index_checked_at = time.monotonic()
-                    self._staged, self._bumps = {}, 0
-                    yield connection
-                    committing = True
-                    staged, bumps = self._staged, self._bumps
-                    self._staged = None
-                if staged or bumps:
-                    self._index = index.applied(staged, revision + bumps)
             except BaseException:
-                self._staged = None
-                if committing or connection.in_transaction:
-                    self._index = None
-                    self._owner_entry = None
-                    connection.close()
+                if entry.connection.in_transaction:  # A ROLLBACK that failed open.
+                    self._drop_owner_connection()
                 raise
 
     @staticmethod

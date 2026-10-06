@@ -64,6 +64,22 @@ class _FailsOnce:
             _FailsOnce(entry.connection, method), entry.schema_stamp)
 
 
+class _FailsStatement:
+    """A connection whose next statement starting with ``prefix`` reports an I/O error."""
+
+    def __init__(self, connection: sqlite3.Connection, prefix: str) -> None:
+        self._connection, self._prefix = connection, prefix
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
+
+    def execute(self, sql, *args):
+        if self._prefix and sql.startswith(self._prefix):
+            self._prefix = ""
+            raise sqlite3.OperationalError("disk I/O error")
+        return self._connection.execute(sql, *args)
+
+
 class RegistryIndexTests(unittest.TestCase):
     fixtures = registry_fixtures.DirectRegistryTests()
 
@@ -142,6 +158,48 @@ class RegistryIndexTests(unittest.TestCase):
             writer.join(10)
         self.assertEqual(owner.get("a").phase, "deleting")
 
+    def test_queued_writers_share_one_commit_and_fail_alone(self) -> None:
+        owner = self.owner()
+        planned = self.plan(owner, "a")
+        commits: list[str] = []
+        owner._owner_entry.connection.set_trace_callback(
+            lambda sql: commits.append(sql) if sql.upper().startswith("COMMIT") else None)
+        inside, release, results = Event(), Event(), {}
+        original = owner._write
+
+        def write_then_wait(connection, record, **kwargs):
+            original(connection, record, **kwargs)
+            if record.sandbox_id == "a":
+                inside.set()
+                release.wait(10)
+
+        def run(name, call):
+            try:
+                results[name] = call()
+            except Exception as exc:  # noqa: BLE001 - the failure is the result
+                results[name] = exc
+
+        owner._write = write_then_wait
+        threads = [Thread(target=run, args=("a", lambda: owner.commit_quota(
+            "a", expected_revision=planned.revision, project_id=200_001, total_mb=4096,
+            quota_path=self.root / "a")))]
+        threads[0].start()
+        self.assertTrue(inside.wait(10))
+        threads += [Thread(target=run, args=("b", lambda: self.plan(owner, "b"))),
+                    Thread(target=run, args=("stale", lambda: owner.commit_owned("a", expected_revision=planned.revision)))]
+        for thread in threads[1:]:
+            thread.start()
+        deadline = time.monotonic() + 10
+        while owner._turn_waiters < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        release.set()
+        for thread in threads:
+            thread.join(10)
+        self.assertEqual((results["a"].phase, results["b"].phase), ("quota_ready", "planned"))
+        self.assertIsInstance(results["stale"], DirectRegistryConflictError)
+        self.assertEqual(len(commits), 1)  # One fsync for the three writers.
+        self.assert_matches_journal(owner)
+
     def test_failed_body_or_commit_leaves_the_index_equal_to_the_journal(self) -> None:
         owner = self.owner()
         planned = self.plan(owner, "a")
@@ -156,10 +214,11 @@ class RegistryIndexTests(unittest.TestCase):
         deleting = owner.get("a")
         self.assertEqual(deleting.phase, "deleting")  # Reread, as committed.
         self.assert_matches_journal(owner)
-        # A failed ROLLBACK leaves the transaction open: it would hold the
-        # write lock, refuse every BEGIN and keep NORMAL. Drop the connection.
-        _FailsOnce.install(owner, "rollback")
-        with self.assertRaisesRegex(DirectRegistryError, "unreadable"):
+        # A writer whose savepoint cannot be rolled back leaves the shared
+        # transaction untrustworthy: it is abandoned and the connection dropped.
+        entry = owner._owner_entry
+        owner._owner_entry = _RegistryConnection(_FailsStatement(entry.connection, "ROLLBACK TO"), entry.schema_stamp)
+        with self.assertRaises(DirectRegistryConflictError):
             owner.commit_owned("a", expected_revision=deleting.revision)  # wrong phase
         self.assertIsNone(owner._owner_entry)
         self.plan(owner, "b")

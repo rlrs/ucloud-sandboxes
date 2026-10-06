@@ -94,7 +94,7 @@ class RegistryHotPathTests(unittest.TestCase):
         first = owner.get("one")
         owner.disk_claims_mb()
         idle = patch.multiple(
-            owner, _borrow=unittest.mock.DEFAULT, _owner_transaction=unittest.mock.DEFAULT,
+            owner, _borrow=unittest.mock.DEFAULT, _refresh_owned_index=unittest.mock.DEFAULT,
             _check_file=unittest.mock.DEFAULT,
         )
         owner._index_checked_at = float("inf")  # A slow host must not fall due for the recheck.

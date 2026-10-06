@@ -173,8 +173,9 @@ import unittest
 # +74 node-local waits and resumes commit in batches (one registry transaction, SAVEPOINT each).
 # +15 a managed create is not charged the memory bound its launch carries.
 # +9 registry writer-turn wait and commit sync timed apart.
+# +94 the node registry's owner writes share group commits (SAVEPOINT per writer).
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 116_685
+PACKAGE_LINE_BUDGET = 116_779
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

@@ -21,8 +21,7 @@ from .models import (
     ScalePolicy,
     SOFT_DRAIN_LABEL,
     is_soft_drained,
-    REPEATED_REBOOTS,
-    repeatedly_rebooted,
+    retiring_reason,
     utc_now,
 )
 from .resource_admission import (
@@ -53,6 +52,7 @@ def evaluate_scale(
     incompatible_candidates = incompatible_stop_candidates(
         [node for node in nodes if node.job_id not in unreachable_job_ids],
         now=now,
+        max_cpu_check_ms=policy.max_cpu_check_ms,
     )[: max(0, stop_budget - len(unreachable_stop_candidates))]
     pool_nodes = [node for node in nodes if _counts_as_pool_node(node, policy, now, 0)]
     # A booting node can temporarily have no usable version label. It remains
@@ -64,9 +64,9 @@ def evaluate_scale(
         node
         for node in pool_nodes
         if (node.agent_version_compatible or node.is_provisioning)
-        # A repeatedly rebooting host keeps serving what it holds while it
-        # retires; demand is planned without it.
-        and not repeatedly_rebooted(node.heartbeat, now)
+        # A retiring host (repeated reboots, a slow VM) keeps serving what it
+        # holds while it retires; demand is planned without it.
+        and not retiring_reason(node.heartbeat, now, max_cpu_check_ms=policy.max_cpu_check_ms)
     ]
     ready_nodes = [node for node in capacity_nodes if node.is_schedulable]
 
@@ -1353,12 +1353,14 @@ def plan_soft_drain(
             reason="drain on park is disabled" if labelled else "",
         )
     # A failing host empties whatever demand says, and takes the one slot.
-    if retiring := [node for node in pool if repeatedly_rebooted(node.heartbeat, now)]:
+    if retiring := [node for node in pool
+                    if retiring_reason(node.heartbeat, now, max_cpu_check_ms=policy.max_cpu_check_ms)]:
         chosen = min(retiring, key=lambda node: (not is_soft_drained(node.heartbeat), node.job_id))
         return SoftDrainPlan(
             job_id=chosen.job_id, selected=not is_soft_drained(chosen.heartbeat), retiring=True,
             clear_job_ids=tuple(n.job_id for n in labelled if n.job_id != chosen.job_id),
-            reason=f"{chosen.job_id} rebooted {REPEATED_REBOOTS} times within a day",
+            reason=f"{chosen.job_id} "
+            + retiring_reason(chosen.heartbeat, now, max_cpu_check_ms=policy.max_cpu_check_ms),
         )
     capacity_nodes = [
         node for node in pool if node.agent_version_compatible or node.is_provisioning
@@ -1486,10 +1488,11 @@ def incompatible_stop_candidates(
     nodes: list[SandboxNode],
     *,
     now: datetime,
+    max_cpu_check_ms: int = 0,
 ) -> list[SandboxNode]:
     candidates: list[SandboxNode] = []
     for node in nodes:
-        retiring = repeatedly_rebooted(node.heartbeat, now)
+        retiring = retiring_reason(node.heartbeat, now, max_cpu_check_ms=max_cpu_check_ms) is not None
         if node.job.is_final or (node.agent_version_compatible and not retiring):
             continue
         if node.job.is_provisioning and not node.agent_version_compatible:

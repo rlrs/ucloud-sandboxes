@@ -6652,6 +6652,7 @@ def dashboard_scale_policy_to_dict(policy: ScalePolicy) -> dict[str, Any]:
         "max_provisioning_nodes": policy.max_provisioning_nodes,
         "provisioning_capacity_weight": policy.provisioning_capacity_weight,
         "stale_provisioning_after_seconds": (policy.stale_provisioning_after_seconds),
+        "max_cpu_check_ms": policy.max_cpu_check_ms,
         "stale_provisioning_capacity_weight": (
             policy.stale_provisioning_capacity_weight
         ),

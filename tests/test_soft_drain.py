@@ -306,6 +306,31 @@ class SoftDrainSelectionTests(unittest.TestCase):
             [worker("100"), idle], demand(), ScalePolicy(drain_on_park_enabled=False), now=now,
         ).stops, ("200",))
 
+    def test_a_worker_with_a_slow_boot_cpu_check_retires_like_a_rebooting_one(self):
+        now = utc_now()
+
+        def checked(value, ms):
+            metrics = replace(value.heartbeat.runtime_metrics, cpu_check_ms=ms)
+            return replace(value, heartbeat=replace(value.heartbeat, runtime_metrics=metrics))
+
+        policy = ScalePolicy(max_cpu_check_ms=40)
+        slow = checked(worker("200", active=10), 75)
+        # Off (0), unknown (an older agent) and within the limit: nothing retires.
+        self.assertFalse(self.plan([worker("100", active=10), slow]).retiring)
+        for ms in (0, 23):
+            self.assertFalse(self.plan([worker("100", active=10), checked(worker("200", active=10), ms)],
+                                       policy=policy).retiring)
+        plan = self.plan([worker("100", active=10), slow], policy=policy)
+        self.assertEqual((plan.job_id, plan.retiring), ("200", True))
+        self.assertIn("CPU check took 75 ms, over the 40 ms limit", plan.reason)
+        request = SandboxPlacementRequest(ResourceQuantity(1, 1024, 2048))
+        busy = evaluate_scale([drained_node(slow)], demand(pending_count=1, placement_requests=(request,)),
+                              policy, now=now)
+        self.assertEqual(busy.ready_nodes, 0)  # No capacity: a replacement is planned.
+        idle = checked(worker("200", active=0, idle_since=now - timedelta(hours=1)), 75)
+        self.assertEqual(evaluate_scale([worker("100"), idle], demand(), replace(policy, drain_on_park_enabled=False),
+                                        now=now).stops, ("200",))
+
     def test_emptied_worker_stops_after_short_grace(self):
         now = utc_now()
         policy = ScalePolicy(scale_down_idle_seconds=300)

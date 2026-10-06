@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import functools
+import math
 import os
 from pathlib import Path
 import time
@@ -21,6 +23,21 @@ from .singleflight_cache import GenerationFencedSingleFlightCache
 _RESOURCE_EVIDENCE = ResourceEvidenceSampler()
 
 DEFAULT_RUNTIME_METRICS_FRESHNESS_SECONDS = 0.2
+_CPU_CHECK_ITERATIONS = 1_000_000
+
+
+@functools.cache
+def cpu_check_ms() -> int:
+    """A fixed CPU-bound loop, best of five, timed once per agent (at its first
+    sample, before it hosts sandboxes). VMs of one product measured 1-3x apart
+    with no steal reported (2026-10-06); the scale policy retires slow ones."""
+    best = math.inf
+    for _ in range(5):
+        started, total = time.perf_counter(), 0
+        for value in range(_CPU_CHECK_ITERATIONS):
+            total += value * value
+        best = min(best, time.perf_counter() - started)
+    return max(1, round(best * 1000))
 
 
 class SingleFlightRuntimeMetricsSampler:
@@ -113,4 +130,5 @@ def sample_node_runtime_metrics(
         load_average_1m=load[0],
         load_average_5m=load[1],
         load_average_15m=load[2],
+        cpu_check_ms=cpu_check_ms() if proc_path == Path("/proc") else 0,
     )

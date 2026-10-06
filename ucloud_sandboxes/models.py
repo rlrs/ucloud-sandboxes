@@ -461,6 +461,7 @@ NODE_RUNTIME_METRIC_DEFAULTS = {
     "storage_memory_idle_claim_mb": 0,
     "storage_workspace_growths": 0,
     "storage_workspace_growth_refusals": 0,
+    "cpu_check_ms": 0,
 }
 
 
@@ -533,6 +534,9 @@ class NodeRuntimeMetrics:
     # None on Docker workers and while the backend is unreachable or predates
     # its metrics RPC (it outlives agent upgrades).
     environment_io: dict[str, int | float | bool] | None = None
+    # A fixed loop timed once at agent start (runtime_metrics.cpu_check_ms);
+    # 0 is unknown. The scale policy retires a node over max_cpu_check_ms.
+    cpu_check_ms: int = 0
 
     @classmethod
     def from_dict(cls, raw: object) -> "NodeRuntimeMetrics | None":
@@ -817,6 +821,18 @@ def repeatedly_rebooted(heartbeat: NodeHeartbeat | None, now: datetime) -> bool:
     return sum(now - at <= window for at in epoch_retirements(heartbeat)) >= REPEATED_REBOOTS
 
 
+def retiring_reason(heartbeat: NodeHeartbeat | None, now: datetime, *, max_cpu_check_ms: int = 0) -> str | None:
+    """Why a worker serves what it holds but takes no new demand, else None:
+    repeated reboots, or a boot CPU check over the policy's limit (a VM on a
+    slow host; 0 turns the check off)."""
+    if repeatedly_rebooted(heartbeat, now):
+        return f"rebooted {REPEATED_REBOOTS} times within a day"
+    metrics = heartbeat.runtime_metrics if heartbeat is not None else None
+    if max_cpu_check_ms > 0 and metrics is not None and metrics.cpu_check_ms > max_cpu_check_ms:
+        return f"CPU check took {metrics.cpu_check_ms} ms, over the {max_cpu_check_ms} ms limit"
+    return None
+
+
 @dataclass(frozen=True)
 class SandboxNode:
     job: ProviderInstance
@@ -993,6 +1009,9 @@ class ScalePolicy:
     max_provisioning_nodes: int = 8
     provisioning_capacity_weight: float = 1.0
     stale_provisioning_after_seconds: int = 300
+    # Retire a worker whose boot CPU check (runtime_metrics.cpu_check_ms) is
+    # slower than this; 0 is off.
+    max_cpu_check_ms: int = 0
     stale_provisioning_capacity_weight: float = 0.0
     unreachable_stop_after_seconds: int = 1800
     scale_down_idle_seconds: int = 600

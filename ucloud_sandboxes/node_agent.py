@@ -92,6 +92,7 @@ from .node_runtime import BuilderNodeRuntime, DirectNodeRuntime, NodeStateStore
 from .registry import heartbeat_to_dict
 from .runtime_metrics import (
     SingleFlightRuntimeMetricsSampler,
+    cpu_check_ms,
     sample_node_runtime_metrics,
 )
 from .sandbox import (
@@ -143,6 +144,8 @@ def _host_runtime_metrics_sampler(
     lets tests and alternate collectors choose a different freshness window.
     """
 
+    if provider is None:
+        cpu_check_ms()  # Timed once now, before this agent hosts anything.
     source = provider if provider is not None else (
         lambda: sample_node_runtime_metrics(memory_backing_root=memory_backing_root)
     )

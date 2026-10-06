@@ -138,16 +138,7 @@ pub fn valid_session_prefix(prefix: &str) -> bool {
 /// Python `new_exec_session_id`: `<prefix>.<uuid4 hex>` for a well-formed
 /// gateway prefix, else `exec-<uuid4 hex>`.
 pub fn new_session_id(prefix: Option<&str>) -> String {
-    let mut bytes = [0u8; 16];
-    let mut filled = 0;
-    while filled < bytes.len() {
-        let read = unsafe { libc::getrandom(bytes[filled..].as_mut_ptr().cast(), bytes.len() - filled, 0) };
-        if read > 0 {
-            filled += read as usize;
-        } else if io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
-            panic!("getrandom failed: {}", io::Error::last_os_error());
-        }
-    }
+    let mut bytes = crate::guest::random_bytes::<16>().unwrap_or_else(|error| panic!("getrandom failed: {error}"));
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
     let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();

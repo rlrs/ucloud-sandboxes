@@ -4,7 +4,8 @@ Status (2026-10-06):
 - **Phase 0:** in production (0.9.43).
 - **Phase 1 (creates):** built and canaried. 0.9.45 carries the canary's fixes and rehearses it.
 - **Phase 2a (execs on running sandboxes):** built, shipping in 0.9.45.
-- **Phase 3:** specified. The pause tier and local waits move together as 3a.
+- **Phase 3a (the pause tier, local waits, thaw-on-exec):** in production in 0.9.46.
+- **Storage prepare (the create path's largest phase):** 0.9.47.
 
 Decided: Rust, and the daemon owns the node registry.
 
@@ -288,6 +289,23 @@ reaches the agent; the kernel carries the fence (`ucloud_sandboxes/exec_fence.py
     admission.
 - **In relay rollouts every exec meets a paused sandbox,** so phase 2a forwards
   them all until thaw-on-exec is the daemon's (3a).
+
+### What 0.9.46 measured (the pause tier in the daemon)
+
+- **Answer→resume:**
+  - warm: p50 19 ms and p95 56 ms (0.9.45: 46 ms and 1.38 s; 0.9.43: 25 ms and 0.41 s);
+  - cold: p95 0.19 s (0.9.45: 3.3 s);
+  - worst warm case: 0.91 s (0.9.43: 8.6 s).
+- **Relay overhead (warm):** p95 0.13 s and p99 0.26 s.
+- **Thaw-on-exec:** in relay rollouts every exec now runs in the daemon, with
+  its thaw; the only forward left is an exec that arrives before its sandbox
+  is owned.
+- **Warm ready times:** 647 sandboxes by 30 s, 955 by 45 s, all 1,024 by 49.7 s
+  (0.9.45: 627, 933, 53 s).
+- **What still bounds creates:** `startup_admission` p50 1.5 s, and
+  `storage_prepare` p50 0.66 s. 0.9.47 targets the second: a separate storage
+  admission class for creates, a 64-device pool, and the memory-backing
+  group commit.
 
 ### Phase 2a: the daemon's half
 

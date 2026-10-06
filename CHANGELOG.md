@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.41 - 2026-10-06 (gateway renders node init; workers and builders)
+
+- **udev neither probes nor watches nbd and ublk devices.** A worker creating about 500 sandboxes ran 144 udev workers on 6–10 of its 64 cores. systemd's persistent-storage rules blkid-probe every nbd and ublk device (1,024 + ~500), and the block watch re-probes each one after every close-for-write, such as the storage daemon's mkfs. That mkfs also waits on udev's device lock. Init now installs rules setting `UDEV_DISABLE_PERSISTENT_STORAGE_RULES_FLAG` and `nowatch` for these devices before nbd loads, and masks udisks2 (a desktop service, 0.5 cores).
+
 ## 0.9.40 - 2026-10-06 (workers)
 
 - **The node registry's writers share group commits.** In a 1,024-rollout burst, 25–42 writers queued for the registry's one writer while each held it through its own durable COMMIT. Creates waited about 1.7 s for the writer (`registry_turn_ms`, 0.9.39), while the COMMIT itself took 5 ms at the median. State-disk fsync under the burst spiked to p95 60–110 ms and up to 565 ms, and every queued writer waited out each spike. Queued writers now run under SAVEPOINTs of one transaction, and the last in line (none queued, or 64 served) commits for all. A failed writer undoes only its savepoint. The owner's commits are now always durable: `commit_owned`'s unsynced commit gives way to a shared fsync.

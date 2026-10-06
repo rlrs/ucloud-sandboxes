@@ -111,6 +111,8 @@ async fn blocking<T: Send + 'static>(
 }
 
 pub struct NodePipeline {
+    /// One materialization in flight per (image, root).
+    materializing: std::sync::Mutex<std::collections::HashMap<(String, Option<String>), Arc<tokio::sync::Mutex<()>>>>,
     pause: Option<Arc<PauseTier>>,
     /// The pause policy and local waits, while the daemon owns the pause tier.
     pause_runtime: Option<crate::pause_runtime::PauseRuntime>,
@@ -238,6 +240,7 @@ impl NodePipeline {
             network.start_pool();
         }
         Ok(NodePipeline {
+            materializing: Default::default(),
             pause,
             pause_runtime,
             storage: StorageClient::new(&config.storage_native_socket),
@@ -282,12 +285,31 @@ impl NodePipeline {
 
     /// S2.2: a warm lease from the store's receipts, else the agent mounts
     /// the image once and hands over its resolution.
-    async fn lease_image(&self, image: &str, root: Option<&str>) -> Result<ImageLease, CreateError> {
-        match self.images.lease(image, root).await {
+    async fn lease_image(&self, image: &str, root: Option<&str>, timings: &mut Timings) -> Result<ImageLease, CreateError> {
+        let started = timings.start();
+        let warm = self.images.lease(image, root).await;
+        timings.add("image_lease", started);
+        match warm {
             Ok(lease) => return Ok(lease),
             Err(ImageError::NotMaterialized(_) | ImageError::MutableReference(_)) => {}
             Err(error) => return Err(error.into()),
         }
+        // Single flight per image: a burst of first creates of one image asks
+        // the agent once; the rest lease the resolution it handed over.
+        let flight = {
+            let mut flights = self.materializing.lock().expect("not poisoned");
+            flights.entry((image.to_string(), root.map(str::to_string))).or_default().clone()
+        };
+        let _turn = flight.lock().await;
+        let started = timings.start();
+        let leased = self.images.lease(image, root).await;
+        timings.add("image_lease", started);
+        match leased {
+            Ok(lease) => return Ok(lease),
+            Err(ImageError::NotMaterialized(_) | ImageError::MutableReference(_)) => {}
+            Err(error) => return Err(error.into()),
+        }
+        let started = timings.start();
         let request = json!({"image": image, "environment_root": root});
         let reply = self
             .agent
@@ -295,6 +317,7 @@ impl NodePipeline {
             .call_within(Duration::from_secs(600), Method::POST, "/internal/v1/images/materialize", Some(&request))
             .await
             .map_err(|error| unavailable(error.to_string()))?;
+        timings.add("image_materialize", started);
         let body = reply.json().map_err(|error| unavailable(error.to_string()))?;
         if reply.status != StatusCode::OK {
             let message = body.get("error").and_then(Value::as_str).unwrap_or("image materialization failed").to_string();
@@ -305,7 +328,10 @@ impl NodePipeline {
             });
         }
         let resolution = body.get("resolution").ok_or_else(|| unavailable("image materialization has no resolution"))?;
-        Ok(self.images.lease_resolved(image, root, resolution).await?)
+        let started = timings.start();
+        let lease = self.images.lease_resolved(image, root, resolution).await;
+        timings.add("image_lease", started);
+        Ok(lease?)
     }
 
     async fn run(&self, admitted: &Admitted, timings: &mut Timings) -> Result<bool, CreateError> {
@@ -321,7 +347,7 @@ impl NodePipeline {
             .map_err(|error| CreateError::Unsupported(format!("spec: {error}")))?;
         let generation = admitted.generation;
         let started = timings.start();
-        let image = self.lease_image(&oci_spec.image, oci_spec.environment_root.as_deref()).await?;
+        let image = self.lease_image(&oci_spec.image, oci_spec.environment_root.as_deref(), timings).await?;
         timings.add("image_resolve", started);
 
         let started = timings.start();

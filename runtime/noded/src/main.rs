@@ -89,22 +89,20 @@ fn main() -> ExitCode {
                 _ = interrupt.recv() => {}
             }
         };
-        if rust_exec {
-            // Phase 2a: until the exec terminator is wired in, execs keep going
-            // to the agent, which still serves every exec route.
-            eprintln!("ucloud-noded: --rust-exec: execs stay with the agent in this build");
+        if rust_exec && !rust_create {
+            eprintln!("ucloud-noded: --rust-exec needs --rust-create in this build; execs stay with the agent");
         }
-        let create = match token.filter(|_| rust_create) {
-            Some(token) => match ucloud_noded::start_creates(&config.upstream, &token) {
-                Ok(front) => Some(front),
+        let fronts = match token.filter(|_| rust_create) {
+            Some(token) => match ucloud_noded::start_fronts(&config.upstream, &token, rust_exec) {
+                Ok(fronts) => fronts,
                 Err(error) => {
                     eprintln!("ucloud-noded: {error}");
                     return ExitCode::FAILURE;
                 }
             },
-            None => None,
+            None => ucloud_noded::Fronts::default(),
         };
-        ucloud_noded::serve_with(listener, config, create, shutdown).await;
+        ucloud_noded::serve_with(listener, config, fronts, shutdown).await;
         ExitCode::SUCCESS
     })
 }

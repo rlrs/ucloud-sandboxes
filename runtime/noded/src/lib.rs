@@ -14,6 +14,7 @@ pub mod agent_rpc;
 pub mod create;
 pub mod exec;
 pub mod exec_fence;
+pub mod exec_front;
 pub mod fsutil;
 pub mod journal;
 pub mod memory_backing;
@@ -191,9 +192,18 @@ impl Upstream {
     }
 }
 
-/// The create front for `--rust-create`: the agent client under a fresh
-/// session, and a pipeline that loads once the agent reports its configuration.
-pub fn start_creates(upstream: &std::path::Path, token: &str) -> Result<Arc<create::CreateFront>, String> {
+/// The daemon's own routes, each optional.
+#[derive(Clone, Default)]
+pub struct Fronts {
+    pub create: Option<Arc<create::CreateFront>>,
+    pub exec: Option<Arc<exec_front::ExecFront>>,
+}
+
+/// The fronts for `--rust-create` and `--rust-exec`: the agent client under a
+/// fresh session, and the node (registry owner, pipeline) once the agent
+/// reports its configuration. Execs need the node, so `--rust-exec` needs
+/// `--rust-create` in this build.
+pub fn start_fronts(upstream: &std::path::Path, token: &str, exec: bool) -> Result<Fronts, String> {
     let mut nonce = [0u8; 16];
     std::fs::File::open("/dev/urandom")
         .and_then(|mut random| std::io::Read::read_exact(&mut random, &mut nonce))
@@ -201,27 +211,27 @@ pub fn start_creates(upstream: &std::path::Path, token: &str) -> Result<Arc<crea
     let session: String = nonce.iter().map(|byte| format!("{byte:02x}")).collect();
     let agent = Arc::new(agent_rpc::AgentClient::new(upstream.to_path_buf(), token, &session).map_err(|e| e.to_string())?);
     let pipeline = pipeline::LazyPipeline::new();
-    let pipeline_agent = agent.clone();
+    let node = Arc::new(std::sync::OnceLock::new());
+    let (pipeline_agent, cell) = (agent.clone(), node.clone());
     tokio::spawn(pipeline.clone().load(agent.clone(), move |config| {
-        let pipeline = node_pipeline::NodePipeline::open(config, pipeline_agent.clone())?;
-        Ok(Arc::new(pipeline) as Arc<dyn create::Pipeline>)
+        let opened = Arc::new(node_pipeline::NodePipeline::open(config, pipeline_agent.clone())?);
+        let _ = cell.set(opened.clone());
+        Ok(opened as Arc<dyn create::Pipeline>)
     }));
-    Ok(Arc::new(create::CreateFront::new(agent, pipeline, token)))
+    Ok(Fronts {
+        create: Some(Arc::new(create::CreateFront::new(agent, pipeline, token))),
+        exec: exec.then(|| exec_front::ExecFront::new(node, token)),
+    })
 }
 
 /// Serve until `shutdown` resolves, then let in-flight requests finish within
 /// `config.shutdown_grace`.
 pub async fn serve(listener: TcpListener, config: Config, shutdown: impl Future<Output = ()>) {
-    serve_with(listener, config, None, shutdown).await
+    serve_with(listener, config, Fronts::default(), shutdown).await
 }
 
-/// `serve`, with creates the daemon runs itself when `create` is set.
-pub async fn serve_with(
-    listener: TcpListener,
-    config: Config,
-    create: Option<Arc<create::CreateFront>>,
-    shutdown: impl Future<Output = ()>,
-) {
+/// `serve`, with the routes the daemon answers itself.
+pub async fn serve_with(listener: TcpListener, config: Config, fronts: Fronts, shutdown: impl Future<Output = ()>) {
     let slots = Arc::new(Semaphore::new(config.max_connections));
     let graceful = GracefulShutdown::new();
     let mut builder = hyper::server::conn::http1::Builder::new();
@@ -246,10 +256,10 @@ pub async fn serve_with(
         };
         let _ = stream.set_nodelay(true);
         let upstream = Arc::new(Upstream { path: config.upstream.clone(), sender: Mutex::new(None) });
-        let create = create.clone();
+        let fronts = fronts.clone();
         let service = hyper::service::service_fn(move |request: Request<Incoming>| {
             let upstream = upstream.clone();
-            let create = create.clone();
+            let fronts = fronts.clone();
             async move {
                 let mut request = request.map(|body| body.boxed());
                 // The agent's internal create endpoints answer the daemon only,
@@ -258,7 +268,13 @@ pub async fn serve_with(
                     return Ok(not_found());
                 }
                 request.headers_mut().remove(agent_rpc::SESSION_HEADER);
-                match create {
+                if let Some(front) = fronts.exec.as_ref().filter(|front| front.intercepts(&request)) {
+                    return match front.handle(request).await {
+                        exec_front::Outcome::Response(response) => Ok(response),
+                        exec_front::Outcome::Forward(request) => upstream.forward(request).await,
+                    };
+                }
+                match fronts.create {
                     Some(front) if front.intercepts(&request) => match front.handle(request).await {
                         create::Outcome::Response(response) => Ok(response),
                         create::Outcome::Forward(request) => upstream.forward(request).await,

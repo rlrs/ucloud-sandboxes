@@ -217,6 +217,18 @@ impl NodePipeline {
         })
     }
 
+    pub fn config(&self) -> &CreateConfig {
+        &self.config
+    }
+
+    pub fn registry(&self) -> &Arc<Registry> {
+        &self.registry
+    }
+
+    pub fn warden(&self) -> &Arc<Warden> {
+        &self.warden
+    }
+
     /// S2.2: a warm lease from the store's receipts, else the agent mounts
     /// the image once and hands over its resolution.
     async fn lease_image(&self, image: &str, root: Option<&str>) -> Result<ImageLease, CreateError> {

@@ -60,6 +60,30 @@ pub struct CreateConfig {
     pub environment: Option<EnvironmentConfig>,
     pub runtime_compatibility_sha256: String,
     pub node_epoch: String,
+    /// Phase 2a; absent from agents older than it.
+    #[serde(default)]
+    pub exec: Option<ExecConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExecSessionLimits {
+    pub max_sessions: usize,
+    pub max_events_per_session: usize,
+    pub completed_retention_seconds: f64,
+    pub delivered_grace_seconds: f64,
+    pub output_idle_timeout_seconds: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExecConfig {
+    pub rust_execs_enabled: bool,
+    pub runsc: PathBuf,
+    pub runtime_root: PathBuf,
+    pub warden_locks_dir: PathBuf,
+    pub warden_paused_dir: PathBuf,
+    pub active_capacity_configured: bool,
+    pub memory_floor_mib: u64,
+    pub sessions: ExecSessionLimits,
 }
 
 impl CreateConfig {

@@ -113,7 +113,8 @@ from tests.test_package_budget import package_lines
 # +17 a queued batch commits together and each item fails alone; +2 notes.
 # +7 managed creates admit beside a launch that holds the headroom; +2 notes.
 # +62 group commit: queued writers share one COMMIT and fail alone; +2 notes.
-SUITE_LINE_BUDGET = 99_816
+# +5 the udev rules precede nbd's first load; +2 notes.
+SUITE_LINE_BUDGET = 99_823
 SUITE = Path(__file__).resolve().parent
 
 

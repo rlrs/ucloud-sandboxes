@@ -769,6 +769,12 @@ else:
         # Init loads nbd before environment_bootstrap; its pool size must hold for that first load.
         nbd = script.index("options nbd nbds_max=1024 max_part=0")
         self.assertLess(nbd, script.index('$SUDO modprobe "$module"'))
+        # udev neither probes nor watches the agent's devices, from their first load.
+        rules = script.index('KERNEL=="nbd*|ublkb*", ENV{UDEV_DISABLE_PERSISTENT_STORAGE_RULES_FLAG}="1"')
+        self.assertLess(rules, script.index('$SUDO modprobe "$module"'))
+        self.assertIn('KERNEL=="nbd*|ublkb*", OPTIONS+="nowatch"', script)
+        bash = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
+        self.assertEqual(bash.returncode, 0, bash.stderr)
 
     def test_stages_bundle_with_digest(self) -> None:
         calls: list[tuple[tuple[str, ...], bytes | None]] = []

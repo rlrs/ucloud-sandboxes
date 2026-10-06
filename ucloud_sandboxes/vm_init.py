@@ -1421,6 +1421,16 @@ log_init_phase "host-aliases"
 # nbd fixes its device pool at load and this init loads it first, so the
 # pool environment_bootstrap asks for applies to every load of the module.
 printf 'options nbd nbds_max=1024 max_part=0\n' | $SUDO tee /etc/modprobe.d/ucloud-sandboxes-nbd.conf >/dev/null
+# nbd and ublk devices belong to the agent and its storage daemons. udev would
+# blkid-probe each one and re-probe it after every close-for-write (watch):
+# 8-10 cores of udev workers on a 64-vCPU worker creating ~500 sandboxes.
+# Installed before nbd loads its 1,024 devices; udisks is a desktop service.
+printf '%s\n' 'SUBSYSTEM=="block", KERNEL=="nbd*|ublkb*", ENV{{UDEV_DISABLE_PERSISTENT_STORAGE_RULES_FLAG}}="1", ENV{{UDISKS_IGNORE}}="1"' \
+  | $SUDO tee /etc/udev/rules.d/10-ucloud-sandboxes-devices.rules >/dev/null
+printf '%s\n' 'SUBSYSTEM=="block", KERNEL=="nbd*|ublkb*", OPTIONS+="nowatch"' \
+  | $SUDO tee /etc/udev/rules.d/99-ucloud-sandboxes-devices-nowatch.rules >/dev/null
+$SUDO udevadm control --reload 2>/dev/null || true
+$SUDO systemctl mask --now udisks2.service >/dev/null 2>&1 || true
 UCLOUD_RUNTIME_KERNEL_MODULES=({runtime_kernel_modules_shell})
 UCLOUD_KERNEL_RELEASE="$(uname -r)"
 UCLOUD_KERNEL_MODULE_ROOT="/lib/modules/$UCLOUD_KERNEL_RELEASE"

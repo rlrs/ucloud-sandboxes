@@ -174,8 +174,9 @@ import unittest
 # +15 a managed create is not charged the memory bound its launch carries.
 # +9 registry writer-turn wait and commit sync timed apart.
 # +94 the node registry's owner writes share group commits (SAVEPOINT per writer).
+# +10 udev neither probes nor watches nbd and ublk devices; udisks masked.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 116_779
+PACKAGE_LINE_BUDGET = 116_789
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

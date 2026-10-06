@@ -10,6 +10,8 @@
 //! - upstream failed after the request was written: the client connection
 //!   closes without a response, as when the agent dies mid-request.
 
+pub mod agent_rpc;
+pub mod create;
 pub mod fsutil;
 pub mod journal;
 pub mod memory_backing;
@@ -106,7 +108,7 @@ fn unavailable(reason: &str) -> Response<Body> {
 /// replaced when the agent closes it.
 struct Upstream {
     path: PathBuf,
-    sender: Mutex<Option<SendRequest<Incoming>>>,
+    sender: Mutex<Option<SendRequest<Body>>>,
 }
 
 #[derive(Debug)]
@@ -120,7 +122,7 @@ impl std::fmt::Display for UpstreamFailed {
 
 impl std::error::Error for UpstreamFailed {}
 
-async fn connect(path: &PathBuf) -> std::io::Result<SendRequest<Incoming>> {
+async fn connect(path: &PathBuf) -> std::io::Result<SendRequest<Body>> {
     let stream = UnixStream::connect(path).await?;
     let (sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
         .await
@@ -133,7 +135,7 @@ async fn connect(path: &PathBuf) -> std::io::Result<SendRequest<Incoming>> {
 }
 
 impl Upstream {
-    async fn forward(&self, mut request: Request<Incoming>) -> Result<Response<Body>, UpstreamFailed> {
+    async fn forward(&self, mut request: Request<Body>) -> Result<Response<Body>, UpstreamFailed> {
         strip_hop_by_hop(request.headers_mut());
         let mut guard = self.sender.lock().await;
         // A pooled connection the agent closed while idle is replaced once; the
@@ -175,6 +177,16 @@ impl Upstream {
 /// Serve until `shutdown` resolves, then let in-flight requests finish within
 /// `config.shutdown_grace`.
 pub async fn serve(listener: TcpListener, config: Config, shutdown: impl Future<Output = ()>) {
+    serve_with(listener, config, None, shutdown).await
+}
+
+/// `serve`, with creates the daemon runs itself when `create` is set.
+pub async fn serve_with(
+    listener: TcpListener,
+    config: Config,
+    create: Option<Arc<create::CreateFront>>,
+    shutdown: impl Future<Output = ()>,
+) {
     let slots = Arc::new(Semaphore::new(config.max_connections));
     let graceful = GracefulShutdown::new();
     let mut builder = hyper::server::conn::http1::Builder::new();
@@ -199,9 +211,20 @@ pub async fn serve(listener: TcpListener, config: Config, shutdown: impl Future<
         };
         let _ = stream.set_nodelay(true);
         let upstream = Arc::new(Upstream { path: config.upstream.clone(), sender: Mutex::new(None) });
-        let service = hyper::service::service_fn(move |request| {
+        let create = create.clone();
+        let service = hyper::service::service_fn(move |request: Request<Incoming>| {
             let upstream = upstream.clone();
-            async move { upstream.forward(request).await }
+            let create = create.clone();
+            async move {
+                let request = request.map(|body| body.boxed());
+                match create {
+                    Some(front) if front.intercepts(&request) => match front.handle(request).await {
+                        create::Outcome::Response(response) => Ok(response),
+                        create::Outcome::Forward(request) => upstream.forward(request).await,
+                    },
+                    _ => upstream.forward(request).await,
+                }
+            }
         });
         let connection = graceful.watch(builder.serve_connection(TokioIo::new(stream), service));
         tokio::spawn(async move {

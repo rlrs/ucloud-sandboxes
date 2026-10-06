@@ -307,6 +307,23 @@ reaches the agent; the kernel carries the fence (`ucloud_sandboxes/exec_fence.py
   admission class for creates, a 64-device pool, and the memory-backing
   group commit.
 
+### What 0.9.47 measured (storage prepare)
+
+- **Warm ready time:** p50 22.2 s, p95 41.2 s, max 46.3 s (0.9.46: 23.5, 45.6, 49.7).
+- **Relay overhead (warm):** p95 98 ms, max 0.32 s.
+- **Storage phases (warm, p50):** `volume_prepare` 301 ms, `memory_prepare` 19 ms
+  (0.9.46: `storage_prepare` 658 ms in all).
+- **Cold `manager_create`:** p50 4.3 s, against 10.6 s on 0.9.46.
+- **The next phase to fix is `image_resolve`:** p50 492 ms and p95 3.6 s, warm.
+  - Cause: on every delete the environment store collects an image no sandbox
+    references any more (unmount and drop its components), so a rollout keeps
+    materializing the same 128 images again.
+  - This predates the daemon: 0.9.43's Python creates spent 330 ms there.
+  - Fix in progress: keep unused compositions mounted, and evict the least
+    recently used only above a fixed device budget.
+- **Also in progress:** veths and namespaces over netlink, plus the daemon's
+  own prepared-pair pool (`network_ensure` p50 166 ms).
+
 ### Phase 2a: the daemon's half
 
 - **`src/exec/`:** Python's session semantics, ported and checked against Python

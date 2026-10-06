@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.40 - 2026-10-06 (workers)
+
+- **The node registry's writers share group commits.** In a 1,024-rollout burst, 25–42 writers queued for the registry's one writer while each held it through its own durable COMMIT. Creates waited about 1.7 s for the writer (`registry_turn_ms`, 0.9.39), while the COMMIT itself took 5 ms at the median. State-disk fsync under the burst spiked to p95 60–110 ms and up to 565 ms, and every queued writer waited out each spike. Queued writers now run under SAVEPOINTs of one transaction, and the last in line (none queued, or 64 served) commits for all. A failed writer undoes only its savepoint. The owner's commits are now always durable: `commit_owned`'s unsynced commit gives way to a shared fsync.
+
 ## 0.9.39 - 2026-10-06 (workers)
 
 - **Create timings split the registry's time.** `registry_turn_ms` (waiting for the one writer) and `registry_sync_ms` (the commit) are reported beside `registry_commit_ms`, which was 0.7–1.3 s per create in bursts for about 2 ms of SQL.

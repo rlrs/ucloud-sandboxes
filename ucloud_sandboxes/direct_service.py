@@ -45,6 +45,7 @@ from .memory_backing import MemoryBackingBusyError
 from .models import NodeRuntimeMetrics, ResourceQuantity
 from . import phase_timings
 from .resource_admission import (
+    PHYSICAL_MEMORY_FLOOR_MB,
     dynamic_cpu_pressure_retryable,
     dynamic_pressure_error,
     dynamic_request_fits,
@@ -288,6 +289,10 @@ class DirectProcessRunner:
 
 class DirectSandboxService:
     """Product-facing service owned by the single direct runtime daemon."""
+
+    # --rust-execs (DirectNodeRuntime installs it): noded's execs advance each
+    # sandbox's activity clock, the mtime of its fence file.
+    exec_fence = None
 
     def __init__(
         self,
@@ -949,16 +954,14 @@ class DirectSandboxService:
             ):
                 raise DirectWardenError("reclaim requires a measured live incarnation")
 
-        with self._activity_guard:
-            activity = self._last_activity.get(key)
+        activity = self._activity_mark(key)
 
         def is_current():
             if not is_wait_current():
                 return False
             with self._lock(*key):
                 current = self.provisioner.registry.get(sandbox_id)
-                with self._activity_guard:
-                    unchanged_activity = self._last_activity.get(key) == activity
+                unchanged_activity = self._activity_mark(key) == activity
                 return (
                     current == registration
                     and unchanged_activity
@@ -2333,6 +2336,15 @@ class DirectSandboxService:
     def mark_activity(self, sandbox_id: str, generation: int) -> None:
         with self._activity_guard:
             self._last_activity[(sandbox_id, generation)] = time.monotonic()
+        if self.exec_fence is not None:
+            self.exec_fence.touch(sandbox_id)
+
+    def _activity_mark(self, key: tuple[str, int]) -> tuple[float | None, int | None]:
+        """Changes with any activity of this process or of noded's execs."""
+        with self._activity_guard:
+            local = self._last_activity.get(key)
+        fence = self.exec_fence
+        return local, (fence.activity_mtime_ns(key[0]) if fence is not None else None)
 
     @property
     def idle_park_seconds(self) -> float:
@@ -2349,7 +2361,13 @@ class DirectSandboxService:
         key = (sandbox_id, generation)
         with self._activity_guard:
             last_activity = self._last_activity.setdefault(key, observed_at)
-        return max(0.0, observed_at - last_activity)
+        idle = max(0.0, observed_at - last_activity)
+        touched = self.exec_fence.activity_mtime_ns(sandbox_id) if self.exec_fence is not None else None
+        if touched is not None:
+            # Wall clock: noded's exec activity. The monotonic mark stays a
+            # floor, so a clock step can only make a sandbox look busier.
+            idle = min(idle, max(0.0, time.time() - touched / 1e9))
+        return idle
 
     def read_file(
         self,
@@ -2909,7 +2927,7 @@ class DirectSandboxService:
                     # MemAvailable can be shared by many concurrent requests.
                     # Reserve each in-flight footprint exactly once before it
                     # allocates; preserve the existing physical 2 GiB floor.
-                    headroom = (max(0, metrics.memory_available_mb - 2048) * 1024 ** 2
+                    headroom = (max(0, metrics.memory_available_mb - PHYSICAL_MEMORY_FLOOR_MB) * 1024 ** 2
                                 if metrics.memory_total_mb > 0 else 0)
                     self._current_growth_forecasts_locked()
                     if transition_cost_provider is not None:

@@ -7,6 +7,8 @@ from .capabilities import (
 )
 from .models import NodeHeartbeat, NodeRuntimeMetrics, ResourceQuantity
 
+# Resident headroom kept for the node agent, sentries and a new operation.
+PHYSICAL_MEMORY_FLOOR_MB = 2048
 
 def dynamic_request_fits(
     requested: ResourceQuantity,
@@ -156,9 +158,9 @@ def _memory_pressure_error(
     # resident headroom needed by the node agent, sentries and a new operation.
     # Keep a physical floor even before PSI's ten-second average catches up to
     # reclaim. Larger sandbox limits remain reusable and may use RAM plus swap.
-    if metrics.memory_total_mb > 0 and metrics.memory_available_mb < 2048:
+    if metrics.memory_total_mb > 0 and metrics.memory_available_mb < PHYSICAL_MEMORY_FLOOR_MB:
         return "direct node has insufficient physical live memory headroom"
-    minimum_headroom_mb = max(2048, requested.memory_mb)
+    minimum_headroom_mb = max(PHYSICAL_MEMORY_FLOOR_MB, requested.memory_mb)
     if metrics.swap_total_mb > 0:
         available_memory_mb = metrics.memory_available_mb + metrics.swap_free_mb
         memory_is_known = True

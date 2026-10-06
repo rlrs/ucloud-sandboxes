@@ -15,6 +15,7 @@ from uuid import uuid4
 from .background_io import PressureSampler
 from .direct_service import DirectSandboxService
 from .direct_registry import DirectRegistryConflictError
+from .exec_fence import ExecFence
 from .warm_park import WarmParkDeferred, WarmParkPolicy, decide_resident_wait
 from .pause_tier import (
     ESCALATION_CONCURRENCY, PausedWait, ReclaimBudget, advised_wait_seconds, park_tier,
@@ -214,7 +215,9 @@ class DirectLifecycle:
         self._coordinator = SandboxLifecycleCoordinator()
 
     def is_idle(self, sandbox_id: str) -> bool:
-        return self._coordinator.is_idle(sandbox_id)
+        fence = self.owner.exec_fence
+        return self._coordinator.is_idle(sandbox_id) and (
+            fence is None or fence.activity_idle(sandbox_id))
 
     def acquire_shared(self, sandbox_id: str) -> None:
         # A parked guest can race a tool request with a local deferred park.
@@ -292,7 +295,17 @@ class DirectLifecycle:
             join_transition=join_transition,
             transition_timeout_seconds=transition_timeout_seconds,
         ):
-            yield
+            # Every lifecycle transition passes here, so noded's execs (which
+            # the coordinator cannot see) are fenced by the same rules.
+            fence = self.owner.exec_fence
+            with (nullcontext() if fence is None
+                  else fence.transition(sandbox_id, allow_shared=allow_shared)):
+                yield
+
+    def discard_fence(self, sandbox_id: str) -> None:
+        """Unlink a deleted sandbox's exec fence files, inside its exclusive."""
+        if self.owner.exec_fence is not None:
+            self.owner.exec_fence.discard(sandbox_id)
 
 
 class DirectNodeRuntime:
@@ -301,8 +314,16 @@ class DirectNodeRuntime:
     def __init__(
         self,
         service: DirectSandboxService,
+        *,
+        rust_execs: bool = False,
     ) -> None:
         self.service = service
+        # --rust-execs: noded runs execs; transitions fence them through
+        # flock files and their activity clock (ucloud_sandboxes/exec_fence.py).
+        self.exec_fence = None
+        if rust_execs:
+            self.exec_fence = service.exec_fence = ExecFence(
+                service.warden.config.runtime_root / "warden-locks")
         warden_config = getattr(getattr(service, "warden", None), "config", None)
         memory_backing_root = getattr(warden_config, "application_memory_root", None)
         # C1.1: disposable pause scheduling metadata; Warden markers are the
@@ -801,6 +822,7 @@ class DirectNodeRuntime:
                 sandbox_id,
                 generation=generation,
             )
+            self.lifecycle.discard_fence(sandbox_id)
         with self._relay_parking_guard:
             for key in tuple(self._deferred_relay_parks):
                 if key[:2] == (sandbox_id, generation):
@@ -1400,6 +1422,10 @@ class DirectNodeRuntime:
         )
         build_count = max(0, active_build_count())
         drain = self._drain
+        # With --rust-execs noded's execs are not in active_operations. The
+        # empty proof still holds: each runs in a registered sandbox, so it
+        # needs a record, and noded re-reads the drain row before every start.
+        # Only the exiting runsc client of a just-deleted sandbox can outlive it.
         if (
             drain.draining
             and not records

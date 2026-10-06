@@ -209,14 +209,18 @@ class CreateHandoff:
             held.done.set()
 
 
-def create_config(service: Any, *, node_epoch: str, rust_creates_enabled: bool) -> dict[str, Any]:
+def create_config(service: Any, *, node_epoch: str, rust_creates_enabled: bool,
+                  rust_execs_enabled: bool = False, exec_sessions: Any = None) -> dict[str, Any]:
     """The agent's effective create configuration, read from the assembled node.
 
     Python stays the single source of truth for flags and assembly checks;
     runtime/noded reads this instead of parsing the agent's command line.
+    ``exec`` is phase 2a's: what noded needs to run execs itself, fenced by
+    ucloud_sandboxes/exec_fence.py; ``exec_sessions`` is the ExecSessionManager.
     """
     from .direct_network import NETWORK_MTU
     from .environment_manifest import HOST_EROFS_ABI
+    from .resource_admission import PHYSICAL_MEMORY_FLOOR_MB
 
     provisioner = service.provisioner
     warden = provisioner.warden
@@ -264,4 +268,23 @@ def create_config(service: Any, *, node_epoch: str, rust_creates_enabled: bool) 
         "runtime_compatibility_sha256": provisioner.runtime_compatibility_sha256,
         "node_epoch": node_epoch,
         "rust_creates_enabled": bool(rust_creates_enabled),
+        "exec": {
+            "runsc": str(config.runsc),
+            "runtime_root": str(config.runtime_root),
+            "warden_locks_dir": str(config.runtime_root / "warden-locks"),
+            "warden_paused_dir": str(config.runtime_root / "warden-paused"),
+            # The physical floor applies to execs only with active capacity
+            # (direct_service._active_admission_guard).
+            "active_capacity_configured": getattr(service, "_active_capacity", None) is not None,
+            "memory_floor_mib": PHYSICAL_MEMORY_FLOOR_MB,
+            "sessions": None if exec_sessions is None else {
+                "max_sessions": exec_sessions.max_sessions,
+                "max_events_per_session": exec_sessions.max_events_per_session,
+                "completed_retention_seconds": exec_sessions.completed_retention_seconds,
+                "delivered_grace_seconds": exec_sessions.delivered_grace_seconds,
+                "output_idle_timeout_seconds": exec_sessions.output_idle_timeout_seconds,
+            },
+            "admission_wait_seconds": service.admission_wait_seconds,
+            "rust_execs_enabled": bool(rust_execs_enabled),
+        },
     }

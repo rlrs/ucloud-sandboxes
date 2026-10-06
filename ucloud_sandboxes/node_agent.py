@@ -644,7 +644,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
         cached = type(self).__dict__.get("_create_config_cache")
         if cached is None:
             config = create_config(self.manager.service, node_epoch=self.node_epoch,
-                                   rust_creates_enabled=self.create_handoff is not None)
+                                   rust_creates_enabled=self.create_handoff is not None,
+                                   rust_execs_enabled=getattr(self.manager, "exec_fence", None) is not None,
+                                   exec_sessions=self.exec_manager)
             digest = hashlib.sha256(json.dumps(config, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
             cached = type(self)._create_config_cache = dict(config, config_sha256=digest)
         return cached
@@ -2091,14 +2093,19 @@ def build_direct_node_agent_server(
     heartbeat: HeartbeatSenderConfig | None = None,
     unix_socket: Path | None = None,
     rust_creates: bool = False,
+    rust_execs: bool = False,
 ) -> NodeAgentHTTPServer:
     """Serve a sandbox node with direct runsc and storage-native ownership.
 
     ``rust_creates``: runtime/noded, in front on the node's port, runs creates
     and owns the registry; this agent holds their admission (create_handoff).
+    ``rust_execs``: noded runs execs on running sandboxes; lifecycle
+    transitions fence them through flock files (exec_fence).
     """
     if rust_creates and (unix_socket is None or service.provisioner.registry.is_owner):
         raise ValueError("Rust creates need the agent on its Unix socket and a foreign registry")
+    if rust_execs and unix_socket is None:
+        raise ValueError("Rust execs need the agent on its Unix socket")
     node_control_bearer_token = node_control_bearer_token.strip()
     if not node_control_bearer_token:
         raise ValueError("node control bearer token cannot be empty")
@@ -2120,7 +2127,7 @@ def build_direct_node_agent_server(
             runtime_metrics_provider=host_runtime_metrics,
         )
     service.start()
-    manager = DirectNodeRuntime(service)
+    manager = DirectNodeRuntime(service, rust_execs=rust_execs)
     manager.start()
     exec_manager = ExecSessionManager(manager, telemetry=resolved_telemetry)
     from .environment_manifest import HOST_EROFS_ABI

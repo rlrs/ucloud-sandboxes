@@ -229,6 +229,33 @@ protocols and the create endpoint's contract.
   created by the daemon. Anything else, and any request it cannot parse
   strictly, goes to the agent byte for byte.
 
+## Phase 2a: the agent's half of Rust execs
+
+Behind `sandbox.direct_node_rust_exec` (requires the front door): the agent
+runs with `--rust-execs`, noded with `--rust-exec`. No per-exec request
+reaches the agent; the kernel carries the fence (`ucloud_sandboxes/exec_fence.py`).
+
+- **Files:** per sandbox id, `<runtime_root>/warden-locks/.<id>.transition` (T)
+  and `.<id>.activity` (A), opened `O_RDWR|O_CREAT|O_CLOEXEC|O_NOFOLLOW`, 0600.
+  Every locker checks after locking that the path still names its inode.
+- **Lock order T, then A, everywhere.**
+  - noded's exec: T `LOCK_SH|LOCK_NB` (busy: forward), A `LOCK_SH|LOCK_NB`
+    (busy: forward), release T, keep A until the session is reaped; the running
+    and pause checks come after A.
+  - park, pause, local-wait pause, relay and warm parks, escalation: T
+    `LOCK_EX` (blocking), then A `LOCK_EX|LOCK_NB`; busy is today's
+    `SandboxBusyError`. Delete and wake: T `LOCK_EX` only.
+  - Delete unlinks A, then T, while holding T.
+- **Activity clock:** A's mtime. noded touches it at exec start and
+  completion; the agent's activity marks touch it too. Idle park takes the
+  smaller of the agent's monotonic idle time and the time since A's mtime;
+  resident reclaim's currency check sees a touch.
+- **Configuration:** `GET /internal/v1/creates/config` carries an `exec` object
+  under the same `config_sha256`.
+- **Drain and heartbeats:** noded's execs are not in `active_operations`.
+  Drain readiness stays correct because it requires no records at all, and
+  noded re-reads the drain row before each start.
+
 ## Engineering notes
 
 - **Toolchain:** pin a Rust release and vendor crates. Build reproducibly into

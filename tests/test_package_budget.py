@@ -179,8 +179,9 @@ import unittest
 # +99 phase 0 of the Rust node daemon: the agent on a Unix socket, noded's init and unit.
 # +548 phase 1 of the Rust node daemon, the agent's half: a foreign registry with a revalidated read cache, the create handoff (admit, finish, image materialize, create config) and its flag.
 # +38 the daemon's create review: materialize hands over the resolution, finish knows whether a runtime started, admissions carry the config digest.
+# +260 phase 2a of the Rust node daemon, the agent's half: the exec fence's flock files and activity clock, the exec configuration and its flag.
 # Lower it on deletions (C1.3 is ~8k; the Rust daemon retires the Python agent).
-PACKAGE_LINE_BUDGET = 117_480
+PACKAGE_LINE_BUDGET = 117_740
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

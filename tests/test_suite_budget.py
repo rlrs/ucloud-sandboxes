@@ -118,7 +118,8 @@ from tests.test_package_budget import package_lines
 # +74 the agent's Unix socket, noded's init rendering and bundle validation; +2 notes.
 # +307 the agent's half of Rust creates: foreign index revalidation, admit/finish/rollback/expiry/session, materialize, config, flag rendering; +2 notes.
 # +19 the resolution of config-only siblings, runtime_started and the config digest; +2 notes.
-SUITE_LINE_BUDGET = 100_235
+# +307 the agent's half of Rust execs: cross-process fences, inode replacement, the activity clock, config, flag rendering; +2 notes.
+SUITE_LINE_BUDGET = 100_544
 SUITE = Path(__file__).resolve().parent
 
 

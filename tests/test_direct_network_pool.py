@@ -391,6 +391,23 @@ class NetworkPoolTests(unittest.TestCase):
         self.assertEqual(self.kernel.names(), set())
         self.assertEqual(self.kernel.links, {})
 
+    def test_an_agent_that_is_not_the_pool_owner_never_touches_the_pool(self) -> None:
+        # --rust-creates: runtime/noded owns state["pool"] and its pairs.
+        setup = self.manager(0)
+        setup._ensure_kernel_lease(setup._pool_lease(1))
+        self.write_state(leases={}, pool=[1])
+        manager = self.kernel.install(DirectNetworkManager(
+            self.root / "network-slots.json", namespace_root=self.root / "netns",
+            pool_size=0, pool_owner=False))
+        self.managers.append(manager)
+        manager.start_pool()
+        self.assertIsNone(manager._pool_thread)
+        lease = manager.ensure("a", 1)
+        self.assertEqual(lease.slot, 2)
+        self.assertEqual(self.state()["pool"], [1])
+        self.assertIn("ucloud-pool-1", self.kernel.names())
+        self.assertFalse((self.root / "network-slots.json.lock.pool").exists())
+
     def test_one_process_owns_the_pool(self) -> None:
         owner, other = self.manager(2), self.manager(2)
         owner.start_pool()

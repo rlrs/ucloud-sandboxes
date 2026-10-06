@@ -177,6 +177,7 @@ class DirectNetworkManager:
         ip_batch_runner: Callable[[Sequence[str], str], None] | None = None,
         resolve_interval_seconds: float = DEFAULT_EGRESS_RESOLVE_INTERVAL_SECONDS,
         pool_size: int = 0,
+        pool_owner: bool = True,
     ) -> None:
         if not state_path.is_absolute() or not namespace_root.is_absolute():
             raise ValueError("direct network paths must be absolute")
@@ -187,6 +188,9 @@ class DirectNetworkManager:
         self.state_path = state_path
         self.lock_path = state_path.with_suffix(state_path.suffix + ".lock")
         self.pool_size = pool_size
+        # False while runtime/noded creates (--rust-creates): the daemon owns
+        # state["pool"] and its pairs, and this process never touches either.
+        self.pool_owner = pool_owner
         # Only slots this process configured while owning the pool are handed
         # out; other durable pool slots are rechecked first.
         self._pool_ready: set[int] = set()
@@ -333,6 +337,8 @@ class DirectNetworkManager:
 
     def start_pool(self) -> None:
         """Start the low-priority refill, or the trim of a disabled pool."""
+        if not self.pool_owner:
+            return
         if self._pool_thread is not None and self._pool_thread.is_alive():
             return
         if self.pool_size == 0:

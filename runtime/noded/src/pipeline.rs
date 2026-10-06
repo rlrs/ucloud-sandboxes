@@ -46,6 +46,10 @@ pub struct CreateConfig {
     pub journal_root: PathBuf,
     pub network: String,
     pub network_mtu: u32,
+    /// Pre-created direct-egress pairs the daemon keeps; absent from agents
+    /// older than the daemon's pool (then `network::DEFAULT_POOL_SIZE`).
+    #[serde(default)]
+    pub network_pool_size: Option<usize>,
     pub direct_network_allow_tcp: Vec<AllowTcp>,
     pub dns_named_egress: bool,
     pub relays_configured: bool,

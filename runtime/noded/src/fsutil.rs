@@ -84,6 +84,16 @@ fn temp_name(dir: &Path, name: &str) -> PathBuf {
 /// Python's `_save_unlocked`: a private temp file in the same directory (0600),
 /// write, fsync, rename over `path`, fsync the directory; the temp file never survives.
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    replace_file(path, bytes, true)
+}
+
+/// `atomic_write` without the directory fsync: after an OS crash `path` holds
+/// this content or the previous, each complete.
+pub fn atomic_write_unsynced_directory(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    replace_file(path, bytes, false)
+}
+
+fn replace_file(path: &Path, bytes: &[u8], sync_directory: bool) -> io::Result<()> {
     let dir = path.parent().ok_or_else(|| io::Error::other("path has no parent"))?;
     let name = path.file_name().and_then(|n| n.to_str()).ok_or_else(|| io::Error::other("invalid file name"))?;
     let temp = temp_name(dir, name);
@@ -99,7 +109,7 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> io::Result<()> {
         file.sync_all()?;
         drop(file);
         std::fs::rename(&temp, path)?;
-        fsync_dir(dir)
+        if sync_directory { fsync_dir(dir) } else { Ok(()) }
     })();
     let _ = std::fs::remove_file(&temp);
     result

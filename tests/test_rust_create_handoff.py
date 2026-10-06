@@ -277,7 +277,7 @@ class CreateHandoffTests(unittest.TestCase):
             "state_root": str(self.root), "image_cache_root": str(self.root / "cache"),
             "volume_mount_root": str(self.root / "quota"), "storage_native_socket": "/run/storage.sock",
             "runsc": "/opt/runsc", "bundle_root": str(self.root / "bundles"), "network": "none",
-            "network_mtu": 1420, "direct_network_allow_tcp": [], "dns_named_egress": False,
+            "network_mtu": 1420, "network_pool_size": 32, "direct_network_allow_tcp": [], "dns_named_egress": False,
             "relays_configured": False, "split_memory_backing": False, "application_memory_root": None,
             "workspace_initial_grant_mb": 0, "demonstrated_memory": False, "environment": None,
             "runtime_compatibility_sha256": self.provisioner.runtime_compatibility_sha256,

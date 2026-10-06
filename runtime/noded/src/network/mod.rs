@@ -1,22 +1,33 @@
 //! Direct-egress network leases, as ucloud_sandboxes/direct_network.py's
 //! `DirectNetworkManager.ensure` does them for a create: the same slot state
-//! file and flocks (shared with the Python agent), the same names, addresses
-//! and `ip`/`iptables` commands. Relay egress policies, DNS-named egress
-//! endpoints and the pre-created pool stay with Python in phase 1: a create
-//! that needs them is forwarded to the agent.
+//! file and flocks (shared with the Python agent), the same names and
+//! addresses and the same `iptables` host rules. The netns and veth pair are
+//! made over rtnetlink ([`kernel`]), with IPv6 off on both ends, and a
+//! background pool keeps pairs ready ([`pool`]). Relay egress policies and
+//! DNS-named egress endpoints stay with Python: a create that needs them is
+//! forwarded to the agent.
+
+pub mod kernel;
+pub mod netlink;
+mod pool;
+#[cfg(test)]
+mod tests;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::fsutil::{FileLock, atomic_write};
+use crate::fsutil::{FileLock, atomic_write, atomic_write_unsynced_directory};
 use crate::storage::canonical_json;
+
+pub use kernel::{Kernel, NetlinkKernel, interface_present};
+pub use pool::DEFAULT_POOL_SIZE;
 
 pub const STATE_VERSION: u64 = 1;
 pub const MAX_SLOTS: u32 = 32767;
@@ -25,7 +36,6 @@ pub const CIDR: &str = "100.96.0.0/16";
 const RELAY_FORWARD_MARK: &str = "0x1000000/0x1000000";
 const DENIED_DESTINATIONS: [&str; 6] =
     ["10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"];
-const ONE_QUEUE: [&str; 4] = ["numtxqueues", "1", "numrxqueues", "1"];
 
 #[derive(Debug)]
 pub enum NetworkError {
@@ -105,12 +115,52 @@ pub struct NetworkManager {
     relays_configured: bool,
     /// The last host-rule reconciliation's start; creates received before it share it.
     host_rules: Mutex<Option<Instant>>,
+    kernel: Arc<dyn Kernel>,
+    pool: pool::Pool,
 }
 
 impl NetworkManager {
+    /// A manager with no pool (`with_pool_size` sets one) over the real kernel.
     pub fn new(state_path: PathBuf, namespace_root: PathBuf, egress: Vec<TcpEgress>, relays_configured: bool) -> Self {
+        let kernel = Arc::new(NetlinkKernel::new(namespace_root.clone()));
+        Self::with_kernel(state_path, namespace_root, egress, relays_configured, kernel)
+    }
+
+    pub fn with_kernel(
+        state_path: PathBuf,
+        namespace_root: PathBuf,
+        egress: Vec<TcpEgress>,
+        relays_configured: bool,
+        kernel: Arc<dyn Kernel>,
+    ) -> Self {
         let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
-        NetworkManager { state_path, lock_path, namespace_root, egress, relays_configured, host_rules: Mutex::new(None) }
+        NetworkManager {
+            state_path,
+            lock_path,
+            namespace_root,
+            egress,
+            relays_configured,
+            host_rules: Mutex::new(None),
+            kernel,
+            pool: pool::Pool::new(0),
+        }
+    }
+
+    /// Keep `size` configured pairs ready once `start_pool` runs (Python's
+    /// `pool_size`, 0..=1024).
+    pub fn with_pool_size(mut self, size: usize) -> Result<Self, NetworkError> {
+        if size > pool::MAX_POOL_SIZE {
+            return Err(fail(format!("direct network pool size must be in 0..={}", pool::MAX_POOL_SIZE)));
+        }
+        self.pool = pool::Pool::new(size);
+        Ok(self)
+    }
+
+    /// Tests and benches only: as if host rules were reconciled after every
+    /// request, so none touches this machine's firewall.
+    #[doc(hidden)]
+    pub fn assume_host_rules_current(&self) {
+        *self.host_rules.lock().expect("not poisoned") = Some(Instant::now() + std::time::Duration::from_secs(86400 * 365));
     }
 
     pub fn lease(&self, sandbox_id: &str, generation: u64, slot: u32) -> Result<Lease, NetworkError> {
@@ -130,6 +180,23 @@ impl NetworkManager {
             host_ip: Ipv4Addr::from(host),
             guest_ip: Ipv4Addr::from(host + 1),
         })
+    }
+
+    /// Python `_pool_lease`: the slot's addresses and interface, in namespace
+    /// `ucloud-pool-<slot>`.
+    pub fn pool_lease(&self, slot: u32) -> Lease {
+        let name = format!("ucloud-pool-{slot}");
+        let host = u32::from(Ipv4Addr::new(100, 96, 0, 0)) + slot * 2;
+        Lease {
+            sandbox_id: String::new(),
+            sandbox_generation: 0,
+            slot,
+            namespace_path: self.namespace_root.join(&name),
+            namespace: name,
+            host_interface: format!("us{slot}h"),
+            host_ip: Ipv4Addr::from(host),
+            guest_ip: Ipv4Addr::from(host + 1),
+        }
     }
 
     fn lease_lock_path(&self, key: &str) -> PathBuf {
@@ -189,48 +256,70 @@ impl NetworkManager {
     }
 
     /// Python `_write_durably`: sort_keys, compact, ensure_ascii, then "\n".
-    fn store(&self, state: &Map<String, Value>) -> Result<(), NetworkError> {
+    /// Pool-only writes skip the directory fsync, as Python's do: after an OS
+    /// crash the name holds a complete later write or the last synced one,
+    /// with the same leases and policies, and pooled pairs died with the
+    /// kernel (the pool rechecks them).
+    fn store(&self, state: &Map<String, Value>, pool_only: bool) -> Result<(), NetworkError> {
         let mut bytes = canonical_json(&Value::Object(state.clone()));
         bytes.push(b'\n');
         if let Some(parent) = self.state_path.parent() {
             use std::os::unix::fs::DirBuilderExt;
             std::fs::DirBuilder::new().recursive(true).mode(0o700).create(parent)?;
         }
-        Ok(atomic_write(&self.state_path, &bytes)?)
+        if pool_only {
+            Ok(atomic_write_unsynced_directory(&self.state_path, &bytes)?)
+        } else {
+            Ok(atomic_write(&self.state_path, &bytes)?)
+        }
     }
 
     /// Allocate (or reuse) this incarnation's direct-egress lease and make its
-    /// netns and veth pair. Blocking: call from a blocking thread.
+    /// netns and veth pair, from the pool when it has one ready. Blocking:
+    /// call from a blocking thread.
     pub fn ensure_direct(&self, sandbox_id: &str, generation: u64) -> Result<Lease, NetworkError> {
         let requested_at = Instant::now();
         let key = key(sandbox_id, generation)?;
         let _incarnation = Self::locked(&self.lease_lock_path(&key))?;
-        let lease = {
+        let _foreground = self.pool.foreground();
+        let (lease, pooled) = {
             let _state_lock = Self::locked(&self.lock_path)?;
             let mut state = self.load()?;
             let leases = state["leases"].as_object().cloned().unwrap_or_default();
             if state.get("policies").and_then(|p| p.get(&key)).is_some() {
                 return Err(fail("network policy is immutable for a sandbox generation"));
             }
-            let slot = match leases.get(&key).and_then(Value::as_u64) {
-                Some(slot) => slot as u32,
+            let (slot, pooled) = match leases.get(&key).and_then(Value::as_u64) {
+                Some(slot) => (slot as u32, false),
                 None => {
-                    let mut used: BTreeSet<u64> = leases.values().filter_map(Value::as_u64).collect();
-                    used.extend(state["pool"].as_array().into_iter().flatten().filter_map(Value::as_u64));
-                    let slot = (1..=MAX_SLOTS as u64).find(|slot| !used.contains(slot))
-                        .ok_or_else(|| fail("direct network slot capacity is exhausted"))?;
+                    let pooled = self.pool.claim(&mut state);
+                    let slot = match pooled {
+                        Some(slot) => slot,
+                        None => {
+                            let mut used: BTreeSet<u64> = leases.values().filter_map(Value::as_u64).collect();
+                            used.extend(pool_slots(&state));
+                            (1..=MAX_SLOTS).find(|slot| !used.contains(&u64::from(*slot)))
+                                .ok_or_else(|| fail("direct network slot capacity is exhausted"))?
+                        }
+                    };
+                    // One durable write moves a pooled slot to this lease.
                     let mut leases = leases;
                     leases.insert(key.clone(), json!(slot));
                     state.insert("leases".into(), Value::Object(leases));
-                    self.store(&state)?;
-                    slot as u32
+                    self.store(&state, false)?;
+                    (slot, pooled.is_some())
                 }
             };
             let lease = self.lease(sandbox_id, generation, slot)?;
             self.ensure_host_rules_since(requested_at)?;
-            lease
+            (lease, pooled)
         };
-        self.ensure_kernel_lease(&lease)?;
+        // A pair the pool configured needs only its name; any other lease,
+        // and a hand-off a crash interrupted, is checked and repaired.
+        let adopted = self.adopt_pooled(&lease);
+        if !(pooled && adopted && self.kernel.interface_present(&lease.host_interface)) {
+            self.ensure_kernel_lease(&lease)?;
+        }
         Ok(lease)
     }
 
@@ -320,10 +409,12 @@ impl NetworkManager {
         Ok(())
     }
 
+    /// Python `_ensure_kernel_lease`: keep a complete pair (configuration is
+    /// idempotent), else remove any part and create it afresh.
     fn ensure_kernel_lease(&self, lease: &Lease) -> Result<(), NetworkError> {
         let namespace_exists = lease.namespace_path.exists();
-        let interface_exists = interface_present(&lease.host_interface);
-        if namespace_exists && interface_exists && self.configure_kernel_lease(lease).is_ok() {
+        let interface_exists = self.kernel.interface_present(&lease.host_interface);
+        if namespace_exists && interface_exists && self.kernel.configure_pair(lease).is_ok() {
             // runsc consumes the external netns wiring at checkpoint; a partial
             // pair fails configuration and is recreated below.
             return Ok(());
@@ -331,46 +422,73 @@ impl NetworkManager {
         if namespace_exists || interface_exists {
             self.cleanup_kernel_lease(lease);
         }
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            std::fs::DirBuilder::new().recursive(true).mode(0o755).create(&self.namespace_root)?;
-        }
-        let created = (|| {
-            run(&["ip", "netns", "add", &lease.namespace])?;
-            run(&[&["ip", "link", "add", &lease.host_interface][..], &ONE_QUEUE[..], &["type", "veth", "peer", "name", "eth0"][..],
-                  &ONE_QUEUE[..], &["netns", &lease.namespace][..]].concat())?;
-            self.configure_kernel_lease(lease)
-        })();
+        let created = self.kernel.create_pair(lease);
         if created.is_err() {
             self.cleanup_kernel_lease(lease);
         }
         created
     }
 
-    fn configure_kernel_lease(&self, lease: &Lease) -> Result<(), NetworkError> {
-        ip_batch(&["ip", "-batch", "-"], &format!(
-            "link set dev {iface} mtu {MTU} up\naddress replace {host}/31 dev {iface}\n",
-            iface = lease.host_interface, host = lease.host_ip))?;
-        ip_batch(&["ip", "-n", &lease.namespace, "-batch", "-"], &format!(
-            "link set lo up\nlink set dev eth0 mtu {MTU} up\naddress replace {guest}/31 dev eth0\nroute replace default via {host} dev eth0\n",
-            guest = lease.guest_ip, host = lease.host_ip))
+    /// Python `_cleanup_kernel_lease`, best effort.
+    fn cleanup_kernel_lease(&self, lease: &Lease) {
+        // The link first: dropping a namespace frees its veth asynchronously,
+        // which could race a recreation of this name.
+        if let Err(error) = self.kernel.delete_link(&lease.host_interface) {
+            eprintln!("ucloud-noded: {error}");
+        }
+        if let Err(error) = self.kernel.detach_namespace(&lease.namespace_path) {
+            eprintln!("ucloud-noded: cannot delete namespace {}: {error}", lease.namespace);
+        }
+        let pooled = self.pool_lease(lease.slot).namespace_path;
+        if pooled != lease.namespace_path && pooled.exists() {
+            // Left by a crash after this lease took the slot from the pool.
+            if let Err(error) = self.kernel.detach_namespace(&pooled) {
+                eprintln!("ucloud-noded: cannot delete namespace {}: {error}", pooled.display());
+            }
+        }
     }
 
-    fn cleanup_kernel_lease(&self, lease: &Lease) {
-        // The link first: dropping a namespace frees its veth asynchronously.
-        best_effort(&["ip", "link", "delete", &lease.host_interface]);
-        best_effort(&["ip", "netns", "delete", &lease.namespace]);
+    /// Python `_adopt_pooled`: name the slot's pooled namespace for `lease`,
+    /// then drop the pool's name. The pool's name is dropped only once the
+    /// namespace has another, so cleanup still deletes the link before the
+    /// namespace. Whether this call attached it.
+    fn adopt_pooled(&self, lease: &Lease) -> bool {
+        let source = self.pool_lease(lease.slot).namespace_path;
+        if !source.exists() {
+            return false;
+        }
+        let adopted = !lease.namespace_path.exists();
+        if adopted {
+            if let Err(error) = self.kernel.attach_namespace(&source, &lease.namespace_path) {
+                eprintln!("ucloud-noded: cannot attach pooled namespace {}: {error}", source.display());
+                return false;
+            }
+        } else if !same_file(&source, &lease.namespace_path) {
+            return false;
+        }
+        if let Err(error) = self.kernel.detach_namespace(&source) {
+            eprintln!("ucloud-noded: cannot drop pooled name {}: {error}", source.display());
+        }
+        adopted
     }
+}
+
+fn same_file(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (std::fs::metadata(a), std::fs::metadata(b)) {
+        (Ok(a), Ok(b)) => (a.dev(), a.ino()) == (b.dev(), b.ino()),
+        _ => false,
+    }
+}
+
+/// The durable pool's slots (validated by `load`).
+fn pool_slots(state: &Map<String, Value>) -> Vec<u64> {
+    state.get("pool").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_u64).collect()
 }
 
 fn tcp_egress_rule(address: &str, port: u16) -> Vec<String> {
     ["-s", CIDR, "-d", &format!("{address}/32"), "-p", "tcp", "--dport", &port.to_string(), "-j", "ACCEPT"]
         .iter().map(|s| s.to_string()).collect()
-}
-
-/// Python tests presence with sysfs, never if_nametoindex (which modprobes).
-pub fn interface_present(name: &str) -> bool {
-    !name.contains('/') && std::fs::symlink_metadata(format!("/sys/class/net/{name}")).is_ok()
 }
 
 fn run(argv: &[&str]) -> Result<(), NetworkError> {
@@ -381,17 +499,6 @@ fn run(argv: &[&str]) -> Result<(), NetworkError> {
         let detail = if stderr.trim().is_empty() { stdout.trim().to_string() } else { stderr.trim().to_string() };
         return Err(fail(format!("direct network command failed ({}): {}: {detail}",
                                 output.status.code().unwrap_or(-1), argv.join(" "))));
-    }
-    Ok(())
-}
-
-fn ip_batch(argv: &[&str], commands: &str) -> Result<(), NetworkError> {
-    use std::io::Write;
-    let mut child = Command::new(argv[0]).args(&argv[1..]).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
-    child.stdin.take().expect("piped").write_all(commands.as_bytes())?;
-    let output = child.wait_with_output()?;
-    if !output.status.success() {
-        return Err(fail(format!("ip batch failed: {}", String::from_utf8_lossy(&output.stderr).trim())));
     }
     Ok(())
 }
@@ -467,63 +574,4 @@ pub fn parse_iptables_save(text: &str) -> Option<BTreeSet<Vec<String>>> {
         }
     }
     if table.is_some() { None } else { Some(rules) }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn manager(root: &Path) -> NetworkManager {
-        NetworkManager::new(root.join("network-slots.json"), root.join("netns"), vec![], true)
-    }
-
-    #[test]
-    fn names_and_addresses_match_python() {
-        let m = manager(Path::new("/tmp/x"));
-        let lease = m.lease("sb-1", 1, 1).unwrap();
-        assert_eq!((lease.host_ip.to_string(), lease.guest_ip.to_string()), ("100.96.0.2".into(), "100.96.0.3".into()));
-        assert_eq!(lease.namespace, "ucloud-3019d619ced61cc29ced");
-        assert_eq!(lease.host_interface, "us1h");
-        let last = m.lease("sb", 1, MAX_SLOTS).unwrap();
-        assert_eq!((last.host_ip.to_string(), last.guest_ip.to_string()), ("100.96.255.254".into(), "100.96.255.255".into()));
-        assert!(m.lease("sb", 1, 0).is_err());
-    }
-
-    #[test]
-    fn state_round_trips_in_python_format() {
-        let root = std::env::temp_dir().join(format!("noded-net-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
-        let m = manager(&root);
-        // Python wrote this: a leased slot in the pool is dropped on load; policies are kept.
-        std::fs::write(root.join("network-slots.json"),
-            "{\"leases\":{\"a\\u00001\":3},\"policies\":{},\"pool\":[3,5],\"version\":1}\n").unwrap();
-        let mut state = m.load().unwrap();
-        assert_eq!(state["pool"], json!([5]));
-        state["leases"].as_object_mut().unwrap().insert("b\u{0}2".into(), json!(1));
-        m.store(&state).unwrap();
-        assert_eq!(std::fs::read_to_string(root.join("network-slots.json")).unwrap(),
-                   "{\"leases\":{\"a\\u00001\":3,\"b\\u00002\":1},\"policies\":{},\"pool\":[5],\"version\":1}\n");
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn iptables_save_keys_match_install_checks() {
-        let saved = "*filter\n:INPUT ACCEPT [0:0]\n-A INPUT -s 100.96.0.0/16 -j DROP\n\
-            -A FORWARD -s 100.96.0.0/16 -d 10.36.101.16/32 -p tcp -m tcp --dport 8092 -j ACCEPT\nCOMMIT\n\
-            *nat\n-A POSTROUTING -s 100.96.0.0/16 -j MASQUERADE\nCOMMIT\n";
-        let rules = parse_iptables_save(saved).unwrap();
-        assert!(rules.contains(&rule_key(&["iptables", "-C", "INPUT", "-s", CIDR, "-j", "DROP"])));
-        let egress = tcp_egress_rule("10.36.101.16", 8092);
-        let check: Vec<&str> = ["iptables", "-C", "FORWARD"].into_iter().chain(egress.iter().map(String::as_str)).collect();
-        assert!(rules.contains(&rule_key(&check)));
-        assert!(rules.contains(&rule_key(&["iptables", "-t", "nat", "-C", "POSTROUTING", "-s", CIDR, "-j", "MASQUERADE"])));
-        assert!(parse_iptables_save("*filter\n-A INPUT -j DROP\n").is_none());
-    }
-
-    #[test]
-    fn egress_endpoints_are_literal_ipv4_only() {
-        assert_eq!(TcpEgress::parse("10.36.101.16:8092"), Some(TcpEgress { address: Ipv4Addr::new(10, 36, 101, 16), port: 8092 }));
-        assert_eq!(TcpEgress::parse("relay.example:8092"), None);
-    }
 }

@@ -183,9 +183,10 @@ def build_direct_runtime_service(
             allowed_tcp_egress=network_allow_tcp,
             network_relays=network_relays,
             # Pooled pairs are usable only by the process that configured
-            # them; while noded creates, this pool only trims what an earlier
-            # agent left and stops.
+            # them. While noded creates it owns the pool (its size comes from
+            # create_config), and this agent never touches state["pool"].
             pool_size=0 if rust_creates else NETWORK_POOL_SIZE,
+            pool_owner=not rust_creates,
         )
         if network == "sandbox"
         else None

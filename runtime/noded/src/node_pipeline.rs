@@ -15,7 +15,7 @@ use crate::create::{Admitted, CreateError, Pipeline};
 use crate::guest;
 use crate::image::{EnvironmentBackendClient, ImageError, ImageLease, ImageStore, MountProbe};
 use crate::memory_backing::{ActiveMode, MemoryBackingConfig, MemoryBackingError, MemoryBackingRef, MemoryBackingStore, XfsMemoryQuota};
-use crate::network::{NetworkError, NetworkManager, TcpEgress};
+use crate::network::{self, NetworkError, NetworkManager, TcpEgress};
 use crate::oci::{self, NetworkMode, OciBuilder, OciError};
 use crate::pause::{PauseConfig, PauseTier};
 use crate::pipeline::{CreateConfig, spec_supported};
@@ -103,7 +103,7 @@ fn unavailable(message: impl Into<String>) -> CreateError {
     CreateError::Unavailable(message.into())
 }
 
-/// Run blocking work (SQLite, flocks, netlink-by-command) off the reactor.
+/// Run blocking work (SQLite, flocks, netlink) off the reactor.
 async fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, CreateError> + Send + 'static,
 ) -> Result<T, CreateError> {
@@ -176,12 +176,16 @@ impl NodePipeline {
                             .map_err(|_| format!("egress address {} is not IPv4", allowed.ip))
                     })
                     .collect::<Result<Vec<_>, String>>()?;
-                Some(Arc::new(NetworkManager::new(
+                let pool_size = config.network_pool_size.unwrap_or(network::DEFAULT_POOL_SIZE);
+                let manager = NetworkManager::new(
                     config.state_root.join("network-slots.json"),
                     PathBuf::from("/run/netns"),
                     egress,
                     config.relays_configured,
-                )))
+                )
+                .with_pool_size(pool_size)
+                .map_err(|error| format!("network: {error}"))?;
+                Some(Arc::new(manager))
             }
         };
         let images = ImageStore::new(
@@ -226,6 +230,13 @@ impl NodePipeline {
                 settings,
             })
         });
+        // Last, once nothing can fail: a failed open is retried, and a pool
+        // left running would hold the ownership flock against the next one.
+        // Under --rust-creates the daemon owns the pool; the agent leaves
+        // state["pool"] alone.
+        if let Some(network) = &network {
+            network.start_pool();
+        }
         Ok(NodePipeline {
             pause,
             pause_runtime,
@@ -254,10 +265,13 @@ impl NodePipeline {
         &self.warden
     }
 
-    /// Stop the daemon's loops (the pause tier) before the process exits.
+    /// Stop the daemon's loops (the pause tier, the network pool) before the process exits.
     pub async fn shutdown(&self) {
         if let Some(runtime) = &self.pause_runtime {
             runtime.stop().await;
+        }
+        if let Some(network) = self.network.clone() {
+            let _ = tokio::task::spawn_blocking(move || network.stop_pool()).await;
         }
     }
 

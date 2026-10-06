@@ -220,7 +220,7 @@ def create_config(service: Any, *, node_epoch: str, rust_creates_enabled: bool,
     ucloud_sandboxes/exec_fence.py; ``exec_sessions`` is the ExecSessionManager.
     ``pause`` is phase 3a's (pause_handoff.pause_config).
     """
-    from .direct_network import NETWORK_MTU
+    from .direct_network import NETWORK_MTU, NETWORK_POOL_SIZE
     from .environment_manifest import HOST_EROFS_ABI
     from .pause_handoff import pause_config
     from .resource_admission import PHYSICAL_MEMORY_FLOOR_MB
@@ -255,6 +255,8 @@ def create_config(service: Any, *, node_epoch: str, rust_creates_enabled: bool,
         "journal_root": str(config.journal_root),
         "network": config.network,
         "network_mtu": NETWORK_MTU,
+        # The daemon's pre-created pair pool (it owns the pool under --rust-creates).
+        "network_pool_size": NETWORK_POOL_SIZE,
         "direct_network_allow_tcp": [{"ip": item.address, "port": item.port}
                                      for item in allowed if not item.is_dynamic],
         "dns_named_egress": any(item.is_dynamic for item in allowed),

@@ -16,6 +16,7 @@ import weakref
 from types import MappingProxyType
 from typing import Any, Iterator, Mapping
 
+from . import phase_timings
 from .direct_warden import DirectSandbox
 from .sandbox import (
     NodeDrainState,
@@ -1948,8 +1949,15 @@ class DirectSandboxRegistry:
         elif self._owner_lock:
             with self._readable():
                 self._check_file()  # Its syscalls release the GIL: not under the turn.
-            with self._writer_turn, self._owner_transaction(write=True, durable=durable) as connection:
-                yield connection
+            # Waiting for the one writer and committing are timed apart: a
+            # create's registry time is one or the other, not SQL work.
+            with phase_timings.phase("registry_turn"):
+                self._writer_turn.acquire()
+            try:
+                with self._owner_transaction(write=True, durable=durable) as connection:
+                    yield connection
+            finally:
+                self._writer_turn.release()
         else:
             with self._borrow() as entry, self._writer_turn:
                 with self._validated(entry, write=True, durable=durable):
@@ -1967,7 +1975,8 @@ class DirectSandboxRegistry:
             connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
             try:
                 yield self._checked_stamp(entry)
-                connection.commit()
+                with phase_timings.phase("registry_sync"):
+                    connection.commit()
             except BaseException:
                 # Roll back before the next in-process writer may BEGIN.
                 connection.rollback()

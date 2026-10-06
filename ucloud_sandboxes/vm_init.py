@@ -2180,8 +2180,8 @@ def _validate_pause_tier(options: VmInitOptions) -> None:
         raise ValueError("Rust node creates require the node front door.")
     if options.direct_node_rust_create and not options.node_control_bearer_token_file:
         raise ValueError("Rust node creates require a node control bearer token file.")
-    if options.direct_node_rust_exec and not options.direct_node_front_door:
-        raise ValueError("Rust node execs require the node front door.")
+    if options.direct_node_rust_exec and not (options.direct_node_front_door and options.direct_node_rust_create):
+        raise ValueError("Rust node execs require the node front door and Rust node creates.")
     if options.direct_node_rust_exec and not options.node_control_bearer_token_file:
         raise ValueError("Rust node execs require a node control bearer token file.")
     if options.direct_node_rust_pause and not (options.direct_pause_tier and options.direct_node_rust_exec):

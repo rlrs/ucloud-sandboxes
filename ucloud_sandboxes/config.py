@@ -424,8 +424,10 @@ class SandboxPoolConfig:
             raise ValueError("sandbox.direct_node_rust_create requires sandbox.direct_node_front_door")
         if not isinstance(result.direct_node_rust_exec, bool):
             raise ValueError("sandbox.direct_node_rust_exec must be a boolean")
-        if result.direct_node_rust_exec and not result.direct_node_front_door:
-            raise ValueError("sandbox.direct_node_rust_exec requires sandbox.direct_node_front_door")
+        if result.direct_node_rust_exec and not (result.direct_node_front_door and result.direct_node_rust_create):
+            # noded serves execs from the node state its create pipeline owns.
+            raise ValueError("sandbox.direct_node_rust_exec requires sandbox.direct_node_front_door "
+                             "and sandbox.direct_node_rust_create")
         if not isinstance(result.direct_node_rust_pause, bool):
             raise ValueError("sandbox.direct_node_rust_pause must be a boolean")
         if result.direct_node_rust_pause and not (result.direct_pause_tier and result.direct_node_rust_exec):

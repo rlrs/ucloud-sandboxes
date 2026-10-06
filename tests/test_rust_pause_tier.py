@@ -430,7 +430,8 @@ class RustPauseFlagTests(unittest.TestCase):
     def test_the_flag_requires_the_pause_tier_and_rust_execs_and_renders_both_sides(self) -> None:
         raw = DeploymentConfig.default(scope_id="project-1").to_dict()
         self.assertFalse(DeploymentConfig.from_dict(raw).sandbox.direct_node_rust_pause)
-        execs = {**raw["sandbox"], "direct_node_front_door": True, "direct_node_rust_exec": True}
+        execs = {**raw["sandbox"], "direct_node_front_door": True, "direct_node_rust_create": True,
+                 "direct_node_rust_exec": True}
         for sandbox in ({**raw["sandbox"], "direct_node_rust_pause": True},
                         {**execs, "direct_node_rust_pause": True}):
             with self.assertRaisesRegex(ValueError, "direct_node_rust_pause requires"):
@@ -438,7 +439,8 @@ class RustPauseFlagTests(unittest.TestCase):
         enabled = {**execs, "direct_pause_tier": True, "swap_gb": 8, "direct_node_rust_pause": True}
         self.assertTrue(DeploymentConfig.from_dict({**raw, "sandbox": enabled}).sandbox.direct_node_rust_pause)
         options = vm_init_fixtures.VmInitTests._options(
-            direct_node_front_door=True, direct_node_rust_exec=True, direct_pause_tier=True, swap_gb=8,
+            direct_node_front_door=True, direct_node_rust_create=True, direct_node_rust_exec=True,
+            direct_pause_tier=True, swap_gb=8,
             direct_node_rust_pause=True)
         self.assertTrue(vm_init_options_to_dict(options)["directNodeRustPause"])
         script = render_vm_init_script(options)

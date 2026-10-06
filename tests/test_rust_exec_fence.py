@@ -278,17 +278,19 @@ class RustExecFlagTests(unittest.TestCase):
         self.assertFalse(DeploymentConfig.from_dict(raw).sandbox.direct_node_rust_exec)
         with self.assertRaisesRegex(ValueError, "direct_node_rust_exec requires"):
             DeploymentConfig.from_dict({**raw, "sandbox": {**raw["sandbox"], "direct_node_rust_exec": True}})
-        enabled = {**raw["sandbox"], "direct_node_front_door": True, "direct_node_rust_exec": True}
+        exec_only = {**raw["sandbox"], "direct_node_front_door": True, "direct_node_rust_exec": True}
+        with self.assertRaisesRegex(ValueError, "direct_node_rust_exec requires"):
+            DeploymentConfig.from_dict({**raw, "sandbox": exec_only})
+        enabled = {**exec_only, "direct_node_rust_create": True}
         self.assertTrue(DeploymentConfig.from_dict({**raw, "sandbox": enabled}).sandbox.direct_node_rust_exec)
-        options = vm_init_fixtures.VmInitTests._options(direct_node_front_door=True, direct_node_rust_exec=True)
+        options = vm_init_fixtures.VmInitTests._options(
+            direct_node_front_door=True, direct_node_rust_create=True, direct_node_rust_exec=True)
         self.assertTrue(vm_init_options_to_dict(options)["directNodeRustExec"])
         token = options.node_control_bearer_token_file
-        script = render_vm_init_script(options)
-        self.assertIn("--unix-socket /run/ucloud-sandboxes/node-agent/agent.sock --rust-execs", script)
-        self.assertIn(f"--upstream-unix /run/ucloud-sandboxes/node-agent/agent.sock --rust-exec"
-                      f" --node-control-token-file {token}\n", script)
-        both = render_vm_init_script(vm_init_fixtures.VmInitTests._options(
-            direct_node_front_door=True, direct_node_rust_create=True, direct_node_rust_exec=True))
+        with self.assertRaisesRegex(ValueError, "require the node front door and Rust node creates"):
+            render_vm_init_script(vm_init_fixtures.VmInitTests._options(
+                direct_node_front_door=True, direct_node_rust_exec=True))
+        both = render_vm_init_script(options)
         self.assertIn("--registry-foreign --rust-creates --rust-execs", both)
         self.assertIn(f"--rust-create --rust-exec --node-control-token-file {token}\n", both)
         front_door_only = render_vm_init_script(vm_init_fixtures.VmInitTests._options(direct_node_front_door=True))

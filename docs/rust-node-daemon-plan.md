@@ -1,7 +1,11 @@
 # A Rust node daemon (design for review)
 
-Status (2026-10-06): phase 0 is in production (0.9.43). Phase 1 is being
-built in `runtime/noded` behind `sandbox.direct_node_rust_create` (off).
+Status (2026-10-06):
+- **Phase 0:** in production (0.9.43).
+- **Phase 1 (creates):** built and canaried. 0.9.45 carries the canary's fixes and rehearses it.
+- **Phase 2a (execs on running sandboxes):** built, shipping in 0.9.45.
+- **Phase 3:** specified. The pause tier and local waits move together as 3a.
+
 Decided: Rust, and the daemon owns the node registry.
 
 ## Why now
@@ -204,30 +208,36 @@ protocols and the create endpoint's contract.
 
 ### Phase 1 progress
 
-- **Done in the crate:**
-  - the storage-daemon client;
-  - lifecycle journals;
-  - runsc runner and sentry identity;
-  - direct-egress network leases;
-  - Python-exact JSON and the spec fingerprint;
-  - the warden's create and fenced runtime delete;
-  - the memory-backing allocator;
-  - the create front, with the admit and finish handoff to the agent.
-- **In progress:**
-  - the registry port;
-  - image resolve (warm path), the OCI config, the rootfs and guest files;
-  - the agent side: foreign registry, the internal create endpoints, and
-    `GET /internal/v1/creates/config`.
-- **How the daemon gets its configuration.** It does not parse the node's
-  flags. It asks the agent for the effective create configuration, so the
-  agent stays the single source of truth for flags and assembly checks. It
-  forwards every create to the agent until:
-  - the configuration has arrived;
-  - the node is one it serves: the agent runs with `--rust-creates`, there are
-    no DNS-named egress endpoints, and the environment image store is in use.
-- **Per request:** only direct egress and the shell management helper are
-  created by the daemon. Anything else, and any request it cannot parse
-  strictly, goes to the agent byte for byte.
+- **Built:** the registry port (owner, index, group commit, cross-language
+  tests both ways); the storage-daemon client; lifecycle journals; runsc and
+  sentry identity; direct-egress leases; Python-exact JSON and the spec
+  fingerprint; the warden's create and fenced delete; the memory-backing
+  allocator; the warm image lease; the OCI config, overlay rootfs and guest
+  files; the create pipeline (`node_pipeline.rs`, resumable from every phase);
+  the create front with the agent's admit and finish.
+- **Configuration.** The daemon does not parse the node's flags. It asks the
+  agent for the effective create configuration (`GET
+  /internal/v1/creates/config`, with a digest that every admission echoes).
+  It forwards every create until that arrives and the node is one it serves.
+  A changed digest sends creates back to the agent.
+- **Per request.** The daemon creates only direct egress with the shell
+  management helper, from specs it reads exactly as Python does (fingerprint
+  checked). Anything else goes to the agent byte for byte.
+- **What the 0.9.44 canary found:**
+  1. The storage daemon's volume record is flat, and the daemon read it as
+     nested. Every create failed this check with an ambiguous 503, and the
+     gateway cleaned up.
+  2. A static musl link resolved `libc::getrandom`, a weak import, to address 0.
+     The first overlay prepare crashed the daemon (SIGSEGV; a core dump read
+     against the same commit's debug build).
+  - Fixes: the raw syscall, and `build_pinned.sh` now refuses a binary in
+    which any libc function the source calls is not linked. That check found
+    a second call in the exec manager.
+- **The fast loop for live bugs.** Hot-swap a pinned binary onto a running
+  worker and run a 64-task smoke rollout. The fixed binary: 60/64 (the 4
+  failures are images without Python), ready p50 3.7 s and p95 5.4 s,
+  `runtime_create` p50 205 ms, `storage_prepare` 291 ms, `network_ensure`
+  33 ms, `registry_commit` 8 ms.
 
 ## Phase 2a: the agent's half of Rust execs
 
@@ -255,6 +265,42 @@ reaches the agent; the kernel carries the fence (`ucloud_sandboxes/exec_fence.py
 - **Drain and heartbeats:** noded's execs are not in `active_operations`.
   Drain readiness stays correct because it requires no records at all, and
   noded re-reads the drain row before each start.
+
+### Phase 2a: the daemon's half
+
+- **`src/exec/`:** Python's session semantics, ported and checked against Python
+  goldens (sequencing, acks, backpressure, UTF-8 decoding, eviction).
+- **`src/exec_front.rs`:** the per-request decision.
+  - **Starts the exec itself when:**
+    - the sandbox is owned;
+    - the drain row is open;
+    - the fence is free;
+    - the journal says RUNNING with live authority, and its sentry is the
+      process it names;
+    - there is no pause marker;
+    - the memory floor holds.
+  - **The warden flock** spans the spawn, and the marker is re-checked under it.
+  - **Everything else goes to the agent.**
+- `--rust-exec` needs `--rust-create`, which owns the node state.
+
+### Phase 3: the pause tier and local waits move together
+
+The phase-3 spec showed that local model waits pause and thaw through the
+pause tier, and they cause almost every production pause, because relay agents
+are managed sandboxes.
+
+**Order, without a split-brain pause tier:**
+1. **3a:** the whole pause tier, thaw-on-exec (the planned 2b is folded in),
+   idle pause, reclaim, the escalation decision and local waits. These are
+   separate PRs under one flag.
+2. **3b:** resident sampling.
+3. **3c:** one admission function (C5.3), with growth.
+
+**Cross-process mechanisms**, kernel-native, as in phase 2a:
+- a flock on the pause marker means "thaw in progress";
+- markers stay the truth;
+- small atomic status files feed the heartbeat;
+- Rust calls Python only for rare commands, such as escalating to a park.
 
 ## Engineering notes
 

@@ -165,7 +165,8 @@ impl NflogSocket {
     }
 
     fn set_timeout(&self, timeout: Duration) -> io::Result<()> {
-        let value = libc::timeval { tv_sec: timeout.as_secs() as libc::time_t, tv_usec: timeout.subsec_micros() as libc::suseconds_t };
+        // `as _`: musl deprecates naming time_t and suseconds_t.
+        let value = libc::timeval { tv_sec: timeout.as_secs() as _, tv_usec: timeout.subsec_micros() as _ };
         self.set_option(libc::SO_RCVTIMEO, &value)
     }
 

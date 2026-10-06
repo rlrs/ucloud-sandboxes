@@ -16,6 +16,7 @@ pub mod fsutil;
 pub mod journal;
 pub mod memory_backing;
 pub mod network;
+pub mod node_pipeline;
 pub mod pipeline;
 pub mod pyjson;
 pub mod registry;
@@ -198,8 +199,10 @@ pub fn start_creates(upstream: &std::path::Path, token: &str) -> Result<Arc<crea
     let session: String = nonce.iter().map(|byte| format!("{byte:02x}")).collect();
     let agent = Arc::new(agent_rpc::AgentClient::new(upstream.to_path_buf(), token, &session).map_err(|e| e.to_string())?);
     let pipeline = pipeline::LazyPipeline::new();
-    tokio::spawn(pipeline.clone().load(agent.clone(), |_config| {
-        Err("the Rust create pipeline is not assembled yet".to_string())
+    let pipeline_agent = agent.clone();
+    tokio::spawn(pipeline.clone().load(agent.clone(), move |config| {
+        let pipeline = node_pipeline::NodePipeline::open(config, pipeline_agent)?;
+        Ok(Arc::new(pipeline) as Arc<dyn create::Pipeline>)
     }));
     Ok(Arc::new(create::CreateFront::new(agent, pipeline, token)))
 }

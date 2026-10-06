@@ -179,11 +179,16 @@ pub struct NetlinkKernel {
     namespace_root: PathBuf,
     /// Whether this process has made the namespace root a shared mount point.
     root_shared: Mutex<bool>,
+    /// Pairs are created one at a time. Concurrent namespace and veth
+    /// creation contends in the kernel worse than it queues: 32 cold creates
+    /// at once took p50 80-100 ms each, against 28 ms one at a time (1.3 ms
+    /// per pair alone).
+    create_turn: Mutex<()>,
 }
 
 impl NetlinkKernel {
     pub fn new(namespace_root: PathBuf) -> NetlinkKernel {
-        NetlinkKernel { namespace_root, root_shared: Mutex::new(false) }
+        NetlinkKernel { namespace_root, root_shared: Mutex::new(false), create_turn: Mutex::new(()) }
     }
 
     fn prepare_root(&self) -> io::Result<()> {
@@ -225,6 +230,7 @@ impl NetlinkKernel {
 
 impl Kernel for NetlinkKernel {
     fn create_pair(&self, lease: &Lease) -> Result<(), NetworkError> {
+        let _turn = self.create_turn.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         self.prepare_root().map_err(|error| fail(format!("direct network namespace root: {error}")))?;
         // Interfaces registered in the new namespace inherit its default, so
         // eth0 never has IPv6; lo, already there, keeps ::1.

@@ -18,7 +18,7 @@ libc = "0.2"
 http-body-util = "0.1.5"
 hyper = { version = "1.11", features = ["client", "http1", "server"] }
 hyper-util = { version = "0.1.21", features = ["http1", "server", "server-graceful", "tokio"] }
-tokio = { version = "1.53", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { version = "1.53", features = ["io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 
 [dev-dependencies]
 tokio = { version = "1.53", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }

@@ -61,7 +61,7 @@ class LinuxVolumeReadaheadTests(unittest.TestCase):
                 probe.assert_called_once()
                 self.assertEqual(probe.call_args.args[0], ("mkfs.xfs", "-l", "help"))
                 for call, device in zip(run.call_args_list, ("/dev/ublkb17", "/dev/ublkb18")):
-                    self.assertEqual(call.args, ("mkfs.xfs", "-f", "-m", "reflink=1", "-n", "ftype=1", *expected, device))
+                    self.assertEqual(call.args, ("mkfs.xfs", "-f", "-K", "-m", "reflink=1", "-n", "ftype=1", *expected, device))
 
     def test_reused_and_restored_mounts_configure_readahead_before_opening_files(self):
         host = LinuxStorageHostOperations()

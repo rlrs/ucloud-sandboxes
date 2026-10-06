@@ -67,7 +67,7 @@ def workload(root, seconds):
                 payload_sha256=hashlib.sha256(payload).hexdigest())
 
 
-def qualify(root, *, label, log_mb, seconds, size_gib, log_concurrency=None, sector_size=4096):
+def qualify(root, *, label, log_mb, seconds, size_gib, log_concurrency=None, sector_size=4096, no_discard=False):
     raw = tempfile.mkdtemp(prefix=f'{label}-', dir=root)
     trial = Path(raw)
     image = trial / 'workspace.img'
@@ -81,7 +81,7 @@ def qualify(root, *, label, log_mb, seconds, size_gib, log_concurrency=None, sec
         stat = Path('/sys/class/block') / Path(loop).name / 'stat'
         before = list(map(int, stat.read_text().split()))
         started = time.monotonic()
-        args = ['mkfs.xfs', '-f', '-m', 'reflink=1', '-n', 'ftype=1']
+        args = ['mkfs.xfs', '-f', *(('-K',) if no_discard else ()), '-m', 'reflink=1', '-n', 'ftype=1']
         if log_mb is not None:
             args += ['-l', f'size={log_mb}m']
         elif log_concurrency is not None:
@@ -129,6 +129,7 @@ def main():
     parser.add_argument('--size-gib', type=int, default=4)
     parser.add_argument('--host-concurrency', type=int, default=32)
     parser.add_argument('--sector-size', type=int, choices=(512, 4096), default=4096)
+    parser.add_argument('--no-discard', action='store_true', help='also run the production mode with mkfs -K')
     args = parser.parse_args()
     if os.geteuid() != 0 or not 1 <= args.seconds <= 60 or not 1 <= args.size_gib <= 64:
         parser.error('requires root, duration 1..60 seconds and size 1..64 GiB')
@@ -136,12 +137,15 @@ def main():
     print(json.dumps(dict(kernel=command('uname', '-r').strip(),
                           mkfs=command('mkfs.xfs', '-V').strip(),
                           cpu=cpu_evidence())), flush=True)
-    modes = [('host', None, args.host_concurrency), ('filesystem', None, 0),
-             ('log128m', 128, None)]
-    for label, log_mb, concurrency in [*modes, *reversed(modes)]:
+    modes = [('host', None, args.host_concurrency, False), ('filesystem', None, 0, False),
+             ('log128m', 128, None, False)]
+    if args.no_discard:
+        modes.append(('filesystem-K', None, 0, True))
+    for label, log_mb, concurrency, no_discard in [*modes, *reversed(modes)]:
         print(json.dumps(qualify(args.root, label=label, log_mb=log_mb,
                                 seconds=args.seconds, size_gib=args.size_gib,
-                                log_concurrency=concurrency, sector_size=args.sector_size)), flush=True)
+                                log_concurrency=concurrency, sector_size=args.sector_size,
+                                no_discard=no_discard)), flush=True)
 
 
 if __name__ == '__main__':

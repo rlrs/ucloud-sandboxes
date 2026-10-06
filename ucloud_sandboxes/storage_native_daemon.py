@@ -600,9 +600,14 @@ class LinuxStorageHostOperations:
     def format_xfs(self, device: Path, *, size_bytes: int | None = None) -> None:
         # A grant smaller than the device bounds the blocks XFS can ever
         # write, and therefore the overlaybd upper, until it is grown online.
+        # -K: no whole-device discard. Every format lands on a fresh upper,
+        # which already reads as zeros, and the discard was a round trip
+        # through ublk for the whole virtual size (format was 80% of
+        # PrepareVolume, mean 350 ms, in the 2026-10-06 rehearsal).
         self._run(
             "mkfs.xfs",
             "-f",
+            "-K",
             "-m",
             "reflink=1",
             "-n",

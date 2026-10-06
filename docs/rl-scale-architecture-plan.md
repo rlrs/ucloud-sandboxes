@@ -1978,10 +1978,18 @@ on 32 sandboxes at once.
 - **The M2 gap is create throughput.** Two warm workers make about 20 creates/s, so 609 of 1,024 are ready at 30 s.
   - A startup slot holds for about 3.8 s (mean): memory-admission waits 1.0 s, registry commits 0.74 s, runsc 0.77 s, storage prepare 0.5 s.
   - The node agent's GIL is now about half busy. The largest remaining GIL holder is `posix_spawn` (15%).
+- **Then (0.9.38–0.9.41):**
+  - managed creates are no longer double-charged their memory bound;
+  - local-wait bookkeeping commits in batches;
+  - the node registry uses group commit: the writer queue had been waiting out fsync spikes of up to 565 ms;
+  - udev leaves nbd and ublk devices alone.
+
+  Warm ready is now 24/51–56/55–61 s, and relay overhead p95 is 0.2–0.3 s.
+- **The remaining M2 gap is per-worker create throughput, about 10/s.** 64 startup slots measured no faster, because every in-slot phase grew in proportion while CPU stayed near 50%. The serialization sits below the agent: network namespace and veth setup under one networking lock, mounts, and ublk and nbd device creation.
 - **Next:**
-  1. Startup slots per node: 32 → 64 (a config bound, measured next).
-  2. The registry writer turn: a Python lock held across GIL-releasing SQLite calls. Under CPU contention each transaction waits for the GIL once per statement, about 8 times. Group commit or C4.4's journal-only SQLite would remove that.
-  3. Spawning outside the agent's GIL: runsc pause, resume and create, and `ip`.
+  1. Trace one worker's kernel-side create path under load (rtnl, mount and ublk contention), e.g. with off-CPU stacks.
+  2. Prepare network namespaces and volumes ahead of demand. The network pool and the storage daemon's device pool already exist, but are sized for steady state, not a 500-sandbox step.
+  3. M2's 30 s for 1,024 assumed more than two workers. On two, about 20 creates/s gives ~600 ready at 30 s and all by about 60 s.
 
 ## Appendix: evidence index
 

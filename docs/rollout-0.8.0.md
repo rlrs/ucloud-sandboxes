@@ -745,3 +745,4 @@ benchmark client running out of descriptors under `systemd-run`'s default limit 
   - runtime: 0.8 s;
   - registry: 0.5 s;
   - network: 0.4 s.
+- **64 startup slots on 0.9.41, now that the registry no longer convoys: no faster.** Warm ready was 26/56/59 s with 583 ready at 30 s. Every in-slot phase grew in proportion: runtime 1.4 s, storage 1.3 s, network 0.9 s, registry 0.8 s. A worker therefore tops out near 10 creates/s whatever the concurrency, at about 50% CPU. That points below the agent, at kernel-serialized setup (network namespaces and veths under one networking lock, mounts, block devices). Slots are back at 32.

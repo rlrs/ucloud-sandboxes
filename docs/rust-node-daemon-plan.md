@@ -144,6 +144,62 @@ every transition.
 - **Effect:** this is where most of the invariants live, so it goes last, on
   the most tested contract.
 
+## Phase 1 boundaries (decided 2026-10-06, from the porting specs)
+
+**Phase 0 is in production** (0.9.43, `sandbox.direct_node_front_door`). It
+ran a cold 1,024-rollout rehearsal with no failures it caused. The specs for
+phase 1 cover the registry, the create pipeline, the node's external
+protocols and the create endpoint's contract.
+
+- **Registry: the daemon owns it.**
+  - The daemon takes the `.owner` flock and keeps the in-memory index and
+    group commit.
+  - The Python agent keeps working as a *foreign* process on the same file:
+    - its remaining writes (delete, park, wake, migration, commit) use
+      SQLite's cross-process locking, which the registry already supports;
+    - its reads come from a cached index revalidated by activity revision and
+      `data_version`, so an exec does not rescan the table.
+  - Every row the daemon writes must re-encode byte-identically under
+    Python's codec: sorted keys, ASCII escapes, Python float repr, Python's
+    default-dropping rules. Cross-language tests pin this in both directions.
+- **Admission, drain and lifecycle locks: Python stays the single owner.**
+  - Today the in-flight create ledger, memory admission, drain readiness,
+    heartbeat accounting and the per-sandbox lifecycle lock live in the
+    agent's process. Two owners would let creates and wakes spend the same
+    memory, or a drain report ready mid-create.
+  - The daemon asks the agent over its Unix socket:
+    - **admit:** the startup slot, active capacity, transition demand and
+      lifecycle lock, held under a token;
+    - **finish:** release, mark activity and return the sandbox record and
+      epochs, so the response, `activity_epoch` and heartbeats stay exactly
+      Python's.
+  - These are two small requests per create. All the I/O happens between
+    them, in Rust.
+- **Network.**
+  - The daemon creates direct-egress leases under the same flocks and state
+    file.
+  - Relay egress policies and DNS-named egress endpoints stay in Python.
+  - The Python network pool is not started while the daemon creates, because
+    pooled pairs are usable only by the process that made them. The pool
+    moves to Rust next.
+- **The daemon creates only what it fully supports.** Any other create
+  request is forwarded to the agent unchanged, so unsupported options stay
+  correct:
+  - relay egress;
+  - DNS-named egress;
+  - an image kind not yet ported;
+  - a migration import.
+- **Rollout:** a second flag, `sandbox.direct_node_rust_create`, which
+  requires the front door. Turning it off returns creates to Python on the
+  next worker.
+- **Bugs the specs found in today's create path.** The port fixes these
+  rather than copying them:
+  - a failed `runsc create` leaks its runtime, because the best-effort delete
+    is skipped;
+  - a runtime without a journal is never `runsc delete`d;
+  - one persistently failing pending create aborts the agent at startup;
+  - a `rootfs_ready` replay after a reboot does not remount the overlay.
+
 ## Engineering notes
 
 - **Toolchain:** pin a Rust release and vendor crates. Build reproducibly into

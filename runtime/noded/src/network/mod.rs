@@ -2,11 +2,13 @@
 //! `DirectNetworkManager.ensure` does them for a create: the same slot state
 //! file and flocks (shared with the Python agent), the same names and
 //! addresses and the same `iptables` host rules. The netns and veth pair are
-//! made over rtnetlink ([`kernel`]), with IPv6 off on both ends, and a
-//! background pool keeps pairs ready ([`pool`]). Relay egress policies and
+//! made over rtnetlink ([`kernel`]), with IPv6 off on both ends, a
+//! background pool keeps pairs ready ([`pool`]), and concurrent creates share
+//! one durable state write ([`allocate`]). Relay egress policies and
 //! DNS-named egress endpoints stay with Python: a create that needs them is
 //! forwarded to the agent.
 
+mod allocate;
 pub mod kernel;
 pub mod netlink;
 mod pool;
@@ -17,6 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -117,6 +120,9 @@ pub struct NetworkManager {
     host_rules: Mutex<Option<Instant>>,
     kernel: Arc<dyn Kernel>,
     pool: pool::Pool,
+    allocator: allocate::Allocator,
+    /// Durable lease writes (each one a group of allocations).
+    lease_writes: AtomicU64,
 }
 
 impl NetworkManager {
@@ -143,6 +149,8 @@ impl NetworkManager {
             host_rules: Mutex::new(None),
             kernel,
             pool: pool::Pool::new(0),
+            allocator: allocate::Allocator::default(),
+            lease_writes: AtomicU64::new(0),
         }
     }
 
@@ -275,45 +283,15 @@ impl NetworkManager {
     }
 
     /// Allocate (or reuse) this incarnation's direct-egress lease and make its
-    /// netns and veth pair, from the pool when it has one ready. Blocking:
-    /// call from a blocking thread.
+    /// netns and veth pair, from the pool when it has one ready. Allocations
+    /// queued together share one durable write ([`allocate`]). Blocking: call
+    /// from a blocking thread.
     pub fn ensure_direct(&self, sandbox_id: &str, generation: u64) -> Result<Lease, NetworkError> {
         let requested_at = Instant::now();
         let key = key(sandbox_id, generation)?;
         let _incarnation = Self::locked(&self.lease_lock_path(&key))?;
         let _foreground = self.pool.foreground();
-        let (lease, pooled) = {
-            let _state_lock = Self::locked(&self.lock_path)?;
-            let mut state = self.load()?;
-            let leases = state["leases"].as_object().cloned().unwrap_or_default();
-            if state.get("policies").and_then(|p| p.get(&key)).is_some() {
-                return Err(fail("network policy is immutable for a sandbox generation"));
-            }
-            let (slot, pooled) = match leases.get(&key).and_then(Value::as_u64) {
-                Some(slot) => (slot as u32, false),
-                None => {
-                    let pooled = self.pool.claim(&mut state);
-                    let slot = match pooled {
-                        Some(slot) => slot,
-                        None => {
-                            let mut used: BTreeSet<u64> = leases.values().filter_map(Value::as_u64).collect();
-                            used.extend(pool_slots(&state));
-                            (1..=MAX_SLOTS).find(|slot| !used.contains(&u64::from(*slot)))
-                                .ok_or_else(|| fail("direct network slot capacity is exhausted"))?
-                        }
-                    };
-                    // One durable write moves a pooled slot to this lease.
-                    let mut leases = leases;
-                    leases.insert(key.clone(), json!(slot));
-                    state.insert("leases".into(), Value::Object(leases));
-                    self.store(&state, false)?;
-                    (slot, pooled.is_some())
-                }
-            };
-            let lease = self.lease(sandbox_id, generation, slot)?;
-            self.ensure_host_rules_since(requested_at)?;
-            (lease, pooled)
-        };
+        let (lease, pooled) = self.allocate(key, sandbox_id, generation, requested_at)?;
         // A pair the pool configured needs only its name; any other lease,
         // and a hand-off a crash interrupted, is checked and repaired.
         let adopted = self.adopt_pooled(&lease);

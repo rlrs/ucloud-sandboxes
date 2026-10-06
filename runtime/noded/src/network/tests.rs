@@ -4,6 +4,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 use super::*;
+use crate::fsutil::FileLock;
 
 fn manager(root: &Path) -> NetworkManager {
     NetworkManager::new(root.join("network-slots.json"), root.join("netns"), vec![], true)
@@ -549,6 +550,49 @@ fn the_refill_waits_for_ensures_in_flight() {
         pending.join().unwrap();
     });
     wait_for("one ready pair", || manager.pool_ready().len() == 1);
+}
+
+#[test]
+fn queued_creates_share_one_durable_write_and_fail_alone() {
+    let test = PoolTest::new("group");
+    let state = json!({"version": 1, "leases": {"bad\u{0}1": 9}, "policies": {"bad\u{0}1": {"egress": "relay", "relay": "r"}}, "pool": []});
+    std::fs::write(test.root.join("network-slots.json"), state.to_string()).unwrap();
+    let manager = test.manager(0);
+    // Another process (the agent) holds the state flock while creates queue.
+    let held = FileLock::acquire(&test.root.join("network-slots.json.lock"), false).unwrap();
+    let outcomes: Vec<Result<Lease, NetworkError>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = ["a", "b", "bad", "c", "d"]
+            .into_iter()
+            .map(|id| {
+                let manager = manager.clone();
+                scope.spawn(move || manager.ensure_direct(id, 1))
+            })
+            .collect();
+        wait_for("five queued allocations", || manager.allocator.pending() == 5);
+        drop(held);
+        handles.into_iter().map(|handle| handle.join().unwrap()).collect()
+    });
+    assert_eq!(manager.lease_writes.load(std::sync::atomic::Ordering::Relaxed), 1);
+    let mut slots = BTreeSet::new();
+    for (id, outcome) in ["a", "b", "bad", "c", "d"].into_iter().zip(&outcomes) {
+        match (id, outcome) {
+            ("bad", Err(error)) => assert_eq!(error.to_string(), "network policy is immutable for a sandbox generation"),
+            (_, Ok(lease)) => {
+                test.assert_pair_owned(lease);
+                slots.insert(lease.slot);
+            }
+            (id, outcome) => panic!("{id}: {outcome:?}"),
+        }
+    }
+    assert_eq!(slots, BTreeSet::from([1, 2, 3, 4]));
+    let leases = test.state()["leases"].clone();
+    assert_eq!(leases.as_object().unwrap().len(), 5);
+    // Existing leases are found without a write.
+    for id in ["a", "b"] {
+        manager.ensure_direct(id, 1).unwrap();
+    }
+    assert_eq!(manager.lease_writes.load(std::sync::atomic::Ordering::Relaxed), 1);
+    assert_eq!(test.state()["leases"], leases);
 }
 
 #[test]

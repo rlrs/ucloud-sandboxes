@@ -407,21 +407,8 @@ impl NodePipeline {
         let virtual_size = (if split { disk_mb } else { requested_mb }) as u64 * MIB as u64;
         let granted = claim.map(|claim| claim.workspace_mb as u64 * MIB as u64).filter(|granted| *granted < virtual_size);
         let record = self.storage.prepare_volume(&owner, &registration.operation_id, virtual_size, granted, Map::new()).await?;
-        let mount_path = self.config.volume_mount_root.join(&volume_id);
-        let owned = record.get("owner").is_some_and(|recorded| {
-            recorded.get("volume_id").and_then(Value::as_str) == Some(volume_id.as_str())
-                && recorded.get("sandbox_id").and_then(Value::as_str) == Some(id.as_str())
-                && recorded.get("sandbox_generation").and_then(Value::as_u64) == Some(generation as u64)
-        });
-        let accounting_id = record.get("accounting_id").and_then(Value::as_i64).unwrap_or(0);
-        if !owned
-            || record.get("virtual_size").and_then(Value::as_u64) != Some(virtual_size)
-            || record.get("mount_path").and_then(Value::as_str) != mount_path.to_str()
-            || accounting_id <= 0
-        {
-            return Err(unavailable("storage-native volume record does not match its workspace"));
-        }
-        Ok(Quota { project_id: accounting_id, total_mb: requested_mb, path: mount_path.display().to_string() })
+        let owner = (volume_id.as_str(), id.as_str(), generation as u64);
+        workspace_quota(&record, owner, virtual_size, &self.config.volume_mount_root, requested_mb)
     }
 
     /// S5 and S9 to S13: guest files, the runtime, then `owned`.
@@ -514,6 +501,33 @@ impl NodePipeline {
     }
 }
 
+/// `_require_storage_record`: the daemon's record (StorageVolumeRecord.to_json,
+/// flat) must be this workspace's, at its size and mount path, with a project.
+fn workspace_quota(
+    record: &Map<String, Value>,
+    (volume_id, sandbox_id, generation): (&str, &str, u64),
+    virtual_size: u64,
+    mount_root: &std::path::Path,
+    total_mb: i64,
+) -> Result<Quota, CreateError> {
+    let text = |name: &str| record.get(name).and_then(Value::as_str);
+    let owned = text("volume_id") == Some(volume_id)
+        && text("sandbox_id") == Some(sandbox_id)
+        && record.get("sandbox_generation").and_then(Value::as_u64) == Some(generation);
+    if !owned || record.get("virtual_size").and_then(Value::as_u64) != Some(virtual_size) {
+        return Err(unavailable("storage-native volume belongs to another quota owner"));
+    }
+    let expected = mount_root.join(volume_id);
+    if text("mount_path").map(std::path::Path::new) != Some(expected.as_path()) {
+        return Err(unavailable("storage-native service returned an unexpected mount path"));
+    }
+    let accounting_id = record.get("accounting_id").and_then(Value::as_i64).unwrap_or(0);
+    if accounting_id <= 0 {
+        return Err(unavailable("storage-native service returned an invalid accounting ID"));
+    }
+    Ok(Quota { project_id: accounting_id, total_mb, path: expected.display().to_string() })
+}
+
 /// Whether the RAM root is mounted `noswap` (the pause tier mounts it swappable).
 fn tmpfs_noswap(root: Option<&std::path::Path>) -> bool {
     let Some(root) = root else { return true };
@@ -539,5 +553,31 @@ impl Pipeline for NodePipeline {
 
     fn supports(&self, spec: &Map<String, Value>) -> bool {
         spec_supported(spec)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// StorageVolumeRecord(...).to_json() from the repo's Python.
+    const RECORD: &str = r#"{"accounting_id": 1234, "cached_layer_paths": [], "device_id": null, "device_owner_id": "o", "device_path": "", "error": "", "granted_size": 536870912, "local_layer_bytes": 0, "mount_path": "/var/lib/ucloud-sandboxes/storage-native/mounts/workspace-box.sandbox-1", "operation_id": "create-1", "published_backend": "", "published_layers": [], "published_manifest_digest": "", "published_repo_blob_url": "", "published_repository": "", "published_tag": "", "revision": 3, "runtime_dir": "/run/x", "runtime_image_config": "", "sandbox_generation": 1, "sandbox_id": "box", "sealed_layer_bytes": 0, "sealed_layer_paths": [], "source_image_config": "/etc/x.json", "state": "mounted", "updated_ns": 0, "virtual_size": 5368709120, "volume_id": "workspace-box.sandbox-1"}"#;
+
+    #[test]
+    fn the_storage_daemons_record_is_checked_like_python() {
+        let record: Map<String, Value> = serde_json::from_str(RECORD).unwrap();
+        let root = std::path::Path::new("/var/lib/ucloud-sandboxes/storage-native/mounts");
+        let owner = ("workspace-box.sandbox-1", "box", 1);
+        let quota = workspace_quota(&record, owner, 5120 * MIB as u64, root, 7232).unwrap();
+        assert_eq!(quota, Quota { project_id: 1234, total_mb: 7232, path: format!("{}/workspace-box.sandbox-1", root.display()) });
+        let message = |result: Result<Quota, CreateError>| match result {
+            Err(CreateError::Unavailable(message)) => message,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(message(workspace_quota(&record, ("workspace-box.sandbox-1", "box", 2), 5120 * MIB as u64, root, 1)),
+                   "storage-native volume belongs to another quota owner");
+        assert_eq!(message(workspace_quota(&record, owner, 1, root, 1)), "storage-native volume belongs to another quota owner");
+        assert_eq!(message(workspace_quota(&record, owner, 5120 * MIB as u64, std::path::Path::new("/elsewhere"), 1)),
+                   "storage-native service returned an unexpected mount path");
     }
 }

@@ -962,9 +962,9 @@ is therefore **≤ 78k lines**, with 70k as a stretch goal.
 
 **C6.3 Stop regrowth mechanically.**
 
-- **Line budget test.** Add `tests/test_package_budget.py`, which fails when
-  `ucloud_sandboxes/` exceeds a checked-in budget. The budget may only go down
-  except in a PR that states why.
+- **Line budget test.** Dropped 2026-10-06: the package and suite budget
+  tests were deleted. Raising them with a note on each change stopped
+  nothing; complexity goes down by retiring mechanisms (C6.2).
 - **PR ledger.** Every PR records lines deleted and added against the C6.2
   ledger.
 - **New mechanisms.** A new mechanism must name the one it retires (this is
@@ -1040,7 +1040,7 @@ is therefore **≤ 78k lines**, with 70k as a stretch goal.
   does not fall while test lines drop.
 
 **C8.5 Test budget.**
-- **Change:** a test-line budget alongside the package budget (C6.3).
+- **Change:** dropped with the package budget (C6.3); coverage, not line counts.
 - **Target:** ≤ 60k test lines with equal or better branch coverage, measured
   by coverage, not by test count.
 

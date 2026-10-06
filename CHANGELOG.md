@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.43 - 2026-10-06 (workers; gateway renders node init)
+
+- **Phase 0 of the Rust node daemon** ([docs/rust-node-daemon-plan.md](docs/rust-node-daemon-plan.md)). `runtime/noded` (`ucloud-noded`, Rust: tokio and hyper) can own the node's TCP port and forward every request to the Python agent, now able to serve on a Unix socket (`--unix-socket`).
+  - One upstream connection per client connection, reused across keep-alive.
+  - Both bodies stream unbuffered.
+  - An unreachable agent is a retryable 503 `node_agent_unavailable`; a failure after the request was written closes the client connection without a response.
+  - The binary is a reproducible static musl build pinned in the sandbox bundle (`runtime/noded`).
+  - Init installs and runs it only with `sandbox.direct_node_front_door` (default off). Nothing changes until it is set.
+
 ## 0.9.42 - 2026-10-06 (workers)
 
 - **Sandbox veths get one queue pair, not one per CPU.** veth allocates a TX and an RX queue per possible CPU by default, and each queue is a sysfs object with its own add and remove uevents. On a 64-vCPU worker, one sandbox's pair produced 280 uevents (create, up, delete), against 31 with `numtxqueues`/`numrxqueues` 1 on both ends. In a 1,024-rollout burst, D-state kernel stacks showed udev workers blocked on the sysfs root's lock (`kernfs_dop_revalidate`) about 3,250 times per worker, against a few dozen for anything else. That lock also serializes every device add on the create path. gVisor's netstack reads eth0 through one packet channel.

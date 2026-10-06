@@ -21,6 +21,7 @@ pub mod local_wait;
 pub mod memory_backing;
 pub mod network;
 pub mod pause;
+pub mod pause_policy;
 pub mod node_pipeline;
 pub mod pipeline;
 pub mod pyjson;

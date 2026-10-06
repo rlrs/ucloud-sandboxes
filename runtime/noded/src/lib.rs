@@ -16,6 +16,8 @@ pub mod network;
 pub mod pyjson;
 pub mod runsc;
 pub mod storage;
+pub mod warden;
+pub mod timings;
 
 use std::future::Future;
 use std::path::PathBuf;

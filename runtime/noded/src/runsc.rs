@@ -174,7 +174,15 @@ fn same_file(a: &Path, b: &Path) -> bool {
     }
 }
 
-/// Where a sandbox's sentry must come from.
+/// Which runsc process of a container: the sentry (`runsc-sandbox ... boot`)
+/// or its gofer (`runsc-gofer ... gofer`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    Sandbox,
+    Gofer,
+}
+
+/// Where a sandbox's runsc processes must come from.
 pub struct SentryOwner<'a> {
     pub proc_root: &'a Path,
     pub runsc: &'a Path,
@@ -186,6 +194,11 @@ pub struct SentryOwner<'a> {
 /// `owned_runtime_process_ticks(role="sandbox")`: the process's command line,
 /// executable and cgroup name this container, bracketed by unchanged ticks.
 pub fn owned_sentry_ticks(owner: &SentryOwner, pid: u32, expected: Option<u64>) -> Result<u64, RunscError> {
+    owned_process_ticks(owner, Role::Sandbox, pid, expected)
+}
+
+/// `owned_runtime_process_ticks(role=...)`.
+pub fn owned_process_ticks(owner: &SentryOwner, role: Role, pid: u32, expected: Option<u64>) -> Result<u64, RunscError> {
     if pid <= 1 {
         return Err(RunscError::Invalid("runtime process PID must be greater than one".into()));
     }
@@ -210,16 +223,23 @@ pub fn owned_sentry_ticks(owner: &SentryOwner, pid: u32, expected: Option<u64>) 
             .map_err(|_| RunscError::Invalid("runtime process command line is invalid".into()))?;
         let runtime_root = owner.runtime_root.to_string_lossy();
         let bundle = owner.bundle.to_string_lossy();
-        if argv[0] != "runsc-sandbox"
+        let (name, command) = match role {
+            Role::Sandbox => ("runsc-sandbox", "boot"),
+            Role::Gofer => ("runsc-gofer", "gofer"),
+        };
+        if argv[0] != name
             || argv.last().map(String::as_str) != Some(owner.container_id)
-            || argv.iter().filter(|arg| *arg == "boot").count() != 1
+            || argv.iter().filter(|arg| *arg == command).count() != 1
             || unique_flag(&argv, "--root") != Some(runtime_root.as_ref())
             || unique_flag(&argv, "--bundle") != Some(bundle.as_ref())
         {
             return Err(RunscError::Invalid("runtime process invocation has another owner".into()));
         }
         let binary = std::fs::canonicalize(owner.runsc)?;
-        let sidecar = binary.parent().map(|dir| dir.join("gvisor-bin").join("gvisor_sentry"));
+        // Only the sentry may run the pinned distribution's packaged sidecar.
+        let sidecar = (role == Role::Sandbox)
+            .then(|| binary.parent().map(|dir| dir.join("gvisor-bin").join("gvisor_sentry")))
+            .flatten();
         let exe = process.join("exe");
         if ![Some(binary), sidecar].into_iter().flatten().any(|candidate| candidate.is_file() && same_file(&exe, &candidate)) {
             return Err(RunscError::Invalid("runtime process executable is not trusted".into()));

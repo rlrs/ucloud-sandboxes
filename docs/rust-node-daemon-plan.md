@@ -1,0 +1,169 @@
+# A Rust node daemon (design for review)
+
+Status: proposal, 2026-10-06. Nothing here is built yet.
+
+## Why now
+
+The 1,024-rollout rehearsals on two 64-vCPU UCloud workers stopped at about
+20 creates/s (10 per worker). Ready time: about 600 sandboxes at 30 s, all by
+55–70 s. M2 asks for 30 s.
+
+Each fix removed one bottleneck, and a create still held its node slot for
+about 3 s:
+- registry group commit (0.9.40);
+- one-queue veths (0.9.42; sysfs contention gone);
+- no double memory charge (0.9.38);
+- forecast cache, no modprobe, faster disk sampler (0.9.37).
+
+**64 slots instead of 32 changed nothing.** Every phase stretched in proportion,
+and CPU stayed near 50%.
+
+**The remaining serialization point is the node agent's GIL.** Measured with
+bpftrace on `PyEval_RestoreThread` in the agent during a warm burst (0.9.42):
+
+| | Agent threads waiting for the GIL (avg) | GIL re-acquisitions/s |
+|---|---|---|
+| Burst (creates) | 10–15 | 15,000–22,000 |
+| After the burst (turns only) | 1.8 | ~19,000 |
+
+- Each re-acquisition waits about 0.7 ms on average.
+- A create re-acquires hundreds of times: each SQLite statement, subprocess
+  wait, socket call and file read. That is the 2–3 s.
+- It also explains why every phase grows as a worker fills. Per-sandbox
+  background work competes for the same GIL: sampling, local-wait ticks,
+  pause/thaw, exec streams.
+- The storage daemon, another Python process, shows negligible GIL wait.
+
+**What the kernel side contributes now:**
+- mount-namespace copies: 20–25 ms each at ~2,500 host mounts, two per runsc
+  create;
+- IPv6 DAD: a little rtnl time;
+- journal fsyncs.
+
+None of these is the bound. The plan's C4.4 gate, node-side create p50 ≤ 150 ms
+at 32 concurrent, is out of reach while one interpreter lock serializes the
+node.
+
+## What moves, and what does not
+
+The node side is about 30k lines of Python:
+
+| Module | Lines |
+|---|---|
+| `node_agent` (HTTP API) | 2.3k |
+| `node_runtime` | 1.5k |
+| `direct_service` | 3.2k |
+| `direct_warden` | 3.2k |
+| `direct_registry` | 2.3k |
+| `hibernation` (lifecycle journal) | 2.4k |
+| `direct_provisioner` | 1.0k |
+| `direct_network` | 1.2k |
+| `memory_backing` | 1.0k |
+| `pause_tier`, `local_wait`, `resident_memory`, `warm_park` | 1.8k |
+| `sandbox_exec` | 0.8k |
+| storage daemon | 4.1k |
+
+Much of it encodes invariants learned the hard way: incarnation fences, crash
+replay between journal phases, capacity accounting, migration ownership. A
+rewrite in one step would re-learn those as production bugs.
+
+**Proposal: strangle the agent.** A Rust daemon (`ucloud-noded`) takes over
+the node's HTTP API first and then whole subsystems, each behind the same
+contract and the existing test suite's scenarios.
+
+**What stays outside the daemon:**
+- **Gateway:** stays Python. It is not the bound.
+- **Storage daemon:** a separate process with its own GIL; not hot today.
+- **runsc and the managed init:** unchanged.
+
+### State ownership is the key decision
+
+The node registry (`direct-registry.sqlite`) has exactly one owner process,
+which takes an exclusive flock and serves reads from its in-memory index. The
+warden's per-sandbox lifecycle journals are written under per-sandbox flocks.
+Whoever runs the create pipeline must own the registry, or call the owner for
+every transition.
+
+**Options:**
+1. **Rust owns the registry from the first create slice (recommended).** The
+   Rust daemon becomes the registry owner. Python's `DirectSandboxRegistry`
+   becomes a thin client over a UDS RPC for writes. Reads come from a snapshot
+   the daemon publishes, or through the same RPC. The schema and file stay
+   identical, so rollback is "start the Python owner again".
+2. **Python keeps the registry; Rust only spawns and does netlink.** This is
+   cheaper, but Python still runs the create's business logic and its
+   re-acquisitions. The measurement says that is where the time goes, so this
+   buys little.
+3. **Rewrite the whole node side at once.** Rejected (see above).
+
+## Phases
+
+**Phase 0: the daemon as the front door (1–2 weeks).**
+- **Change:**
+  - `ucloud-noded` (Rust: tokio and hyper) listens on the node port.
+  - The Python agent moves to a UDS.
+  - The daemon proxies every route unchanged, holds long-polls and exec event
+    streams itself, and sends heartbeats.
+- **Effect:**
+  - HTTP parsing and connection threads leave the GIL; today each request is a
+    Python thread.
+  - The proxy adds one UDS hop.
+- **Gate:**
+  - the full suite passes against the daemon in front;
+  - the relay rehearsal is unchanged or better;
+  - rollback by a unit swap.
+
+**Phase 1: the create pipeline (3–5 weeks).**
+- **Change:** the daemon owns the registry (option 1) and runs create end to end:
+  - plan, quota, rootfs and owned as one journal transition (C5.2);
+  - netns and veth through netlink (`rtnetlink`): one queue pair, IPv6 off on
+    sandbox interfaces, no `ip` processes;
+  - storage prepare over the storage daemon's existing UDS protocol;
+  - the overlay rootfs mount;
+  - `runsc create` and `runsc start` spawned from Rust;
+  - the lifecycle journal's `initialize_running`.
+- **Python keeps:** delete, park, wake, migration and commit. These call
+  registry writes through the daemon.
+- **Gate:**
+  - node-side create p50 ≤ 150 ms and p99 ≤ 400 ms at 32 concurrent (C4.4);
+  - ≥ 40 creates/s per 64-vCPU worker;
+  - the crash-replay and fence tests port as Rust tests and still pass in Python.
+
+**Phase 2: exec, files and managed processes (with C5.1).**
+- **Change:** the daemon terminates exec, stdin and file transfer, ideally
+  talking to the in-guest agent over its UDS. Python leaves the exec data path.
+- **Gate:** C5.1's numbers: exec start p50 ≤ 5 ms, ≥ 1,000 starts/s per node.
+
+**Phase 3: waits and the pause tier.**
+- **Change:** local model waits, pause and thaw, resident sampling and growth
+  admission (C5.3, one admission function) move.
+- **Effect:** these are the per-sandbox loops that grow with density.
+
+**Phase 4: the rest, then delete the Python agent.**
+- **Change:** park, wake, migration, commit, fork and reconcile move.
+- **Effect:** this is where most of the invariants live, so it goes last, on
+  the most tested contract.
+
+## Engineering notes
+
+- **Toolchain:** pin a Rust release and vendor crates. Build reproducibly into
+  the sandbox bundle, as `chunk-serve` (Go) is today. A second native toolchain
+  next to Go is the cost; the gain is no GC pauses on the data path, mature
+  netlink and io_uring crates, and the sharing of state across threads that
+  this daemon needs.
+- **Same files, same formats.** The registry schema, the lifecycle journals,
+  the network slot file and the storage daemon protocol are unchanged until
+  Python no longer reads them. Every phase can roll back by swapping units.
+- **Tests:** the Python suite's node scenarios run against the daemon through
+  the node API. Unit and crash-replay tests are rewritten in Rust per subsystem
+  as it moves.
+- **Kernel follow-ups independent of the language:**
+  - IPv6 off on sandbox veths;
+  - keep sandbox mounts out of the namespace runsc copies (or private), so a
+    create's mount-namespace copy stays O(base mounts).
+
+## Decisions requested
+
+1. Rust (this plan) or Go for the daemon.
+2. Option 1 for state ownership: the daemon owns the node registry from phase 1.
+3. Phase 0 starts now, while the Python fixes stay in production.

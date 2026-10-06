@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.44 - 2026-10-06 (gateway; workers)
+
+- **Phase 1 of the Rust node daemon: creates run in `ucloud-noded`** ([docs/rust-node-daemon-plan.md](docs/rust-node-daemon-plan.md)), behind `sandbox.direct_node_rust_create` (requires the front door).
+  - The daemon owns the node registry (`--registry-foreign` on the agent) and runs the create pipeline end to end: image lease, plan, split memory allocation and workspace volume, direct network, OCI config, overlay rootfs, guest files and init, `runsc create`/`start`, the lifecycle journal, `owned`. Each phase resumes on an exact replay.
+  - Python keeps admission, drain and the lifecycle lock. The daemon asks the agent to admit (validation, startup slot, capacity, lock) and to finish (the record, epochs, post-create bookkeeping) over the agent's socket, so heartbeats, drain and the create response are unchanged.
+  - Anything the daemon does not fully support goes to the agent unchanged: relay egress, the static management helper, DNS-named egress, the legacy image store, specs it reads differently, and every framing or validation edge.
+  - Fixed while porting: a failed `runsc create` now deletes what runsc left, and a runtime without a journal is deleted.
+  - The gateway upgrade turns the flag on.
+
 ## 0.9.43 - 2026-10-06 (workers; gateway renders node init)
 
 - **Phase 0 of the Rust node daemon** ([docs/rust-node-daemon-plan.md](docs/rust-node-daemon-plan.md)). `runtime/noded` (`ucloud-noded`, Rust: tokio and hyper) can own the node's TCP port and forward every request to the Python agent, now able to serve on a Unix socket (`--unix-socket`).

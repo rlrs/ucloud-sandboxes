@@ -13,6 +13,7 @@
 pub mod fsutil;
 pub mod journal;
 pub mod network;
+pub mod pyjson;
 pub mod runsc;
 pub mod storage;
 

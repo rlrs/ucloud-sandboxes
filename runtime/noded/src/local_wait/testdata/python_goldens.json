@@ -1,0 +1,478 @@
+{
+ "configs": [
+  "1c0000000104050001000000000000000000106f0500010001000000",
+  "200000000104050002000000000000000000106f0a0002000000004002000000",
+  "1c0000000104050003000000000000000000106f0800050000000001"
+ ],
+ "group": 4207,
+ "messages": [
+  {
+   "data": "240000000200000001000000000000000000000000000000000000000000000000000000480000000004000000000000000000000200106f07000a00616263002c000900450000320000000040060000646000030a2a00029c401f9c00000001000000015010ffff00000000480000000004000000000000000000000200106f07000a00616263002b0009804500003c00000000400600000a2a0002646000031f9c1f9c00000001000000015010ffff00000000",
+   "packets": [
+    "450000320000000040060000646000030a2a00029c401f9c00000001000000015010ffff00000000",
+    "4500003c00000000400600000a2a0002646000031f9c1f9c00000001000000015010ffff000000"
+   ]
+  },
+  {
+   "data": "050000",
+   "packets": []
+  },
+  {
+   "data": "480000000004000000000000000000000200106f07000a00616263002c000900450000320000000040060000646000030a2a00029c401f9c00000001000000015010ffff0000000003000000",
+   "packets": [
+    "450000320000000040060000646000030a2a00029c401f9c00000001000000015010ffff00000000"
+   ]
+  },
+  {
+   "data": "480000000104000000000000000000000200106f07000a00616263002c000900450000320000000040060000646000030a2a00029c401f9c00000001000000015010ffff00000000480000000004000000000000000000000200106f07000a00616263002b0009804500003c00000000400600000a2a0002646000031f9c1f9c00000001000000015010ffff00000000",
+   "packets": [
+    "4500003c00000000400600000a2a0002646000031f9c1f9c00000001000000015010ffff000000"
+   ]
+  },
+  {
+   "data": "480000000004000000000000000000000200106f07000a00616263002c000900450000320000000040060000646000030a2a00029c401f9c0000000100000001",
+   "packets": []
+  },
+  {
+   "data": "08000000000000000000000000000000480000000004000000000000000000000200106f07000a00616263002c000900450000320000000040060000646000030a2a00029c401f9c00000001000000015010ffff00000000",
+   "packets": []
+  }
+ ],
+ "packets": [
+  {
+   "parsed": [
+    "100.96.0.3",
+    true,
+    300,
+    24,
+    false
+   ],
+   "raw": "450001540000000040060000646000030a2a00029c401f9c00000001000000015018ffff00000000"
+  },
+  {
+   "parsed": [
+    "100.96.0.3",
+    false,
+    1368,
+    16,
+    true
+   ],
+   "raw": "4500058000000000400600000a2a0002646000031f9c9c4000000001000000015010ffff00000000"
+  },
+  {
+   "parsed": [
+    "100.96.0.3",
+    false,
+    0,
+    16,
+    false
+   ],
+   "raw": "4500002800000000400600000a2a0002646000031f9c9c4000000001000000015010ffff00000000"
+  },
+  {
+   "parsed": [
+    "100.96.0.3",
+    false,
+    0,
+    17,
+    true
+   ],
+   "raw": "4500002800000000400600000a2a0002646000031f9c1f9c00000001000000015011ffff00000000"
+  },
+  {
+   "parsed": [
+    "100.96.0.3",
+    false,
+    0,
+    4,
+    true
+   ],
+   "raw": "4500002800000000400600000a2a0002646000031f9c1f9c00000001000000015004ffff00000000"
+  },
+  {
+   "parsed": [
+    "100.96.0.3",
+    false,
+    0,
+    2,
+    false
+   ],
+   "raw": "4500002800000000400600000a2a0002646000031f9c1f9c00000001000000015002ffff00000000"
+  },
+  {
+   "parsed": null,
+   "raw": "4500002800000000400600000a2a00020a2a00099c401f9c00000001000000015010ffff00000000"
+  },
+  {
+   "parsed": [
+    "100.96.0.3",
+    true,
+    7,
+    16,
+    false
+   ],
+   "raw": "4500002f000000004006000064600003646000059c401f9c00000001000000015010ffff00000000"
+  },
+  {
+   "parsed": [
+    "100.96.0.3",
+    true,
+    40,
+    16,
+    false
+   ],
+   "raw": "470000640000000040060000646000030a2a000201010101010101019c401f9c00000001000000018010ffff00000000000000000000000000000000"
+  },
+  {
+   "parsed": [
+    "100.96.0.3",
+    true,
+    0,
+    16,
+    false
+   ],
+   "raw": "450000500000000040060000646000030a2a00029c401f9c0000000100000001f010ffff00000000000000000000000000000000000000000000000000000000"
+  },
+  {
+   "parsed": null,
+   "raw": "60000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+   "parsed": null,
+   "raw": "450000280000000040060000646000030a2a00"
+  },
+  {
+   "parsed": null,
+   "raw": "470000300000000040060000646000030a2a000201010101010101019c401f9c000000010000000150"
+  },
+  {
+   "parsed": [
+    "100.96.0.3",
+    true,
+    0,
+    16,
+    false
+   ],
+   "raw": "470000300000000040060000646000030a2a000201010101010101019c401f9c00000001000000015010"
+  },
+  {
+   "parsed": [
+    "100.96.0.3",
+    true,
+    0,
+    16,
+    false
+   ],
+   "raw": "4500000a0000000040060000646000030a2a00029c401f9c00000001000000015010ffff00000000"
+  },
+  {
+   "parsed": null,
+   "raw": "450000280000000040110000646000030a2a00029c401f9c00000001000000015010ffff00000000"
+  }
+ ],
+ "relay_endpoints": [
+  {
+   "endpoints": [
+    [
+     "10.42.0.2",
+     8092
+    ]
+   ],
+   "relays": [
+    [
+     "10.42.0.2",
+     8092
+    ],
+    [
+     "relay.example.org",
+     443
+    ],
+    [
+     "77.42.92.27",
+     443
+    ]
+   ]
+  },
+  {
+   "endpoints": [
+    [
+     "0.1.2.3",
+     6
+    ],
+    [
+     "10.42.0.10",
+     8092
+    ],
+    [
+     "10.42.0.2",
+     8092
+    ],
+    [
+     "10.42.0.2",
+     8093
+    ],
+    [
+     "127.0.0.1",
+     4
+    ],
+    [
+     "169.254.1.1",
+     5
+    ],
+    [
+     "172.16.0.1",
+     1
+    ],
+    [
+     "192.168.1.5",
+     80
+    ],
+    [
+     "198.18.0.1",
+     7
+    ],
+    [
+     "240.0.0.1",
+     8
+    ],
+    [
+     "255.255.255.255",
+     9
+    ]
+   ],
+   "relays": [
+    [
+     "10.42.0.10",
+     8092
+    ],
+    [
+     "10.42.0.2",
+     8092
+    ],
+    [
+     "10.42.0.2",
+     8093
+    ],
+    [
+     "10.42.0.2",
+     8092
+    ],
+    [
+     "192.168.1.5",
+     80
+    ],
+    [
+     "172.16.0.1",
+     1
+    ],
+    [
+     "172.32.0.1",
+     2
+    ],
+    [
+     "100.64.0.1",
+     3
+    ],
+    [
+     "127.0.0.1",
+     4
+    ],
+    [
+     "169.254.1.1",
+     5
+    ],
+    [
+     "0.1.2.3",
+     6
+    ],
+    [
+     "198.18.0.1",
+     7
+    ],
+    [
+     "240.0.0.1",
+     8
+    ],
+    [
+     "255.255.255.255",
+     9
+    ],
+    [
+     "192.0.0.8",
+     10
+    ],
+    [
+     "192.0.0.9",
+     11
+    ],
+    [
+     "8.8.8.8",
+     12
+    ],
+    [
+     "010.0.0.1",
+     13
+    ],
+    [
+     "10.0.0.256",
+     14
+    ],
+    [
+     "::1",
+     15
+    ],
+    [
+     " 10.0.0.3",
+     16
+    ],
+    [
+     "10.0.0.4 ",
+     17
+    ]
+   ]
+  },
+  {
+   "endpoints": [],
+   "relays": [
+    [
+     "relay.example.org",
+     443
+    ]
+   ]
+  }
+ ],
+ "scripts": [
+  {
+   "endpoints": [
+    [
+     "10.42.0.2",
+     8092
+    ]
+   ],
+   "network": "100.96.0.0/16",
+   "script": "add table inet ucloud_local_wait\nadd chain inet ucloud_local_wait forward { type filter hook forward priority -150; policy accept; }\nflush chain inet ucloud_local_wait forward\nadd rule inet ucloud_local_wait forward ip saddr 100.96.0.0/16 ip daddr 10.42.0.2 tcp dport 8092 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.42.0.2 tcp sport 8092 ip daddr 100.96.0.0/16 log group 4207 snaplen 64 queue-threshold 1\n"
+  },
+  {
+   "endpoints": [
+    [
+     "10.42.0.2",
+     8092
+    ]
+   ],
+   "network": "10.0.0.0/8",
+   "script": "add table inet ucloud_local_wait\nadd chain inet ucloud_local_wait forward { type filter hook forward priority -150; policy accept; }\nflush chain inet ucloud_local_wait forward\nadd rule inet ucloud_local_wait forward ip saddr 10.0.0.0/8 ip daddr 10.42.0.2 tcp dport 8092 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.42.0.2 tcp sport 8092 ip daddr 10.0.0.0/8 log group 4207 snaplen 64 queue-threshold 1\n"
+  },
+  {
+   "endpoints": [
+    [
+     "0.1.2.3",
+     6
+    ],
+    [
+     "10.42.0.10",
+     8092
+    ],
+    [
+     "10.42.0.2",
+     8092
+    ],
+    [
+     "10.42.0.2",
+     8093
+    ],
+    [
+     "127.0.0.1",
+     4
+    ],
+    [
+     "169.254.1.1",
+     5
+    ],
+    [
+     "172.16.0.1",
+     1
+    ],
+    [
+     "192.168.1.5",
+     80
+    ],
+    [
+     "198.18.0.1",
+     7
+    ],
+    [
+     "240.0.0.1",
+     8
+    ],
+    [
+     "255.255.255.255",
+     9
+    ]
+   ],
+   "network": "100.96.0.0/16",
+   "script": "add table inet ucloud_local_wait\nadd chain inet ucloud_local_wait forward { type filter hook forward priority -150; policy accept; }\nflush chain inet ucloud_local_wait forward\nadd rule inet ucloud_local_wait forward ip saddr 100.96.0.0/16 ip daddr 0.1.2.3 tcp dport 6 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 0.1.2.3 tcp sport 6 ip daddr 100.96.0.0/16 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 100.96.0.0/16 ip daddr 10.42.0.10 tcp dport 8092 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.42.0.10 tcp sport 8092 ip daddr 100.96.0.0/16 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 100.96.0.0/16 ip daddr 10.42.0.2 tcp dport 8092 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.42.0.2 tcp sport 8092 ip daddr 100.96.0.0/16 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 100.96.0.0/16 ip daddr 10.42.0.2 tcp dport 8093 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.42.0.2 tcp sport 8093 ip daddr 100.96.0.0/16 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 100.96.0.0/16 ip daddr 127.0.0.1 tcp dport 4 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 127.0.0.1 tcp sport 4 ip daddr 100.96.0.0/16 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 100.96.0.0/16 ip daddr 169.254.1.1 tcp dport 5 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 169.254.1.1 tcp sport 5 ip daddr 100.96.0.0/16 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 100.96.0.0/16 ip daddr 172.16.0.1 tcp dport 1 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 172.16.0.1 tcp sport 1 ip daddr 100.96.0.0/16 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 100.96.0.0/16 ip daddr 192.168.1.5 tcp dport 80 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 192.168.1.5 tcp sport 80 ip daddr 100.96.0.0/16 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 100.96.0.0/16 ip daddr 198.18.0.1 tcp dport 7 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 198.18.0.1 tcp sport 7 ip daddr 100.96.0.0/16 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 100.96.0.0/16 ip daddr 240.0.0.1 tcp dport 8 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 240.0.0.1 tcp sport 8 ip daddr 100.96.0.0/16 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 100.96.0.0/16 ip daddr 255.255.255.255 tcp dport 9 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 255.255.255.255 tcp sport 9 ip daddr 100.96.0.0/16 log group 4207 snaplen 64 queue-threshold 1\n"
+  },
+  {
+   "endpoints": [
+    [
+     "0.1.2.3",
+     6
+    ],
+    [
+     "10.42.0.10",
+     8092
+    ],
+    [
+     "10.42.0.2",
+     8092
+    ],
+    [
+     "10.42.0.2",
+     8093
+    ],
+    [
+     "127.0.0.1",
+     4
+    ],
+    [
+     "169.254.1.1",
+     5
+    ],
+    [
+     "172.16.0.1",
+     1
+    ],
+    [
+     "192.168.1.5",
+     80
+    ],
+    [
+     "198.18.0.1",
+     7
+    ],
+    [
+     "240.0.0.1",
+     8
+    ],
+    [
+     "255.255.255.255",
+     9
+    ]
+   ],
+   "network": "10.0.0.0/8",
+   "script": "add table inet ucloud_local_wait\nadd chain inet ucloud_local_wait forward { type filter hook forward priority -150; policy accept; }\nflush chain inet ucloud_local_wait forward\nadd rule inet ucloud_local_wait forward ip saddr 10.0.0.0/8 ip daddr 0.1.2.3 tcp dport 6 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 0.1.2.3 tcp sport 6 ip daddr 10.0.0.0/8 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.0.0.0/8 ip daddr 10.42.0.10 tcp dport 8092 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.42.0.10 tcp sport 8092 ip daddr 10.0.0.0/8 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.0.0.0/8 ip daddr 10.42.0.2 tcp dport 8092 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.42.0.2 tcp sport 8092 ip daddr 10.0.0.0/8 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.0.0.0/8 ip daddr 10.42.0.2 tcp dport 8093 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.42.0.2 tcp sport 8093 ip daddr 10.0.0.0/8 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.0.0.0/8 ip daddr 127.0.0.1 tcp dport 4 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 127.0.0.1 tcp sport 4 ip daddr 10.0.0.0/8 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.0.0.0/8 ip daddr 169.254.1.1 tcp dport 5 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 169.254.1.1 tcp sport 5 ip daddr 10.0.0.0/8 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.0.0.0/8 ip daddr 172.16.0.1 tcp dport 1 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 172.16.0.1 tcp sport 1 ip daddr 10.0.0.0/8 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.0.0.0/8 ip daddr 192.168.1.5 tcp dport 80 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 192.168.1.5 tcp sport 80 ip daddr 10.0.0.0/8 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.0.0.0/8 ip daddr 198.18.0.1 tcp dport 7 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 198.18.0.1 tcp sport 7 ip daddr 10.0.0.0/8 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.0.0.0/8 ip daddr 240.0.0.1 tcp dport 8 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 240.0.0.1 tcp sport 8 ip daddr 10.0.0.0/8 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 10.0.0.0/8 ip daddr 255.255.255.255 tcp dport 9 log group 4207 snaplen 64 queue-threshold 1\nadd rule inet ucloud_local_wait forward ip saddr 255.255.255.255 tcp sport 9 ip daddr 10.0.0.0/8 log group 4207 snaplen 64 queue-threshold 1\n"
+  },
+  {
+   "endpoints": [],
+   "network": "100.96.0.0/16",
+   "script": "add table inet ucloud_local_wait\nadd chain inet ucloud_local_wait forward { type filter hook forward priority -150; policy accept; }\nflush chain inet ucloud_local_wait forward\n"
+  },
+  {
+   "endpoints": [],
+   "network": "10.0.0.0/8",
+   "script": "add table inet ucloud_local_wait\nadd chain inet ucloud_local_wait forward { type filter hook forward priority -150; policy accept; }\nflush chain inet ucloud_local_wait forward\n"
+  }
+ ],
+ "snaplen": 64,
+ "table": "ucloud_local_wait"
+}

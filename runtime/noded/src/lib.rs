@@ -17,6 +17,7 @@ pub mod exec_fence;
 pub mod exec_front;
 pub mod fsutil;
 pub mod journal;
+pub mod local_wait;
 pub mod memory_backing;
 pub mod network;
 pub mod pause;

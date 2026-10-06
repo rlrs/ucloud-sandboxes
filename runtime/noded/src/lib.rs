@@ -16,6 +16,7 @@ pub mod fsutil;
 pub mod journal;
 pub mod memory_backing;
 pub mod network;
+pub mod pipeline;
 pub mod pyjson;
 pub mod runsc;
 pub mod storage;
@@ -172,6 +173,22 @@ impl Upstream {
         }
         unreachable!("the second attempt always returns")
     }
+}
+
+/// The create front for `--rust-create`: the agent client under a fresh
+/// session, and a pipeline that loads once the agent reports its configuration.
+pub fn start_creates(upstream: &std::path::Path, token: &str) -> Result<Arc<create::CreateFront>, String> {
+    let mut nonce = [0u8; 16];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut random| std::io::Read::read_exact(&mut random, &mut nonce))
+        .map_err(|error| format!("cannot read a session nonce: {error}"))?;
+    let session: String = nonce.iter().map(|byte| format!("{byte:02x}")).collect();
+    let agent = Arc::new(agent_rpc::AgentClient::new(upstream.to_path_buf(), token, &session).map_err(|e| e.to_string())?);
+    let pipeline = pipeline::LazyPipeline::new();
+    tokio::spawn(pipeline.clone().load(agent.clone(), |_config| {
+        Err("the Rust create pipeline is not assembled yet".to_string())
+    }));
+    Ok(Arc::new(create::CreateFront::new(agent, pipeline, token)))
 }
 
 /// Serve until `shutdown` resolves, then let in-flight requests finish within

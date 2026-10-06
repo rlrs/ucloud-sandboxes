@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.47 - 2026-10-06 (gateway; workers)
+
+- **The create path's storage step.** 0.9.45's 64-slot rehearsal put `storage_prepare` at p95 3.5 s.
+  - **The storage daemon** admitted every lifecycle operation (creates, parks, wakes, seals) through 8 node-wide slots. New-workspace prepares now have their own admission class, bounded by `sandbox.storage_native_max_concurrent_prepares` (default: the node's create concurrency), so parks cannot starve creates and creates cannot starve wakes.
+  - **Pool and process spawns:** the ublk device pool keeps 64 idle devices (was 2). Mounts and readahead are direct syscalls instead of processes, and a create no longer lists every device owner.
+  - **Memory-backing prepare (in `ucloud-noded`)** sets XFS project ids and limits with ioctl and quotactl instead of two `xfs_quota` processes, and group-commits its journal. Locally, at 32 concurrent prepares, p50 dropped from 288 to 23 ms.
+  - **Diagnostics:** spans on every create step and queue-wait metrics in GetMetrics. noded splits `storage_prepare` into `memory_prepare`, `volume_prepare` and `disk_claim`.
+- 0.9.46's rehearsal: answer→resume p95 0.19 s cold (0.9.45: 3.3 s) with the pause tier in the daemon.
+- The gateway upgrade sets the pool watermarks to 64/64.
+
 ## 0.9.46 - 2026-10-06 (gateway; workers)
 
 - **Phase 3a: the pause tier runs in `ucloud-noded`**, behind `sandbox.direct_node_rust_pause`. It requires the pause tier, Rust creates and Rust execs.

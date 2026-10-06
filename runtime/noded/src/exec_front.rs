@@ -76,8 +76,27 @@ fn available_mib() -> Option<u64> {
 /// Why the daemon does not start this exec itself.
 enum Decline {
     /// The agent answers it (exactly as it always has).
-    Forward,
+    Forward(&'static str),
     Reply(Reply),
+}
+
+/// Counts forwards per reason; logs the first of each and every 1,000th.
+fn forwarded(reason: &'static str) {
+    static COUNTS: std::sync::Mutex<Vec<(&'static str, u64)>> = std::sync::Mutex::new(Vec::new());
+    let mut counts = COUNTS.lock().expect("not poisoned");
+    let count = match counts.iter_mut().find(|(name, _)| *name == reason) {
+        Some((_, count)) => {
+            *count += 1;
+            *count
+        }
+        None => {
+            counts.push((reason, 1));
+            1
+        }
+    };
+    if count == 1 || count % 1000 == 0 {
+        eprintln!("ucloud-noded: exec forwarded to the agent ({reason}): {count}");
+    }
 }
 
 impl ExecFront {
@@ -114,10 +133,22 @@ impl ExecFront {
         let path = request.uri().path();
         let start = request.method() == Method::POST && path.starts_with("/v1/sandboxes/") && path.ends_with("/exec");
         let session = session_route(path).is_some_and(|(sid, _)| self.manager.owns(sid));
-        if !(start || session) || !self.authorized(request) || request.headers().contains_key(header::TRANSFER_ENCODING) {
+        if !(start || session) {
             return false;
         }
-        start && self.node().is_some() || session
+        if !self.authorized(request) {
+            forwarded("not authorized");
+            return false;
+        }
+        if request.headers().contains_key(header::TRANSFER_ENCODING) {
+            forwarded("transfer-encoding");
+            return false;
+        }
+        if start && self.node().is_none() {
+            forwarded("node not configured for execs");
+            return false;
+        }
+        true
     }
 
     pub async fn handle(&self, request: Request<Body>) -> Outcome {
@@ -163,32 +194,53 @@ impl ExecFront {
         }
         let prefix = parts.headers.get(SESSION_PREFIX_HEADER).and_then(|value| value.to_str().ok());
         // Python's own answer for anything malformed, tty and post-fence checks.
-        let Ok(exec) = ExecRequest::parse(&sandbox_id, &bytes, query, prefix) else { return forward(bytes) };
+        let exec = match ExecRequest::parse(&sandbox_id, &bytes, query, prefix) {
+            Ok(exec) => exec,
+            Err(_) => {
+                forwarded("request");
+                return forward(bytes);
+            }
+        };
         if exec.tty || exec.check_direct().is_err() {
+            forwarded("tty or post-fence checks");
             return forward(bytes);
         }
-        let Some(node) = self.node().cloned() else { return forward(bytes) };
+        let Some(node) = self.node().cloned() else {
+            forwarded("node not configured");
+            return forward(bytes);
+        };
         match self.launch(&node, exec, timings).await {
             Ok(reply) => Outcome::Response(respond(reply)),
             Err(Decline::Reply(reply)) => Outcome::Response(respond(reply)),
-            Err(Decline::Forward) => forward(bytes),
+            Err(Decline::Forward(reason)) => {
+                forwarded(reason);
+                forward(bytes)
+            }
         }
     }
 
     async fn launch(&self, node: &Arc<NodePipeline>, exec: ExecRequest, mut timings: StartTimings) -> Result<Reply, Decline> {
-        let config = node.config().exec.clone().ok_or(Decline::Forward)?;
+        let config = node.config().exec.clone().ok_or(Decline::Forward("no exec configuration"))?;
         let registry = node.registry().clone();
         let id = exec.sandbox_id.clone();
         let (registration, drain) = tokio::task::spawn_blocking(move || (registry.get(&id), registry.load_drain()))
             .await
-            .map_err(|_| Decline::Forward)?;
-        let registration = registration.ok().flatten().filter(|r| r.phase == Phase::Owned).ok_or(Decline::Forward)?;
+            .map_err(|_| Decline::Forward("registry worker"))?;
+        let registration = registration
+            .ok()
+            .flatten()
+            .filter(|r| r.phase == Phase::Owned)
+            .ok_or(Decline::Forward("not an owned registration"))?;
         // A drain committed before its answer closes admission for execs too.
         if !drain.map(|drain| drain.admission_open).unwrap_or(false) {
-            return Err(Decline::Forward);
+            return Err(Decline::Forward("admission closed or unreadable"));
         }
         let fence = ExecFence::new(&config.warden_locks_dir);
-        let Ok(Fenced::Held(lease)) = fence.acquire(&exec.sandbox_id) else { return Err(Decline::Forward) };
+        let lease = match fence.acquire(&exec.sandbox_id) {
+            Ok(Fenced::Held(lease)) => lease,
+            Ok(Fenced::Busy) => return Err(Decline::Forward("lifecycle fence busy")),
+            Err(_) => return Err(Decline::Forward("lifecycle fence unreadable")),
+        };
         // With A held no pause or park can start; check that the runtime runs.
         let sandbox = Sandbox {
             sandbox_id: exec.sandbox_id.clone(),
@@ -199,16 +251,19 @@ impl ExecFront {
             spec_sha256: registration.spec_sha256(),
         };
         let marker = config.warden_paused_dir.join(format!("{}.sandbox-{}", sandbox.sandbox_id, sandbox.generation));
-        if !running(node, &sandbox) || marker.exists() {
-            return Err(Decline::Forward);
+        if marker.exists() {
+            return Err(Decline::Forward("paused"));
+        }
+        if !running(node, &sandbox) {
+            return Err(Decline::Forward("not running"));
         }
         if config.active_capacity_configured && available_mib().is_none_or(|mib| mib < config.memory_floor_mib) {
-            return Err(Decline::Forward);
+            return Err(Decline::Forward("memory floor"));
         }
         // Python's start fence: the warden flock across the spawn only.
-        let lock = node.warden().lock(&sandbox).await.map_err(|_| Decline::Forward)?;
+        let lock = node.warden().lock(&sandbox).await.map_err(|_| Decline::Forward("warden lock"))?;
         if marker.exists() {
-            return Err(Decline::Forward);
+            return Err(Decline::Forward("paused"));
         }
         let argv = runsc_exec_argv(
             &config.runsc.to_string_lossy(),
@@ -219,7 +274,7 @@ impl ExecFront {
         timings.manager.insert("daemon".into(), Value::Bool(true));
         match self.manager.start(exec, argv, Box::new(lease), Some(Box::new(lock)), timings).await {
             Ok(reply) => Ok(reply),
-            Err(ExecError::Forward(_)) => Err(Decline::Forward),
+            Err(ExecError::Forward(_)) => Err(Decline::Forward("exec manager")),
             Err(error) => Err(Decline::Reply(error.reply())),
         }
     }

@@ -1,0 +1,28 @@
+[package]
+name = "ucloud-noded"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+description = "The UCloud sandbox node's front door (docs/rust-node-daemon-plan.md, phase 0)"
+
+[[bin]]
+name = "ucloud-noded"
+path = "src/main.rs"
+
+[dependencies]
+bytes = "1"
+http-body-util = "0.1.5"
+hyper = { version = "1.11", features = ["client", "http1", "server"] }
+hyper-util = { version = "0.1.21", features = ["http1", "server", "server-graceful", "tokio"] }
+tokio = { version = "1.53", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+
+[dev-dependencies]
+tokio = { version = "1.53", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio-stream = "0.1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+panic = "abort"
+strip = true

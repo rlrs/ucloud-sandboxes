@@ -25,6 +25,7 @@ from .disk_claims import DiskClaimPolicy
 from . import phase_timings
 from .direct_registry import (
     DirectRegistryError,
+    DiskClaim,
     DirectSandboxRegistration,
     DirectSandboxRegistry,
 )
@@ -84,7 +85,7 @@ class DirectSandboxProvisioner:
         self._image_gc_reconciled_generation = 0
         image_store = getattr(overlays, "image_store", None)
         self.image_evictor: ImageCacheEvictor | None = (
-            ImageCacheEvictor(image_store, is_referenced=self.registry.references_image)
+            ImageCacheEvictor(image_store, is_referenced=self.image_referenced)
             if callable(getattr(image_store, "evict_image", None)) else None
         )
         self._validate_layout()
@@ -138,6 +139,12 @@ class DirectSandboxProvisioner:
                     )
                 results.append(item)
             else:
+                # RACE (phase 1, --rust-creates): runtime/noded may be running
+                # this create right now. An agent restarted mid-burst advances
+                # it here concurrently with the daemon; the registry's revision
+                # fences make one of them fail, but the loser's side effects
+                # (network, runsc) are not fenced. Kept until reconcile moves
+                # to the daemon (docs/rust-node-daemon-plan.md, phase 4).
                 results.append(
                     self._advance(
                         item,
@@ -165,13 +172,13 @@ class DirectSandboxProvisioner:
         operation_id: str,
     ) -> DirectSandboxRegistration:
         with phase_timings.phase("validate_spec"):
-            self._validate_spec(spec)
+            self.validate_spec(spec)
         # Resolve immutable image metadata and validate the full OCI translation
         # before persisting an operation or reserving node capacity.
         with ExitStack() as resolved:
             with phase_timings.phase("image_resolve"):
                 image = resolved.enter_context(self.overlays.resolve(spec.image, spec.environment_root))
-            split = self.warden.memory_backing is not None and spec.parkable
+            split, initial_claim = self.create_layout(spec)
             with phase_timings.phase("registry_commit"):
                 registration = self.registry.plan(
                     spec=spec,
@@ -179,9 +186,18 @@ class DirectSandboxProvisioner:
                     operation_id=operation_id,
                     runtime_compatibility_sha256=self.runtime_compatibility_sha256,
                     split_memory_backing=split,
-                    initial_claim=self.disk_claim_policy.initial_claim(spec) if split else None,
+                    initial_claim=initial_claim,
                 )
             return self._advance(registration, image=image)
+
+    def image_referenced(self, image_id: str) -> bool:
+        # Image GC must see a registration runtime/noded committed just now.
+        return self.registry.references_image(image_id, fresh=not self.registry.is_owner)
+
+    def create_layout(self, spec: SandboxSpec) -> tuple[bool, DiskClaim | None]:
+        """Whether a new sandbox takes the split layout, and its initial claim."""
+        split = self.warden.memory_backing is not None and spec.parkable
+        return split, self.disk_claim_policy.initial_claim(spec) if split else None
 
     def reconcile(self, sandbox_id: str) -> DirectSandboxRegistration:
         registration = self.registry.get(sandbox_id)
@@ -205,7 +221,7 @@ class DirectSandboxProvisioner:
             raise StorageNativeMigrationError(
                 "storage-native migration belongs to another runtime compatibility"
             )
-        self._validate_spec(portable.spec)
+        self.validate_spec(portable.spec)
         with self.overlays.resolve(portable.spec.image, portable.spec.environment_root) as image:
             return self._stage_storage_native_import_materialized(
                 migration,
@@ -607,7 +623,7 @@ class DirectSandboxProvisioner:
         try:
             self.overlays.collect_image(
                 image_id,
-                is_referenced=self.registry.references_image,
+                is_referenced=self.image_referenced,
             )
         except Exception as exc:
             # Registry deletion is already durable. Cache reclamation is not
@@ -646,7 +662,7 @@ class DirectSandboxProvisioner:
             try:
                 self.overlays.reconcile_images(
                     (item.image_id for item in registrations if item.image_id),
-                    is_referenced=self.registry.references_image,
+                    is_referenced=self.image_referenced,
                 )
             except Exception:
                 self._record_image_gc_failure()
@@ -959,7 +975,7 @@ class DirectSandboxProvisioner:
                 "direct provisioner requires the unified quota-owned runtime layout"
             )
 
-    def _validate_spec(self, spec: SandboxSpec) -> None:
+    def validate_spec(self, spec: SandboxSpec) -> None:
         spec.validate()
         self.oci.validate_management_helper(spec)
         if spec.memory_mb is None or spec.disk_mb is None:

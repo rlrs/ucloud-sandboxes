@@ -365,6 +365,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--unix-socket", type=Path,
         help="serve on this Unix socket instead of --host/--port; runtime/noded owns the port",
     )
+    direct_node_agent.add_argument(
+        "--registry-foreign", action="store_true",
+        help="runtime/noded owns the node registry; write as a foreign process and cache reads",
+    )
+    direct_node_agent.add_argument(
+        "--rust-creates", action="store_true",
+        help="runtime/noded runs creates; hold their admission over the socket (needs --unix-socket, --registry-foreign)",
+    )
     direct_node_agent.add_argument("--job-id")
     direct_node_agent.add_argument("--node-id")
     direct_node_agent.add_argument("--node-url")
@@ -1360,6 +1368,8 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         environment_registry=environment_registry_from_args(args),
         environment_backend_socket=getattr(args, "environment_backend_socket", None),
         environment_rafs=getattr(args, "environment_rafs", False),
+        registry_foreign=args.registry_foreign,
+        rust_creates=args.rust_creates,
         telemetry=telemetry,
     )
     server = build_direct_node_agent_server(
@@ -1386,6 +1396,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         telemetry=telemetry,
         heartbeat=heartbeat,
         unix_socket=args.unix_socket,
+        rust_creates=args.rust_creates,
     )
     if args.unix_socket is not None:
         print(f"Serving direct-runsc node agent on unix:{args.unix_socket}")
@@ -1394,6 +1405,8 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         print(f"Serving direct-runsc node agent on http://{host}:{port}")
     print(f"Heartbeat push: {heartbeat.url if heartbeat else 'off (GET /v1/heartbeat only)'}")
     print(f"Direct state root: {state_root}")
+    print(f"Registry: {'foreign (runtime/noded owns it)' if args.registry_foreign else 'owned'}; "
+          f"creates: {'runtime/noded' if args.rust_creates else 'this agent'}")
     print(
         "Direct image cache root: "
         f"{args.image_cache_root or state_root / 'image-cache'}"
@@ -7114,6 +7127,7 @@ def vm_init_options_for_job(
         direct_pause_tier_zswap=role == "sandbox" and config.sandbox.direct_pause_tier_zswap,
         direct_local_model_waits=role == "sandbox" and config.sandbox.direct_local_model_waits,
         direct_node_front_door=role == "sandbox" and config.sandbox.direct_node_front_door,
+        direct_node_rust_create=role == "sandbox" and config.sandbox.direct_node_rust_create,
         direct_workspace_initial_grant_mb=(
             config.sandbox.direct_workspace_initial_grant_mb if role == "sandbox" else 0
         ),
@@ -7172,6 +7186,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "directPauseTierZswap": options.direct_pause_tier_zswap,
         "directLocalModelWaits": options.direct_local_model_waits,
         "directNodeFrontDoor": options.direct_node_front_door,
+        "directNodeRustCreate": options.direct_node_rust_create,
         "directWorkspaceInitialGrantMb": options.direct_workspace_initial_grant_mb,
         "storageNativeRegistryUrl": options.storage_native_registry_url,
         "storageNativeRepository": options.storage_native_repository,

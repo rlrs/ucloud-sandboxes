@@ -177,8 +177,9 @@ import unittest
 # +10 udev neither probes nor watches nbd and ublk devices; udisks masked.
 # +6 sandbox veths get one queue pair, not one per CPU.
 # +99 phase 0 of the Rust node daemon: the agent on a Unix socket, noded's init and unit.
+# +548 phase 1 of the Rust node daemon, the agent's half: a foreign registry with a revalidated read cache, the create handoff (admit, finish, image materialize, create config) and its flag.
 # Lower it on deletions (C1.3 is ~8k; the Rust daemon retires the Python agent).
-PACKAGE_LINE_BUDGET = 116_894
+PACKAGE_LINE_BUDGET = 117_442
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

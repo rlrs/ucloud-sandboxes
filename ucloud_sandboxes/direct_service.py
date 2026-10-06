@@ -682,6 +682,22 @@ class DirectSandboxService:
         *,
         operation: SandboxOperation,
     ) -> SandboxRecord:
+        with self.create_admission(spec, operation=operation):
+            try:
+                registration = self.provisioner.create(
+                    spec=spec,
+                    sandbox_generation=operation.generation,
+                    operation_id=operation.operation_id,
+                )
+            except (StorageNativeCapacityError, DirectRegistryCapacityUnavailable) as exc:
+                self.roll_back_capacity_rejection(spec.id, operation.generation)
+                raise SandboxCapacityUnavailableError(str(exc)) from exc
+            return self.created_record(registration)
+
+    @contextmanager
+    def create_admission(self, spec: SandboxSpec, *, operation: SandboxOperation) -> Iterator[None]:
+        """Everything a create holds while it provisions; runtime/noded's
+        creates hold it through the agent's create handoff."""
         operation.validate_spec(spec)
         with ExitStack() as admitted:
             # Same nesting order as one compound with-statement; each entry is
@@ -702,27 +718,24 @@ class DirectSandboxService:
                 )
             with phase_timings.phase("request_lock"):
                 admitted.enter_context(self._request_lock(spec.id, operation.generation))
-            try:
-                registration = self.provisioner.create(
-                    spec=spec,
-                    sandbox_generation=operation.generation,
-                    operation_id=operation.operation_id,
-                )
-            except (StorageNativeCapacityError, DirectRegistryCapacityUnavailable) as exc:
-                # Capacity rejection is safe to place on another node only
-                # after this worker has rolled back every partial owner.
-                try:
-                    self.provisioner.delete(
-                        spec.id, generation=operation.generation
-                    )
-                except Exception as cleanup_exc:
-                    raise DirectWardenError(
-                        "storage capacity rejection rollback failed"
-                    ) from cleanup_exc
-                raise SandboxCapacityUnavailableError(str(exc)) from exc
-            self._forget_published_snapshot(spec.id, operation.generation)
-            self.mark_activity(spec.id, operation.generation)
-            return self._record(registration)
+            yield
+
+    def roll_back_capacity_rejection(self, sandbox_id: str, generation: int) -> None:
+        # Capacity rejection is safe to place on another node only after this
+        # worker has rolled back every partial owner. The caller holds the
+        # create's admission and lifecycle lock.
+        try:
+            self.provisioner.delete(sandbox_id, generation=generation)
+        except Exception as cleanup_exc:
+            raise DirectWardenError(
+                "storage capacity rejection rollback failed"
+            ) from cleanup_exc
+
+    def created_record(self, registration: DirectSandboxRegistration) -> SandboxRecord:
+        """A finished create's record; the caller still holds its admission."""
+        self._forget_published_snapshot(registration.sandbox_id, registration.sandbox_generation)
+        self.mark_activity(registration.sandbox_id, registration.sandbox_generation)
+        return self._record(registration)
 
     def get(self, sandbox_id: str) -> SandboxRecord | None:
         registration = self.provisioner.registry.get(sandbox_id)

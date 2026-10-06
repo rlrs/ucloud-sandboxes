@@ -249,6 +249,7 @@ class VmInitOptions:
     direct_pause_tier_zswap: bool = False
     direct_local_model_waits: bool = False
     direct_node_front_door: bool = False
+    direct_node_rust_create: bool = False
     direct_workspace_initial_grant_mb: int = 0
     environment_registry_url: str = ""
     environment_repository: str = ""
@@ -597,6 +598,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --node-url ${UCLOUD_NODE_URL}"
             + (f" --unix-socket {NODE_AGENT_SOCKET}" if options.direct_node_front_door else
                " --host ${UCLOUD_NODE_AGENT_HOST} --port ${UCLOUD_NODE_AGENT_PORT}")
+            + (" --registry-foreign --rust-creates" if options.direct_node_rust_create else "")
             + f"{deployment_flag}{version_flags}"
             " --state-root ${UCLOUD_STATE_DIR}/direct-runtime"
             " --image-cache-root ${UCLOUD_DIRECT_IMAGE_CACHE_ROOT}"
@@ -663,6 +665,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         node_service_after += " ucloud-sandbox-noded.service"
         host = options.node_agent_host
         listen = f"[{host}]:{options.node_agent_port}" if ":" in host else f"{host}:{options.node_agent_port}"
+        rust_create_flag = " --rust-create" if options.direct_node_rust_create else ""
         noded_setup = f"""echo "Writing node front door systemd service"
 $SUDO tee {shlex.quote(noded_service)} >/dev/null <<'NODED_SERVICE'
 [Unit]
@@ -675,7 +678,7 @@ Before=ucloud-sandbox-node.service
 Type=simple
 User=root
 Group=root
-ExecStart={DEFAULT_NODED} --listen {listen} --upstream-unix {NODE_AGENT_SOCKET}
+ExecStart={DEFAULT_NODED} --listen {listen} --upstream-unix {NODE_AGENT_SOCKET}{rust_create_flag}
 LimitNOFILE=65536
 Restart=always
 RestartSec=1
@@ -2163,6 +2166,8 @@ def _validate_pause_tier(options: VmInitOptions) -> None:
         raise ValueError("pause-tier zswap requires the pause tier.")
     if options.direct_local_model_waits and not options.direct_pause_tier:
         raise ValueError("node-local model waits require the pause tier.")
+    if options.direct_node_rust_create and not options.direct_node_front_door:
+        raise ValueError("Rust node creates require the node front door.")
 
 
 def validate_vm_init_options(options: VmInitOptions) -> None:

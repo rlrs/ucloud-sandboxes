@@ -353,6 +353,15 @@ class MemoryBackingStore:
         with self._active_modes_lock:
             self._active_modes.pop((sandbox_id, generation), None)
 
+    def observe_allocation(self, sandbox_id: str, generation: int) -> None:
+        """Remember the placement of an allocation another process made
+        (runtime/noded's creates), as the journal load at startup does."""
+        row = self._reader().execute(
+            "SELECT active_mode FROM allocations WHERE sandbox_id=? AND generation=? AND state!='deleted'",
+            (sandbox_id, generation)).fetchone()
+        if row is not None:
+            self._remember_mode(sandbox_id, generation, row[0])
+
     def active_mode(self, sandbox_id: str, generation: int) -> str | None:
         """Cached placement evidence, never permission to change a live runtime.
 

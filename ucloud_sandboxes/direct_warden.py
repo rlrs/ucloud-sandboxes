@@ -511,13 +511,23 @@ class DirectRunscWarden:
             except Exception:
                 self._best_effort_delete(sandbox)
                 raise
-            if sandbox.memory is not None:
-                # Hand a granted workspace to the growth monitor.
-                try:
-                    self._sync_workspace_claim(sandbox, self.workspace_record(sandbox))
-                except Exception:
-                    _LOG.exception("could not track the workspace of %s", sandbox.sandbox_id)
+            self._track_created(sandbox)
             return running
+
+    def adopt_created(self, sandbox: DirectSandbox) -> None:
+        """The in-process state create keeps, for a sandbox runtime/noded created."""
+        with self._locked(sandbox):
+            if self.memory_backing is not None and sandbox.memory is not None:
+                self.memory_backing.observe_allocation(sandbox.sandbox_id, sandbox.sandbox_generation)
+            self._track_created(sandbox)
+
+    def _track_created(self, sandbox: DirectSandbox) -> None:
+        if sandbox.memory is not None:
+            # Hand a granted workspace to the growth monitor.
+            try:
+                self._sync_workspace_claim(sandbox, self.workspace_record(sandbox))
+            except Exception:
+                _LOG.exception("could not track the workspace of %s", sandbox.sandbox_id)
 
     def _readiness_command(self, sandbox: DirectSandbox) -> tuple[str, ...]:
         try:

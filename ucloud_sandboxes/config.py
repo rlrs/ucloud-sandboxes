@@ -298,6 +298,9 @@ class SandboxPoolConfig:
     # runtime/noded (Rust) owns the node's port and forwards to the Python agent
     # on a Unix socket (docs/rust-node-daemon-plan.md, phase 0).
     direct_node_front_door: bool = False
+    # noded owns the node registry and runs creates; the agent keeps admission
+    # (docs/rust-node-daemon-plan.md, phase 1). Requires the front door.
+    direct_node_rust_create: bool = False
     # Split workspaces start with an XFS filesystem this large and grow online
     # toward disk_mb (docs/disk-density.md). 0 formats full-size workspaces.
     direct_workspace_initial_grant_mb: int = 512
@@ -326,6 +329,7 @@ class SandboxPoolConfig:
                    "direct_reflink_memory_restore": False,
                    "direct_pause_tier": False, "direct_pause_tier_zswap": False,
                    "direct_local_model_waits": False, "direct_node_front_door": False,
+                   "direct_node_rust_create": False,
                    "direct_workspace_initial_grant_mb": cls.direct_workspace_initial_grant_mb,
                    **raw}
         values = _exact_dataclass_values("sandbox", raw, cls())
@@ -405,6 +409,10 @@ class SandboxPoolConfig:
             raise ValueError("sandbox.direct_local_model_waits requires the pause tier")
         if not isinstance(result.direct_node_front_door, bool):
             raise ValueError("sandbox.direct_node_front_door must be a boolean")
+        if not isinstance(result.direct_node_rust_create, bool):
+            raise ValueError("sandbox.direct_node_rust_create must be a boolean")
+        if result.direct_node_rust_create and not result.direct_node_front_door:
+            raise ValueError("sandbox.direct_node_rust_create requires sandbox.direct_node_front_door")
         grant = result.direct_workspace_initial_grant_mb
         if isinstance(grant, bool) or not isinstance(grant, int) or (grant and grant < 512):
             raise ValueError("sandbox.direct_workspace_initial_grant_mb must be 0 or at least 512")

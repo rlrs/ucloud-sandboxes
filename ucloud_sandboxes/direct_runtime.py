@@ -57,9 +57,18 @@ def build_direct_runtime_service(
     environment_registry: object | None = None,
     environment_backend_socket: Path | None = None,
     environment_rafs: bool = False,
+    registry_foreign: bool = False,
+    rust_creates: bool = False,
     telemetry: Telemetry | None = None,
 ) -> DirectSandboxService:
-    """Assemble the one production direct-runtime owner for an entire node."""
+    """Assemble the one production direct-runtime owner for an entire node.
+
+    ``registry_foreign``: runtime/noded owns the registry file; this agent
+    writes through SQLite's cross-process locking and caches its reads.
+    ``rust_creates``: noded runs creates (docs/rust-node-daemon-plan.md, phase 1).
+    """
+    if rust_creates and not registry_foreign:
+        raise ValueError("Rust creates require the registry owned by runtime/noded (--registry-foreign)")
     for label, path in (
         ("state_root", state_root),
         ("image_cache_root", image_cache_root or state_root / "image-cache"),
@@ -173,7 +182,10 @@ def build_direct_runtime_service(
             state_root / "network-slots.json",
             allowed_tcp_egress=network_allow_tcp,
             network_relays=network_relays,
-            pool_size=NETWORK_POOL_SIZE,
+            # Pooled pairs are usable only by the process that configured
+            # them; while noded creates, this pool only trims what an earlier
+            # agent left and stops.
+            pool_size=0 if rust_creates else NETWORK_POOL_SIZE,
         )
         if network == "sandbox"
         else None
@@ -210,12 +222,14 @@ def build_direct_runtime_service(
         if checkpoint_registry_url
         else None
     )
-    # The node agent is the registry's only writer and owns its index.
+    # The node agent owns the registry and its index, unless noded does: then
+    # the agent is a foreign writer with a revalidated read cache.
     registry = DirectSandboxRegistry(
         state_root / "direct-registry.sqlite",
         hard_disk_capacity_mb=memory_backing_hard_capacity_bytes // (1024 * 1024)
         if split_memory_backing else 0,
-        owner=True,
+        owner=not registry_foreign,
+        cached_reads=registry_foreign,
     )
     if not reflink_memory_restore and registry.reflink_overlap_bytes():
         # A crash may leave a global reservation before the allocator writes

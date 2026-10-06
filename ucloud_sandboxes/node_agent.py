@@ -74,7 +74,12 @@ from .images import (
     uploaded_build_context_reference,
 )
 from .build_admission import BUILD_ADMISSION_CAPACITY_LABEL
-from .direct_registry import DirectRegistrationOwnedError, ManagedPrimaryOwnedError
+from .create_handoff import NODED_SESSION_HEADER, CreateHandoff, CreateTokenUnknownError, create_config
+from .direct_registry import (
+    DirectRegistrationOwnedError,
+    DirectRegistryCapacityUnavailable,
+    ManagedPrimaryOwnedError,
+)
 from .memory_backing import MemoryBackingBusyError
 from .managed_process import ManagedProcessError, ManagedProcessReadUnavailable, ManagedProcessStart
 from .models import NodeHeartbeat, NodeRuntimeMetrics, ResidentWaitMetrics, ResourceQuantity, SandboxInventoryEntry, SandboxMemoryObservation, utc_now
@@ -205,6 +210,10 @@ class NodeAgentHandler(BuildContextHttpHandler):
     commit_exports: Any = None
     rootfs_metrics_provider: Callable[[], dict[str, int]] | None = None
     node_control_bearer_token: str
+    # runtime/noded's internal routes (Unix socket only): the create
+    # configuration, and with --rust-creates the create handoff.
+    internal_routes_enabled = False
+    create_handoff: CreateHandoff | None = None
     max_file_body_bytes = DEFAULT_MAX_FILE_BODY_BYTES
     server_version = "ucloud-sandboxes-node-agent/0.1"
 
@@ -268,6 +277,10 @@ class NodeAgentHandler(BuildContextHttpHandler):
             return
         if parsed.path == "/v1/heartbeat":
             self._write_json({"heartbeat": heartbeat_to_dict(self.node_heartbeat())})
+            return
+        if parsed.path == "/internal/v1/creates/config" and self.internal_routes_enabled:
+            self._write_json(create_config(self.manager.service, node_epoch=self.node_epoch,
+                                           rust_creates_enabled=self.create_handoff is not None))
             return
         if not self.sandboxes_enabled and (
             parsed.path.startswith("/v1/sandboxes")
@@ -393,6 +406,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/v1/drain":
             self._configure_drain()
+            return
+        if parsed.path.startswith("/internal/v1/") and self.create_handoff is not None:
+            self._internal_create_route(parsed.path)
             return
         if not self.sandboxes_enabled and parsed.path not in {
             "/v1/images/build",
@@ -574,35 +590,8 @@ class NodeAgentHandler(BuildContextHttpHandler):
             finally:
                 CREATE_ADMISSION_WAIT.reset(wait)
             phases["manager_create_ms"] = _elapsed_ms(phase)
-        except SandboxConflictError as exc:
-            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
-            return
-        except SandboxAdmissionClosedError as exc:
-            self._write_json(
-                {
-                    "error": str(exc),
-                    "error_code": "node_admission_closed",
-                    "retryable": True,
-                },
-                status=HTTPStatus.SERVICE_UNAVAILABLE,
-            )
-            return
-        except SandboxCapacityUnavailableError as exc:
-            self._write_json(
-                {
-                    "error": str(exc),
-                    "error_code": "node_active_admission_deferred",
-                    "retryable": True,
-                },
-                status=HTTPStatus.SERVICE_UNAVAILABLE,
-                headers={
-                    "Retry-After": "1",
-                    "X-UCloud-Sandbox-Retryable": "true",
-                },
-            )
-            return
         except (RuntimeError, ValueError) as exc:
-            self._write_exception(exc)
+            self._write_create_error(exc)
             return
         status = (
             HTTPStatus.OK if manager_timings.get("idempotent") else HTTPStatus.CREATED
@@ -629,6 +618,108 @@ class NodeAgentHandler(BuildContextHttpHandler):
             },
             status=status,
         )
+
+    def _write_create_error(self, exc: RuntimeError | ValueError) -> None:
+        """A create's refusal; noded relays the handoff's verbatim."""
+        if isinstance(exc, SandboxConflictError):
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+        elif isinstance(exc, SandboxAdmissionClosedError):
+            self._write_json(
+                {"error": str(exc), "error_code": "node_admission_closed", "retryable": True},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+        elif isinstance(exc, SandboxCapacityUnavailableError):
+            # Includes SandboxStartupBusyError: create never says node_startup_busy.
+            self._write_json(
+                {"error": str(exc), "error_code": "node_active_admission_deferred", "retryable": True},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"},
+            )
+        else:
+            self._write_exception(exc)
+
+    def _internal_create_route(self, path: str) -> None:
+        """runtime/noded's create handoff (ucloud_sandboxes/create_handoff.py)."""
+        handoff = self.create_handoff
+        finish = path.startswith("/internal/v1/creates/") and path.endswith("/finish")
+        if path not in ("/internal/v1/creates/admit", "/internal/v1/images/materialize") and not finish:
+            self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict):
+                raise ValueError("handoff payload must be a JSON object")
+            if path == "/internal/v1/creates/admit":
+                self._write_json(self._admit_create(handoff, raw))
+            elif finish:
+                self._finish_create(handoff, unquote(path[len("/internal/v1/creates/"):-len("/finish")]), raw)
+            else:
+                self._materialize_image(raw)
+        except CreateTokenUnknownError as exc:
+            self._write_json({"error": str(exc), "error_code": "create_token_unknown", "retryable": False},
+                             status=HTTPStatus.NOT_FOUND)
+        except OSError as exc:
+            self._write_exception(RuntimeError(str(exc)))
+        except (RuntimeError, ValueError) as exc:
+            self._write_create_error(exc)
+
+    def _admit_create(self, handoff: CreateHandoff, raw: dict[str, Any]) -> dict[str, Any]:
+        if not {"sandbox_id", "generation", "operation_id", "spec", "spec_hash"} <= set(raw) <= {
+                "sandbox_id", "generation", "operation_id", "spec", "spec_hash", "admission_wait_seconds"}:
+            raise ValueError("create admission payload has an invalid schema")
+        operation = SandboxOperation.from_dict({"generation": raw["generation"], "kind": "create",
+                                                "operation_id": raw["operation_id"], "spec_hash": raw["spec_hash"]})
+        if not isinstance(raw["spec"], dict):
+            raise ValueError("sandbox payload must be a JSON object")
+        spec = SandboxSpec.from_dict(raw["spec"])
+        if spec.id != raw["sandbox_id"]:
+            raise ValueError("sandbox_id does not match the spec")
+        wait = raw.get("admission_wait_seconds")
+        if wait is not None and (isinstance(wait, bool) or not isinstance(wait, (int, float))
+                                 or not math.isfinite(wait) or wait < 0):
+            raise ValueError("admission_wait_seconds must be a non-negative number or null")
+        return handoff.admit(spec, operation, wait=None if wait is None else float(wait),
+                             session=self.headers.get(NODED_SESSION_HEADER))
+
+    def _finish_create(self, handoff: CreateHandoff, token: str, raw: dict[str, Any]) -> None:
+        outcome = raw.get("outcome")
+        if outcome == "created" and set(raw) == {"outcome"}:
+            record, idempotent, phases = handoff.finish_created(token)
+            self._write_json({
+                "status": 200 if idempotent else 201,
+                "sandbox": dict(record.to_dict(), node_epoch=self.node_epoch,
+                                activity_epoch=self.manager.service.advance_lifecycle_activity_revision()),
+                "phases": phases,
+            })
+        elif outcome == "capacity_rejected" and set(raw) <= {"outcome", "message"}:
+            message = raw.get("message", "")
+            if not isinstance(message, str):
+                raise ValueError("capacity rejection message must be a string")
+            handoff.finish_capacity_rejected(token, message)  # Raises the deferral.
+        elif outcome == "failed" and set(raw) <= {"outcome", "status", "body"}:
+            status = raw.get("status")
+            if status is not None and (type(status) is not int or not 100 <= status <= 599):
+                raise ValueError("failed create status must be an HTTP status")
+            handoff.finish_failed(token)
+            self._write_json({"released": True})
+        else:
+            raise ValueError("create finish payload has an invalid schema")
+
+    def _materialize_image(self, raw: dict[str, Any]) -> None:
+        image, root = raw.get("image"), raw.get("environment_root")
+        if not set(raw) <= {"image", "environment_root"} or not isinstance(image, str) or not image or not (
+                root is None or isinstance(root, str)):
+            raise ValueError("image materialization payload has an invalid schema")
+        try:
+            # Mount and receipt; the lease is released at once, so the
+            # daemon's own image lock fences GC from here on.
+            with self.manager.service.provisioner.overlays.resolve(image, root) as rootfs:
+                payload = {"image_id": rootfs.image_id, "rootfs": str(rootfs.rootfs),
+                           "rootfs_identity_sha256": rootfs.rootfs_identity_sha256}
+        except DirectRegistryCapacityUnavailable as exc:
+            # The block-device pool is full: the create's capacity rejection.
+            raise SandboxCapacityUnavailableError(str(exc)) from exc
+        self._write_json(payload)
 
     def _start_exec(self, path: str, query: str = "") -> None:
         started = time.monotonic()
@@ -1717,6 +1808,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
             authorization[len(prefix) :] if authorization.startswith(prefix) else ""
         )
         if supplied and hmac.compare_digest(supplied, expected):
+            if self.create_handoff is not None:
+                # A restarted daemon finishes nothing its predecessor admitted.
+                self.create_handoff.observe_session(self.headers.get(NODED_SESSION_HEADER))
             return True
         self._write_json(
             {"error": "unauthorized"},
@@ -1976,8 +2070,15 @@ def build_direct_node_agent_server(
     telemetry: Telemetry | None = None,
     heartbeat: HeartbeatSenderConfig | None = None,
     unix_socket: Path | None = None,
+    rust_creates: bool = False,
 ) -> NodeAgentHTTPServer:
-    """Serve a sandbox node with direct runsc and storage-native ownership."""
+    """Serve a sandbox node with direct runsc and storage-native ownership.
+
+    ``rust_creates``: runtime/noded, in front on the node's port, runs creates
+    and owns the registry; this agent holds their admission (create_handoff).
+    """
+    if rust_creates and (unix_socket is None or service.provisioner.registry.is_owner):
+        raise ValueError("Rust creates need the agent on its Unix socket and a foreign registry")
     node_control_bearer_token = node_control_bearer_token.strip()
     if not node_control_bearer_token:
         raise ValueError("node control bearer token cannot be empty")
@@ -2214,11 +2315,16 @@ def build_direct_node_agent_server(
 
     DirectBoundHandler.runtime_metrics_provider = staticmethod(direct_runtime_metrics)
     DirectBoundHandler.telemetry = resolved_telemetry
+    # Only noded reaches the socket; it must not forward /internal/ itself.
+    DirectBoundHandler.internal_routes_enabled = unix_socket is not None
+    handoff = DirectBoundHandler.create_handoff = CreateHandoff(service) if rust_creates else None
 
     class DirectServiceHTTPServer(NodeAgentHTTPServer):
         def server_close(self) -> None:
             # The sender samples the service; it stops first.
             self.stop_heartbeats()
+            if handoff is not None:
+                handoff.close()
             try:
                 manager.stop()
             finally:

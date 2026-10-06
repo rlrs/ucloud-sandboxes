@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import sqlite3
 import stat
+import itertools
 import time
 from threading import Event, Lock
 import weakref
@@ -460,6 +461,12 @@ class DirectSandboxRegistry:
     owner lock, so a second live owner in any process is refused, and serves
     registration reads from an in-memory index with SQLite as the journal.
     Other instances, such as readers in other processes, read SQLite.
+
+    ``cached_reads=True`` is a foreign instance (the node agent while
+    runtime/noded owns the file): it writes through SQLite's cross-process
+    locking and serves reads from an index revalidated like the owner's, by
+    activity revision and its own reader connection's data version, at most
+    once a second, and before the next read after each of its own writes.
     """
 
     _SCHEMA = """
@@ -537,7 +544,8 @@ class DirectSandboxRegistry:
         );
     """
 
-    def __init__(self, path: Path, *, hard_disk_capacity_mb: int = 0, owner: bool = False) -> None:
+    def __init__(self, path: Path, *, hard_disk_capacity_mb: int = 0, owner: bool = False,
+                 cached_reads: bool = False) -> None:
         if not path.is_absolute():
             raise ValueError("direct registry path must be absolute")
         self.path = path
@@ -572,8 +580,23 @@ class DirectSandboxRegistry:
         self._group: _GroupCommit | None = None
         self._turn_waiters = 0
         self._turn_waiters_guard = Lock()
+        # Foreign index (cached_reads): its own reader connection, whose data
+        # version is comparable between refreshes, and refreshes in sequence
+        # order. An index read at sequence n covers every commit before n; an
+        # own write commits before taking _stale_seq, so later reads refresh.
+        self._cached_reads = bool(cached_reads) and not owner
+        self._reader_entry: _RegistryConnection | None = None
+        self._reader_guard = Lock()
+        self._sequence = itertools.count(1)
+        self._stale_seq = 0
+        # (index, sequence its read began at, monotonic check time), replaced whole.
+        self._foreign: tuple[_RegistryIndex, int, float] | None = None
         if owner:
             self._own()
+
+    @property
+    def is_owner(self) -> bool:
+        return bool(self._owner_lock)
 
     def _own(self) -> None:
         """Take the exclusive owner lock, then build the index from SQLite."""
@@ -611,6 +634,10 @@ class DirectSandboxRegistry:
             _release_owner_lock(self._owner_lock)
         if entry is not None:
             entry.connection.close()
+        with self._reader_guard:
+            reader, self._reader_entry, self._foreign = self._reader_entry, None, None
+        if reader is not None:
+            reader.connection.close()
         _close_idle_registry_connections(self._connections, self._connections_guard)
 
     def bind_runtime_compatibility(
@@ -763,7 +790,7 @@ class DirectSandboxRegistry:
         Every write that changes a charge bumps the activity revision, so the
         owner keeps the charges read at its index's revision until it moves.
         """
-        index = self._owned_index()
+        index = self._cached_index()
         if index is not None and self._claims is not None and self._claims[0] is index:
             return dict(self._claims[1])
         with self._transaction(write=False) as connection:
@@ -1442,16 +1469,18 @@ class DirectSandboxRegistry:
             connection.execute("INSERT OR REPLACE INTO managed_growth VALUES (?,?,?,?,?,?,?)", encoded)
         return intent
 
-    def _view(self) -> _RegistryIndex:
-        """The owner's index; any other instance reads and validates every row."""
-        index = self._owned_index()
+    def _view(self, *, fresh: bool = False) -> _RegistryIndex:
+        """The owner's or the foreign index; any other instance reads and
+        validates every row. ``fresh`` proves the index against the file now."""
+        index = self._cached_index(fresh=fresh)
         if index is not None:
             return index
         with self._transaction(write=False) as connection:
             return self._read_index(connection, self._metadata(connection)[0], 0)
 
-    def get(self, sandbox_id: str) -> DirectSandboxRegistration | None:
-        entry = self._view().rows.get(sandbox_id)
+    def get(self, sandbox_id: str, *, fresh: bool = False) -> DirectSandboxRegistration | None:
+        """``fresh`` also sees another process's commits from just now."""
+        entry = self._view(fresh=fresh).rows.get(sandbox_id)
         return None if entry is None else entry[2]
 
     def list(self) -> tuple[DirectSandboxRegistration, ...]:
@@ -1459,7 +1488,7 @@ class DirectSandboxRegistry:
 
     def activity_revision(self) -> int:
         """Read the durable clock without materializing the node inventory."""
-        index = self._owned_index()
+        index = self._cached_index()
         if index is not None:
             return index.revision
         with self._transaction(write=False) as connection:
@@ -1469,8 +1498,8 @@ class DirectSandboxRegistry:
         """Return records, indexes, roots, and revision from one durable read."""
         return self._view().snapshot
 
-    def references_image(self, image_id: str) -> bool:
-        return image_id in self._view().snapshot.image_ids
+    def references_image(self, image_id: str, *, fresh: bool = False) -> bool:
+        return image_id in self._view(fresh=fresh).snapshot.image_ids
 
     def _plan(
         self,
@@ -1674,13 +1703,16 @@ class DirectSandboxRegistry:
             raise DirectRegistryError("direct registration encoding is invalid")
         return record
 
-    def _read_index(self, connection, revision: int, data_version: int) -> _RegistryIndex:
-        """Read every registration, decoding only rows whose stored text changed.
+    def _read_index(self, connection, revision: int, data_version: int,
+                    previous: _RegistryIndex | None = None) -> _RegistryIndex:
+        """Read every registration, decoding only rows whose stored text changed
+        since ``previous`` (by default the owner's index).
 
         Identical text decodes to an identical frozen record, so the stored
         encoding is the whole cache key.
         """
-        previous = self._index.rows if self._index is not None else {}
+        cache = previous if previous is not None else self._index
+        previous = cache.rows if cache is not None else {}
         rows = {}
         for row in connection.execute(
             "SELECT sandbox_id, image_id, record_json FROM registrations"
@@ -2013,9 +2045,13 @@ class DirectSandboxRegistry:
             if group.error is not None:
                 raise DirectRegistryError("direct registry commit failed") from group.error
         else:
-            with self._borrow() as entry, self._writer_turn:
-                with self._validated(entry, write=True, durable=durable):
-                    yield entry.connection
+            try:
+                with self._borrow() as entry, self._writer_turn:
+                    with self._validated(entry, write=True, durable=durable):
+                        yield entry.connection
+            finally:
+                # After the COMMIT (or an uncertain one): later reads refresh.
+                self._stale_seq = next(self._sequence)
 
     @contextmanager
     def _validated(
@@ -2095,22 +2131,72 @@ class DirectSandboxRegistry:
         if entry is not None:
             entry.connection.close()  # Closing rolls back any open transaction.
 
-    def _owned_index(self) -> _RegistryIndex | None:
+    def _cached_index(self, *, fresh: bool = False) -> _RegistryIndex | None:
+        if self._owner_lock:
+            return self._owned_index(fresh=fresh)
+        return self._foreign_index(fresh=fresh) if self._cached_reads else None
+
+    def _foreign_index(self, *, fresh: bool = False) -> _RegistryIndex:
+        """The foreign index, revalidated at most once a second, and before
+        any read that follows an own write or asks to be ``fresh``.
+
+        While another reader refreshes, a read that needs no newer state serves
+        the current index rather than wait, as the owner's reads do.
+        """
+        if os.getpid() != self._connection_pid:
+            raise DirectRegistryError("reopen direct registry after fork")
+        required = next(self._sequence) if fresh else self._stale_seq
+        view = self._foreign
+        current = view is not None and view[1] > required
+        if current and time.monotonic() - view[2] < _FILE_RECHECK_SECONDS:
+            return view[0]
+        if not self._reader_guard.acquire(blocking=not current):
+            return view[0]
+        try:
+            view = self._foreign
+            if view is not None and view[1] > required and (
+                    fresh or time.monotonic() - view[2] < _FILE_RECHECK_SECONDS):
+                return view[0]  # A refresh that began after ``required``.
+            return self._refresh_foreign_index()
+        finally:
+            self._reader_guard.release()
+
+    def _refresh_foreign_index(self) -> _RegistryIndex:
+        """Prove the foreign index against the file; the caller holds the reader guard."""
+        started = next(self._sequence)
+        with self._readable():
+            self._check_file()
+            if self._reader_entry is None:
+                self._reader_entry = self._connect()
+            entry = self._reader_entry
+            try:
+                with self._validated(entry, write=False) as (revision, data_version):
+                    index = self._foreign[0] if self._foreign is not None else None
+                    if index is None or (index.revision, index.data_version) != (revision, data_version):
+                        index = self._read_index(entry.connection, revision, data_version, previous=index)
+            except BaseException:
+                self._reader_entry = None
+                entry.connection.close()
+                raise
+        self._foreign = (index, started, time.monotonic())
+        return index
+
+    def _owned_index(self, *, fresh: bool = False) -> _RegistryIndex | None:
         """The owner's index, revalidated at most once a second; else None.
 
         A writer holding the turn validates at its BEGIN: reads then serve the
-        current index rather than wait.
+        current index rather than wait. ``fresh`` waits for the turn instead.
         """
         if not self._owner_lock:
             return None
         if os.getpid() != self._connection_pid:
             raise DirectRegistryError("reopen direct registry after fork")
         index = self._index
-        if index is not None and time.monotonic() - self._index_checked_at < _FILE_RECHECK_SECONDS:
+        if not fresh and index is not None and time.monotonic() - self._index_checked_at < _FILE_RECHECK_SECONDS:
             return index
         with self._readable():
             self._check_file()
-        if not self._writer_turn.acquire(blocking=index is None):
+        if not self._writer_turn.acquire(blocking=fresh or index is None):
             return index
         try:
             if not self._owner_lock:

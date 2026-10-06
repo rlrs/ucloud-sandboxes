@@ -192,12 +192,16 @@ class EnvironmentBackend:
         """Attach and mount a component, warming its metadata before return.
 
         Waiting is bounded by the prefetch policy and never fails the attach.
+        Only an attach grows the cache, so only an attach measures it (a walk
+        of every blob file; every create ensures each of its components).
         """
+        attached = digest in self._active and digest not in self._attaching
         target = self._attach(digest)
         with self._guard:
             self._used[digest] = time.monotonic()
             job, ready_by = self._warming.get(digest, (None, 0.0))
-        self._enforce_cache_budget(digest)
+        if not attached:
+            self._enforce_cache_budget(digest)
         remaining = ready_by - time.monotonic()
         # Outside the guard: the threaded RPC server lets other components'
         # attach, liveness checks and drops proceed meanwhile.

@@ -155,7 +155,7 @@ class EnvironmentBackendTests(artifact_fixtures.EnvironmentArtifactTests):
             digests.append(self.registry.publish(
                 image, sign_component(image, source_image="sha256:" + str(index) * 64, signing_key=self.key),
                 tag=f"fixture-{index}"))
-        mounts, busy, closed, held, MIB = set(), set(), [], {"bytes": 0}, 1024 ** 2
+        mounts, busy, closed, held, MIB = set(), set(), [], {"bytes": 0, "measured": 0}, 1024 ** 2
 
         class Device:
             def __init__(self, path, component, *args, **kwargs):
@@ -171,6 +171,7 @@ class EnvironmentBackendTests(artifact_fixtures.EnvironmentArtifactTests):
                 return Device(path, component)
 
             def cache_bytes(self):
+                held["measured"] += 1
                 return held["bytes"]
         backend = EnvironmentBackend(self.root / "budget", self.registry, cache_bytes=5 * MIB // 2,
                                      devices=[Path(f"/dev/nbd-test{n}") for n in range(4)], device_factory=Factory(),
@@ -184,6 +185,9 @@ class EnvironmentBackendTests(artifact_fixtures.EnvironmentArtifactTests):
         self.assertIn(first, mounts)
         self.assertEqual(sorted(backend._active), sorted([digests[0], digests[2]]))
         self.assertEqual(held["bytes"], 2 * MIB)
+        measured = held["measured"]
+        backend.ensure(digests[2])  # Attached already (every create ensures): no cache walk.
+        self.assertEqual(held["measured"], measured)
         self.assertEqual(backend.pressure(), {"active_components": 2, "over_cache_budget": False})
         held["bytes"] += MIB  # Idle images the agent keeps mounted hold it over: only the agent's sweep frees it.
         self.assertEqual(backend.pressure(), {"active_components": 2, "over_cache_budget": True})

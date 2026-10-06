@@ -196,6 +196,11 @@ impl PauseTier {
         self.inner.warden.lock(sandbox).await
     }
 
+    /// `lock` without waiting; `None` while another operation holds it.
+    pub async fn try_lock(&self, sandbox: &Sandbox) -> Result<Option<FileLock>, WardenError> {
+        self.inner.warden.try_lock(sandbox).await
+    }
+
     /// The incarnation's journal record. Call it under `lock`.
     pub async fn journal_record(&self, sandbox: &Sandbox) -> Result<Option<Map<String, Value>>, WardenError> {
         let (inner, id, generation) = (self.inner.clone(), sandbox.sandbox_id.clone(), sandbox.generation);

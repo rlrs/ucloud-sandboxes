@@ -162,7 +162,7 @@ pub fn running_and_alive(record: &Map<String, Value>, proc_root: &std::path::Pat
 impl Engine {
     pub(crate) fn new(config: PolicyConfig, deps: Deps) -> Engine {
         let sampler = ResidentSampler::new(config.cgroup_root.clone(), config.proc_root.clone(), deps.clock.clone());
-        let status_file = StatusFile::open(&config.state_root);
+        let status_file = StatusFile::open(&config.state_root, &config.session);
         Engine {
             mechanism: deps.mechanism,
             fence: deps.fence,

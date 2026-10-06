@@ -12,11 +12,8 @@
 //!   live, goes to the agent's wake route instead.
 
 use std::collections::HashMap;
-use std::fs::File;
 use std::io;
 use std::net::Ipv4Addr;
-use std::os::fd::AsRawFd;
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -29,18 +26,12 @@ use crate::pause::PauseTier;
 use crate::registry::{Phase, Registration, Registry};
 use crate::warden::Sandbox;
 
-/// Python's SANDBOX_ID_RE (as `exec_fence`): `[A-Za-z0-9][A-Za-z0-9_.-]{0,63}`.
-fn safe_id(id: &str) -> bool {
-    let bytes = id.as_bytes();
-    !bytes.is_empty()
-        && bytes.len() <= 64
-        && bytes[0].is_ascii_alphanumeric()
-        && bytes.iter().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
-}
-
 /// Open and flock without blocking; `None` when busy. Retries while the lock
 /// landed on an inode the path no longer names (delete unlinks A, then T).
-pub(crate) fn try_lock(path: &Path, operation: libc::c_int) -> io::Result<Option<File>> {
+#[cfg(test)]
+pub(crate) fn try_lock(path: &Path, operation: libc::c_int) -> io::Result<Option<std::fs::File>> {
+    use std::os::fd::AsRawFd;
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
     loop {
         let file = std::fs::OpenOptions::new()
             .read(true)
@@ -69,17 +60,13 @@ pub(crate) fn try_lock(path: &Path, operation: libc::c_int) -> io::Result<Option
 }
 
 /// A pause's hold: T and A exclusively. Released on drop (A first).
-#[derive(Debug)]
-pub struct Exclusive {
-    _activity: File,
-    _transition: File,
-}
+pub type Exclusive = crate::pause_policy::fence::ExclusiveHold;
 
 /// The phase-2a exec fence's files (`<runtime_root>/warden-locks/.<id>.transition`
 /// and `.<id>.activity`), as a pauser takes them.
 #[derive(Clone, Debug)]
 pub struct WaitFence {
-    directory: PathBuf,
+    pause: crate::pause_policy::fence::PauseFence,
     exec: ExecFence,
 }
 
@@ -87,22 +74,14 @@ impl WaitFence {
     /// `directory`: the warden lock directory (`ExecConfig::warden_locks_dir`).
     pub fn new(directory: impl Into<PathBuf>) -> WaitFence {
         let directory = directory.into();
-        WaitFence { exec: ExecFence::new(&directory), directory }
+        WaitFence { exec: ExecFence::new(&directory), pause: crate::pause_policy::fence::PauseFence::new(directory) }
     }
 
     /// T `LOCK_EX|LOCK_NB`, then A `LOCK_EX|LOCK_NB`; `None` when either is
-    /// busy (Python's `SandboxBusyError`).
+    /// busy (Python's `SandboxBusyError`). The pause policy's fence: A is
+    /// never created by a pause, since its mtime is the activity clock.
     pub fn try_exclusive(&self, sandbox_id: &str) -> io::Result<Option<Exclusive>> {
-        if !safe_id(sandbox_id) {
-            return Ok(None);
-        }
-        let Some(transition) = try_lock(&self.directory.join(format!(".{sandbox_id}.transition")), libc::LOCK_EX)? else {
-            return Ok(None);
-        };
-        let Some(activity) = try_lock(&self.directory.join(format!(".{sandbox_id}.activity")), libc::LOCK_EX)? else {
-            return Ok(None);
-        };
-        Ok(Some(Exclusive { _activity: activity, _transition: transition }))
+        self.pause.try_exclusive(sandbox_id)
     }
 
     /// An exec's fence: T shared then A shared, non-blocking, T released.

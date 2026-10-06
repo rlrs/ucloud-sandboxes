@@ -132,7 +132,9 @@ impl PauseMechanism for PauseTier {
             if !tier.config().enabled {
                 return Err("the pause tier is disabled on this node".into());
             }
-            let lock = tier.lock(&sandbox).await.map_err(|error| error.to_string())?;
+            // A pause holds T exclusively; it never waits for the warden flock
+            // behind an operation that runs a guest command under it.
+            let Some(lock) = tier.try_lock(&sandbox).await.map_err(|error| error.to_string())? else { return Ok(false) };
             let Some(record) = tier.journal_record(&sandbox).await.map_err(|error| error.to_string())? else { return Ok(false) };
             let running = record.get("state").and_then(Value::as_str) == Some("running");
             if !running || tier.is_paused(&sandbox.sandbox_id, sandbox.generation) || !check(&record) {
@@ -227,6 +229,10 @@ pub type Answered = Arc<dyn Fn(&str, u64) -> bool + Send + Sync>;
 pub struct PolicyConfig {
     /// `status.json` and `agent-demand.json` live in `<state_root>/noded/`.
     pub state_root: PathBuf,
+    /// This daemon's session (`X-UCloud-Noded-Session`): `status.json`'s
+    /// counters and `seq` start at 0 per session, and the agent folds one
+    /// session's last values into its base when the session changes.
+    pub session: String,
     /// `direct_idle_park_seconds`; 0 or less: no idle pause.
     pub idle_park_seconds: f64,
     pub proc_root: PathBuf,
@@ -239,9 +245,10 @@ pub struct PolicyConfig {
 
 impl PolicyConfig {
     /// The roots of the node's pause tier.
-    pub fn new(state_root: PathBuf, idle_park_seconds: f64, pause: &PauseConfig) -> PolicyConfig {
+    pub fn new(state_root: PathBuf, session: String, idle_park_seconds: f64, pause: &PauseConfig) -> PolicyConfig {
         PolicyConfig {
             state_root,
+            session,
             idle_park_seconds,
             proc_root: pause.warden.proc_root.clone(),
             cgroup_root: pause.cgroup_root.clone(),

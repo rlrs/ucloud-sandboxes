@@ -338,6 +338,7 @@ fn test_config(root: &Path) -> PolicyConfig {
     // Containment checks compare canonical paths.
     let root = std::fs::canonicalize(root).unwrap();
     PolicyConfig {
+        session: "session-test".into(),
         state_root: root.join("state"),
         idle_park_seconds: 1.0,
         proc_root: root.join("proc"),
@@ -809,7 +810,7 @@ fn the_real_pause_tier_pauses_an_idle_sandbox() {
     });
     let clock = FakeClock::at(10.0);
     write_pressure(&root.join("proc"), 0.9, 90 * GIB, None);
-    let mut config = PolicyConfig::new(root.join("state"), 1.0, &pause);
+    let mut config = PolicyConfig::new(root.join("state"), "session-test".into(), 1.0, &pause);
     config.tick = Duration::from_millis(10);
     let engine = Engine::new(config, Deps {
         mechanism: Arc::new(tier.clone()),

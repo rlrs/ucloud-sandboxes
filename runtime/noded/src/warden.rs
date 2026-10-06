@@ -159,6 +159,18 @@ impl Warden {
         .await
     }
 
+    /// `lock` without waiting: `None` while another operation holds it (a
+    /// Python download or commit export runs its guest command under it).
+    pub async fn try_lock(&self, sandbox: &Sandbox) -> Result<Option<FileLock>, WardenError> {
+        let directory = self.config.runtime_root.join("warden-locks");
+        let name = format!(".{}.sandbox-{}.warden.lock", sandbox.sandbox_id, sandbox.generation);
+        blocking(move || {
+            ensure_private_dir(&directory)?;
+            Ok(FileLock::try_acquire(&directory.join(name), false)?)
+        })
+        .await
+    }
+
     async fn journaled(&self, sandbox: &Sandbox) -> Result<bool, WardenError> {
         let (journal, id, generation) = (self.journal.clone(), sandbox.sandbox_id.clone(), sandbox.generation);
         blocking(move || Ok(journal.load(&id, generation)?.is_some())).await

@@ -32,6 +32,15 @@ pub struct FileLock {
 impl FileLock {
     /// Python: open(O_RDWR|O_CREAT|O_CLOEXEC|O_NOFOLLOW, 0o600) + flock(LOCK_EX).
     pub fn acquire(path: &Path, require_private: bool) -> io::Result<FileLock> {
+        Self::flocked(path, require_private, libc::LOCK_EX).map(|lock| lock.expect("blocking flock returns a lock"))
+    }
+
+    /// `acquire` without waiting: `None` when another holder has it.
+    pub fn try_acquire(path: &Path, require_private: bool) -> io::Result<Option<FileLock>> {
+        Self::flocked(path, require_private, libc::LOCK_EX | libc::LOCK_NB)
+    }
+
+    fn flocked(path: &Path, require_private: bool, operation: libc::c_int) -> io::Result<Option<FileLock>> {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -47,10 +56,11 @@ impl FileLock {
             }
         }
         // SAFETY: the descriptor is valid for the life of `file`.
-        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } != 0 {
-            return Err(io::Error::last_os_error());
+        if unsafe { libc::flock(file.as_raw_fd(), operation) } != 0 {
+            let error = io::Error::last_os_error();
+            return if error.raw_os_error() == Some(libc::EWOULDBLOCK) { Ok(None) } else { Err(error) };
         }
-        Ok(FileLock { file })
+        Ok(Some(FileLock { file }))
     }
 }
 

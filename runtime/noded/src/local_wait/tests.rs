@@ -724,20 +724,20 @@ async fn a_pause_takes_the_fence_exclusively_and_skips_when_busy() {
     let fake = TierFake::new();
     let (actions, _) = fake.actions(true);
     // An exec holds A shared.
-    let Fenced::Held(exec) = ExecFence::new(&fake.locks).acquire("sb-1").unwrap() else { panic!("the fence is free") };
+    let exec = exec_fence_eventually(&fake.locks, "sb-1");
     assert_eq!(actions.pause(fake.wait.clone(), yes()).await, Outcome::Busy);
     drop(exec);
     // A transition holds T exclusively.
-    let transition = try_lock(&fake.locks.join(".sb-1.transition"), libc::LOCK_EX).unwrap().unwrap();
+    let transition = lock_eventually(&fake.locks.join(".sb-1.transition"));
     assert_eq!(actions.pause(fake.wait.clone(), yes()).await, Outcome::Busy);
     drop(transition);
     assert!(!fake.paused() && fake.status() == "running");
     // The answer came in meanwhile: nothing to pause.
-    assert_eq!(actions.pause(fake.wait.clone(), Box::new(|| false)).await, Outcome::Done);
+    assert_eq!(unless_busy(|| actions.pause(fake.wait.clone(), Box::new(|| false))).await, Outcome::Done);
     assert!(!fake.paused());
-    assert_eq!(actions.pause(fake.wait.clone(), yes()).await, Outcome::Acted);
+    assert_eq!(unless_busy(|| actions.pause(fake.wait.clone(), yes())).await, Outcome::Acted);
     assert!(fake.paused() && fake.status() == "paused");
-    assert_eq!(actions.pause(fake.wait.clone(), yes()).await, Outcome::Done); // Already paused.
+    assert_eq!(unless_busy(|| actions.pause(fake.wait.clone(), yes())).await, Outcome::Done); // Already paused.
     // While paused, an exec can hold its fence and a pause cannot.
     let held = fake.fence.try_exclusive("sb-1").unwrap();
     assert!(held.is_some());
@@ -750,13 +750,13 @@ async fn a_pause_takes_the_fence_exclusively_and_skips_when_busy() {
 async fn a_pause_skips_a_replaced_registration_or_a_runtime_that_is_not_running() {
     let fake = TierFake::new();
     let (stale, _) = fake.actions(false);
-    assert_eq!(stale.pause(fake.wait.clone(), yes()).await, Outcome::Done);
+    assert_eq!(unless_busy(|| stale.pause(fake.wait.clone(), yes())).await, Outcome::Done);
     let (actions, _) = fake.actions(true);
     let mut dead = fake.wait.clone();
     dead.sandbox.generation = 2; // No journal for it.
-    assert_eq!(actions.pause(dead, yes()).await, Outcome::Done);
+    assert_eq!(unless_busy(|| actions.pause(dead.clone(), yes())).await, Outcome::Done);
     fake.set_journal_state("parked");
-    assert_eq!(actions.pause(fake.wait.clone(), yes()).await, Outcome::Done);
+    assert_eq!(unless_busy(|| actions.pause(fake.wait.clone(), yes())).await, Outcome::Done);
     assert!(!fake.paused() && fake.status() == "running");
 }
 
@@ -764,14 +764,16 @@ async fn a_pause_skips_a_replaced_registration_or_a_runtime_that_is_not_running(
 async fn a_thaw_resumes_under_an_execs_fence_and_marks_activity() {
     let fake = TierFake::new();
     let (actions, events) = fake.actions(true);
-    assert_eq!(actions.thaw(fake.wait.clone()).await, Outcome::Done); // Not paused.
-    assert_eq!(actions.pause(fake.wait.clone(), yes()).await, Outcome::Acted);
+    assert_eq!(unless_busy(|| actions.thaw(fake.wait.clone())).await, Outcome::Done); // Not paused.
+    // A exists from the sandbox's first activity (a pause never creates it).
+    drop(ExecFence::new(&fake.locks).acquire("sb-1").unwrap());
+    assert_eq!(unless_busy(|| actions.pause(fake.wait.clone(), yes())).await, Outcome::Acted);
     let activity = fake.locks.join(".sb-1.activity");
     let old = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
     std::fs::File::options().write(true).open(&activity).unwrap().set_modified(old).unwrap();
     // A Python-served op holds A shared: a thaw shares it.
-    let Fenced::Held(exec) = ExecFence::new(&fake.locks).acquire("sb-1").unwrap() else { panic!("the fence is free") };
-    assert_eq!(actions.thaw(fake.wait.clone()).await, Outcome::Acted);
+    let exec = exec_fence_eventually(&fake.locks, "sb-1");
+    assert_eq!(unless_busy(|| actions.thaw(fake.wait.clone())).await, Outcome::Acted);
     drop(exec);
     assert!(!fake.paused() && fake.status() == "running");
     assert!(std::fs::metadata(&activity).unwrap().modified().unwrap() > old);
@@ -783,8 +785,8 @@ async fn a_thaw_resumes_under_an_execs_fence_and_marks_activity() {
 async fn a_thaw_behind_a_transition_or_off_a_live_runtime_goes_to_the_agent() {
     let fake = TierFake::new();
     let (actions, events) = fake.actions(true);
-    assert_eq!(actions.pause(fake.wait.clone(), yes()).await, Outcome::Acted);
-    let transition = try_lock(&fake.locks.join(".sb-1.transition"), libc::LOCK_EX).unwrap().unwrap();
+    assert_eq!(unless_busy(|| actions.pause(fake.wait.clone(), yes())).await, Outcome::Acted);
+    let transition = lock_eventually(&fake.locks.join(".sb-1.transition"));
     assert_eq!(actions.thaw(fake.wait.clone()).await, Outcome::Delegated);
     drop(transition);
     assert!(fake.paused());
@@ -801,6 +803,8 @@ async fn a_thaw_behind_a_transition_or_off_a_live_runtime_goes_to_the_agent() {
 fn the_fence_retakes_a_lock_on_an_unlinked_inode() {
     let dir = TempDir::new("lw-fence");
     let fence = WaitFence::new(&dir.0);
+    // An exec made A (a pause never creates it: its mtime is the activity clock).
+    drop(fence.try_shared("box-1").unwrap());
     let old = fence.try_exclusive("box-1").unwrap().unwrap();
     assert!(fence.try_exclusive("box-1").unwrap().is_none());
     // Delete unlinks A, then T, while an old holder keeps the orphans.
@@ -809,6 +813,48 @@ fn the_fence_retakes_a_lock_on_an_unlinked_inode() {
     assert!(fence.try_exclusive("box-1").unwrap().is_some());
     drop(old);
     assert!(fence.try_exclusive("../x").unwrap().is_none());
+}
+
+/// An action that should not meet a busy fence: retried while it does, for at
+/// most 2 s (another test's child can hold a closed lock between fork and exec).
+async fn unless_busy<F, Fut>(mut action: F) -> Outcome
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Outcome>,
+{
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        let outcome = action().await;
+        if outcome != Outcome::Busy || std::time::Instant::now() >= deadline {
+            return outcome;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+}
+
+/// A free lock file taken exclusively, retried as `unless_busy` is.
+fn lock_eventually(path: &Path) -> std::fs::File {
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        match try_lock(path, libc::LOCK_EX).unwrap() {
+            Some(file) => return file,
+            None if std::time::Instant::now() < deadline => std::thread::sleep(Duration::from_millis(5)),
+            None => panic!("{} stayed locked", path.display()),
+        }
+    }
+}
+
+/// An exec's fence on a free sandbox. Another test's child process can hold
+/// a closed lock's descriptor for a moment between its fork and its exec.
+fn exec_fence_eventually(locks: &Path, sandbox_id: &str) -> crate::exec_fence::ActivityLease {
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        match ExecFence::new(locks).acquire(sandbox_id).unwrap() {
+            Fenced::Held(lease) => return lease,
+            Fenced::Busy if std::time::Instant::now() < deadline => std::thread::sleep(Duration::from_millis(5)),
+            Fenced::Busy => panic!("the fence stayed busy"),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -691,6 +691,11 @@ left. The 40 failures in every run are images without Python 3, which the harnes
 | 0.9.36 | warm (one worker replaced) | 984 | 99 / 206 / 212 s | 0.26 / 1.97 s |
 | 0.9.37 | cold | 980 | 115 / 154 / 164 s | 0.78 / 2.79 s |
 | 0.9.37 | warm | 981 | 24 / 64 / 74 s | 0.87 / 2.92 s |
+| 0.9.38 | cold / warm | 984 / 984 | 115 / 148 / 154 s; 28 / 63 / 68 s | 0.33 s; 0.25 s |
+| 0.9.39 | cold / warm | 984 / 984 | 119 / 152 / 156 s; 26 / 57 / 63 s | 0.18 s; 0.21 s |
+| 0.9.40 | cold / warm | 984 / 984 | 114 / 143 / 151 s; 24 / 56 / 61 s | 0.86 s; 0.26 s |
+| 0.9.40 | warm, second seed | 984 | 24 / 51 / 56 s | 0.23 s |
+| 0.9.41 | cold / warm | 984 / 984 | 119 / 151 / 161 s; 25 / 55 / 69 s | 0.37 s; 0.34 s |
 
 Every turn of every completed rollout succeeded. 0.9.37's 7 other failures were the
 benchmark client running out of descriptors under `systemd-run`'s default limit of 1,024.
@@ -729,3 +734,14 @@ benchmark client running out of descriptors under `systemd-run`'s default limit 
   - registry commits: 0.74 s;
   - runsc: 0.77 s;
   - storage prepare: 0.5 s.
+
+**After 0.9.37 (0.9.38–0.9.41).**
+- **0.9.38.** A managed-process create is no longer charged the memory bound its launch carries. With 64 startup slots, creates waited in memory admission for a mean 3.0 s on workers that never had less than 141 GB available. 64 slots alone made warm ready worse (27/85/95 s), so slots stayed at 32.
+- **0.9.39 measured the registry's time.** Creates waited about 1.7 s for its one writer (`registry_turn_ms`), while the COMMIT itself took 5 ms at the median. Thread dumps showed 25–42 writers queued behind one holder. State-disk fsync under the burst ran p50 0.3–7 ms, but spiked to p95 60–110 ms and up to 565 ms.
+- **0.9.40: group commit.** Queued writers share one COMMIT. Registry time per create fell from 1.3 s to 0.5 s, and warm max ready from 74 s to 55–61 s.
+- **0.9.41: udev leaves nbd and ublk devices alone, and udisks is masked.** udev still used 6–10 cores, mostly on network devices. This was neutral for creates, because workers run at about 50% CPU during the burst.
+- **Where it stands.** Warm creates run at a steady ~20/s on two workers: about 600 ready at 30 s, all 1,024 by 55–70 s. A create still holds its slot about 3 s, spread across:
+  - storage prepare: 0.8 s;
+  - runtime: 0.8 s;
+  - registry: 0.5 s;
+  - network: 0.4 s.

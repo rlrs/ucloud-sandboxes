@@ -1991,6 +1991,19 @@ on 32 sandboxes at once.
   2. Prepare network namespaces and volumes ahead of demand. The network pool and the storage daemon's device pool already exist, but are sized for steady state, not a 500-sandbox step.
   3. M2's 30 s for 1,024 assumed more than two workers. On two, about 20 creates/s gives ~600 ready at 30 s and all by about 60 s.
 
+### 2026-10-06: the Rust node daemon (0.9.44–0.9.48), M2's readiness and exec gates met
+
+Creates, execs, pause and local waits moved into `ucloud-noded` ([rust-node-daemon-plan.md](rust-node-daemon-plan.md) has the phases and per-release measurements).
+
+- **Readiness (M2: 1,024 over 128 images, all ≤ 30 s, on three nodes).** Warm on three 64-vCPU workers with 0.9.48: **all 1,024 ready by 27.6 s** (p50 13.6 s, p95 25.3 s). On two workers, 895 by 30 s and all by 37 s (0.9.43: 610 by 30 s, all by 63 s). From zero, provisioning dominates (max 132 s).
+- **Exec (M2: ≥ 1,000 starts/s per node).** **1,239–1,306/s** at p50 24–25 ms with 32 sandboxes, and 1,252/s with 128, after two daemon fixes found by per-check timings: execs share one drain read instead of 128 concurrent SQLite readers, and spawn with `posix_spawn` instead of forking the daemon (a `pre_exec` death-signal hook had made every exec a full fork under the daemon's mmap lock). 0.9.48 as released does 120–280/s. C5.1's exec number no longer needs the in-guest agent.
+- **Uploads (managed, 32 sandboxes):** archive harness 5,666 files/s; 8 MB at 899 MB/s.
+- **Not met: ≥ 300 creates/s cluster-wide.** Three workers deliver about 35 ready sandboxes/s at the burst; a startup slot is held for `manager_create` (p50 1.1 s, p95 3.9 s).
+- **Next:**
+  1. Release the exec fixes (committed after 0.9.48) and repeat the warm three-worker rehearsal with them.
+  2. Training runs need `policy.max_nodes ≥ 3`; production stays at 2 until that is decided.
+  3. The create tail (`manager_create` p95 3.9 s): the warm image lease, `runsc create`, storage prepare and registry commit tails.
+
 ## Appendix: evidence index
 
 - Image path:

@@ -370,11 +370,79 @@ images):
    - the delete-refreshed 60 s grace can thrash a node near its device
      budget.
 5. **Not yet started:**
-   - 2c and 2d: the guest agent as the exec transport, and files over it,
-     for C5.1's exec numbers;
+   - 2c and 2d: the guest agent as the exec transport, and files over it.
+     They are no longer needed for C5.1's exec numbers (next section);
    - 3b: resident sampling;
    - phase 4: park, wake, migration, commit and fork, then deleting the
      Python agent.
+
+### The gate's own shape: three workers (0.9.48, 2026-10-06)
+
+M2's readiness target assumes three nodes; the runs above used two.
+Warm 1,024-rollout rehearsal on three 64-vCPU workers (`policy.max_nodes`
+raised to 3 for the run, then restored):
+
+| Ready by | 10 s | 20 s | 30 s |
+|---|---|---|---|
+| 0.9.48, two workers | 323 | 643 | 895 |
+| 0.9.48, three workers | 370 | 762 | **1,024** |
+
+- **Ready time:** p50 13.6 s, p95 25.3 s, max 27.6 s. **M2's readiness gate
+  is met.** Relay overhead p95 86 ms; no failed turns; 984/1,024 as always
+  (40 images without Python).
+- **Node-side create (p50 / p95):** `manager_create` 1.1 / 3.9 s,
+  `runtime_create` 238 / 949 ms, `storage_prepare` 193 / 632 ms,
+  `registry_commit` 34 / 599 ms, `network_ensure` 20 / 117 ms.
+- **From zero** (cold): ready p50 116 s, max 132 s, as on two workers;
+  VM provisioning dominates.
+- Two short probes (34 sandboxes for a few seconds) ran during the cold run.
+
+### Exec throughput per node (2026-10-06, after 0.9.48)
+
+Measured through the gateway from the store node, on one 64-vCPU worker:
+`true` execs with one in flight per sandbox (the training shape), and the
+0.9.29 workload (`exec_rate.py`).
+
+| Daemon build | 32 sandboxes | 128 sandboxes | Start round trip p50 (32 / 128) |
+|---|---|---|---|
+| 0.9.48 (fresh process) | 281/s | ~120/s | 115 ms / 600 ms |
+| 0.9.48 (after ~40 k execs) | 122/s | 119/s | 260 ms / 630 ms |
+| + shared drain read (`a30d9e5`) | 292/s | 180/s | 108 ms / 680 ms |
+| + `posix_spawn` (`f68b00e`) | **1,239/s** | **1,252/s** | **25 ms / 97 ms** |
+
+Managed-process sandboxes (relay mode) match: 1,306/s at p50 24 ms (from
+125/s at 251 ms). C5.1's gate (≥ 1,000 starts/s per node) is met with
+`runsc exec` per command; at 128 the client (one Python process on 8 vCPU)
+is the likely limit.
+
+- **Finding the cost.** Per-check marks in the start reply (`af1786e`) put
+  the queueing in `launch`: first the registry check (p50 334 ms, p95 3.5 s,
+  max 12.8 s at 128), then every check slowing alike.
+- **The drain read.** Every exec read the drain row in its own SQLite
+  transaction. 128 concurrent WAL readers contend for read marks and back
+  off for up to seconds; readers past the 64 pooled connections also leaked
+  descriptors (512 open on an empty node), because SQLite defers closing a
+  file that another connection holds locks on. Execs now share one read,
+  which counts only for callers that arrived before it began, so a drain
+  committed before an exec arrives still closes admission for it.
+- **The spawn.** A `pre_exec` hook (for `PR_SET_PDEATHSIG`) made every exec
+  a full `fork()` of the daemon on one of four fork threads, copying its
+  page tables under its mmap lock. The daemon's cgroup burned 13 cores at
+  180 execs/s (74 ms of CPU per exec, 92% kernel), while `runsc exec` itself
+  costs about 26 ms of CPU under concurrency. `posix_spawn` shares the
+  address space until the exec. Children still die with the daemon: the
+  unit runs with `KillMode=control-group`, and the Python agent never set a
+  death signal.
+- **Uploads (managed, 32 sandboxes):** the 40-file archive harness in
+  0.23 s (5,666 files/s); 8 MB uploads at 899 MB/s; one file per request at
+  310 files/s (still Python's).
+- **8 MB uploads failed twice on the unfixed daemon** (`BrokenPipeError` in
+  the SDK while sending the body, all 32 uploads, after the exec levels).
+  The SDK is not at fault: it retires pooled connections after 5 s, checks
+  each for a peer close before reuse, and every upload and exec reply
+  carries `Connection: close`, so none is pooled. The same 32 × 8 MB uploads
+  succeed on fresh connections (0.37 s each), and the full sequence passed
+  after the spawn fix. Cause not found; watch for it in the next rehearsal.
 
 ### What 0.9.47 measured (storage prepare)
 

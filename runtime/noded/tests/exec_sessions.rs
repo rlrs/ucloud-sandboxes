@@ -43,7 +43,7 @@ fn argv(script: &str) -> Vec<String> {
 async fn start(manager: &ExecManager, script: &str, stdin: bool, initial_wait: Option<f64>) -> (String, Value, Arc<AtomicBool>) {
     let (guard, released) = fence();
     let reply = manager
-        .start(request(script, stdin, initial_wait), argv(script), guard, StartTimings::now())
+        .start(request(script, stdin, initial_wait), argv(script), guard, None, StartTimings::now())
         .await
         .unwrap();
     assert_eq!(reply.status, 201);
@@ -268,7 +268,7 @@ async fn a_spawn_failure_is_a_failed_session_not_an_http_error() {
     let manager = manager();
     let (guard, released) = fence();
     let reply = manager
-        .start(request("true", false, Some(0.05)), vec!["/nonexistent/runsc".into(), "exec".into()], guard, StartTimings::now())
+        .start(request("true", false, Some(0.05)), vec!["/nonexistent/runsc".into(), "exec".into()], guard, None, StartTimings::now())
         .await
         .unwrap();
     assert_eq!(reply.status, 201);
@@ -294,7 +294,7 @@ async fn capacity_evicts_delivered_results_and_never_running_sessions() {
     let (first, _, _) = start(&manager, "exec sleep 30", false, None).await;
     let (second, _, _) = start(&manager, "exec sleep 30", false, None).await;
     let (guard, released) = fence();
-    let refused = manager.start(request("true", false, None), argv("true"), guard, StartTimings::now()).await;
+    let refused = manager.start(request("true", false, None), argv("true"), guard, None, StartTimings::now()).await;
     assert_eq!(refused, Err(ExecError::ExecDeferred("exec session capacity reached".into())));
     let reply = refused.unwrap_err().reply();
     assert_eq!(reply.status, 503);
@@ -309,7 +309,7 @@ async fn capacity_evicts_delivered_results_and_never_running_sessions() {
     manager.signal(&second, br#"{"signal":9}"#).await;
     eventually("both terminal", || manager.running_count() == 0).await;
     let (guard, _) = fence();
-    assert!(manager.start(request("true", false, None), argv("true"), guard, StartTimings::now()).await.is_err());
+    assert!(manager.start(request("true", false, None), argv("true"), guard, None, StartTimings::now()).await.is_err());
     // Delivering the first's final event makes it evictable after the grace.
     drain(&manager, &first, 0).await;
     tokio::time::sleep(Duration::from_millis(2_100)).await;
@@ -398,7 +398,7 @@ async fn a_gateway_prefix_names_the_session() {
     let body = json!({"command": ["true"], "env": {"B": "1"}, "working_dir": "/", "stdin": false, "tty": false});
     let request = ExecRequest::parse("sbx", body.to_string().as_bytes(), "", Some(&prefix)).unwrap();
     let (guard, _) = fence();
-    let reply = manager.start(request, argv("true"), guard, StartTimings::now()).await.unwrap();
+    let reply = manager.start(request, argv("true"), guard, None, StartTimings::now()).await.unwrap();
     let id = reply.body["session"]["id"].as_str().unwrap();
     assert_eq!(id.len(), prefix.len() + 33);
     assert!(id.starts_with(&format!("{prefix}.")));
@@ -420,4 +420,20 @@ async fn capacity_evicts_the_oldest_retained_result_first() {
     assert!(!manager.owns(&first), "least recently updated goes first");
     assert!(manager.owns(&second) && manager.owns(&third));
     manager.signal(&third, br#"{"signal":9}"#).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_spawn_fence_is_released_after_the_spawn_and_the_guard_after_the_process() {
+    let manager = manager();
+    let (guard, released) = fence();
+    let (spawn_fence, spawn_released) = fence();
+    let reply = manager
+        .start(request("exec sleep 30", false, Some(0.05)), argv("exec sleep 30"), guard, Some(spawn_fence), StartTimings::now())
+        .await
+        .unwrap();
+    assert!(spawn_released.load(Ordering::SeqCst));
+    assert!(!released.load(Ordering::SeqCst));
+    let id = reply.body["session"]["id"].as_str().unwrap();
+    manager.signal(id, br#"{"signal":9}"#).await;
+    eventually("completion", || released.load(Ordering::SeqCst)).await;
 }

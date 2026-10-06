@@ -419,6 +419,10 @@ impl ExecManager {
     /// Python. The only error is [`ExecError::ExecDeferred`] at capacity, when
     /// nothing started and `guard` has been dropped.
     ///
+    /// `spawn_fence`, if any, is dropped as soon as the spawn returns, before
+    /// the initial snapshot wait: the warden flock goes there (Python releases
+    /// it in `exec_started`, right after `Popen`).
+    ///
     /// Cancel-safe: once called, the session starts even if the caller's
     /// future is dropped.
     pub async fn start(
@@ -426,11 +430,12 @@ impl ExecManager {
         request: ExecRequest,
         argv: Vec<String>,
         guard: Guard,
+        spawn_fence: Option<Guard>,
         timings: StartTimings,
     ) -> Result<Reply, ExecError> {
         self.inner.activity(&request.sandbox_id, &*guard);
         let initial_wait = request.initial_wait;
-        let launched = tokio::spawn(self.inner.clone().launch(request, argv, guard));
+        let launched = tokio::spawn(self.inner.clone().launch(request, argv, guard, spawn_fence));
         let (session, session_start) = launched
             .await
             .map_err(|error| ExecError::Unavailable(format!("exec start failed: {error}")))??;
@@ -522,7 +527,13 @@ impl Inner {
         lock(&self.table).sessions.get(session_id).cloned()
     }
 
-    async fn launch(self: Arc<Self>, request: ExecRequest, argv: Vec<String>, guard: Guard) -> Result<(Arc<Session>, Value), ExecError> {
+    async fn launch(
+        self: Arc<Self>,
+        request: ExecRequest,
+        argv: Vec<String>,
+        guard: Guard,
+        spawn_fence: Option<Guard>,
+    ) -> Result<(Arc<Session>, Value), ExecError> {
         let started = Instant::now();
         let now = SystemTime::now();
         let session = Arc::new(Session {
@@ -566,6 +577,7 @@ impl Inner {
         // Held across the spawn, so a racing stdin write finds the pipe.
         let mut stdin = session.stdin.lock().await;
         let spawned = spawn(&session.argv, session.request.stdin).await;
+        drop(spawn_fence);
         let popen_ms = millis(mark);
         let mark = Instant::now();
         match spawned {

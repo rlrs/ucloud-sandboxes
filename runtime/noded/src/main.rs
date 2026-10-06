@@ -1,5 +1,5 @@
 //! ucloud-noded --listen ADDR --upstream-unix PATH [--max-connections N]
-//!               [--rust-create --node-control-token-file PATH]
+//!               [--rust-create] [--rust-exec] [--node-control-token-file PATH]
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -12,7 +12,7 @@ fn usage(message: &str) -> ExitCode {
     eprintln!("ucloud-noded: {message}");
     eprintln!(
         "usage: ucloud-noded --listen ADDR --upstream-unix PATH [--max-connections N] \
-         [--rust-create --node-control-token-file PATH]"
+         [--rust-create] [--rust-exec] [--node-control-token-file PATH]"
     );
     ExitCode::from(2)
 }
@@ -22,11 +22,12 @@ fn main() -> ExitCode {
     let mut upstream: Option<PathBuf> = None;
     let mut max_connections: Option<usize> = None;
     let mut rust_create = false;
+    let mut rust_exec = false;
     let mut token_file: Option<PathBuf> = None;
     let mut args = std::env::args().skip(1);
     while let Some(flag) = args.next() {
-        if flag == "--rust-create" {
-            rust_create = true;
+        if flag == "--rust-create" || flag == "--rust-exec" {
+            *(if flag == "--rust-create" { &mut rust_create } else { &mut rust_exec }) = true;
             continue;
         }
         let Some(value) = args.next() else { return usage(&format!("{flag} needs a value")) };
@@ -47,9 +48,9 @@ fn main() -> ExitCode {
     let (Some(listen), Some(upstream)) = (listen, upstream) else {
         return usage("--listen and --upstream-unix are required");
     };
-    let token = match (rust_create, token_file) {
+    let token = match (rust_create || rust_exec, token_file) {
         (false, _) => None,
-        (true, None) => return usage("--rust-create needs --node-control-token-file"),
+        (true, None) => return usage("--rust-create and --rust-exec need --node-control-token-file"),
         (true, Some(path)) => match std::fs::read_to_string(&path) {
             Ok(token) if !token.trim().is_empty() => Some(token.trim().to_string()),
             Ok(_) => return usage("the node control token file is empty"),
@@ -88,7 +89,12 @@ fn main() -> ExitCode {
                 _ = interrupt.recv() => {}
             }
         };
-        let create = match token {
+        if rust_exec {
+            // Phase 2a: until the exec terminator is wired in, execs keep going
+            // to the agent, which still serves every exec route.
+            eprintln!("ucloud-noded: --rust-exec: execs stay with the agent in this build");
+        }
+        let create = match token.filter(|_| rust_create) {
             Some(token) => match ucloud_noded::start_creates(&config.upstream, &token) {
                 Ok(front) => Some(front),
                 Err(error) => {

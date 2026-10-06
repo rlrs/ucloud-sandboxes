@@ -205,7 +205,7 @@ pub struct Fronts {
 /// fresh session, and the node (registry owner, pipeline) once the agent
 /// reports its configuration. Execs need the node, so `--rust-exec` needs
 /// `--rust-create` in this build.
-pub fn start_fronts(upstream: &std::path::Path, token: &str, exec: bool) -> Result<Fronts, String> {
+pub fn start_fronts(upstream: &std::path::Path, token: &str, exec: bool, pause: bool) -> Result<Fronts, String> {
     let mut nonce = [0u8; 16];
     std::fs::File::open("/dev/urandom")
         .and_then(|mut random| std::io::Read::read_exact(&mut random, &mut nonce))
@@ -216,6 +216,11 @@ pub fn start_fronts(upstream: &std::path::Path, token: &str, exec: bool) -> Resu
     let node = Arc::new(std::sync::OnceLock::new());
     let (pipeline_agent, cell) = (agent.clone(), node.clone());
     tokio::spawn(pipeline.clone().load(agent.clone(), move |config| {
+        // The pause tier is the daemon's only with --rust-pause and the agent's say-so.
+        let mut config = config;
+        if let Some(block) = config.pause.as_mut() {
+            block.rust_pause_enabled &= pause;
+        }
         let opened = Arc::new(node_pipeline::NodePipeline::open(config, pipeline_agent.clone())?);
         let _ = cell.set(opened.clone());
         Ok(opened as Arc<dyn create::Pipeline>)

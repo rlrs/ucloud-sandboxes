@@ -1,5 +1,5 @@
 //! ucloud-noded --listen ADDR --upstream-unix PATH [--max-connections N]
-//!               [--rust-create] [--rust-exec] [--node-control-token-file PATH]
+//!               [--rust-create] [--rust-exec] [--rust-pause] [--node-control-token-file PATH]
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -12,7 +12,7 @@ fn usage(message: &str) -> ExitCode {
     eprintln!("ucloud-noded: {message}");
     eprintln!(
         "usage: ucloud-noded --listen ADDR --upstream-unix PATH [--max-connections N] \
-         [--rust-create] [--rust-exec] [--node-control-token-file PATH]"
+         [--rust-create] [--rust-exec] [--rust-pause] [--node-control-token-file PATH]"
     );
     ExitCode::from(2)
 }
@@ -23,11 +23,17 @@ fn main() -> ExitCode {
     let mut max_connections: Option<usize> = None;
     let mut rust_create = false;
     let mut rust_exec = false;
+    let mut rust_pause = false;
     let mut token_file: Option<PathBuf> = None;
     let mut args = std::env::args().skip(1);
     while let Some(flag) = args.next() {
-        if flag == "--rust-create" || flag == "--rust-exec" {
-            *(if flag == "--rust-create" { &mut rust_create } else { &mut rust_exec }) = true;
+        match flag.as_str() {
+            "--rust-create" => rust_create = true,
+            "--rust-exec" => rust_exec = true,
+            "--rust-pause" => rust_pause = true,
+            _ => {}
+        }
+        if matches!(flag.as_str(), "--rust-create" | "--rust-exec" | "--rust-pause") {
             continue;
         }
         let Some(value) = args.next() else { return usage(&format!("{flag} needs a value")) };
@@ -48,7 +54,7 @@ fn main() -> ExitCode {
     let (Some(listen), Some(upstream)) = (listen, upstream) else {
         return usage("--listen and --upstream-unix are required");
     };
-    let token = match (rust_create || rust_exec, token_file) {
+    let token = match (rust_create || rust_exec || rust_pause, token_file) {
         (false, _) => None,
         (true, None) => return usage("--rust-create and --rust-exec need --node-control-token-file"),
         (true, Some(path)) => match std::fs::read_to_string(&path) {
@@ -89,11 +95,11 @@ fn main() -> ExitCode {
                 _ = interrupt.recv() => {}
             }
         };
-        if rust_exec && !rust_create {
-            eprintln!("ucloud-noded: --rust-exec needs --rust-create in this build; execs stay with the agent");
+        if (rust_exec || rust_pause) && !rust_create {
+            eprintln!("ucloud-noded: --rust-exec and --rust-pause need --rust-create; they stay with the agent");
         }
         let fronts = match token.filter(|_| rust_create) {
-            Some(token) => match ucloud_noded::start_fronts(&config.upstream, &token, rust_exec) {
+            Some(token) => match ucloud_noded::start_fronts(&config.upstream, &token, rust_exec, rust_pause) {
                 Ok(fronts) => fronts,
                 Err(error) => {
                     eprintln!("ucloud-noded: {error}");

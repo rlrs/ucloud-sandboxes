@@ -187,8 +187,17 @@ protocols and the create endpoint's contract.
     file.
   - Relay egress policies and DNS-named egress endpoints stay in Python.
   - The Python network pool is not started while the daemon creates, because
-    pooled pairs are usable only by the process that made them. The pool
-    moves to Rust next.
+    pooled pairs are usable only by the process that made them.
+  - **Done (after 0.9.47):** the daemon makes the pair over rtnetlink (no `ip`
+    processes; IPv6 off on both veth ends, lo keeps `::1`), owns the pool
+    (`network_pool_size` in the create config, default 32; under
+    `--rust-creates` the agent never touches `state["pool"]`), allocates
+    concurrent leases with one durable state write, and creates cold pairs
+    one at a time. Measured on the dev box, host rules excluded, 32 creates
+    at once: before p50 113 ms and p95 200 ms; after, cold p50 38 ms and
+    p95 60 ms, pooled p50 16 ms and p95 18 ms. The rest of a pooled create
+    is the state file's fsyncs (one sequential pooled create: 6.3 ms on disk,
+    0.3 ms on tmpfs).
 - **The daemon creates only what it fully supports.** Any other create
   request is forwarded to the agent unchanged, so unsupported options stay
   correct:
@@ -374,7 +383,8 @@ are managed sandboxes.
   the node API. Unit and crash-replay tests are rewritten in Rust per subsystem
   as it moves.
 - **Kernel follow-ups independent of the language:**
-  - IPv6 off on sandbox veths;
+  - IPv6 off on sandbox veths (done in the daemon's pairs; the agent's own
+    relay-egress pairs still have it);
   - keep sandbox mounts out of the namespace runsc copies (or private), so a
     create's mount-namespace copy stays O(base mounts).
 

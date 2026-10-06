@@ -27,7 +27,7 @@ use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::process::ExitStatusExt;
 use std::process::Stdio;
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, mpsc};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime};
 
 use serde_json::{Map, Value, json};
@@ -403,8 +403,7 @@ impl ExecManager {
     ///
     /// `request` must have passed [`ExecRequest::check_direct`]; `argv` is
     /// normally [`super::runsc_exec_argv`]. The process is spawned with
-    /// `PR_SET_PDEATHSIG` from a dedicated, never-exiting thread (the signal
-    /// follows the forking *thread*), stdin piped only for `stdin: true`
+    /// `posix_spawn` (see [`spawn`]), stdin piped only for `stdin: true`
     /// (else `/dev/null`), stdout and stderr piped. A spawn failure is not an
     /// error: the session reports an `error` event and exit code 1, as in
     /// Python. The only error is [`ExecError::ExecDeferred`] at capacity, when
@@ -943,68 +942,23 @@ fn python_os_error(error: &io::Error, filename: Option<&str>) -> String {
     }
 }
 
-type SpawnJob = Box<dyn FnOnce() + Send>;
-
-/// Spawns happen on these threads, which never exit: `PR_SET_PDEATHSIG`
-/// fires when the forking *thread* exits, so a tokio blocking-pool thread
-/// (which retires when idle) would kill its children.
-fn forkers() -> &'static Mutex<mpsc::Sender<SpawnJob>> {
-    static FORKERS: OnceLock<Mutex<mpsc::Sender<SpawnJob>>> = OnceLock::new();
-    FORKERS.get_or_init(|| {
-        let (sender, receiver) = mpsc::channel::<SpawnJob>();
-        let receiver = Arc::new(Mutex::new(receiver));
-        for index in 0..4 {
-            let receiver = receiver.clone();
-            std::thread::Builder::new()
-                .name(format!("noded-exec-fork-{index}"))
-                .spawn(move || {
-                    loop {
-                        let job = lock(&receiver).recv();
-                        match job {
-                            Ok(job) => job(),
-                            Err(_) => return,
-                        }
-                    }
-                })
-                .expect("exec fork thread");
-        }
-        Mutex::new(sender)
-    })
-}
-
-/// Spawn `argv` with `PR_SET_PDEATHSIG(SIGKILL)` from a fork thread, under
-/// the caller's runtime.
+/// Spawn `argv` through `posix_spawn`, which shares the daemon's address
+/// space until the exec instead of copying its page tables. A `pre_exec` hook
+/// (as `PR_SET_PDEATHSIG` needed) forces a full `fork()`, which holds the
+/// daemon's mmap lock while it copies: under 128 concurrent execs that cost
+/// about 19 ms of daemon CPU per exec and stalled every other thread. The unit
+/// runs with `KillMode=control-group`, so children still die with the daemon,
+/// as the Python agent's always did.
 async fn spawn(argv: &[String], stdin: bool) -> io::Result<Child> {
     let Some((program, args)) = argv.split_first() else {
         return Err(io::Error::from_raw_os_error(libc::ENOENT));
     };
-    let mut command = Command::new(program);
-    command
+    Command::new(program)
         .args(args)
         .stdin(if stdin { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let parent = unsafe { libc::getpid() };
-    unsafe {
-        command.pre_exec(move || {
-            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0) != 0 {
-                return Err(io::Error::last_os_error());
-            }
-            // The daemon died before the prctl: nobody would deliver it.
-            if libc::getppid() != parent {
-                return Err(io::Error::from_raw_os_error(libc::ESRCH));
-            }
-            Ok(())
-        });
-    }
-    let handle = tokio::runtime::Handle::current();
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    let job: SpawnJob = Box::new(move || {
-        let _runtime = handle.enter();
-        let _ = sender.send(command.spawn());
-    });
-    lock(forkers()).send(job).map_err(|_| io::Error::other("exec fork threads are gone"))?;
-    receiver.await.unwrap_or_else(|_| Err(io::Error::other("exec fork thread dropped the spawn")))
+        .stderr(Stdio::piped())
+        .spawn()
 }
 
 #[cfg(test)]

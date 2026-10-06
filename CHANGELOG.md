@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.50 - 2026-10-06 (gateway; workers)
+
+- **Workspaces format without a whole-device discard (`mkfs.xfs -K`).** Format was 80% of `PrepareVolume` in the two-worker rehearsal (mean 350 ms, p95 956 ms; 10 ms on a loop device): a discard of the whole virtual size through ublk, on an upper that is fresh and reads as zeros anyway.
+- **Workers with a slow boot CPU check retire.** VMs of one UCloud product measured 1-3x apart in single-thread speed with no steal reported, and a slow pair turned a 37 s warm 1,024-rollout start into 68-92 s.
+  - Each agent times a fixed loop once at start (`cpu_check_ms` in its runtime metrics; about 22 ms on a good worker).
+  - `policy.max_cpu_check_ms` (0 is off; production 35) retires a node over it as repeated reboots do: no capacity, the soft-drain slot, a stop once idle.
+- **The daemon times the agent's admit and finish per create** (`agent_admit_ms`, `agent_finish_ms`): p50 64 and 93 ms on a good pair, about 5% of a create.
+
 ## 0.9.49 - 2026-10-06 (gateway; workers)
 
 - **Exec starts per node: 120-280/s to 1,239-1,306/s** (p50 24-25 ms through the gateway; M2's gate is 1,000/s). Two fixes in `ucloud-noded`, found by per-check timings now in the exec start reply:

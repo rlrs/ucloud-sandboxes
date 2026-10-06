@@ -376,6 +376,32 @@ images):
    - phase 4: park, wake, migration, commit and fork, then deleting the
      Python agent.
 
+### What 0.9.49 measured: two workers, and VMs that differ 3× (2026-10-06)
+
+0.9.49 = 0.9.48 + the exec fixes below + the environment backend measuring its
+device cache only on attach (every ensure had walked nydusd's whole cache).
+Production keeps `policy.max_nodes = 2`.
+
+| Warm run, two workers | Ready by 10 / 20 / 30 s | All ready | `image_lease` p50 / p95 |
+|---|---|---|---|
+| 0.9.48, 1,024 | 322 / 634 / 878 | 37 s | 112 ms / 1.5 s |
+| 0.9.49, 1,024 (one slow VM) | 246 / 487 / 701 | 55 s | 4 ms / 210 ms |
+| 0.9.49, 512 | 286 / 510 / 512 | **21.5 s** (p50 8.6 s) | 2 ms / 18 ms |
+
+- **The VM pair decides the 1,024 result.** Same product, same "AMD
+  EPYC-Genoa" model, no steal reported, but single-thread Python on the
+  second 0.9.49 worker took 228 ms (later 128 ms) against 70 ms on the
+  first. On 0.9.48 code, one VM pair ran a cold 1,024 with `manager_create`
+  p50 4.2 s and another with 23.8 s, and warm 1,024 finished in 37 s on one
+  pair and 68-92 s on another. A restart A/B on one pair showed the exec fixes
+  help (ready p50 29 s vs 33 s, relay p95 0.43 s vs 4.3 s); the slow pair,
+  not the code, made those runs slow. Pipelines now benchmark each worker.
+- **500 on two workers is comfortable:** all 512 ready by 21.5 s, relay p95
+  94 ms, no failed turns.
+- **1,024 in 30 s on two workers** needs two good VMs and more per-worker
+  create throughput: the node agent's GIL (admit and finish per create, the
+  resource sampler) and the `runsc create` and storage tails.
+
 ### The gate's own shape: three workers (0.9.48, 2026-10-06)
 
 M2's readiness target assumes three nodes; the runs above used two.

@@ -10,6 +10,8 @@
 //! - upstream failed after the request was written: the client connection
 //!   closes without a response, as when the agent dies mid-request.
 
+pub mod fsutil;
+pub mod journal;
 pub mod storage;
 
 use std::future::Future;

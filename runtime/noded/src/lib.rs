@@ -19,6 +19,7 @@ pub mod fsutil;
 pub mod journal;
 pub mod memory_backing;
 pub mod network;
+pub mod pause;
 pub mod node_pipeline;
 pub mod pipeline;
 pub mod pyjson;

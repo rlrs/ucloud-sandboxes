@@ -12,6 +12,7 @@
 
 pub mod fsutil;
 pub mod journal;
+pub mod network;
 pub mod runsc;
 pub mod storage;
 

@@ -119,7 +119,8 @@ from tests.test_package_budget import package_lines
 # +307 the agent's half of Rust creates: foreign index revalidation, admit/finish/rollback/expiry/session, materialize, config, flag rendering; +2 notes.
 # +19 the resolution of config-only siblings, runtime_started and the config digest; +2 notes.
 # +307 the agent's half of Rust execs: cross-process fences, inode replacement, the activity clock, config, flag rendering; +2 notes.
-SUITE_LINE_BUDGET = 100_544
+# +470 the agent's half of the Rust pause tier: cross-process A and marker locks, endpoints, demand and status files, loops off, flag rendering; +2 notes.
+SUITE_LINE_BUDGET = 101_016
 SUITE = Path(__file__).resolve().parent
 
 

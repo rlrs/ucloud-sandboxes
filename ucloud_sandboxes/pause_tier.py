@@ -14,6 +14,7 @@ path and crash window would have to undo first.
 from contextlib import contextmanager
 from dataclasses import dataclass
 import errno
+import fcntl
 import os
 from pathlib import Path
 import threading
@@ -368,6 +369,13 @@ def prefetch(fd, pieces, *, slots, cancelled, threads=PREFETCH_THREADS):
 STOP_COUNTERS = {"target_reached": "pause_reclaim_target_reached",
                  "not_shrinking": "pause_reclaim_not_shrinking",
                  "partial_reclaim": "pause_reclaim_partial", "raised": "pause_reclaim_errors"}
+# The heartbeat's resident_wait names (models.ResidentWaitMetrics), exactly.
+PAUSE_STAT_NAMES = (
+    "pauses", "thaws", "thaw_ms_total", "thaw_ms_max", "pause_reclaims",
+    "pause_reclaimed_bytes", "pause_reclaim_ms_total",
+    "pause_reclaim_cancellations", "pause_reclaim_stalls", "pause_escalations",
+    "thaw_prefetches", "thaw_prefetched_bytes", "thaw_prefetch_ms_total",
+    *STOP_COUNTERS.values())
 
 
 class PauseStats:
@@ -375,12 +383,7 @@ class PauseStats:
 
     def __init__(self):
         self._lock = threading.Lock()
-        self._values = dict.fromkeys((
-            "pauses", "thaws", "thaw_ms_total", "thaw_ms_max", "pause_reclaims",
-            "pause_reclaimed_bytes", "pause_reclaim_ms_total",
-            "pause_reclaim_cancellations", "pause_reclaim_stalls", "pause_escalations",
-            "thaw_prefetches", "thaw_prefetched_bytes", "thaw_prefetch_ms_total",
-            *STOP_COUNTERS.values()), 0)
+        self._values = dict.fromkeys(PAUSE_STAT_NAMES, 0)
 
     def add(self, **amounts):
         with self._lock:  # Exact sums; only the reported snapshot rounds.
@@ -397,3 +400,82 @@ class PauseStats:
     def snapshot(self):
         with self._lock:
             return {name: round(value) for name, value in self._values.items()}
+
+
+# A thaw holds an exclusive flock on its pause marker from finding it until
+# after the unlink: the cross-process "thaw in progress" signal that
+# runtime/noded's paused reclaim probes (src/pause/marker.rs, mirrored here).
+# The lock is on an inode the thaw then unlinks, so a later pause's new file is
+# never blocked by a stale holder; every locker re-opens by path and checks,
+# once locked, that the path still names its descriptor's inode.
+_MARKER_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+
+
+def _open_marker(path):
+    try:
+        return os.open(path, _MARKER_FLAGS)
+    except FileNotFoundError:
+        return None
+
+
+def _names(path, fd):
+    """Whether ``path`` names ``fd``'s inode; None once the path is gone."""
+    held = os.fstat(fd)
+    try:
+        current = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    return (current.st_dev, current.st_ino) == (held.st_dev, held.st_ino)
+
+
+def marker_thawing(path):
+    """A thaw, in any process, holds this marker's flock (observation only)."""
+    try:
+        fd = _open_marker(path)
+    except OSError:
+        return False
+    if fd is None:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return True
+    except OSError:
+        return False
+    finally:
+        os.close(fd)  # Releases a probe's own shared lock.
+    return False
+
+
+@contextmanager
+def thaw_hold(path):
+    """Hold LOCK_EX on the marker ``path`` names; yields False when there is none.
+
+    Non-blocking first, then blocking: a probe holds the shared lock for
+    microseconds, and thaws exclude each other with the warden flock first.
+    Closing the descriptor (never LOCK_UN) releases it, after the unlink.
+    """
+    while True:
+        fd = _open_marker(path)
+        if fd is None:
+            yield False
+            return
+        try:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                fcntl.flock(fd, fcntl.LOCK_EX)
+            names = _names(path, fd)
+        except BaseException:
+            os.close(fd)
+            raise
+        if names:
+            break
+        os.close(fd)  # Replaced by a newer pause (probe that one) or thawed meanwhile.
+        if names is None:
+            yield False
+            return
+    try:
+        yield True
+    finally:
+        os.close(fd)

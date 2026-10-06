@@ -16,6 +16,7 @@ from .background_io import PressureSampler
 from .direct_service import DirectSandboxService
 from .direct_registry import DirectRegistryConflictError
 from .exec_fence import ExecFence
+from .models import ResidentWaitMetrics
 from .warm_park import WarmParkDeferred, WarmParkPolicy, decide_resident_wait
 from .pause_tier import (
     ESCALATION_CONCURRENCY, PausedWait, ReclaimBudget, advised_wait_seconds, park_tier,
@@ -213,6 +214,9 @@ class DirectLifecycle:
     def __init__(self, owner: DirectNodeRuntime) -> None:
         self.owner = owner
         self._coordinator = SandboxLifecycleCoordinator()
+        # --rust-pause-tier: each shared holder's A descriptor, per sandbox id.
+        self._activity_holds: dict[str, list[int]] = {}
+        self._activity_guard = Lock()
 
     def is_idle(self, sandbox_id: str) -> bool:
         fence = self.owner.exec_fence
@@ -233,6 +237,11 @@ class DirectLifecycle:
             )
         except SandboxBusyError as exc:
             raise SandboxExecAdmissionDeferredError(str(exc)) from exc
+        try:
+            self._hold_activity(sandbox_id)
+        except BaseException:
+            self._coordinator.release_shared(sandbox_id)
+            raise
         try:
             registration = self.owner.service._require_registration(sandbox_id)
             # The shared fence keeps park and delete out, so a running sandbox
@@ -258,6 +267,7 @@ class DirectLifecycle:
                     )
             self.owner._set_exec_start_timings(timings)
         except Exception:
+            self._release_activity(sandbox_id)
             self._coordinator.release_shared(sandbox_id)
             raise
 
@@ -270,7 +280,29 @@ class DirectLifecycle:
                     registration.sandbox_generation,
                 )
         finally:
-            self._coordinator.release_shared(sandbox_id)
+            try:
+                self._release_activity(sandbox_id)
+            finally:
+                self._coordinator.release_shared(sandbox_id)
+
+    def _hold_activity(self, sandbox_id: str) -> None:
+        """--rust-pause-tier: hold A shared until release_shared, so a Rust
+        pause cannot land between this op's spawn and its completion. Delete
+        may unlink A meanwhile; the descriptor then fences nothing new."""
+        if not self.owner.rust_pause_tier or self.owner.service.provisioner.registry.get(sandbox_id) is None:
+            return  # No fence files for an unknown id: the registration check refuses it next.
+        activity = self.owner.exec_fence.hold_activity(sandbox_id)
+        with self._activity_guard:
+            self._activity_holds.setdefault(sandbox_id, []).append(activity)
+
+    def _release_activity(self, sandbox_id: str) -> None:
+        with self._activity_guard:
+            held = self._activity_holds.get(sandbox_id)
+            descriptor = held.pop() if held else None
+            if held is not None and not held:
+                del self._activity_holds[sandbox_id]
+        if descriptor is not None:
+            os.close(descriptor)
 
     @contextmanager
     def shared(self, sandbox_id: str) -> Iterator[None]:
@@ -316,15 +348,28 @@ class DirectNodeRuntime:
         service: DirectSandboxService,
         *,
         rust_execs: bool = False,
+        rust_pause_tier: bool = False,
     ) -> None:
         self.service = service
+        warden_config = getattr(getattr(service, "warden", None), "config", None)
+        if rust_pause_tier and not (rust_execs and getattr(warden_config, "pause_tier", False)):
+            raise ValueError("the Rust pause tier needs Rust execs and the pause tier")
         # --rust-execs: noded runs execs; transitions fence them through
         # flock files and their activity clock (ucloud_sandboxes/exec_fence.py).
         self.exec_fence = None
         if rust_execs:
             self.exec_fence = service.exec_fence = ExecFence(
                 service.warden.config.runtime_root / "warden-locks")
-        warden_config = getattr(getattr(service, "warden", None), "config", None)
+        # --rust-pause-tier (phase 3a, pause_handoff.py): noded pauses and
+        # thaws, runs idle pauses, local waits, paused reclaim and decides
+        # escalations. This agent starts none of those loops, executes the
+        # escalations noded asks for and publishes the demand reclaim bills.
+        self.rust_pause_tier = service.rust_pause_tier = bool(rust_pause_tier)
+        self._demand_publisher = self._noded_status = None
+        if rust_pause_tier:
+            from .pause_handoff import AGENT_DEMAND_FILE, STATUS_FILE, DemandPublisher, NodedStatus, noded_directory
+            self._demand_publisher = DemandPublisher(service, noded_directory(service) / AGENT_DEMAND_FILE)
+            self._noded_status = NodedStatus(noded_directory(service) / STATUS_FILE)
         memory_backing_root = getattr(warden_config, "application_memory_root", None)
         # C1.1: disposable pause scheduling metadata; Warden markers are the
         # truth. With the flag on it replaces WarmParkPolicy's park role.
@@ -367,7 +412,10 @@ class DirectNodeRuntime:
 
     def start(self) -> None:
         self._background_stop.clear()
-        self._start_local_waits()
+        if self._demand_publisher is not None:
+            self._demand_publisher.start()
+        else:  # One NFLOG binder per group: noded's, with the Rust pause tier.
+            self._start_local_waits()
         if self._relay_parking_thread is None or not self._relay_parking_thread.is_alive():
             self._relay_parking_thread = Thread(
                 target=self._relay_parking_loop,
@@ -375,7 +423,8 @@ class DirectNodeRuntime:
             )
             self._relay_parking_thread.start()
         idle_seconds = self.service.idle_park_seconds
-        if idle_seconds <= 0 or (
+        # The pause tier's idle loop only pauses; with the Rust pause tier noded does.
+        if idle_seconds <= 0 or self.rust_pause_tier or (
             self._idle_parking_thread is not None
             and self._idle_parking_thread.is_alive()
         ):
@@ -490,8 +539,14 @@ class DirectNodeRuntime:
         """
         with self._relay_parking_guard:
             items, self._growth_queue = self._growth_queue, []
-        if not items:
-            return
+        if items:
+            self._commit_growth(items)
+
+    def record_growth_events(self, items) -> list[str | None]:
+        """noded's batched local waits and answers (POST /internal/v1/growth/events)."""
+        return [None if error is None else str(error) for error in self._commit_growth(items)]
+
+    def _commit_growth(self, items) -> list[Exception | None]:
         def one(method, key, request_id):
             try:
                 getattr(self.service, method)(key[0], key[1], request_id)
@@ -505,12 +560,17 @@ class DirectNodeRuntime:
         for (_, key, _), error in zip(items, errors):
             if isinstance(error, Exception):
                 _LOG.warning("local wait growth bookkeeping for %s skipped: %s", key[0], error)
+        return [error if isinstance(error, Exception) else None for error in errors]
 
     def stop(self) -> None:
         self._background_stop.set()
+        # Never started with the Rust pause tier, so this agent never deletes
+        # the nft table that noded owns then.
         local_waits, self._local_waits = self._local_waits, None
         if local_waits is not None:
             local_waits.stop()
+        if self._demand_publisher is not None:
+            self._demand_publisher.stop()
         thread = self._idle_parking_thread
         if thread is not None:
             thread.join(timeout=max(2.0, self.service.idle_park_seconds * 2))
@@ -535,6 +595,12 @@ class DirectNodeRuntime:
         if self._paused is not None:  # Readers accept these before writers emit them.
             warden = self.service.warden
             snapshot.update(warden.pause_stats.snapshot(), paused_sandboxes=len(warden.paused_keys()))
+            if self._noded_status is not None:
+                # noded's pauses, thaws and reclaims add to this agent's
+                # transition thaws; an invalid sum keeps this agent's own.
+                composed = {**snapshot, **self._noded_status.compose(warden.pause_stats.snapshot())}
+                if ResidentWaitMetrics.from_dict(composed) is not None:
+                    return composed
         return snapshot
 
     def _relay_parking_loop(self) -> None:
@@ -548,7 +614,7 @@ class DirectNodeRuntime:
                 except (OSError, RuntimeError, ValueError):
                     pass  # Missing observations carry no projected reclaim credit.
                 next_sample = time.monotonic() + 1.0
-            if self._paused is not None:
+            if self._paused is not None and not self.rust_pause_tier:
                 try:
                     self._reclaim_paused_tick()
                 except (OSError, RuntimeError, ValueError):
@@ -648,14 +714,11 @@ class DirectNodeRuntime:
         idle-timer recheck: the marker, rechecked under the exclusive
         lifecycle lease, already proves the sandbox inactive.
         """
-        record = None
         try:
             local_waits = self._local_waits
             if local_waits is not None and local_waits.answered(key):
                 return  # Its answer arrived: the local wait thaws it, never hibernate it.
-            record, _ = self.park_with_activity_revision(
-                key[0], operation_id=f"pause-escalation:{uuid4().hex}",
-                generation=key[1], escalate=True)
+            self.escalate_pause(*key)
         except (RuntimeError, ValueError, OSError):
             pass  # Activity, deletion or a refused capture won; retry next tick.
         finally:  # Any error still returns the escalation slot.
@@ -663,8 +726,20 @@ class DirectNodeRuntime:
                 wait = self._paused.get(key)
                 if wait is not None:
                     wait.escalating = False
-        if record is not None and record.state == "parked":
+
+    def escalate_pause(self, sandbox_id: str, generation: int) -> SandboxRecord:
+        """Hibernate a paused sandbox; the reclaim tick or noded decided it must.
+
+        SandboxConflictError (lost to activity: thawed, busy or gone) and
+        WarmParkDeferred (no capture space: it stays paused) as from park.
+        This agent counts ``pause_escalations``, for noded's too.
+        """
+        record, _ = self.park_with_activity_revision(
+            sandbox_id, operation_id=f"pause-escalation:{uuid4().hex}",
+            generation=generation, escalate=True)
+        if record.state == "parked":
             self.service.warden.pause_stats.add(pause_escalations=1)
+        return record
 
     def _recheck_relay_parks(self) -> None:
         # The relay retains durable intents. Local scheduling never changes
@@ -963,7 +1038,8 @@ class DirectNodeRuntime:
                                                    background=background, pause=True)
                     if warm and record.state == "parked":
                         self._warm_parks.parked(key)
-                    if pause and self.service.warden.is_paused(sandbox_id, generation):
+                    if (pause and not self.rust_pause_tier  # noded adopts the marker.
+                            and self.service.warden.is_paused(sandbox_id, generation)):
                         now = time.monotonic()
                         with self._relay_parking_guard:
                             self._paused[key[:2]] = PausedWait(

@@ -251,6 +251,7 @@ class VmInitOptions:
     direct_node_front_door: bool = False
     direct_node_rust_create: bool = False
     direct_node_rust_exec: bool = False
+    direct_node_rust_pause: bool = False
     direct_workspace_initial_grant_mb: int = 0
     environment_registry_url: str = ""
     environment_repository: str = ""
@@ -601,6 +602,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
                " --host ${UCLOUD_NODE_AGENT_HOST} --port ${UCLOUD_NODE_AGENT_PORT}")
             + (" --registry-foreign --rust-creates" if options.direct_node_rust_create else "")
             + (" --rust-execs" if options.direct_node_rust_exec else "")
+            + (" --rust-pause-tier" if options.direct_node_rust_pause else "")
             + f"{deployment_flag}{version_flags}"
             " --state-root ${UCLOUD_STATE_DIR}/direct-runtime"
             " --image-cache-root ${UCLOUD_DIRECT_IMAGE_CACHE_ROOT}"
@@ -668,9 +670,10 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         host = options.node_agent_host
         listen = f"[{host}]:{options.node_agent_port}" if ":" in host else f"{host}:{options.node_agent_port}"
         # The daemon reads the same token to call the agent's internal endpoints
-        # (the create handoff, and the configuration both creates and execs read).
+        # (the create handoff, escalations, growth events and the configuration).
         rust_flags = ((" --rust-create" if options.direct_node_rust_create else "")
-                            + (" --rust-exec" if options.direct_node_rust_exec else ""))
+                      + (" --rust-exec" if options.direct_node_rust_exec else "")
+                      + (" --rust-pause" if options.direct_node_rust_pause else ""))
         if rust_flags:
             rust_flags += " --node-control-token-file " + shlex.quote(options.node_control_bearer_token_file)
         noded_setup = f"""echo "Writing node front door systemd service"
@@ -2181,6 +2184,8 @@ def _validate_pause_tier(options: VmInitOptions) -> None:
         raise ValueError("Rust node execs require the node front door.")
     if options.direct_node_rust_exec and not options.node_control_bearer_token_file:
         raise ValueError("Rust node execs require a node control bearer token file.")
+    if options.direct_node_rust_pause and not (options.direct_pause_tier and options.direct_node_rust_exec):
+        raise ValueError("the Rust node pause tier requires the pause tier and Rust node execs.")
 
 
 def validate_vm_init_options(options: VmInitOptions) -> None:

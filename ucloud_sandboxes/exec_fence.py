@@ -12,7 +12,9 @@ directory, carry the fence across processes:
 - ``.<id>.activity`` (A): noded holds it shared for a whole exec session, from
   before its running check until the session is reaped. Park and pause need it
   exclusively and fail fast; delete and wake never take it, so they tolerate
-  running execs exactly as the in-process ``allow_shared`` does.
+  running execs exactly as the in-process ``allow_shared`` does. With
+  ``--rust-pause-tier`` the agent's own ops hold it shared too, against
+  noded's pauses (``hold_activity``).
 
 Lock order is T, then A, everywhere. A's mtime is the activity clock: noded
 touches it when an exec starts and completes, and the agent's own activity
@@ -83,6 +85,22 @@ class ExecFence:
         finally:
             if activity is not None:
                 os.close(activity)
+            os.close(transition)
+
+    def hold_activity(self, sandbox_id: str) -> int:
+        """A shared for one of the agent's own ops (--rust-pause-tier): its descriptor.
+
+        T shared first, blocking (noded holds it exclusively only for a
+        pause), then A shared, then T goes, as noded's exec start does; noded's
+        pauses take A exclusively and non-blocking, so none lands on the op.
+        """
+        transition = _locked(self.transition_path(sandbox_id), fcntl.LOCK_SH)
+        assert transition is not None
+        try:
+            activity = _locked(self.activity_path(sandbox_id), fcntl.LOCK_SH)
+            assert activity is not None
+            return activity
+        finally:
             os.close(transition)
 
     def discard(self, sandbox_id: str) -> None:

@@ -293,6 +293,8 @@ class DirectSandboxService:
     # --rust-execs (DirectNodeRuntime installs it): noded's execs advance each
     # sandbox's activity clock, the mtime of its fence file.
     exec_fence = None
+    # --rust-pause-tier: noded samples paused sandboxes for its own reclaim.
+    rust_pause_tier = False
 
     def __init__(
         self,
@@ -2262,7 +2264,8 @@ class DirectSandboxService:
                 for key, item in registrations.items()
                 if item.phase == "owned"
                 and item.spec.parkable
-                and (item.spec.managed_process or self.warden.is_paused(*key))
+                and (item.spec.managed_process
+                     or (not self.rust_pause_tier and self.warden.is_paused(*key)))
             }
         )
         self._resident_memory.retain(keys)
@@ -2705,15 +2708,29 @@ class DirectSandboxService:
         with self._capacity_guard:
             if not self._admission_open:
                 return MemoryDemand(1 << 63, 1 << 63)
-            self._current_growth_forecasts_locked()
-            limits = {
-                TransitionKind.STARTUP: self._startup_slots.capacity,
-                TransitionKind.RESTORE: self._restore_slots.capacity,
-            }
-            return MemoryDemand(
-                self._transitions.next_memory_demands(limits),
-                self._transitions.next_memory_demands(limits, resource="ram_backing_bytes"),
-            )
+            return self._next_memory_demand_locked()
+
+    def reclaim_demand(self) -> tuple[bool, MemoryDemand]:
+        """(admission open, what paused reclaim bills), read atomically.
+
+        Closed admission (drain) bills nothing: paused waits are never swapped
+        out for a drain (runtime/noded reads this as agent-demand.json).
+        """
+        with self._capacity_guard:
+            if not self._admission_open:
+                return False, MemoryDemand()
+            return True, self._next_memory_demand_locked()
+
+    def _next_memory_demand_locked(self) -> MemoryDemand:
+        self._current_growth_forecasts_locked()
+        limits = {
+            TransitionKind.STARTUP: self._startup_slots.capacity,
+            TransitionKind.RESTORE: self._restore_slots.capacity,
+        }
+        return MemoryDemand(
+            self._transitions.next_memory_demands(limits),
+            self._transitions.next_memory_demands(limits, resource="ram_backing_bytes"),
+        )
 
     def resident_demand_snapshot(self):
         """Observed ledger costs, never another resource reservation."""

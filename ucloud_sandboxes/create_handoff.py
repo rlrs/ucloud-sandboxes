@@ -210,16 +210,19 @@ class CreateHandoff:
 
 
 def create_config(service: Any, *, node_epoch: str, rust_creates_enabled: bool,
-                  rust_execs_enabled: bool = False, exec_sessions: Any = None) -> dict[str, Any]:
+                  rust_execs_enabled: bool = False, exec_sessions: Any = None,
+                  rust_pause_enabled: bool = False) -> dict[str, Any]:
     """The agent's effective create configuration, read from the assembled node.
 
     Python stays the single source of truth for flags and assembly checks;
     runtime/noded reads this instead of parsing the agent's command line.
     ``exec`` is phase 2a's: what noded needs to run execs itself, fenced by
     ucloud_sandboxes/exec_fence.py; ``exec_sessions`` is the ExecSessionManager.
+    ``pause`` is phase 3a's (pause_handoff.pause_config).
     """
     from .direct_network import NETWORK_MTU
     from .environment_manifest import HOST_EROFS_ABI
+    from .pause_handoff import pause_config
     from .resource_admission import PHYSICAL_MEMORY_FLOOR_MB
 
     provisioner = service.provisioner
@@ -287,4 +290,5 @@ def create_config(service: Any, *, node_epoch: str, rust_creates_enabled: bool,
             "admission_wait_seconds": service.admission_wait_seconds,
             "rust_execs_enabled": bool(rust_execs_enabled),
         },
+        "pause": pause_config(service, rust_pause_enabled=rust_pause_enabled),
     }

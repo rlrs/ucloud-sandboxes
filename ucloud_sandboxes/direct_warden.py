@@ -3056,9 +3056,13 @@ class DirectRunscWarden:
         return os.path.lexists(self._pause_marker(sandbox_id, generation))
 
     def thawing(self, sandbox_id: str, generation: int) -> bool:
-        """Observation only: a thaw is reading memory back; its marker goes after."""
+        """Observation only: a thaw is reading memory back; its marker goes after.
+
+        A thaw in either process holds the marker's flock until the unlink."""
         with self._claims_guard:
-            return (sandbox_id, generation) in self._prefetches
+            if (sandbox_id, generation) in self._prefetches:
+                return True
+        return pause_tier.marker_thawing(self._pause_marker(sandbox_id, generation))
 
     def paused_keys(self) -> list[tuple[str, int]]:
         """Observation only; dot names are atomic-write temporaries, not markers."""
@@ -3109,14 +3113,18 @@ class DirectRunscWarden:
         marker = self._pause_marker(sandbox.sandbox_id, sandbox.sandbox_generation)
         if not os.path.lexists(marker):
             return None
-        started = time.monotonic()
-        if prefetch:
-            self._prefetch_memory(sandbox)
-        result = self.runner.run((*self._state_prefix(), "resume", sandbox.container_id),
-                                 timeout=self.config.command_timeout_seconds)
-        if result.returncode != 0 and self._state_identity_status(sandbox)[2] != "running":
-            raise DirectWardenError(f"runsc resume of a paused sandbox failed: {result.stderr}")
-        marker.unlink()
+        # The marker's flock is "thaw in progress" to runtime/noded's reclaim.
+        with pause_tier.thaw_hold(marker) as held:
+            if not held:
+                return None
+            started = time.monotonic()
+            if prefetch:
+                self._prefetch_memory(sandbox)
+            result = self.runner.run((*self._state_prefix(), "resume", sandbox.container_id),
+                                     timeout=self.config.command_timeout_seconds)
+            if result.returncode != 0 and self._state_identity_status(sandbox)[2] != "running":
+                raise DirectWardenError(f"runsc resume of a paused sandbox failed: {result.stderr}")
+            marker.unlink(missing_ok=True)
         elapsed_ms = (time.monotonic() - started) * 1000
         self.pause_stats.add(thaws=1, thaw_ms_total=elapsed_ms, thaw_ms_max=elapsed_ms)
         return elapsed_ms

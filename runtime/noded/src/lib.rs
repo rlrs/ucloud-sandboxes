@@ -12,6 +12,7 @@
 
 pub mod fsutil;
 pub mod journal;
+pub mod memory_backing;
 pub mod network;
 pub mod pyjson;
 pub mod runsc;

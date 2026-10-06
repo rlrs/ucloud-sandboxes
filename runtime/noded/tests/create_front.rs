@@ -145,7 +145,7 @@ async fn start() -> Harness {
     let front = Arc::new(CreateFront::new(client, Arc::new(FakePipeline), TOKEN));
     let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = tcp.local_addr().unwrap();
-    let fronts = ucloud_noded::Fronts { create: Some(front), exec: None };
+    let fronts = ucloud_noded::Fronts { create: Some(front), exec: None, node: None };
     tokio::spawn(ucloud_noded::serve_with(tcp, ucloud_noded::Config::new(socket), fronts, std::future::pending()));
     Harness { address, seen, _dir: dir }
 }

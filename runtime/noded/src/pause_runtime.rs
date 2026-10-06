@@ -4,7 +4,7 @@
 //! growth events its ledger applies.
 
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
 
 use hyper::{Method, StatusCode};
@@ -47,7 +47,8 @@ impl Escalator for AgentEscalator {
 struct AgentEvents {
     agent: Arc<AgentClient>,
     growth: mpsc::UnboundedSender<GrowthEvent>,
-    policy: Arc<OnceLock<Arc<PausePolicyHandle>>>,
+    /// Weak: the policy holds local waits (through `answered`), which hold these events.
+    policy: Arc<OnceLock<Weak<PausePolicyHandle>>>,
 }
 
 impl LocalWaitEvents for AgentEvents {
@@ -70,7 +71,7 @@ impl LocalWaitEvents for AgentEvents {
     }
 
     fn paused(&self, sandbox_id: &str, generation: u64, request_id: &str) {
-        if let Some(policy) = self.policy.get() {
+        if let Some(policy) = self.policy.get().and_then(Weak::upgrade) {
             policy.record_pause(sandbox_id, generation, None, request_id);
         }
     }
@@ -97,11 +98,11 @@ async fn send_growth(agent: Arc<AgentClient>, mut events: mpsc::UnboundedReceive
     }
 }
 
-/// The running pause tier; dropping it stops local waits (removing the nft
-/// table) and the policy's loops.
+/// The running pause tier. `stop` ends local waits (removing the nft table)
+/// and the policy's loops; the daemon calls it on shutdown.
 pub struct PauseRuntime {
-    _policy: Arc<PausePolicyHandle>,
-    _waits: Option<Arc<LocalWaits>>,
+    policy: Mutex<Option<Arc<PausePolicyHandle>>>,
+    waits: Mutex<Option<Arc<LocalWaits>>>,
 }
 
 pub struct PauseInputs {
@@ -151,7 +152,7 @@ impl PauseRuntime {
             let (growth, queue) = mpsc::unbounded_channel();
             tokio::spawn(send_growth(agent.clone(), queue));
             let cell = Arc::new(OnceLock::new());
-            let _ = cell.set(policy.clone());
+            let _ = cell.set(Arc::downgrade(&policy));
             let events = Arc::new(AgentEvents { agent: agent.clone(), growth, policy: cell });
             match LocalWaits::start(LocalWaitConfig::new(relays, candidates), (*tier).clone(), WaitFence::new(&warden_locks_dir), events) {
                 Ok(waits) => Some(Arc::new(waits)),
@@ -161,10 +162,28 @@ impl PauseRuntime {
                 }
             }
         });
-        if let Some(waits) = waits.clone() {
-            policy.set_answered(Arc::new(move |sandbox_id: &str, generation: u64| waits.answered(sandbox_id, generation)));
+        if let Some(waits) = waits.as_ref().map(Arc::downgrade) {
+            policy.set_answered(Arc::new(move |sandbox_id: &str, generation: u64| {
+                waits.upgrade().is_some_and(|waits| waits.answered(sandbox_id, generation))
+            }));
         }
         eprintln!("ucloud-noded: pause tier running (local waits {})", if waits.is_some() { "on" } else { "off" });
-        PauseRuntime { _policy: policy, _waits: waits }
+        PauseRuntime { policy: Mutex::new(Some(policy)), waits: Mutex::new(waits) }
+    }
+
+    /// Stop local waits, then the policy's loops (in-flight reclaims stop at
+    /// their next window). Idempotent.
+    pub async fn stop(&self) {
+        let waits = self.waits.lock().expect("not poisoned").take();
+        if let Some(waits) = waits {
+            tokio::task::spawn_blocking(move || waits.stop()).await.ok();
+        }
+        let policy = self.policy.lock().expect("not poisoned").take();
+        if let Some(policy) = policy {
+            match Arc::try_unwrap(policy) {
+                Ok(policy) => policy.stop().await,
+                Err(_) => eprintln!("ucloud-noded: the pause policy is still referenced at shutdown"),
+            }
+        }
     }
 }

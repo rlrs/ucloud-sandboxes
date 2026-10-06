@@ -27,6 +27,7 @@ from tests.test_rust_exec_fence import TOKEN, _UnixConnection
 from ucloud_sandboxes import local_wait, pause_handoff, pause_tier
 from ucloud_sandboxes.cli import build_parser, vm_init_options_to_dict
 from ucloud_sandboxes.config import DeploymentConfig
+from ucloud_sandboxes.sandbox import SandboxExecAdmissionDeferredError
 from ucloud_sandboxes.direct_service import DirectSandboxService
 from ucloud_sandboxes.models import ResidentWaitMetrics
 from ucloud_sandboxes.node_runtime import DirectNodeRuntime
@@ -134,6 +135,16 @@ class ActivityFenceTests(unittest.TestCase):
         pause.close()
         self.assertTrue(entered.wait(5))
         thread.join(5)
+
+    def test_a_transition_held_past_the_admission_wait_defers_the_op(self) -> None:
+        self.t.touch()
+        pause = _Holder(self.t)  # a pause stuck holding T
+        self.addCleanup(pause.close)
+        self.service.admission_wait_seconds = 0.05
+        with self.assertRaisesRegex(SandboxExecAdmissionDeferredError, "timed out waiting"):
+            self.runtime.lifecycle.acquire_shared(self.key[0])
+        pause.close()
+        self.assertEqual(self.rust_pause(), "held")  # the deferred op holds nothing
 
     def test_a_failed_op_start_releases_a(self) -> None:
         with patch.object(self.service, "running_timings", side_effect=RuntimeError("gone")):

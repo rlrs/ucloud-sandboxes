@@ -31,6 +31,7 @@ from contextlib import contextmanager
 import fcntl
 import logging
 import os
+import time
 from pathlib import Path
 from threading import Lock
 from typing import Iterator
@@ -87,15 +88,20 @@ class ExecFence:
                 os.close(activity)
             os.close(transition)
 
-    def hold_activity(self, sandbox_id: str) -> int:
+    def hold_activity(self, sandbox_id: str, *, timeout_seconds: float) -> int:
         """A shared for one of the agent's own ops (--rust-pause-tier): its descriptor.
 
-        T shared first, blocking (noded holds it exclusively only for a
-        pause), then A shared, then T goes, as noded's exec start does; noded's
-        pauses take A exclusively and non-blocking, so none lands on the op.
+        T shared first, then A shared, then T goes, as noded's exec start does;
+        noded's pauses take A exclusively and non-blocking, so none lands on
+        the op. T is retried without blocking for at most ``timeout_seconds``:
+        a transition holding it exclusively defers the op as an in-process
+        transition join does, instead of queueing the agent's thread forever.
         """
-        transition = _locked(self.transition_path(sandbox_id), fcntl.LOCK_SH)
-        assert transition is not None
+        deadline = time.monotonic() + timeout_seconds
+        while (transition := _locked(self.transition_path(sandbox_id), fcntl.LOCK_SH | fcntl.LOCK_NB)) is None:
+            if time.monotonic() >= deadline:
+                raise SandboxBusyError(f"timed out waiting for sandbox lifecycle transition: {sandbox_id}")
+            time.sleep(0.005)
         try:
             activity = _locked(self.activity_path(sandbox_id), fcntl.LOCK_SH)
             assert activity is not None

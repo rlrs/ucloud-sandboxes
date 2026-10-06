@@ -113,7 +113,7 @@ async fn blocking<T: Send + 'static>(
 pub struct NodePipeline {
     pause: Option<Arc<PauseTier>>,
     /// The pause policy and local waits, while the daemon owns the pause tier.
-    _pause_runtime: Option<crate::pause_runtime::PauseRuntime>,
+    pause_runtime: Option<crate::pause_runtime::PauseRuntime>,
     config: CreateConfig,
     agent: Arc<AgentClient>,
     registry: Arc<Registry>,
@@ -228,7 +228,7 @@ impl NodePipeline {
         });
         Ok(NodePipeline {
             pause,
-            _pause_runtime: pause_runtime,
+            pause_runtime,
             storage: StorageClient::new(&config.storage_native_socket),
             config,
             agent,
@@ -252,6 +252,13 @@ impl NodePipeline {
 
     pub fn warden(&self) -> &Arc<Warden> {
         &self.warden
+    }
+
+    /// Stop the daemon's loops (the pause tier) before the process exits.
+    pub async fn shutdown(&self) {
+        if let Some(runtime) = &self.pause_runtime {
+            runtime.stop().await;
+        }
     }
 
     /// The pause tier, when the daemon owns it (phase 3a).

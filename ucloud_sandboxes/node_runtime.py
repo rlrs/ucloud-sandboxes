@@ -238,7 +238,10 @@ class DirectLifecycle:
         except SandboxBusyError as exc:
             raise SandboxExecAdmissionDeferredError(str(exc)) from exc
         try:
-            self._hold_activity(sandbox_id)
+            self._hold_activity(sandbox_id, wait_seconds)
+        except SandboxBusyError as exc:
+            self._coordinator.release_shared(sandbox_id)
+            raise SandboxExecAdmissionDeferredError(str(exc)) from exc
         except BaseException:
             self._coordinator.release_shared(sandbox_id)
             raise
@@ -285,13 +288,13 @@ class DirectLifecycle:
             finally:
                 self._coordinator.release_shared(sandbox_id)
 
-    def _hold_activity(self, sandbox_id: str) -> None:
+    def _hold_activity(self, sandbox_id: str, wait_seconds: float) -> None:
         """--rust-pause-tier: hold A shared until release_shared, so a Rust
         pause cannot land between this op's spawn and its completion. Delete
         may unlink A meanwhile; the descriptor then fences nothing new."""
         if not self.owner.rust_pause_tier or self.owner.service.provisioner.registry.get(sandbox_id) is None:
             return  # No fence files for an unknown id: the registration check refuses it next.
-        activity = self.owner.exec_fence.hold_activity(sandbox_id)
+        activity = self.owner.exec_fence.hold_activity(sandbox_id, timeout_seconds=wait_seconds)
         with self._activity_guard:
             self._activity_holds.setdefault(sandbox_id, []).append(activity)
 

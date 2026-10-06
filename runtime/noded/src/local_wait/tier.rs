@@ -125,8 +125,13 @@ impl TierActions {
         if self.tier.is_paused(id, generation) || !self.candidates.current(id, generation) {
             return Outcome::Done;
         }
-        let lock = match self.tier.lock(sandbox).await {
-            Ok(lock) => lock,
+        // Never wait for the warden flock while holding T and A exclusively: a
+        // Python download or commit export holds it for a guest command, and
+        // every operation on this sandbox would queue behind the pause. The
+        // 10 ms tick tries again.
+        let lock = match self.tier.try_lock(sandbox).await {
+            Ok(Some(lock)) => lock,
+            Ok(None) => return Outcome::Busy,
             Err(error) => return Outcome::Failed(error.to_string()),
         };
         if self.tier.is_paused(id, generation) {

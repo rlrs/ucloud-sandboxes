@@ -183,7 +183,8 @@ import unittest
 # +582 phase 3a of the Rust node daemon, the agent's half: A shared for its own ops, the marker flock on thaws, escalation and growth endpoints, agent-demand.json, status.json in the heartbeat, the pause configuration and its flag.
 # Lower it on deletions (C1.3 is ~8k; the Rust daemon retires the Python agent).
 # +2 Rust execs require Rust creates (noded serves them from the create pipeline's node state).
-PACKAGE_LINE_BUDGET = 118_324
+# +9 the agent's ops wait for a transition's T no longer than the admission wait, then defer.
+PACKAGE_LINE_BUDGET = 118_333
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

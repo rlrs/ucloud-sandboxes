@@ -461,7 +461,8 @@ fn swap_nearly_full_escalates_the_best_waits_through_the_durable_park() {
     assert_eq!(fixture.agent.parks.lock().unwrap().len(), ESCALATION_CONCURRENCY);
     assert_eq!(fixture.tier.markers().len(), 3 - ESCALATION_CONCURRENCY);
     assert!(fixture.engine.paused_waits().iter().all(|(_, wait)| !wait.escalating));
-    assert_eq!(fixture.stat(Counter::PauseEscalations), ESCALATION_CONCURRENCY as i64);
+    // The agent counts the escalations it executes; the daemon does not.
+    assert_eq!(fixture.stat(Counter::PauseEscalations), 0);
     // In flight, the slots are taken: a tick starts no third.
     fixture.tier.mark(key("agent0"));
     fixture.tier.mark(key("agent1"));
@@ -491,7 +492,7 @@ fn stalled_or_failed_reclaims_back_off_then_escalate_after_max_stalls() {
         }
         fixture.tick(&fixture.engine);
         assert_eq!(*fixture.agent.parks.lock().unwrap(), [key("agent")]);
-        assert_eq!((fixture.stat(Counter::PauseReclaimStalls), fixture.stat(Counter::PauseEscalations)), (MAX_STALLS as i64, 1));
+        assert_eq!((fixture.stat(Counter::PauseReclaimStalls), fixture.stat(Counter::PauseEscalations)), (MAX_STALLS as i64, 0));
         let stopped = if outcome.is_ok() { Counter::PauseReclaimNotShrinking } else { Counter::PauseReclaimErrors };
         assert_eq!(fixture.stat(stopped), MAX_STALLS as i64);
         assert_eq!(fixture.stat(Counter::PauseReclaims), if outcome.is_ok() { MAX_STALLS as i64 } else { 0 });

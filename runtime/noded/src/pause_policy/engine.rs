@@ -17,7 +17,7 @@ use super::files::{DemandSource, Status, StatusFile};
 use super::plan::{ESCALATION_CONCURRENCY, Key, PausedWait, RECLAIM_WINDOW_BYTES, note_reclaim, reclaim_stalled, relief_plan};
 use super::pressure::PressureSource;
 use super::resident::{ReclaimRequest, ReclaimResult, Reclaimer, ResidentSampler, bundle_cgroup_path, kernel_write};
-use super::{Answered, Candidate, Clock, Escalated, Escalator, Inventory, PauseMechanism, PolicyConfig};
+use super::{Answered, Candidate, Clock, Escalator, Inventory, PauseMechanism, PolicyConfig};
 use crate::pause::Counter;
 use crate::warden::Sandbox;
 
@@ -447,7 +447,8 @@ impl Engine {
             wait.escalating = false;
         }
         match outcome {
-            Some(Ok(Escalated::Parked)) => self.mechanism.stats().add(&[(Counter::PauseEscalations, 1.0)]),
+            // The agent counts the escalations it executes (noded's too); the
+            // heartbeat sums both sides, so counting here would double it.
             Some(Err(error)) => self.log("escalation", format!("{}: {error}", key.0)),
             _ => {}
         }

@@ -201,6 +201,17 @@ impl Upstream {
 pub struct Fronts {
     pub create: Option<Arc<create::CreateFront>>,
     pub exec: Option<Arc<exec_front::ExecFront>>,
+    /// The node, once the agent's configuration loaded it.
+    pub node: Option<Arc<std::sync::OnceLock<Arc<node_pipeline::NodePipeline>>>>,
+}
+
+impl Fronts {
+    /// Stop the node's own loops (the pause tier) after serving ends.
+    pub async fn shutdown(&self) {
+        if let Some(node) = self.node.as_ref().and_then(|cell| cell.get()) {
+            node.shutdown().await;
+        }
+    }
 }
 
 /// The fronts for `--rust-create` and `--rust-exec`: the agent client under a
@@ -229,7 +240,8 @@ pub fn start_fronts(upstream: &std::path::Path, token: &str, exec: bool, pause: 
     }));
     Ok(Fronts {
         create: Some(Arc::new(create::CreateFront::new(agent, pipeline, token))),
-        exec: exec.then(|| exec_front::ExecFront::new(node, token)),
+        exec: exec.then(|| exec_front::ExecFront::new(node.clone(), token)),
+        node: Some(node),
     })
 }
 

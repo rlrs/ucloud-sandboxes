@@ -96,7 +96,7 @@ fn main() -> ExitCode {
             }
         };
         if (rust_exec || rust_pause) && !rust_create {
-            eprintln!("ucloud-noded: --rust-exec and --rust-pause need --rust-create; they stay with the agent");
+            eprintln!("ucloud-noded: --rust-exec and --rust-pause need --rust-create; execs and the pause tier stay with the agent");
         }
         let fronts = match token.filter(|_| rust_create) {
             Some(token) => match ucloud_noded::start_fronts(&config.upstream, &token, rust_exec, rust_pause) {
@@ -108,7 +108,8 @@ fn main() -> ExitCode {
             },
             None => ucloud_noded::Fronts::default(),
         };
-        ucloud_noded::serve_with(listener, config, fronts, shutdown).await;
+        ucloud_noded::serve_with(listener, config, fronts.clone(), shutdown).await;
+        fronts.shutdown().await;
         ExitCode::SUCCESS
     })
 }

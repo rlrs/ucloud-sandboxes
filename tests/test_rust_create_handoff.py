@@ -296,7 +296,8 @@ class RustCreateFlagTests(unittest.TestCase):
         script = render_vm_init_script(options)
         self.assertIn("--unix-socket /run/ucloud-sandboxes/node-agent/agent.sock --registry-foreign --rust-creates",
                       script)
-        self.assertIn("--upstream-unix /run/ucloud-sandboxes/node-agent/agent.sock --rust-create\n", script)
+        self.assertIn("--upstream-unix /run/ucloud-sandboxes/node-agent/agent.sock --rust-create"
+                      f" --node-control-token-file {options.node_control_bearer_token_file}\n", script)
         front_door_only = render_vm_init_script(vm_init_fixtures.VmInitTests._options(direct_node_front_door=True))
         self.assertNotIn("--rust-create", front_door_only)
         with self.assertRaisesRegex(ValueError, "require the node front door"):

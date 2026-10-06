@@ -665,7 +665,10 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         node_service_after += " ucloud-sandbox-noded.service"
         host = options.node_agent_host
         listen = f"[{host}]:{options.node_agent_port}" if ":" in host else f"{host}:{options.node_agent_port}"
-        rust_create_flag = " --rust-create" if options.direct_node_rust_create else ""
+        # The daemon reads the same token to call the agent's internal create endpoints.
+        rust_create_flag = (" --rust-create --node-control-token-file "
+                            + shlex.quote(options.node_control_bearer_token_file)
+                            if options.direct_node_rust_create else "")
         noded_setup = f"""echo "Writing node front door systemd service"
 $SUDO tee {shlex.quote(noded_service)} >/dev/null <<'NODED_SERVICE'
 [Unit]
@@ -2168,6 +2171,8 @@ def _validate_pause_tier(options: VmInitOptions) -> None:
         raise ValueError("node-local model waits require the pause tier.")
     if options.direct_node_rust_create and not options.direct_node_front_door:
         raise ValueError("Rust node creates require the node front door.")
+    if options.direct_node_rust_create and not options.node_control_bearer_token_file:
+        raise ValueError("Rust node creates require a node control bearer token file.")
 
 
 def validate_vm_init_options(options: VmInitOptions) -> None:

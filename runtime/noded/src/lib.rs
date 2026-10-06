@@ -105,6 +105,14 @@ fn unavailable(reason: &str) -> Response<Body> {
     response
 }
 
+fn not_found() -> Response<Body> {
+    let body = Full::new(Bytes::from_static(b"{\"error\":\"not found\"}")).map_err(|never| match never {}).boxed();
+    let mut response = Response::new(body);
+    *response.status_mut() = StatusCode::NOT_FOUND;
+    response.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    response
+}
+
 /// One client connection's upstream connection, opened on first use and
 /// replaced when the agent closes it.
 struct Upstream {
@@ -233,7 +241,13 @@ pub async fn serve_with(
             let upstream = upstream.clone();
             let create = create.clone();
             async move {
-                let request = request.map(|body| body.boxed());
+                let mut request = request.map(|body| body.boxed());
+                // The agent's internal create endpoints answer the daemon only,
+                // and the session header releases admissions held under it.
+                if request.uri().path().starts_with("/internal/") {
+                    return Ok(not_found());
+                }
+                request.headers_mut().remove(agent_rpc::SESSION_HEADER);
                 match create {
                     Some(front) if front.intercepts(&request) => match front.handle(request).await {
                         create::Outcome::Response(response) => Ok(response),

@@ -234,3 +234,19 @@ async fn unsupported_or_unauthorized_creates_go_to_the_agent_unchanged() {
     let seen = harness.seen.lock().unwrap().clone();
     assert!(seen.iter().all(|(path, _)| path == "/v1/sandboxes"));
 }
+
+#[tokio::test]
+async fn internal_endpoints_are_not_reachable_over_tcp() {
+    let harness = start().await;
+    let stream = TcpStream::connect(harness.address).await.unwrap();
+    let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream)).await.unwrap();
+    tokio::spawn(connection);
+    let request = Request::post("/internal/v1/creates/t1/finish")
+        .header("host", "node")
+        .header("authorization", format!("Bearer {TOKEN}"))
+        .body(Full::new(Bytes::from_static(b"{}")))
+        .unwrap();
+    let response = sender.send_request(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert!(harness.seen.lock().unwrap().is_empty());
+}

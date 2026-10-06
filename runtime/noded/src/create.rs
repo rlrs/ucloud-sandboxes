@@ -249,8 +249,13 @@ impl CreateFront {
                     Err(error) => Outcome::Response(self.error(CreateError::Unavailable(error.to_string()))),
                 }
             }
-            (Ok(()), Ok(reply)) => Outcome::Response(relay(&reply)),
-            // The sandbox runs but the agent did not record the answer: ambiguous.
+            // The sandbox runs but the agent did not record the answer (an
+            // expired token, a crash): ambiguous, never a definite reject.
+            (Ok(()), Ok(reply)) => Outcome::Response(self.error(CreateError::Unavailable(format!(
+                "node agent did not finish the create ({}): {}",
+                reply.status.as_u16(),
+                String::from_utf8_lossy(&reply.body)
+            )))),
             (Ok(()), Err(error)) => Outcome::Response(self.error(CreateError::Unavailable(error.to_string()))),
             // The agent rolled back and answered the deferral itself.
             (Err(CreateError::Capacity(_)), Ok(reply)) => Outcome::Response(relay(&reply)),

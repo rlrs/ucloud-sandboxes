@@ -22,6 +22,10 @@ pub mod runsc;
 pub mod storage;
 pub mod warden;
 pub mod timings;
+pub mod guest;
+pub mod image;
+pub mod oci;
+pub mod rootfs;
 
 use std::future::Future;
 use std::path::PathBuf;

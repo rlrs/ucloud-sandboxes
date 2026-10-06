@@ -5,8 +5,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from functools import wraps
 from collections import deque
 import json
+import os
+from pathlib import Path
 import selectors
 import socket
+import socketserver
 from threading import BoundedSemaphore, Condition, RLock, Thread
 from time import monotonic
 from typing import Any, Callable
@@ -275,6 +278,24 @@ def _http_overload_response() -> bytes:
 HTTP_OVERLOAD_RESPONSE = _http_overload_response()
 
 
+class UnixSocketServerMixin:
+    """Serve on a Unix socket whose path is the server address (mode 0600).
+
+    The node daemon (runtime/noded) owns the node's TCP port and forwards to
+    the Python agent here. A socket left by a previous run is replaced.
+    """
+
+    address_family = socket.AF_UNIX
+
+    def server_bind(self) -> None:
+        path = Path(self.server_address)
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        path.unlink(missing_ok=True)
+        socketserver.TCPServer.server_bind(self)  # HTTPServer's expects (host, port).
+        os.chmod(path, 0o600)
+        self.server_name, self.server_port = "localhost", 0
+
+
 class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
     request_queue_size = DEFAULT_HTTP_REQUEST_QUEUE_SIZE
     daemon_threads = True
@@ -318,9 +339,10 @@ class HighBacklogThreadingHTTPServer(ThreadingHTTPServer):
     def get_request(self) -> tuple[socket.socket, Any]:
         client, address = super().get_request()
         client.settimeout(self.client_socket_timeout_seconds)
-        # Headers and small JSON bodies are separate writes. Nagle plus the
-        # peer's delayed ACK otherwise adds ~40ms to reused RPC connections.
-        client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        if self.address_family != socket.AF_UNIX:
+            # Headers and small JSON bodies are separate writes. Nagle plus the
+            # peer's delayed ACK otherwise adds ~40ms to reused RPC connections.
+            client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         return client, address
 
     def process_request(self, request: socket.socket, client_address: Any) -> None:

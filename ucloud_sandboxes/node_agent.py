@@ -55,6 +55,7 @@ from .heartbeat_sender import HeartbeatSenderConfig, NodeHeartbeatSender
 from .http_server import (
     DEFAULT_MAX_JSON_BODY_BYTES,
     HighBacklogThreadingHTTPServer,
+    UnixSocketServerMixin,
     RequestBodyStream,
     RequestBodyTooLargeError,
     TRANSFER_CHUNK_BYTES,
@@ -1974,6 +1975,7 @@ def build_direct_node_agent_server(
     node_epoch: str | None = None,
     telemetry: Telemetry | None = None,
     heartbeat: HeartbeatSenderConfig | None = None,
+    unix_socket: Path | None = None,
 ) -> NodeAgentHTTPServer:
     """Serve a sandbox node with direct runsc and storage-native ownership."""
     node_control_bearer_token = node_control_bearer_token.strip()
@@ -2225,7 +2227,11 @@ def build_direct_node_agent_server(
                 finally:
                     super().server_close()
 
-    server = DirectServiceHTTPServer((host, port), DirectBoundHandler)
+    if unix_socket is not None:
+        server = type("UnixDirectServiceHTTPServer", (UnixSocketServerMixin, DirectServiceHTTPServer), {})(
+            str(unix_socket), DirectBoundHandler)
+    else:
+        server = DirectServiceHTTPServer((host, port), DirectBoundHandler)
     server.attach_heartbeats(heartbeat)
     return server
 

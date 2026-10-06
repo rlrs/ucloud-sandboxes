@@ -361,6 +361,10 @@ def build_parser() -> argparse.ArgumentParser:
     direct_node_agent.add_argument("--deployment-id", required=True)
     direct_node_agent.add_argument("--host", default="127.0.0.1")
     direct_node_agent.add_argument("--port", type=int, default=8090)
+    direct_node_agent.add_argument(
+        "--unix-socket", type=Path,
+        help="serve on this Unix socket instead of --host/--port; runtime/noded owns the port",
+    )
     direct_node_agent.add_argument("--job-id")
     direct_node_agent.add_argument("--node-id")
     direct_node_agent.add_argument("--node-url")
@@ -1381,9 +1385,13 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         ),
         telemetry=telemetry,
         heartbeat=heartbeat,
+        unix_socket=args.unix_socket,
     )
-    host, port = server.server_address
-    print(f"Serving direct-runsc node agent on http://{host}:{port}")
+    if args.unix_socket is not None:
+        print(f"Serving direct-runsc node agent on unix:{args.unix_socket}")
+    else:
+        host, port = server.server_address
+        print(f"Serving direct-runsc node agent on http://{host}:{port}")
     print(f"Heartbeat push: {heartbeat.url if heartbeat else 'off (GET /v1/heartbeat only)'}")
     print(f"Direct state root: {state_root}")
     print(

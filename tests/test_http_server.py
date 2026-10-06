@@ -7,7 +7,7 @@ from threading import Event, Thread, current_thread
 import unittest
 from unittest.mock import patch
 
-from ucloud_sandboxes.http_server import HighBacklogThreadingHTTPServer
+from ucloud_sandboxes.http_server import HighBacklogThreadingHTTPServer, UnixSocketServerMixin
 from ucloud_sandboxes.http_server import JsonHttpHandler, RequestBodyTooLargeError
 
 TEST_TIER = "contract"
@@ -67,7 +67,39 @@ class _NoKeepAliveJsonHandler(JsonHttpHandler):
         self._write_json({"ok": True})
 
 
+class _UnixServer(UnixSocketServerMixin, HighBacklogThreadingHTTPServer):
+    pass
+
+
 class HttpServerTests(unittest.TestCase):
+    def test_unix_socket_server_keeps_connections_alive_and_replaces_a_stale_socket(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as raw:
+            path = Path(raw) / "run" / "agent.sock"
+            path.parent.mkdir()
+            path.write_text("stale")
+            server = _UnixServer(str(path), _JsonHandler)
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                with socket.socket(socket.AF_UNIX) as client:
+                    client.connect(str(path))
+                    stream = client.makefile("rb")
+                    for body in (b'"a"', b'"b"'):  # One connection, two requests.
+                        client.sendall(b"POST / HTTP/1.1\r\nHost: node\r\nContent-Type: application/json\r\n"
+                                       b"Content-Length: 3\r\n\r\n" + body)
+                        self.assertTrue(stream.readline().startswith(b"HTTP/1.1 200"))
+                        length = 0
+                        while (line := stream.readline()) not in (b"\r\n", b""):
+                            if line.lower().startswith(b"content-length:"):
+                                length = int(line.split(b":")[1])
+                        self.assertEqual(json.loads(stream.read(length)), {"payload": body.decode().strip('"')})
+            finally:
+                server.shutdown()
+                server.server_close()
+
     def test_request_workers_are_reused_survive_handler_errors_and_stop(self):
         workers = set()
         errors = []

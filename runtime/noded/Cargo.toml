@@ -14,7 +14,7 @@ path = "src/main.rs"
 bytes = "1"
 serde = { version = "1", features = ["derive"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
-serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order", "raw_value"] }
 libc = "0.2"
 sha2 = "0.10"
 shlex = "1"

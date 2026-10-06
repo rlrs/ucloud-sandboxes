@@ -18,6 +18,7 @@ pub mod memory_backing;
 pub mod network;
 pub mod pipeline;
 pub mod pyjson;
+pub mod registry;
 pub mod runsc;
 pub mod storage;
 pub mod warden;

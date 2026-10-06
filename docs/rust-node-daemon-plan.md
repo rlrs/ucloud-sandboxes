@@ -401,6 +401,14 @@ Production keeps `policy.max_nodes = 2`.
 - **1,024 in 30 s on two workers** needs two good VMs and more per-worker
   create throughput: the node agent's GIL (admit and finish per create, the
   resource sampler) and the `runsc create` and storage tails.
+- **On a good pair (both 69 ms single-thread), 0.9.49 nearly meets it:**
+  warm 1,024 had 971 ready by 30 s and all by 31.9 s (p50 13.4 s); warm 512
+  all by 12.9 s (p50 6.9 s, relay p95 64 ms). With the agent's two requests
+  timed (`f99677b`): `agent_admit` p50 64 ms (49 ms of it the startup slot
+  wait; p95 1.5 s, the slot queue), `agent_finish` p50 93 ms, p95 304 ms, of
+  `manager_create` p50 2.1 s. 3c therefore saves about 5% of a create's slot
+  time; the in-slot phases (`runtime_create` 535 ms, `storage_prepare`
+  370 ms, `registry_commit` p95 742 ms) and VM quality decide the rest.
 
 ### The gate's own shape: three workers (0.9.48, 2026-10-06)
 

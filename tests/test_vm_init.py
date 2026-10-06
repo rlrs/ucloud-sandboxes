@@ -570,6 +570,39 @@ else:
             script,
         )
 
+    def test_storage_prepare_bound_and_device_pool_are_unit_flags(self) -> None:
+        script = render_vm_init_script(self._options(direct_max_concurrent_startups=32))
+        # Unset, the prepare bound follows the node's create target.
+        self.assertIn("UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PREPARES=32", script)
+        self.assertIn(
+            "--max-concurrent-prepares ${UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PREPARES}",
+            script,
+        )
+        # The backend prewarms, and the daemon reports, the same pool bounds.
+        self.assertIn("UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK=64", script)
+        self.assertIn("UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK=64", script)
+        self.assertIn(
+            "--pool-low-watermark ${UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK} "
+            "--pool-high-watermark ${UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}",
+            script,
+        )
+        self.assertIn(
+            "--device-pool-low-watermark ${UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK} "
+            "--device-pool-high-watermark ${UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}",
+            script,
+        )
+        script = render_vm_init_script(self._options(
+            direct_max_concurrent_startups=32,
+            storage_native_max_concurrent_prepares=48,
+            storage_native_pool_low_watermark=8,
+            storage_native_pool_high_watermark=96,
+        ))
+        self.assertIn("UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PREPARES=48", script)
+        self.assertIn("UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK=8", script)
+        self.assertIn("UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK=96", script)
+        with self.assertRaisesRegex(ValueError, "prepare concurrency"):
+            render_vm_init_script(self._options(storage_native_max_concurrent_prepares=-1))
+
     def test_provider_runtime_exceptions_have_one_profile_authority(self) -> None:
         ucloud = vm_init.vm_runtime_profile("ucloud")
         hetzner = vm_init.vm_runtime_profile("hetzner")

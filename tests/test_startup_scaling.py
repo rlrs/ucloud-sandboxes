@@ -139,6 +139,29 @@ class StartupScalingTests(unittest.TestCase):
             "UCLOUD_DIRECT_MAX_CONCURRENT_STARTUPS=$UCLOUD_DIRECT_MAX_CONCURRENT_STARTUPS",
             script,
         )
+        # The storage daemon admits as many new-workspace prepares as the
+        # node starts sandboxes, unless the deployment sets its own bound.
+        self.assertIn("UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PREPARES=3", script)
+        self.assertIn(
+            "--max-concurrent-prepares ${UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PREPARES}",
+            script,
+        )
+        config = replace(
+            config, sandbox=replace(config.sandbox, storage_native_max_concurrent_prepares=48)
+        )
+        with patch(
+            "ucloud_sandboxes.cli.read_bearer_token_source", return_value="test-token"
+        ):
+            options = vm_init_options_for_job(
+                config,
+                self.ready.job,
+                "sandbox",
+                package_spec="/tmp/package.tar.gz",
+                package_sha256="a" * 64,
+            )
+        self.assertIn(
+            "UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PREPARES=48", render_vm_init_script(options)
+        )
 
     def test_old_capacity_queue_adds_headroom_below_cpu_threshold(self):
         result = evaluate_scale(

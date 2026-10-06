@@ -74,8 +74,10 @@ DEFAULT_STORAGE_NATIVE_CREDENTIAL_PROCESS = (
 )
 DEFAULT_STORAGE_NATIVE_CACHE_GB = 32
 DEFAULT_STORAGE_NATIVE_REPOSITORY = "ucloud-sandbox-snapshots"
-DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK = 2
-DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK = 16
+# Prewarmed at boot so a create burst up to the per-node create target takes
+# pooled devices (phase 4 storage-prepare spec, O3).
+DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK = 64
+DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK = 64
 DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES = 0
 DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS = 8
 DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES = 4 * 1024 * 1024 * 1024
@@ -238,6 +240,8 @@ class VmInitOptions:
     storage_native_max_concurrent_publications: int = (
         DEFAULT_MAX_CONCURRENT_PUBLICATIONS
     )
+    # 0 follows direct_max_concurrent_startups (the per-node create target).
+    storage_native_max_concurrent_prepares: int = 0
     direct_disk_headroom_mb: int = DEFAULT_DIRECT_DISK_HEADROOM_MB
     direct_max_concurrent_restores: int = DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES
     direct_max_concurrent_startups: int = 8
@@ -282,6 +286,12 @@ class VmInitOptions:
     chunk_store_s3_secret_access_key: str = ""
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
     labels: dict[str, str] | None = None
+
+    def storage_native_prepare_concurrency(self) -> int:
+        return (
+            self.storage_native_max_concurrent_prepares
+            or self.direct_max_concurrent_startups
+        )
 
     def normalized_node_id(self) -> str:
         return self.node_id or f"ucloud-vm-{self.job_id}"
@@ -848,6 +858,7 @@ UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK={options.storage_native_pool_low_waterm
 UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK={options.storage_native_pool_high_watermark}
 UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES={options.storage_native_max_ublk_devices}
 UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PUBLICATIONS={options.storage_native_max_concurrent_publications}
+UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PREPARES={options.storage_native_prepare_concurrency()}
 UCLOUD_STORAGE_NATIVE_REGISTRY_URL={shlex.quote(options.storage_native_registry_url)}
 UCLOUD_STORAGE_NATIVE_REPOSITORY={shlex.quote(options.storage_native_repository)}
 UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND={shlex.quote(options.storage_native_snapshot_backend)}
@@ -2091,7 +2102,7 @@ User=root
 Group=root
 EnvironmentFile={env_file}
 WorkingDirectory={work_dir}
-{memory_filesystem_prestart}ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root {storage_runtime_root} --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}}{storage_publication_args} --max-concurrent-publications ${{UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PUBLICATIONS}} --snapshot-compact-after-layers {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS} --snapshot-compact-after-bytes {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}} --max-ublk-devices ${{UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES}}{telemetry_args} --deployment-id ${{UCLOUD_DEPLOYMENT_ID}} --node-id ${{UCLOUD_NODE_ID}}
+{memory_filesystem_prestart}ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root {storage_runtime_root} --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}}{storage_publication_args} --max-concurrent-publications ${{UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PUBLICATIONS}} --max-concurrent-prepares ${{UCLOUD_STORAGE_NATIVE_MAX_CONCURRENT_PREPARES}} --snapshot-compact-after-layers {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS} --snapshot-compact-after-bytes {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}} --max-ublk-devices ${{UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES}}{telemetry_args} --deployment-id ${{UCLOUD_DEPLOYMENT_ID}} --node-id ${{UCLOUD_NODE_ID}}
 Restart=always
 RestartSec=2
 
@@ -2310,6 +2321,9 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
             raise ValueError(
                 "storage-native publication concurrency must be positive."
             )
+        if (options.storage_native_max_concurrent_prepares < 0
+                or options.storage_native_prepare_concurrency() < 1):
+            raise ValueError("storage-native prepare concurrency must be positive.")
         if options.direct_disk_headroom_mb < 1:
             raise ValueError("direct runtime disk headroom must be positive.")
         guaranteed_mb = (

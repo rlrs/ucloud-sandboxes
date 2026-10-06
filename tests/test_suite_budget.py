@@ -122,7 +122,8 @@ from tests.test_package_budget import package_lines
 # +470 the agent's half of the Rust pause tier: cross-process A and marker locks, endpoints, demand and status files, loops off, flag rendering; +2 notes.
 # +5 Rust execs need Rust creates: the exec-only shape is refused, both flag tests set creates; +1 note.
 # +11 a transition held past the admission wait defers the agent's op; +2 notes.
-SUITE_LINE_BUDGET = 101_035
+# +312 storage prepare steps 0-2: creates vs parks and wakes vs creates admission, create step events, reuse without inventory, mount/readahead syscalls, flag plumbing; +2 notes.
+SUITE_LINE_BUDGET = 101_349
 SUITE = Path(__file__).resolve().parent
 
 

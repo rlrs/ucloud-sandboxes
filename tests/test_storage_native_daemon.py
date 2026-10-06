@@ -12,6 +12,7 @@ import threading
 import time
 import unittest
 from types import SimpleNamespace
+import unittest.mock
 from unittest.mock import patch
 from typing import Callable
 
@@ -65,19 +66,54 @@ class LinuxVolumeReadaheadTests(unittest.TestCase):
     def test_reused_and_restored_mounts_configure_readahead_before_opening_files(self):
         host = LinuxStorageHostOperations()
         calls = []
-        with patch("ucloud_sandboxes.storage_native_daemon.os.sysconf", return_value=4096), patch.object(host, "_run", side_effect=lambda *args: calls.append(args)):
+        with (patch("ucloud_sandboxes.storage_native_daemon.os.sysconf", return_value=4096),
+              patch.object(host, "_set_readahead", side_effect=lambda *args: calls.append(("readahead", *args))),
+              patch.object(host, "_mount_xfs", side_effect=lambda *args: calls.append(("mount", *args))),
+              patch.object(host, "_run") as run):
             host.mount(Path("/dev/ublkb17"), Path("/volumes/first"))
             host.mount(Path("/dev/ublkb17"), Path("/volumes/restored"))
-        self.assertEqual([command[0] for command in calls], ["blockdev", "mount", "blockdev", "mount"])
-        self.assertEqual(calls[0], ("blockdev", "--setra", "8", "/dev/ublkb17"))
-        self.assertIn("noatime,nouuid", calls[1])
+        self.assertEqual([call[0] for call in calls], ["readahead", "mount", "readahead", "mount"])
+        self.assertEqual(calls[0], ("readahead", Path("/dev/ublkb17"), 8))
+        self.assertEqual(calls[1], ("mount", Path("/dev/ublkb17"), Path("/volumes/first")))
+        run.assert_not_called()  # no blockdev or mount process per create or wake
 
     def test_failed_device_configuration_never_mounts(self):
         host = LinuxStorageHostOperations()
-        with patch.object(host, "_run", side_effect=StorageNativeNodeError("device gone")) as run:
-            with self.assertRaisesRegex(StorageNativeNodeError, "device gone"):
+        with (patch("ucloud_sandboxes.storage_native_daemon.os.open", side_effect=FileNotFoundError(2, "No such file or directory")),
+              patch.object(host, "_mount_xfs") as mount):
+            with self.assertRaisesRegex(StorageNativeNodeError, r"^blockdev failed with 2: No such file or directory$"):
                 host.mount(Path("/dev/ublkb17"), Path("/volumes/first"))
-        self.assertEqual(run.call_count, 1)
+        mount.assert_not_called()
+
+    def test_readahead_and_mount_are_the_syscalls_blockdev_and_mount_made(self):
+        host = LinuxStorageHostOperations()
+        mount = unittest.mock.Mock(return_value=0)
+        with (patch("ucloud_sandboxes.storage_native_daemon.os.open", return_value=91) as opened,
+              patch("ucloud_sandboxes.storage_native_daemon.os.close") as closed,
+              patch("ucloud_sandboxes.storage_native_daemon.fcntl.ioctl") as ioctl,
+              patch("ucloud_sandboxes.storage_native_daemon._libc_mount", return_value=mount),
+              patch("ucloud_sandboxes.storage_native_daemon.os.sysconf", return_value=4096)):
+            host.mount(Path("/dev/ublkb17"), Path("/volumes/first"))
+        self.assertEqual(opened.call_args.args[0], Path("/dev/ublkb17"))
+        ioctl.assert_called_once_with(91, 0x1262, 8)  # BLKRASET, 4 KiB in sectors
+        closed.assert_called_once_with(91)
+        # mount -t xfs -o noatime,nouuid: MS_NOATIME plus the XFS option.
+        mount.assert_called_once_with(b"/dev/ublkb17", b"/volumes/first", b"xfs", 1024, b"nouuid")
+
+    def test_mount_failure_keeps_the_error_shape(self):
+        host = LinuxStorageHostOperations()
+        with (patch("ucloud_sandboxes.storage_native_daemon._libc_mount", return_value=lambda *args: -1),
+              patch("ucloud_sandboxes.storage_native_daemon.ctypes.get_errno", return_value=22)):
+            with self.assertRaisesRegex(StorageNativeNodeError, r"^mount failed with 22: Invalid argument$"):
+                host._mount_xfs(Path("/dev/ublkb17"), Path("/volumes/first"))
+
+    def test_libc_mount_binding_passes_flags_as_unsigned_long(self):
+        from ucloud_sandboxes import storage_native_daemon as daemon
+        import ctypes
+        function = daemon._libc_mount()
+        self.assertIs(daemon._libc_mount(), function)
+        self.assertEqual(function.argtypes[3], ctypes.c_ulong)
+        self.assertEqual(function.restype, ctypes.c_int)
 
 
 class JournalWriterCoordinationTests(unittest.TestCase):
@@ -1034,6 +1070,68 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                     self.assertNotEqual(first.result(timeout=2).device_id, second.device_id)
                 self.assertEqual(len(backend.owners), 2)
                 self.assertEqual(service._pending_device_allocations, 0)
+
+    def test_create_and_wake_take_no_owner_inventory_and_still_count_reuse(self):
+        with TemporaryDirectory() as raw:
+            service, backend, host = self._service(Path(raw), pooled=True)
+            inventories = []
+            original = backend.list_runtime_device_owners
+            backend.list_runtime_device_owners = lambda: inventories.append(1) or original()
+            # One device the backend prewarmed before this daemon saw it.
+            backend.idle.add(41)
+            backend.live.add(41)
+            backend.next_device_id = 42
+            first = StorageVolumeOwner("first", "first", 1)
+            prewarmed = service.converge_volume(
+                first, action="prepare", operation_id="create:first", virtual_size=1 << 30)
+            fresh = service.converge_volume(
+                StorageVolumeOwner("fresh", "fresh", 1), action="prepare",
+                operation_id="create:fresh", virtual_size=1 << 30)
+            service.converge_volume(first, action="release", operation_id="park:first")
+            parked_device = prewarmed.device_id
+            woken = service.converge_volume(first, action="mount", operation_id="wake:first")
+            self.assertEqual(inventories, [])
+            self.assertEqual((prewarmed.device_id, fresh.device_id, woken.device_id), (41, 42, parked_device))
+            with service._pool_metrics_lock:
+                counts = (service._pool_acquires, service._pool_reused_acquires, service._pool_new_acquires)
+            self.assertEqual(counts, (3, 2, 1))
+
+    def test_create_records_one_event_per_step(self):
+        for pooled in (False, True):
+            with self.subTest(pooled=pooled), TemporaryDirectory() as raw:
+                service, _backend, _host = self._service(Path(raw), pooled=pooled)
+                span = unittest.mock.Mock()
+                with patch("ucloud_sandboxes.storage_native_daemon.get_current_span", return_value=span):
+                    service.converge_volume(
+                        StorageVolumeOwner("vol", "sandbox", 1), action="prepare",
+                        operation_id="create", virtual_size=1 << 30)
+                    events = [call.args for call in span.add_event.call_args_list]
+                    # An idempotent retry writes nothing and records only the reservation replay.
+                    span.reset_mock()
+                    service.create_volume(
+                        sandbox_id="sandbox", sandbox_generation=1, volume_id="vol",
+                        operation_id=service.journal.load("vol").operation_id,
+                        virtual_size=1 << 30)
+                    replay = [call.args[0] for call in span.add_event.call_args_list]
+                self.assertEqual([name for name, _ in events], [
+                    "storage.create.reserve",
+                    "storage.create.write_source",
+                    "storage.create.acquire_device.inventory",
+                    "storage.create.acquire_device.backend",
+                    "storage.create.acquire_device",
+                    "storage.create.persist_pending",
+                    "storage.create.format",
+                    "storage.create.mount",
+                    "storage.create.finish",
+                ])
+                for _name, attributes in events:
+                    self.assertGreaterEqual(attributes["duration_ms"], 0)
+                backend_attributes = events[3][1]
+                if pooled:
+                    self.assertIs(backend_attributes["storage.device.reused"], False)
+                else:
+                    self.assertNotIn("storage.device.reused", backend_attributes)
+                self.assertEqual(replay, ["storage.create.reserve"])
 
     def test_acquired_device_is_not_counted_twice_during_slow_format(self) -> None:
         with TemporaryDirectory() as raw:

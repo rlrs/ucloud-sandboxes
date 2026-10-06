@@ -12,6 +12,7 @@ from .storage_native import AgentEnvUblkClient
 from .deployment import package_version
 from .managed_registry import RegistryClient
 from .storage_native_daemon import (
+    DEFAULT_MAX_CONCURRENT_PREPARES,
     StorageNativeNodeConfig,
     StorageNativeNodeServer,
     StorageNativeNodeService,
@@ -41,6 +42,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--mount-root", required=True, type=Path)
     parser.add_argument("--hard-capacity-bytes", required=True, type=int)
     parser.add_argument("--max-concurrent-operations", default=8, type=int)
+    parser.add_argument(
+        "--max-concurrent-prepares", default=DEFAULT_MAX_CONCURRENT_PREPARES, type=int
+    )
     parser.add_argument("--device-pool-enabled", action="store_true")
     parser.add_argument("--device-pool-low-watermark", default=2, type=int)
     parser.add_argument("--device-pool-high-watermark", default=16, type=int)
@@ -208,6 +212,7 @@ def main(argv: list[str] | None = None) -> int:
             hard_capacity_bytes=args.hard_capacity_bytes,
             upper_mode=args.upper_mode,
             max_concurrent_operations=args.max_concurrent_operations,
+            max_concurrent_prepares=args.max_concurrent_prepares,
             device_pool_enabled=args.device_pool_enabled,
             device_pool_low_watermark=args.device_pool_low_watermark,
             device_pool_high_watermark=args.device_pool_high_watermark,

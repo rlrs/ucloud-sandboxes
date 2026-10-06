@@ -184,7 +184,8 @@ import unittest
 # Lower it on deletions (C1.3 is ~8k; the Rust daemon retires the Python agent).
 # +2 Rust execs require Rust creates (noded serves them from the create pipeline's node state).
 # +9 the agent's ops wait for a transition's T no longer than the admission wait, then defer.
-PACKAGE_LINE_BUDGET = 118_333
+# +171 phase 4 storage prepare, steps 0-2: create step spans, a prepare admission class with queue-wait counters and its flag, mount(2) and BLKRASET, no owner inventory per acquisition.
+PACKAGE_LINE_BUDGET = 118_504
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

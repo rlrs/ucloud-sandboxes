@@ -233,11 +233,27 @@ class ConfigTests(unittest.TestCase):
         raw = self._raw()
         sandbox = raw["sandbox"]
         sandbox["storage_native_max_ublk_devices"] = 0
-        sandbox["storage_native_pool_high_watermark"] = 16
+        sandbox["storage_native_pool_high_watermark"] = 64
         config = DeploymentConfig.from_dict(raw)
         self.assertEqual(config.sandbox.storage_native_max_ublk_devices, 0)
         self.assertEqual(DeploymentConfig.from_dict(config.to_dict()), config)
         sandbox["storage_native_max_ublk_devices"] = -1
+        with self.assertRaises(ValueError):
+            DeploymentConfig.from_dict(raw)
+
+    def test_storage_prepare_bound_is_optional_and_nonnegative(self) -> None:
+        raw = self._raw()
+        sandbox = raw["sandbox"]
+        assert isinstance(sandbox, dict)
+        # Deployment files written before the setting existed stay valid.
+        sandbox.pop("storage_native_max_concurrent_prepares", None)
+        config = DeploymentConfig.from_dict(raw)
+        self.assertEqual(config.sandbox.storage_native_max_concurrent_prepares, 0)
+        sandbox["storage_native_max_concurrent_prepares"] = 48
+        config = DeploymentConfig.from_dict(raw)
+        self.assertEqual(config.sandbox.storage_native_max_concurrent_prepares, 48)
+        self.assertEqual(DeploymentConfig.from_dict(config.to_dict()), config)
+        sandbox["storage_native_max_concurrent_prepares"] = -1
         with self.assertRaises(ValueError):
             DeploymentConfig.from_dict(raw)
 

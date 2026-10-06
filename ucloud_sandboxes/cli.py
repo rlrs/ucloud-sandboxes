@@ -7123,6 +7123,9 @@ def vm_init_options_for_job(
         storage_native_max_concurrent_publications=(
             config.sandbox.storage_native_max_concurrent_publications
         ),
+        storage_native_max_concurrent_prepares=(
+            config.sandbox.storage_native_max_concurrent_prepares
+        ),
         direct_disk_headroom_mb=config.sandbox.direct_disk_headroom_mb,
         direct_max_concurrent_restores=(config.sandbox.direct_max_concurrent_restores),
         direct_max_concurrent_startups=config.policy.create_target_concurrency_per_node,
@@ -7218,6 +7221,9 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "storageNativeMaxUblkDevices": options.storage_native_max_ublk_devices,
         "storageNativeMaxConcurrentPublications": (
             options.storage_native_max_concurrent_publications
+        ),
+        "storageNativeMaxConcurrentPrepares": (
+            options.storage_native_prepare_concurrency()
         ),
         "directDiskHeadroomMb": options.direct_disk_headroom_mb,
         "directMaxConcurrentRestores": options.direct_max_concurrent_restores,

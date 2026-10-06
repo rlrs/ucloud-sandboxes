@@ -272,14 +272,21 @@ class SandboxPoolConfig:
     network_relays: dict[str, str] = field(default_factory=dict)
     storage_native_repository: str = "ucloud-sandbox-snapshots"
     storage_native_cache_gb: int = 32
-    storage_native_pool_low_watermark: int = 2
-    storage_native_pool_high_watermark: int = 16
+    # The backend prewarms the low watermark at boot and refills toward it, so
+    # a create burst up to the per-node create target takes pooled devices
+    # instead of creating ublk devices in the request path (phase 4, O3).
+    storage_native_pool_low_watermark: int = 64
+    storage_native_pool_high_watermark: int = 64
     # Optional operator override. Disk quota and live memory admission provide
     # the default capacity bounds; a fixed device count ignores machine size.
     storage_native_max_ublk_devices: int = 0
     storage_native_max_concurrent_publications: int = (
         DEFAULT_MAX_CONCURRENT_PUBLICATIONS
     )
+    # The storage daemon's bound on concurrent new-workspace prepares, its own
+    # admission class beside the lifecycle slots. 0 follows
+    # policy.create_target_concurrency_per_node.
+    storage_native_max_concurrent_prepares: int = 0
     direct_disk_headroom_mb: int = 16 * 1024
     direct_max_concurrent_restores: int = 8
     direct_idle_park_seconds: float = 0.0
@@ -340,6 +347,7 @@ class SandboxPoolConfig:
                    "direct_node_rust_create": False, "direct_node_rust_exec": False,
                    "direct_node_rust_pause": False,
                    "direct_workspace_initial_grant_mb": cls.direct_workspace_initial_grant_mb,
+                   "storage_native_max_concurrent_prepares": 0,
                    **raw}
         values = _exact_dataclass_values("sandbox", raw, cls())
         values["direct_network_allow_tcp"] = _string_tuple(
@@ -370,6 +378,7 @@ class SandboxPoolConfig:
         for name in (
             "swap_gb", "storage_native_pool_low_watermark",
             "storage_native_max_ublk_devices",
+            "storage_native_max_concurrent_prepares",
         ):
             _require_int(f"sandbox.{name}", getattr(result, name), minimum=0)
         _require_float(

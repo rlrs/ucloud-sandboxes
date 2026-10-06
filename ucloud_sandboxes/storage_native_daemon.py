@@ -4,6 +4,7 @@ from contextlib import closing, contextmanager, nullcontext, suppress
 from dataclasses import asdict, dataclass, fields, replace
 from enum import Enum
 from functools import wraps
+import ctypes
 import errno
 import fcntl
 import hashlib
@@ -50,6 +51,8 @@ _JOURNAL_APPLICATION_ID = 0x55435342
 _JOURNAL_SCHEMA_VERSION = 4
 # Current xfsprogs refuses filesystems below 300 MB; grants stay well above.
 MIN_WORKSPACE_GRANT_BYTES = 512 * 1024**2
+# The production per-node create target (policy.create_target_concurrency_per_node).
+DEFAULT_MAX_CONCURRENT_PREPARES = 32
 _PROTOCOL_MAX_BYTES = 1024 * 1024
 _OWNER_REQUEST_FIELDS = ("sandbox_generation", "sandbox_id", "volume_id")
 _PROTOCOL_EXTRA_FIELDS = {
@@ -190,6 +193,9 @@ class StorageNativeNodeConfig:
     upper_mode: str = "hybridLogStructured"
     command_timeout_seconds: float = 120.0
     max_concurrent_operations: int = 8
+    # New-workspace prepares have their own admission class and bound, so a
+    # create burst and a park/wake wave cannot starve each other.
+    max_concurrent_prepares: int = DEFAULT_MAX_CONCURRENT_PREPARES
     device_pool_enabled: bool = False
     device_pool_low_watermark: int = 2
     device_pool_high_watermark: int = 16
@@ -222,6 +228,8 @@ class StorageNativeNodeConfig:
             raise ValueError("command timeout must be positive")
         if self.max_concurrent_operations <= 0:
             raise ValueError("max_concurrent_operations must be positive")
+        if self.max_concurrent_prepares <= 0:
+            raise ValueError("max_concurrent_prepares must be positive")
         if self.device_pool_low_watermark < 0:
             raise ValueError("device pool low watermark must be non-negative")
         if self.device_pool_high_watermark <= 0:
@@ -530,6 +538,24 @@ class StorageHostOperations(Protocol):
     def ublk_device_ids(self) -> set[int]: ...
 
 
+_BLKRASET = 0x1262  # _IO(0x12, 98)
+_MS_NOATIME = 1024
+_LIBC_MOUNT: Any = None
+
+
+def _libc_mount() -> Any:
+    global _LIBC_MOUNT
+    if _LIBC_MOUNT is None:
+        function = ctypes.CDLL(None, use_errno=True).mount
+        function.argtypes = (
+            ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p,
+            ctypes.c_ulong, ctypes.c_char_p,
+        )
+        function.restype = ctypes.c_int
+        _LIBC_MOUNT = function
+    return _LIBC_MOUNT
+
+
 class LinuxStorageHostOperations:
     def __init__(self, *, timeout_seconds: float = 120.0) -> None:
         self.timeout_seconds = timeout_seconds
@@ -621,12 +647,40 @@ class LinuxStorageHostOperations:
         # Keep one page of read-ahead: mmap faults cannot grow a speculative
         # high-order allocation, while bulk read() calls can request larger I/O.
         sectors = max(1, os.sysconf("SC_PAGE_SIZE") // 512)
-        self._run("blockdev", "--setra", str(sectors), str(device))
+        self._set_readahead(device, sectors)
         # Independently owned COW snapshots retain their parent filesystem UUID.
         # Ownership is fenced by the volume journal and block backend, not UUID.
-        self._run(
-            "mount", "-t", "xfs", "-o", "noatime,nouuid", str(device), str(target)
-        )
+        self._mount_xfs(device, target)
+
+    @staticmethod
+    def _set_readahead(device: Path, sectors: int) -> None:
+        # `blockdev --setra` is this one ioctl; no process per create or wake.
+        try:
+            fd = os.open(device, os.O_RDONLY | os.O_CLOEXEC)
+            try:
+                fcntl.ioctl(fd, _BLKRASET, sectors)
+            finally:
+                os.close(fd)
+        except OSError as exc:
+            raise StorageNativeNodeError(
+                f"blockdev failed with {exc.errno}: {exc.strerror}"
+            ) from exc
+
+    @staticmethod
+    def _mount_xfs(device: Path, target: Path) -> None:
+        # mount(8) -t xfs -o noatime,nouuid is exactly this syscall: noatime is
+        # a VFS flag, nouuid an XFS option. Calling it directly skips a process
+        # and libmount's parse of a mountinfo with thousands of entries. Unlike
+        # mount(8), a write-protected device fails instead of silently
+        # mounting read-only, which a writable workspace must never do.
+        if _libc_mount()(
+            os.fsencode(str(device)), os.fsencode(str(target)), b"xfs",
+            _MS_NOATIME, b"nouuid",
+        ):
+            code = ctypes.get_errno()
+            raise StorageNativeNodeError(
+                f"mount failed with {code}: {os.strerror(code)}"
+            )
 
     def sync(self, target: Path) -> None:
         self._run("sync", "-f", str(target))
@@ -1622,6 +1676,25 @@ def _storage_mutation(method):
     return guarded
 
 
+class _SpanPhases:
+    """Duration events on the current span, one per consecutive step."""
+
+    def __init__(self, prefix: str) -> None:
+        self.prefix = prefix
+        self.started = time.monotonic()
+
+    def end(self, step: str, *, restart: bool = True) -> None:
+        now = time.monotonic()
+        self.event(step, (now - self.started) * 1000)
+        if restart:
+            self.started = now
+
+    def event(self, step: str, duration_ms: float, attributes: dict[str, Any] | None = None) -> None:
+        get_current_span().add_event(
+            f"{self.prefix}.{step}", {"duration_ms": duration_ms, **(attributes or {})}
+        )
+
+
 @dataclass
 class _DeviceAllocationSlot:
     # Guarded by the service's _device_slot_guard. Once the backend owns the
@@ -1794,11 +1867,15 @@ class StorageNativeNodeService:
         existing = self.journal.load(volume_id)
         slot = self._device_allocation_slot() if existing is None else suppress()
         with slot as allocation_slot:
+            # Per-step events mirror mount_snapshot_cow's (storage.mount.*), so
+            # a burst shows where a new workspace's in-slot time goes.
+            phase = _SpanPhases("storage.create")
             reserved = self.journal.reserve_create(
                 request=request,
                 record=record,
                 hard_capacity_bytes=self.config.hard_capacity_bytes,
             )
+            phase.end("reserve")
             if isinstance(reserved, OperationReplay):
                 return reserved.record
             record = reserved
@@ -1812,13 +1889,16 @@ class StorageNativeNodeService:
                     source,
                     {"lowers": [], "resultFile": "", "upper": {}},
                 )
+                phase.end("write_source")
                 device = self._acquire_runtime_device(
                     source_image_config=source,
                     runtime_dir=runtime_dir,
                     virtual_size=virtual_size,
                     owner_id=record.device_owner_id,
                     allocation_slot=allocation_slot,
+                    phases=phase,
                 )
+                phase.end("acquire_device")
                 if device.virtual_size != virtual_size:
                     raise StorageNativeTerminalError(
                         "block backend changed the requested virtual size"
@@ -1831,17 +1911,21 @@ class StorageNativeNodeService:
                     updated_ns=time.time_ns(),
                 )
                 self.journal.update_pending(record)
+                phase.end("persist_pending")
                 if record.granted_size < record.virtual_size:
                     self.host.format_xfs(device.device_path, size_bytes=record.granted_size)
                 else:
                     self.host.format_xfs(device.device_path)
+                phase.end("format")
                 self.host.mount(device.device_path, mount_path)
+                phase.end("mount")
                 record = replace(
                     record,
                     state=StorageVolumeState.MOUNTED,
                     updated_ns=time.time_ns(),
                 )
                 self.journal.finish(record)
+                phase.end("finish")
                 return record
             except BaseException as exc:
                 self._best_effort_release(record)
@@ -3076,13 +3160,20 @@ class StorageNativeNodeService:
         virtual_size: int,
         owner_id: str,
         allocation_slot: _DeviceAllocationSlot | None = None,
+        phases: _SpanPhases | None = None,
     ) -> StorageNativeDevice:
-        idle_before = (
+        # Only the pool's reuse metric needs this. A device that already
+        # existed came from the backend's pool (prewarmed or returned): the
+        # backend never hands out another owner's device. A sysfs listing is
+        # enough to tell; the backend's full owner inventory per acquisition
+        # was an O(active devices) RPC and decode on every create and wake.
+        live_before = (
             self.host.ublk_device_ids()
-            - {owner.device_id for owner in self._backend_ownership().values()}
             if self.config.device_pool_enabled
             else set()
         )
+        if phases is not None:
+            phases.end("acquire_device.inventory", restart=False)
         # Only an explicit device ceiling needs atomic reservation-to-owner
         # transfer. In the normal uncapped path, let independent volumes acquire
         # concurrently; the native backend already fences each owner identity.
@@ -3099,6 +3190,7 @@ class StorageNativeNodeService:
                     raise StorageNativeCapacityError(
                         "storage-native ublk device capacity is exhausted"
                     )
+            backend_started = time.monotonic()
             device = self.backend.create_runtime_device(
                 source_image_config=source_image_config,
                 global_config=self.global_config_path,
@@ -3107,6 +3199,7 @@ class StorageNativeNodeService:
                 upper_mode=self.config.upper_mode,
                 owner_id=owner_id,
             )
+            backend_ms = (time.monotonic() - backend_started) * 1000
             # The owner is now visible to every later admission check. Keeping
             # its transient reservation through format/mount double-counts it
             # and rejects the last slots of a concurrent create/wake burst.
@@ -3119,10 +3212,11 @@ class StorageNativeNodeService:
             raise StorageNativeNodeError(
                 "block backend supplied a device still in use by the kernel"
             )
+        reuse: dict[str, Any] = {}
         if self.config.device_pool_enabled:
             with self._pool_metrics_lock:
                 reused = (
-                    device.device_id in idle_before
+                    device.device_id in live_before
                     or device.device_id in self._released_device_ids
                 )
                 self._released_device_ids.discard(device.device_id)
@@ -3131,6 +3225,9 @@ class StorageNativeNodeService:
                     self._pool_reused_acquires += 1
                 else:
                     self._pool_new_acquires += 1
+            reuse["storage.device.reused"] = reused
+        if phases is not None:
+            phases.event("acquire_device.backend", backend_ms, reuse)
         return device
 
     @contextmanager
@@ -3705,20 +3802,66 @@ class _StorageNativeRequestHandler(socketserver.BaseRequestHandler):
             if operation == "GrowVolume":
                 span.set_attribute("storage.admission.class", "growth")
                 return {"status": "ok", "result": self.server.dispatch(request)}
-            span.set_attribute("storage.admission.class", "lifecycle")
-            waiting_started = time.monotonic()
-            self.server.operation_waiting()
-            with self.server.operation_slots:
-                queue_wait = max(0.0, time.monotonic() - waiting_started)
+            # A prepare that creates a new workspace (mkfs, a fresh device) is
+            # the create path. Parks, wakes, deletes and captures share the
+            # lifecycle slots; giving creates their own bound means neither a
+            # park wave nor a create burst can starve the other. A prepare of
+            # an existing volume (a wake, or an idempotent retry) stays
+            # lifecycle. The peek is advisory: per-volume fences still decide.
+            admission = (
+                self.server.prepare_admission
+                if operation == "PrepareVolume" and self.server.creates_volume(request)
+                else self.server.lifecycle_admission
+            )
+            span.set_attribute("storage.admission.class", admission.name)
+            with admission.admit() as queue_wait:
                 span.add_event(
                     "storage.queue.acquired",
                     {"storage.queue.wait_seconds": queue_wait},
                 )
-                self.server.operation_started()
-                try:
-                    return {"status": "ok", "result": self.server.dispatch(request)}
-                finally:
-                    self.server.operation_finished()
+                return {"status": "ok", "result": self.server.dispatch(request)}
+
+
+class _AdmissionClass:
+    """A bounded admission class with its occupancy and queue-wait counters."""
+
+    def __init__(self, name: str, plural: str, limit: int) -> None:
+        self.name, self.plural, self.limit = name, plural, limit
+        self.slots = threading.BoundedSemaphore(limit)
+        self._lock = threading.Lock()
+        self._active = self._waiting = self._admissions = 0
+        self._wait_ms_total = self._wait_ms_max = 0.0
+
+    @contextmanager
+    def admit(self):
+        started = time.monotonic()
+        with self._lock:
+            self._waiting += 1
+        self.slots.acquire()
+        wait = max(0.0, time.monotonic() - started)
+        with self._lock:
+            self._waiting -= 1
+            self._active += 1
+            self._admissions += 1
+            self._wait_ms_total += wait * 1000
+            self._wait_ms_max = max(self._wait_ms_max, wait * 1000)
+        try:
+            yield wait
+        finally:
+            with self._lock:
+                self._active -= 1
+            self.slots.release()
+
+    def metrics(self) -> dict[str, int]:
+        with self._lock:
+            return {
+                f"active_{self.plural}": self._active,
+                f"waiting_{self.plural}": self._waiting,
+                f"max_concurrent_{self.plural}": self.limit,
+                f"{self.name}_admissions": self._admissions,
+                f"{self.name}_queue_wait_ms_total": int(self._wait_ms_total),
+                f"{self.name}_queue_wait_ms_max": int(self._wait_ms_max),
+            }
 
 
 class _StorageNativeUnixServer(
@@ -3727,9 +3870,9 @@ class _StorageNativeUnixServer(
 ):
     daemon_threads = True
     # The default socketserver backlog is only five. Production permits eight
-    # simultaneous storage operations plus metrics/reconcile traffic, so a
-    # burst could otherwise fail connect() before reaching the explicit
-    # operation semaphore.
+    # lifecycle operations and a create burst's prepares at once, plus
+    # metrics/reconcile traffic, so a burst could otherwise fail connect()
+    # before reaching the explicit admission semaphores.
     request_queue_size = 128
 
     def __init__(
@@ -3743,38 +3886,32 @@ class _StorageNativeUnixServer(
         self.service = service
         self.require_root_peer_enabled = require_root_peer
         self.telemetry = telemetry
-        self.operation_slots = threading.BoundedSemaphore(
-            service.config.max_concurrent_operations
+        self.lifecycle_admission = _AdmissionClass(
+            "lifecycle", "operations", service.config.max_concurrent_operations
         )
-        self._metrics_lock = threading.Lock()
-        self._active_operations = 0
-        self._waiting_operations = 0
+        self.prepare_admission = _AdmissionClass(
+            "prepare", "prepares", service.config.max_concurrent_prepares
+        )
+        self.operation_slots = self.lifecycle_admission.slots
         super().__init__(str(socket_path), _StorageNativeRequestHandler)
 
-    def operation_waiting(self) -> None:
-        with self._metrics_lock:
-            self._waiting_operations += 1
-
-    def operation_started(self) -> None:
-        with self._metrics_lock:
-            self._waiting_operations -= 1
-            self._active_operations += 1
-
-    def operation_finished(self) -> None:
-        with self._metrics_lock:
-            self._active_operations -= 1
+    def creates_volume(self, request: dict[str, Any]) -> bool:
+        volume_id = request.get("volume_id")
+        if not isinstance(volume_id, str):
+            return False
+        try:
+            return self.service.journal.load(volume_id) is None
+        except Exception:
+            # An invalid id fails in dispatch; classify it as before.
+            return False
 
     def metrics(self) -> dict[str, Any]:
-        with self._metrics_lock:
-            active = self._active_operations
-            waiting = self._waiting_operations
+        # The *_operations keys stay the lifecycle class alone: heartbeats,
+        # consolidation and admission read active/max as its utilization.
         return {
             **self.service.metrics(),
-            "active_operations": active,
-            "waiting_operations": waiting,
-            "max_concurrent_operations": (
-                self.service.config.max_concurrent_operations
-            ),
+            **self.lifecycle_admission.metrics(),
+            **self.prepare_admission.metrics(),
         }
 
     def require_allowed_peer(self, connection: socket.socket) -> None:

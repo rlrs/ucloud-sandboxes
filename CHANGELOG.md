@@ -10,7 +10,12 @@
   - The pool of 32 pairs that Python's agent used to keep (off under Rust creates) now lives in the daemon.
   - Creates share one durable write of the network state, and cold namespace creation is serialized.
   - Locally, at 32 concurrent creates, p50 went from 113 ms to 16 ms pooled and 38 ms cold.
-- **IPv6 is off on sandbox veths.** Nothing in the sandbox contract uses it, and it reached host services on `[::]` past the IPv4-only INPUT rules.
+- **IPv6 is off on sandbox veths.** Nothing in the sandbox contract uses it, and it reached host services on `[::]` past the IPv4-only INPUT rules. The initial pool fill still leaves it on (follow-up).
+- **Measured (warm 1,024-rollout rehearsal):**
+  - Ready by 30 s: 895 of 1,024 (0.9.47: 694; 0.9.43: 610). All ready by 37.3 s.
+  - Ready p50 15.9 s.
+  - Answer→resume p95 34 ms.
+  - One create in 1,024 materialized an image.
 
 ## 0.9.47 - 2026-10-06 (gateway; workers)
 

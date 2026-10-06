@@ -6,6 +6,9 @@ Status (2026-10-06):
 - **Phase 2a (execs on running sandboxes):** built, shipping in 0.9.45.
 - **Phase 3a (the pause tier, local waits, thaw-on-exec):** in production in 0.9.46.
 - **Storage prepare (the create path's largest phase):** 0.9.47.
+- **Image cache, netlink networking and the daemon's network pool:** 0.9.48.
+  This push closes here; see "Where this push stopped" for the measured
+  result and the follow-ups.
 
 Decided: Rust, and the daemon owns the node registry.
 
@@ -315,6 +318,63 @@ reaches the agent; the kernel carries the fence (`ucloud_sandboxes/exec_fence.py
   `storage_prepare` p50 0.66 s. 0.9.47 targets the second: a separate storage
   admission class for creates, a 64-device pool, and the memory-backing
   group commit.
+
+### Where this push stopped (0.9.48, 2026-10-06)
+
+Warm 1,024-rollout rehearsal on two 64-vCPU workers (relay think mode, 128
+images):
+
+| Ready by | 10 s | 20 s | 30 s | 40 s |
+|---|---|---|---|---|
+| 0.9.43 (Python agent) | 203 | 414 | 610 | 767 |
+| 0.9.47 | 201 | 436 | 694 | 935 |
+| 0.9.48 | 323 | 643 | **895** | **1,024** |
+
+- **Ready time:** p50 15.9 s, p95 33.2 s, max 37.3 s (0.9.43: 24.4 / 52.6 / 63.3 s).
+  The M2 gate (all 1,024 by 30 s) is not met yet: 87% are ready by 30 s,
+  and all by 37 s.
+- **Answer→resume:** p50 16 ms, p95 34 ms, max 0.26 s. That meets the
+  local-wait target (p95 ≤ 46 ms); 0.9.43 had p95 0.41 s and max 8.6 s.
+  Relay overhead p95 is 95 ms.
+- **Node-side create (warm, p50 / p95):**
+  - `manager_create` 2.06 / 4.9 s;
+  - `startup_admission` 0 / 1.9 s;
+  - `image_resolve` 113 ms / 1.5 s (1 create in 1,024 materialized an image);
+  - `volume_prepare` 183 / 785 ms;
+  - `runsc_create` 191 / 853 ms;
+  - `registry_commit` 99 / 650 ms;
+  - `network_ensure` 33 / 147 ms.
+- **Failures:** every run completed 984/1,024. The 40 failures are images
+  without Python, as in every release since 0.9.35.
+
+**Follow-ups, in rough order of value for the gate:**
+1. **The warm image lease** (`image_lease` p50 112 ms, p95 1.5 s, even on hits):
+   one `ensure` call per component to the Python environment backend, which
+   also serves block I/O for every sandbox, plus flocks and a receipt
+   re-read per create. Cache `ensure` per backend session in the daemon, or
+   move the backend's control RPC out of its I/O process.
+2. **The tails:** `runsc_create` p95 0.85 s, `volume_prepare` p95 0.8 s,
+   `registry_commit` p95 0.65 s. Next steps: the blank-filesystem seed
+   (phase-4 spec, step 4) to drop the per-create mkfs, and group commit in
+   the agent's foreign registry writes.
+3. **3c: one admission function in the daemon.** It removes the two Python
+   requests per create (admit and finish), and with them the agent's
+   foreign-index refresh on every finish.
+4. **Small fixes found in review:**
+   - after device exhaustion, the image sweep retries the mount only if it
+     collected something itself;
+   - a drop guard on the batched network write's leader flag;
+   - IPv6 is still on for the 32 pairs of the initial pool fill (61 of 93
+     interfaces had it off on the canary);
+   - Python-made pairs (relay egress) keep IPv6;
+   - the delete-refreshed 60 s grace can thrash a node near its device
+     budget.
+5. **Not yet started:**
+   - 2c and 2d: the guest agent as the exec transport, and files over it,
+     for C5.1's exec numbers;
+   - 3b: resident sampling;
+   - phase 4: park, wake, migration, commit and fork, then deleting the
+     Python agent.
 
 ### What 0.9.47 measured (storage prepare)
 

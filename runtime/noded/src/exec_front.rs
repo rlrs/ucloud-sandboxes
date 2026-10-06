@@ -251,7 +251,9 @@ impl ExecFront {
             spec_sha256: registration.spec_sha256(),
         };
         let marker = config.warden_paused_dir.join(format!("{}.sandbox-{}", sandbox.sandbox_id, sandbox.generation));
-        if marker.exists() {
+        // A paused sandbox is the agent's unless the daemon owns the pause tier.
+        let tier = node.pause_tier().cloned();
+        if marker.exists() && tier.is_none() {
             return Err(Decline::Forward("paused"));
         }
         if !running(node, &sandbox) {
@@ -263,7 +265,17 @@ impl ExecFront {
         // Python's start fence: the warden flock across the spawn only.
         let lock = node.warden().lock(&sandbox).await.map_err(|_| Decline::Forward("warden lock"))?;
         if marker.exists() {
-            return Err(Decline::Forward("paused"));
+            // Thaw-on-exec (Python's exec_lease: `_thaw_locked(prefetch=True)`
+            // under the warden flock). The exec's A lock already keeps a new
+            // pause out until the session ends.
+            let Some(tier) = tier else { return Err(Decline::Forward("paused")) };
+            match tier.thaw_locked(&sandbox, &lock, true).await {
+                Ok(thawed) => {
+                    let ms = thawed.map_or(0.0, |elapsed| elapsed.as_secs_f64() * 1000.0);
+                    timings.manager.insert("thaw".into(), serde_json::json!(ms));
+                }
+                Err(_) => return Err(Decline::Forward("thaw failed")),
+            }
         }
         let argv = runsc_exec_argv(
             &config.runsc.to_string_lossy(),

@@ -63,6 +63,18 @@ pub struct CreateConfig {
     /// Phase 2a; absent from agents older than it.
     #[serde(default)]
     pub exec: Option<ExecConfig>,
+    /// Phase 3a; absent from agents older than it.
+    #[serde(default)]
+    pub pause: Option<PauseBlock>,
+}
+
+/// The agent's pause-tier configuration (phase 3a). Only the switch is read
+/// here; the policy reads the rest.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PauseBlock {
+    pub rust_pause_enabled: bool,
+    #[serde(flatten)]
+    pub settings: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

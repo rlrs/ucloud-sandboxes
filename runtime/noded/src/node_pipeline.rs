@@ -17,6 +17,7 @@ use crate::image::{EnvironmentBackendClient, ImageError, ImageLease, ImageStore,
 use crate::memory_backing::{ActiveMode, MemoryBackingConfig, MemoryBackingError, MemoryBackingRef, MemoryBackingStore, XfsMemoryQuota};
 use crate::network::{NetworkError, NetworkManager, TcpEgress};
 use crate::oci::{self, NetworkMode, OciBuilder, OciError};
+use crate::pause::{PauseConfig, PauseTier};
 use crate::pipeline::{CreateConfig, spec_supported};
 use crate::registry::{self, DiskClaim, MIB, Phase, PlanRequest, Quota, Registration, Registry, RegistryError, Rootfs};
 use crate::rootfs::{OverlayManager, RootfsError};
@@ -110,6 +111,7 @@ async fn blocking<T: Send + 'static>(
 }
 
 pub struct NodePipeline {
+    pause: Option<Arc<PauseTier>>,
     config: CreateConfig,
     agent: Arc<AgentClient>,
     registry: Arc<Registry>,
@@ -190,7 +192,7 @@ impl NodePipeline {
             .map_err(|error| format!("overlays: {error}"))?;
         let oci = OciBuilder::new(Some(config.init_binary.clone()), Some(config.managed_init_binary.clone()), network_mode)
             .map_err(|error| format!("OCI: {error}"))?;
-        let warden = Warden::new(WardenConfig {
+        let warden_config = WardenConfig {
             runsc: config.runsc.clone(),
             runtime_root: config.runtime_root.clone(),
             bundle_root: config.bundle_root.clone(),
@@ -202,8 +204,15 @@ impl NodePipeline {
             proc_root: PathBuf::from("/proc"),
             command_timeout: Duration::from_secs(60),
             stop_timeout: Duration::from_secs(30),
+        };
+        // Phase 3a: the daemon owns the pause tier only when the agent says so.
+        let pause = config.pause.as_ref().filter(|pause| pause.rust_pause_enabled).map(|_| {
+            let modes = memory.clone().map(|memory| memory as Arc<dyn crate::pause::ModeSource>);
+            Arc::new(PauseTier::new(PauseConfig::new(warden_config.clone(), true), modes))
         });
+        let warden = Warden::new(warden_config);
         Ok(NodePipeline {
+            pause,
             storage: StorageClient::new(&config.storage_native_socket),
             config,
             agent,
@@ -227,6 +236,11 @@ impl NodePipeline {
 
     pub fn warden(&self) -> &Arc<Warden> {
         &self.warden
+    }
+
+    /// The pause tier, when the daemon owns it (phase 3a).
+    pub fn pause_tier(&self) -> Option<&Arc<PauseTier>> {
+        self.pause.as_ref()
     }
 
     /// S2.2: a warm lease from the store's receipts, else the agent mounts

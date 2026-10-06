@@ -9,6 +9,7 @@
 
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full, Limited};
@@ -223,9 +224,17 @@ impl ExecFront {
         let config = node.config().exec.clone().ok_or(Decline::Forward("no exec configuration"))?;
         let registry = node.registry().clone();
         let id = exec.sandbox_id.clone();
+        // Each check's milliseconds, in the start reply's `timings.manager`.
+        let mut step = Instant::now();
+        let mut mark = |timings: &mut StartTimings, name: &str| {
+            let now = Instant::now();
+            timings.manager.insert(format!("{name}_ms"), serde_json::json!(millis(now - step)));
+            step = now;
+        };
         let (registration, drain) = tokio::task::spawn_blocking(move || (registry.get(&id), registry.load_drain()))
             .await
             .map_err(|_| Decline::Forward("registry worker"))?;
+        mark(&mut timings, "registry");
         let registration = registration
             .ok()
             .flatten()
@@ -241,6 +250,7 @@ impl ExecFront {
             Ok(Fenced::Busy) => return Err(Decline::Forward("lifecycle fence busy")),
             Err(_) => return Err(Decline::Forward("lifecycle fence unreadable")),
         };
+        mark(&mut timings, "fence");
         // With A held no pause or park can start; check that the runtime runs.
         let sandbox = Sandbox {
             sandbox_id: exec.sandbox_id.clone(),
@@ -259,11 +269,13 @@ impl ExecFront {
         if !running(node, &sandbox) {
             return Err(Decline::Forward("not running"));
         }
+        mark(&mut timings, "running");
         if config.active_capacity_configured && available_mib().is_none_or(|mib| mib < config.memory_floor_mib) {
             return Err(Decline::Forward("memory floor"));
         }
         // Python's start fence: the warden flock across the spawn only.
         let lock = node.warden().lock(&sandbox).await.map_err(|_| Decline::Forward("warden lock"))?;
+        mark(&mut timings, "warden_lock");
         if marker.exists() {
             // Thaw-on-exec (Python's exec_lease: `_thaw_locked(prefetch=True)`
             // under the warden flock). The exec's A lock already keeps a new
@@ -309,3 +321,6 @@ fn running(node: &NodePipeline, sandbox: &Sandbox) -> bool {
     crate::runsc::start_time_ticks(std::path::Path::new("/proc"), pid as u32).is_ok_and(|now| now == ticks)
 }
 
+fn millis(elapsed: Duration) -> f64 {
+    (elapsed.as_secs_f64() * 100_000.0).round() / 100.0
+}

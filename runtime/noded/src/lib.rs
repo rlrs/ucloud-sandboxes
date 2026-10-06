@@ -12,6 +12,7 @@
 
 pub mod agent_rpc;
 pub mod create;
+pub mod exec;
 pub mod exec_fence;
 pub mod fsutil;
 pub mod journal;

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.49 - 2026-10-06 (gateway; workers)
+
+- **Exec starts per node: 120-280/s to 1,239-1,306/s** (p50 24-25 ms through the gateway; M2's gate is 1,000/s). Two fixes in `ucloud-noded`, found by per-check timings now in the exec start reply:
+  - Every exec read the drain row in its own SQLite transaction. Concurrent WAL readers backed off for up to seconds (p95 3.5 s at 128 in flight), and readers past the 64 pooled connections leaked descriptors. Execs now share one read that began after they arrived, so a committed drain still closes admission.
+  - A `pre_exec` hook (for a parent-death signal) made every exec a full `fork()` of the daemon on one of four threads, under its mmap lock: 74 ms of CPU per exec. Execs now use `posix_spawn`; children still die with the daemon through the unit's `KillMode=control-group`, as under the Python agent.
+- **The environment backend measures its device cache only on attach.** Every create ensures each component of its image, nearly always already attached, and every ensure stat-ed every blob in nydusd's cache: `image_lease` p95 2.6-6.5 s in two-worker bursts.
+- **The package and suite line budgets are gone.**
+
 ## 0.9.48 - 2026-10-06 (gateway; workers)
 
 - **Images stay cached between sandboxes.** On every delete the environment store collected an image no sandbox referenced any more: it unmounted the composition and dropped its components. A rollout therefore kept re-materializing the same images, and `image_resolve` reached p50 0.5 s and p95 3.6 s in the 0.9.47 warm rehearsal (0.9.43, with Python creates: 0.33 s).

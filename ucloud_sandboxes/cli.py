@@ -7113,6 +7113,7 @@ def vm_init_options_for_job(
         direct_pause_tier=role == "sandbox" and config.sandbox.direct_pause_tier,
         direct_pause_tier_zswap=role == "sandbox" and config.sandbox.direct_pause_tier_zswap,
         direct_local_model_waits=role == "sandbox" and config.sandbox.direct_local_model_waits,
+        direct_node_front_door=role == "sandbox" and config.sandbox.direct_node_front_door,
         direct_workspace_initial_grant_mb=(
             config.sandbox.direct_workspace_initial_grant_mb if role == "sandbox" else 0
         ),
@@ -7170,6 +7171,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "directPauseTier": options.direct_pause_tier,
         "directPauseTierZswap": options.direct_pause_tier_zswap,
         "directLocalModelWaits": options.direct_local_model_waits,
+        "directNodeFrontDoor": options.direct_node_front_door,
         "directWorkspaceInitialGrantMb": options.direct_workspace_initial_grant_mb,
         "storageNativeRegistryUrl": options.storage_native_registry_url,
         "storageNativeRepository": options.storage_native_repository,

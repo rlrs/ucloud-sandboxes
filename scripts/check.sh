@@ -68,6 +68,16 @@ else
   exit 1
 fi
 
+if command -v cargo >/dev/null 2>&1; then
+  (
+    cd runtime/noded
+    cargo test --locked --quiet
+  )
+else
+  echo "cargo is required for the node front door (runtime/noded) tests" >&2
+  exit 1
+fi
+
 sdk_root="$repo_root/ucloud-sandboxes-sdk"
 if [ -f "$sdk_root/pyproject.toml" ]; then
   (

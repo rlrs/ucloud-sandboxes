@@ -336,8 +336,8 @@ else:
         values.update(overrides)
         return VmInitOptions(**values)
 
-    def _bundle_validator(self, role="sandbox"):
-        script = render_vm_init_script(self._options(role=role))
+    def _bundle_validator(self, role="sandbox", **overrides):
+        script = render_vm_init_script(self._options(role=role, **overrides))
         start = script.index("import hashlib\nimport json\nimport os")
         end = script.index('\nPY\n)"', start)
         return script, script[start:end]
@@ -656,6 +656,7 @@ else:
                         runtime[name]["sha256"]
                         for name in "direct_runsc managed_init storage_native".split()
                     )
+                    expected.append("none")  # ucloud-noded: the front door is off.
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 self.assertEqual(completed.stdout.strip().split("\t"), expected)
 
@@ -679,6 +680,28 @@ else:
                 elif corruption == "commit":
                     entry["nydus_commit"] = "0" * 40
                 manifest["runtime"]["nydusd"] = entry
+                (root / "package-bundle.json").write_text(json.dumps(manifest), encoding="utf-8")
+                completed = self._run_bundle_validator(validator, root)
+                if corruption is None:
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertEqual(completed.stdout.strip().split("\t")[-1], entry["sha256"])
+                else:
+                    self.assertNotEqual(completed.returncode, 0)
+
+    def test_an_enabled_front_door_requires_the_bundled_noded(self) -> None:
+        _script, validator = self._bundle_validator(direct_node_front_door=True)
+        for corruption in (None, "binary", "absent"):
+            with self.subTest(corruption=corruption), TemporaryDirectory() as raw_dir:
+                root = Path(raw_dir)
+                manifest = write_bundle(root, "sandbox")
+                path = root / "runtime/noded/ucloud-noded"
+                path.parent.mkdir(parents=True)
+                path.write_bytes(b"noded")
+                entry = {"file": "runtime/noded/ucloud-noded", "sha256": hashlib.sha256(b"noded").hexdigest(), "size": 5}
+                if corruption == "binary":
+                    path.write_bytes(b"NODED")
+                if corruption != "absent":
+                    manifest["runtime"]["noded"] = entry
                 (root / "package-bundle.json").write_text(json.dumps(manifest), encoding="utf-8")
                 completed = self._run_bundle_validator(validator, root)
                 if corruption is None:
@@ -759,6 +782,25 @@ else:
         )
         self.assertEqual(phases, {"runtime-bundle": 17321, "docker-daemon": 823})
         self.assertEqual(total, 24100)
+
+    def test_node_front_door_owns_the_port_and_the_agent_serves_its_socket(self) -> None:
+        on = render_vm_init_script(self._options(direct_node_front_door=True))
+        self.assertIn("--unix-socket /run/ucloud-sandboxes/node-agent/agent.sock", on)
+        self.assertNotIn("--host ${UCLOUD_NODE_AGENT_HOST} --port", on)
+        self.assertIn("ExecStart=/usr/local/libexec/ucloud-noded --listen 0.0.0.0:8090 "
+                      "--upstream-unix /run/ucloud-sandboxes/node-agent/agent.sock", on)
+        self.assertIn('the node front door is enabled but the bundle carries no ucloud-noded', on)
+        self.assertIn('"$UCLOUD_BUNDLED_NODED_SHA256" /usr/local/libexec/ucloud-noded | sha256sum --check', on)
+        # The front door starts before the agent, whose health check goes through it.
+        self.assertLess(on.index("systemctl restart ucloud-sandbox-noded.service"),
+                        on.index("systemctl restart ucloud-sandbox-node.service"))
+        off = render_vm_init_script(self._options())
+        self.assertIn("--host ${UCLOUD_NODE_AGENT_HOST} --port ${UCLOUD_NODE_AGENT_PORT}", off)
+        self.assertIn("systemctl disable --now ucloud-sandbox-noded.service", off)
+        self.assertNotIn("systemctl restart ucloud-sandbox-noded.service", off)
+        for script in (on, off):
+            bash = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
+            self.assertEqual(bash.returncode, 0, bash.stderr)
 
     def test_kernel_bootstrap_reuses_matching_base_image_module_index(self) -> None:
         script = render_vm_init_script(self._options())

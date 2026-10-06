@@ -48,6 +48,9 @@ DEFAULT_REMOTE_PACKAGE_FILENAME = "node-package.tar.gz"
 STATIC_RUNTIME_RECEIPT_SCHEMA = 2
 DEFAULT_DIRECT_RUNSC = "/usr/local/libexec/ucloud-gvisor/runsc"
 DEFAULT_MANAGED_INIT = "/usr/local/libexec/ucloud-sandbox-init"
+DEFAULT_NODED = "/usr/local/libexec/ucloud-noded"
+# The Python agent's socket behind ucloud-noded (direct_node_front_door).
+NODE_AGENT_SOCKET = "/run/ucloud-sandboxes/node-agent/agent.sock"
 DEFAULT_STORAGE_NATIVE_BACKEND = "/usr/local/libexec/ucloud-storage-native-backend"
 DEFAULT_STORAGE_NATIVE_BACKEND_SOCKET = (
     "/run/ucloud-sandboxes/storage-native/backend.sock"
@@ -245,6 +248,7 @@ class VmInitOptions:
     direct_pause_tier: bool = False
     direct_pause_tier_zswap: bool = False
     direct_local_model_waits: bool = False
+    direct_node_front_door: bool = False
     direct_workspace_initial_grant_mb: int = 0
     environment_registry_url: str = ""
     environment_repository: str = ""
@@ -472,6 +476,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     storage_native_resize_backend_config = DEFAULT_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG
     env_file = "/etc/ucloud-sandboxes/node.env"
     node_service = "/etc/systemd/system/ucloud-sandbox-node.service"
+    noded_service = "/etc/systemd/system/ucloud-sandbox-noded.service"
     storage_backend_service = (
         "/etc/systemd/system/ucloud-storage-native-backend.service"
     )
@@ -590,9 +595,9 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --job-id ${UCLOUD_JOB_ID}"
             " --node-id ${UCLOUD_NODE_ID}"
             " --node-url ${UCLOUD_NODE_URL}"
-            " --host ${UCLOUD_NODE_AGENT_HOST}"
-            " --port ${UCLOUD_NODE_AGENT_PORT}"
-            f"{deployment_flag}{version_flags}"
+            + (f" --unix-socket {NODE_AGENT_SOCKET}" if options.direct_node_front_door else
+               " --host ${UCLOUD_NODE_AGENT_HOST} --port ${UCLOUD_NODE_AGENT_PORT}")
+            + f"{deployment_flag}{version_flags}"
             " --state-root ${UCLOUD_STATE_DIR}/direct-runtime"
             " --image-cache-root ${UCLOUD_DIRECT_IMAGE_CACHE_ROOT}"
             " --image-file ${UCLOUD_STATE_DIR}/images.sqlite"
@@ -651,6 +656,43 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         node_service_wants = "network-online.target docker.service"
         node_service_after = "network-online.target docker.service"
         node_service_requires = "docker.service"
+
+    front_door = options.role == "sandbox" and options.direct_node_front_door
+    if front_door:
+        node_service_wants += " ucloud-sandbox-noded.service"
+        node_service_after += " ucloud-sandbox-noded.service"
+        host = options.node_agent_host
+        listen = f"[{host}]:{options.node_agent_port}" if ":" in host else f"{host}:{options.node_agent_port}"
+        noded_setup = f"""echo "Writing node front door systemd service"
+$SUDO tee {shlex.quote(noded_service)} >/dev/null <<'NODED_SERVICE'
+[Unit]
+Description=UCloud sandbox node front door (ucloud-noded)
+Wants=network-online.target
+After=network-online.target
+Before=ucloud-sandbox-node.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart={DEFAULT_NODED} --listen {listen} --upstream-unix {NODE_AGENT_SOCKET}
+LimitNOFILE=65536
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
+NODED_SERVICE
+"""
+        noded_start = ("$SUDO systemctl enable ucloud-sandbox-noded.service\n"
+                       "$SUDO systemctl restart ucloud-sandbox-noded.service\n")
+    else:
+        noded_setup = f"""if [ -e {shlex.quote(noded_service)} ]; then
+  $SUDO systemctl disable --now ucloud-sandbox-noded.service || true
+  $SUDO rm -f {shlex.quote(noded_service)}
+fi
+"""
+        noded_start = ""
 
     from .environment_bootstrap import settings as environment_bootstrap_settings
     environment_flags, environment_setup, environment_start = environment_bootstrap_settings(options)
@@ -1221,7 +1263,14 @@ if runtime.get("role") == "sandbox":
         for key, digest_key in (("manifest_file", "manifest_sha256"), ("license_file", "license_sha256")):
             if digest(bundle_dir / nydusd_files[key]) != nydusd.get(digest_key):
                 raise SystemExit(f"nydusd {{key}} checksum mismatch")
-    result.extend((direct_sha256, managed_sha256, storage_sha256, nydusd_sha256))
+    noded_sha256 = "none"
+    if {options.direct_node_front_door!r}:
+        noded = runtime.get("noded")
+        if not isinstance(noded, dict) or noded.get("file") != "runtime/noded/ucloud-noded":
+            raise SystemExit("the node front door is enabled but the bundle carries no ucloud-noded")
+        noded_sha256 = verified_artifact(noded, "runtime/noded/ucloud-noded", "ucloud-noded")
+    # nydusd's digest may be empty, so it stays last: read collapses empty tab fields.
+    result.extend((direct_sha256, managed_sha256, storage_sha256, noded_sha256, nydusd_sha256))
 
 print("\\t".join(result))
 PY
@@ -1231,6 +1280,7 @@ IFS=$'\t' read -r \
   UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256 \
   UCLOUD_BUNDLED_MANAGED_INIT_SHA256 \
   UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_SHA256 \
+  UCLOUD_BUNDLED_NODED_SHA256 \
   UCLOUD_BUNDLED_NYDUSD_SHA256 \
   <<< "$UCLOUD_PACKAGE_METADATA"
 UCLOUD_PREBUILT_AGENT_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/agent/node-agent-runtime.tar"
@@ -1238,6 +1288,7 @@ UCLOUD_BUNDLED_KERNEL_MODULE_DIR="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/kernel/$(un
 if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
   UCLOUD_BUNDLED_DIRECT_RUNSC="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/direct/runsc"
   UCLOUD_BUNDLED_MANAGED_INIT="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/direct/ucloud-sandbox-init"
+  UCLOUD_BUNDLED_NODED="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/noded/ucloud-noded"
   UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/storage-native/backend"
   UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_MANIFEST="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/storage-native/build-manifest.json"
   UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_LICENSE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/storage-native/LICENSE"
@@ -1620,6 +1671,11 @@ if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
     $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_MANAGED_INIT" "$UCLOUD_MANAGED_INIT"
     printf '%s  %s\n' "$UCLOUD_BUNDLED_MANAGED_INIT_SHA256" "$UCLOUD_MANAGED_INIT" | sha256sum --check --status -
     test "$("$UCLOUD_MANAGED_INIT" version)" = managed-primary-v1
+    if [ "$UCLOUD_BUNDLED_NODED_SHA256" != none ]; then
+      echo "Installing bundle-verified node front door"
+      $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_NODED" {shlex.quote(DEFAULT_NODED)}
+      printf '%s  %s\n' "$UCLOUD_BUNDLED_NODED_SHA256" {shlex.quote(DEFAULT_NODED)} | sha256sum --check --status -
+    fi
     echo "Installing bundle-verified storage-native backend"
     $SUDO install -m 0755 -o root -g root \
       "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND" "$UCLOUD_STORAGE_NATIVE_BACKEND"
@@ -2031,7 +2087,7 @@ WantedBy=multi-user.target
 STORAGE_SERVICE
 fi
 
-echo "Writing node-agent systemd service"
+{noded_setup}echo "Writing node-agent systemd service"
 $SUDO tee {shlex.quote(node_service)} >/dev/null <<NODE_SERVICE
 [Unit]
 Description=UCloud sandbox node agent
@@ -2078,7 +2134,7 @@ if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
   $SUDO systemctl restart ucloud-storage-native-backend.service
   $SUDO systemctl restart ucloud-storage-native.service
 fi
-$SUDO systemctl enable ucloud-sandbox-node.service
+{noded_start}$SUDO systemctl enable ucloud-sandbox-node.service
 $SUDO systemctl restart ucloud-sandbox-node.service
 NODE_AGENT_READY=0
 for _ in $(seq 1 100); do

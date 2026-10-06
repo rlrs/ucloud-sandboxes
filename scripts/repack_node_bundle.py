@@ -416,6 +416,33 @@ def add_chunk_serve(root: Path, manifest: dict, build_dir: Path) -> dict:
     return entry
 
 
+NODED_FILES = {"file": "runtime/noded/ucloud-noded", "manifest_file": "runtime/noded/build-manifest.json"}
+
+
+def add_noded(root: Path, manifest: dict, build_dir: Path) -> dict:
+    """runtime/noded from runtime/noded/build_pinned.sh's output: the node's front
+    door (Rust), which sandbox init installs when sandbox.direct_node_front_door is on."""
+    if manifest["runtime"].get("role") != "sandbox":
+        raise ValueError("only sandbox bundles carry ucloud-noded")
+    built = {"file": build_dir / "ucloud-noded", "manifest_file": build_dir / "build-manifest.json"}
+    payload = json.loads(built["manifest_file"].read_text(encoding="utf-8"))
+    if (payload.get("schema") != 1 or payload.get("target") != "x86_64-unknown-linux-musl"
+            or not payload.get("source_tree")):
+        raise ValueError("unsupported ucloud-noded build manifest")
+    validate_digest(built["file"], str(payload.get("artifact_sha256")), "ucloud-noded")
+    entry = {"source_commit": payload.get("source_commit"), "source_tree": payload["source_tree"],
+             "rustc_version": payload.get("rustc_version")}
+    for key, digest_key in (("file", "sha256"), ("manifest_file", "manifest_sha256")):
+        target = root / NODED_FILES[key]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(built[key], target)
+        target.chmod(0o755 if key == "file" else 0o644)
+        entry.update({key: NODED_FILES[key], digest_key: sha256_file(target)})
+    entry["size"] = (root / NODED_FILES["file"]).stat().st_size
+    manifest["runtime"]["noded"] = entry
+    return entry
+
+
 def validate_storage_build(
     backend: Path, manifest_path: Path, license_path: Path
 ) -> dict[str, object]:

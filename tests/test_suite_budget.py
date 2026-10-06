@@ -115,7 +115,8 @@ from tests.test_package_budget import package_lines
 # +62 group commit: queued writers share one COMMIT and fail alone; +2 notes.
 # +5 the udev rules precede nbd's first load; +2 notes.
 # +4 the veth pair is created with one queue per end; +2 notes.
-SUITE_LINE_BUDGET = 99_829
+# +74 the agent's Unix socket, noded's init rendering and bundle validation; +2 notes.
+SUITE_LINE_BUDGET = 99_905
 SUITE = Path(__file__).resolve().parent
 
 

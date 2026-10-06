@@ -1,6 +1,8 @@
 # A Rust node daemon (design for review)
 
-Status: proposal, 2026-10-06. Nothing here is built yet.
+Status (2026-10-06): phase 0 is in production (0.9.43). Phase 1 is being
+built in `runtime/noded` behind `sandbox.direct_node_rust_create` (off).
+Decided: Rust, and the daemon owns the node registry.
 
 ## Why now
 
@@ -199,6 +201,33 @@ protocols and the create endpoint's contract.
   - a runtime without a journal is never `runsc delete`d;
   - one persistently failing pending create aborts the agent at startup;
   - a `rootfs_ready` replay after a reboot does not remount the overlay.
+
+### Phase 1 progress
+
+- **Done in the crate:**
+  - the storage-daemon client;
+  - lifecycle journals;
+  - runsc runner and sentry identity;
+  - direct-egress network leases;
+  - Python-exact JSON and the spec fingerprint;
+  - the warden's create and fenced runtime delete;
+  - the memory-backing allocator;
+  - the create front, with the admit and finish handoff to the agent.
+- **In progress:**
+  - the registry port;
+  - image resolve (warm path), the OCI config, the rootfs and guest files;
+  - the agent side: foreign registry, the internal create endpoints, and
+    `GET /internal/v1/creates/config`.
+- **How the daemon gets its configuration.** It does not parse the node's
+  flags. It asks the agent for the effective create configuration, so the
+  agent stays the single source of truth for flags and assembly checks. It
+  forwards every create to the agent until:
+  - the configuration has arrived;
+  - the node is one it serves: the agent runs with `--rust-creates`, there are
+    no DNS-named egress endpoints, and the environment image store is in use.
+- **Per request:** only direct egress and the shell management helper are
+  created by the daemon. Anything else, and any request it cannot parse
+  strictly, goes to the agent byte for byte.
 
 ## Engineering notes
 

@@ -440,6 +440,10 @@ class DirectNetworkManagerTests(unittest.TestCase):
 
             cleanup.assert_called_once_with(lease)
             self.assertIn(("ip", "netns", "add", lease.namespace), commands)
+            # One queue pair per end: veth's per-CPU default is hundreds of sysfs objects and uevents.
+            one = ("numtxqueues", "1", "numrxqueues", "1")
+            self.assertIn(("ip", "link", "add", lease.host_interface, *one, "type", "veth",
+                           "peer", "name", "eth0", *one, "netns", lease.namespace), commands)
 
 
 if __name__ == "__main__":

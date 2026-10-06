@@ -52,6 +52,7 @@ NETWORK_POOL_SIZE = 32
 # The refill defers to in-flight ensures for at most this long per pair, so a
 # sustained create stream still refills slowly instead of never.
 _POOL_YIELD_SECONDS = 1.0
+_ONE_QUEUE = ("numtxqueues", "1", "numrxqueues", "1")
 _POOL_RETRY_SECONDS = 5.0
 DEFAULT_EGRESS_RESOLVE_INTERVAL_SECONDS = 2.0
 DENIED_DESTINATIONS = (
@@ -972,10 +973,15 @@ class DirectNetworkManager:
         self.namespace_root.mkdir(mode=0o755, parents=True, exist_ok=True)
         try:
             self.runner(("ip", "netns", "add", lease.namespace))
+            # veth allocates a queue pair per possible CPU by default, each a
+            # sysfs object with its own uevents: 280 uevents per sandbox on a
+            # 64-vCPU worker against 31 with one. udev's flood of sysfs reads
+            # then contends with every device add on the one sysfs lock. The
+            # sandbox's netstack reads eth0 through one packet channel.
             self.runner(
                 (
-                    "ip", "link", "add", lease.host_interface, "type", "veth",
-                    "peer", "name", "eth0", "netns", lease.namespace,
+                    "ip", "link", "add", lease.host_interface, *_ONE_QUEUE, "type", "veth",
+                    "peer", "name", "eth0", *_ONE_QUEUE, "netns", lease.namespace,
                 )
             )
             self._configure_kernel_lease(lease)

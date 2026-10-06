@@ -175,8 +175,9 @@ import unittest
 # +9 registry writer-turn wait and commit sync timed apart.
 # +94 the node registry's owner writes share group commits (SAVEPOINT per writer).
 # +10 udev neither probes nor watches nbd and ublk devices; udisks masked.
+# +6 sandbox veths get one queue pair, not one per CPU.
 # Lower it on deletions (C1.3 is ~8k).
-PACKAGE_LINE_BUDGET = 116_789
+PACKAGE_LINE_BUDGET = 116_795
 PACKAGE = Path(__file__).resolve().parents[1] / "ucloud_sandboxes"
 
 

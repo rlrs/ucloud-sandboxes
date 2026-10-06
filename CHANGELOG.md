@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.46 - 2026-10-06 (gateway; workers)
+
+- **Phase 3a: the pause tier runs in `ucloud-noded`**, behind `sandbox.direct_node_rust_pause`. It requires the pause tier, Rust creates and Rust execs.
+  - The daemon now owns pause and thaw, thaw-on-exec, idle pause, local model waits (nft and NFLOG), reclaim and the escalation decision.
+  - Python keeps escalation execution (`/internal/v1/pauses/escalate`), growth bookkeeping (`/internal/v1/growth/events`), relay parks, wake, park and delete.
+  - Pause markers stay the truth. A flock on a marker means a thaw is in progress, and the exec fence's T and A locks order Python's transitions and ops against the daemon's pauses.
+  - The heartbeat adds the daemon's `status.json` counters to its own and folds each daemon session into its totals.
+  - Why: 0.9.45 left the answer→resume path in Python, sharing its GIL with every create's admit and finish (answer→resume p95 1.4 s warm). In relay rollouts every exec met a paused sandbox, so phase 2a forwarded them all.
+- Rust execs now require Rust creates. The agent's own operations wait at most the admission wait for a transition, then defer.
+- The gateway upgrade turns on `sandbox.direct_node_rust_pause`.
+
 ## 0.9.45 - 2026-10-06 (gateway; workers)
 
 - **Rust creates, fixed from the 0.9.44 canary.** Two defects stopped every create the daemon ran:

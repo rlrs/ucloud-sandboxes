@@ -74,17 +74,17 @@ class TaskRecipe:
 class GitObjects:
     """Read a checkout's tree and blobs from git, fetching blobs a partial clone lacks."""
 
-    def __init__(self, repo):
-        self.repo = Path(repo)
+    def __init__(self, repo, revision="HEAD"):
+        self.repo, self.rev = Path(repo), revision
 
     def git(self, *args, **kwargs):
         return subprocess.run(["git", "-C", str(self.repo), *args], check=True, capture_output=True, **kwargs).stdout
 
     def revision(self):
-        return self.git("rev-parse", "HEAD").decode().strip()
+        return self.git("rev-parse", self.rev + "^{commit}").decode().strip()
 
     def tree(self, prefix=""):
-        out = self.git("ls-tree", "-r", "-z", "HEAD", *([prefix] if prefix else []))
+        out = self.git("ls-tree", "-r", "-z", self.rev, *([prefix] if prefix else []))
         entries = []
         for item in filter(None, out.decode().split("\0")):
             meta, path = item.split("\t", 1)
@@ -216,8 +216,8 @@ def environment_files(entries, blobs, marker="/environment/"):
     return files, directories
 
 
-def tmax_recipes(dataset, limit, lfs_cache):
-    git = GitObjects(dataset)
+def tmax_recipes(dataset, limit, lfs_cache, revision="HEAD"):
+    git = GitObjects(dataset, revision)
     tasks = group_tasks(git.tree("datasets/tmax/"), 2)
     names = sorted(tasks)[:limit] if limit else sorted(tasks)
     wanted = [e.oid for task in names for e in tasks[task] if "/environment/" in e.path or e.path.endswith("/task.toml")]
@@ -238,6 +238,12 @@ def tmax_recipes(dataset, limit, lfs_cache):
         yield recipe
 
 
+def text_of(data):
+    """Bytes as the environment reads a file (Path.read_text: universal newlines),
+    so the verifier split and fingerprint match what runs (task_03600's CRLF test.sh)."""
+    return data.decode().replace("\r\n", "\n").replace("\r", "\n")
+
+
 def terminal_generator(environments):
     """The pinned verifier split and fingerprint, and the CA isolation repair."""
     git = GitObjects(environments)
@@ -253,9 +259,9 @@ def terminal_generator(environments):
     return verifier.split_verifier_script, verifier.verifier_fingerprint, isolate_verifier_ca
 
 
-def terminal_recipes(dataset, environments, limit, lfs_cache):
+def terminal_recipes(dataset, environments, limit, lfs_cache, revision="HEAD"):
     split, fingerprint, isolate = terminal_generator(environments)
-    git = GitObjects(dataset)
+    git = GitObjects(dataset, revision)
     tasks = {task: entries for task, entries in group_tasks(git.tree(), 0).items() if task.startswith("task_")}
     names = sorted(tasks)[:limit] if limit else sorted(tasks)
     wanted = [e.oid for task in names for e in tasks[task]
@@ -274,9 +280,9 @@ def terminal_recipes(dataset, environments, limit, lfs_cache):
             recipe.reason = "no docker_image, Dockerfile or tests/test.sh"
             yield recipe
             continue
-        original = blobs[test.oid].decode()
+        original = text_of(blobs[test.oid])
         before, _after, warm = split(original)
-        text = dockerfile.decode()
+        text = text_of(dockerfile)
         built = {"dockerfile": text + TERMINAL_TOOLS + TERMINAL_VERIFIER
                  + f"RUN {warm}\nRUN echo {fingerprint(original)} > /opt/terminal-lego-verifier.sha256\n",
                  "files": {"verifier-bootstrap.sh": before}}
@@ -312,11 +318,11 @@ def export(args):
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=False)  # Never write into an earlier bundle.
     if args.family == "tmax":
-        recipes = tmax_recipes(args.dataset, args.limit, args.lfs_cache)
+        recipes = tmax_recipes(args.dataset, args.limit, args.lfs_cache, args.revision)
     else:
         if not args.environments:
             raise SystemExit("terminal-lego needs --environments")
-        recipes = terminal_recipes(args.dataset, args.environments, args.limit, args.lfs_cache)
+        recipes = terminal_recipes(args.dataset, args.environments, args.limit, args.lfs_cache, args.revision)
     counts, seen = Counter(), {}
     with (out / "manifest.jsonl").open("w") as manifest, (out / "excluded.jsonl").open("w") as excluded:
         for recipe in recipes:
@@ -333,7 +339,7 @@ def export(args):
             manifest.write(json.dumps({"name": recipe.name, "task": recipe.task, "family": args.family,
                                        "context": f"contexts/{recipe.task}", "files_sha256": digest}) + "\n")
             counts["exported"] += 1
-    meta = {"family": args.family, "dataset_revision": GitObjects(args.dataset).revision(),
+    meta = {"family": args.family, "dataset_revision": GitObjects(args.dataset, args.revision).revision(),
             "environment_revision": GitObjects(args.environments).revision() if args.environments else None,
             "exported_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "counts": dict(counts)}
     (out / "bundle.json").write_text(json.dumps(meta, indent=1) + "\n")
@@ -378,6 +384,7 @@ def main(argv=None):
     out.add_argument("--dataset", required=True)
     out.add_argument("--environments")
     out.add_argument("--out", required=True)
+    out.add_argument("--revision", default="HEAD", help="the dataset revision to export (the selection's pin)")
     out.add_argument("--limit", type=int, default=0)
     out.add_argument("--lfs-cache", required=True, help="directory of downloaded LFS objects, reused across exports")
     reg = commands.add_parser("register")

@@ -59,6 +59,38 @@ down. Each image has a row: `absent`, `submitting`, `building`, `ready` or `fail
 a rollout on an unbuilt task waits for its build (0.5–4 minutes in the pilot). A recipe that
 failed for good answers 409 `image_build_failed`.
 
+## Builds into the chunk store (builder_format "rafs")
+
+Today a build ends as EROFS components in the registry, and only an operator's M2-style
+waves move images into the chunk store. The pilot showed what that costs: about 80 MB of
+registry per TMax image and 220 MB per Terminal-Lego image, against about 5 and 15 MB of
+deduplicated chunks. With `immutable_environments.builder_format = "rafs"`, a build ends
+in the chunk store instead.
+
+- **On the builder.** The build's last step, where the EROFS publisher ran, converts the
+  pushed image with `RafsConverter` (`chunk_convert.rafs_build_publisher`).
+  - The tag moves to a copy annotated with the chunk-store root: the same contract as the
+    EROFS publisher, so resolution and dispatch are unchanged.
+  - Layers another build converted are reused through the index's layer claims, so the
+    first build on a foundation converts it once (93 s for TMax's largest) and later ones
+    convert only their own layers (about 20 s each, mostly whole-image index work).
+- **Credentials.** Rafs builders get the chunk-store block, the index's write token and the S3
+  key (`chunk-store.env`, root-only, as on the store node), never the read token.
+  - They already hold the environment signing key, the stronger credential: workers trust
+    whatever it signs. So this does not widen what a builder can do.
+  - `nydus-image` comes from the builder bundle, checked against
+    `chunk_store.nydus_image_sha256`.
+- **Release.** When ensure first finds a recipe image ready with a chunk-store root, the
+  gateway records an `image_roots` row (old and new root are the same; wave `recipe`), moves it
+  to `released`, and deletes the OCI manifest through `release_oci`'s fences.
+  - A lease or a route still reading the manifest defers this to a later ensure.
+  - Release-aware resolution then answers the image from its row, as for the M2 corpus.
+  - No regeneration receipt is needed: a recipe can always rebuild its image.
+  - An EROFS build keeps its OCI copy (`oci: kept`).
+- **Pinned** recipe images are an OCI-free owner (`OCI_FREE_OWNERS`): their `image_roots` row
+  keeps the root, so their durable reference no longer pins the manifest.
+- **No full-tree check** on builders, unlike the M2 waves, whose originals could not be rebuilt.
+
 ## Clients (SDK 0.4.37)
 
 ```python
@@ -75,9 +107,6 @@ training is still correct, just slower on a task's first use.
 
 ## Not yet
 
-- **Chunk-store conversion of built images.** The pilot's dedup numbers (about 300 GB for TMax
-  and Terminal-Lego) need the built images converted into the chunk store and their EROFS and
-  OCI copies released.
 - **An importer** that walks a pinned dataset revision and registers its recipes, writing the
   whole `environment/` tree as the pilot's `prepare.py` does.
 - **The trainer-side lookahead call.**

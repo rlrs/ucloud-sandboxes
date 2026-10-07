@@ -1267,9 +1267,19 @@ def validate_store_options(options):
     """Store material goes to the store role only, and is well formed."""
     supplied = (options.chunk_store_config_json, options.chunk_store_read_token, options.chunk_store_write_token,
                 options.chunk_store_s3_access_key_id, options.chunk_store_s3_secret_access_key)
+    rafs_builder = options.role == "builder" and getattr(options, "environment_builder_format", "erofs") == "rafs"
+    if rafs_builder:  # Builds end in the chunk store: the block, the write token and the S3 key; no read token.
+        from .environment_config import ChunkStoreConfig
+        store = ChunkStoreConfig.from_dict(json.loads(options.chunk_store_config_json or "null"))
+        if store.nydus_image_sha256 is None:
+            raise ValueError("a rafs builder installs a pinned nydus-image (chunk_store.nydus_image_sha256)")
+        if (options.chunk_store_read_token or any(not _SAFE_SECRET.fullmatch(value) for value in supplied[2:])
+                or len(options.chunk_store_write_token) < 32):
+            raise ValueError("a rafs builder needs the index write token and the S3 key, not the read token")
+        return
     if options.role != "store":
         if any(supplied):
-            raise ValueError("chunk store node material is only for the store role")
+            raise ValueError("chunk store node material is only for the store role and rafs builders")
         return
     from .environment_config import ChunkStoreConfig
     store = ChunkStoreConfig.from_dict(json.loads(options.chunk_store_config_json or "null"))

@@ -154,3 +154,50 @@ class ImageRecipeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ImageRecipeReleaseTests(unittest.TestCase):
+    """Ready images built into the chunk store lose their OCI copy, once."""
+
+    def setUp(self):
+        self.temp = TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.store = ImageRecipeStore(Path(self.temp.name) / "image-recipes.sqlite3")
+        self.builders, self.calls, self.answers = Builders(), [], {}
+        self.ensurer = RecipeEnsurer(self.store, resolve=self.builders.resolve, build_status=self.builders.build_status,
+                                     adopt=self.builders.adopt, submit=self.builders.submit, release=self.release)
+
+    def release(self, references):
+        self.calls.append(dict(references))
+        return {image_id: self.answers.get(image_id, "released") for image_id in references}
+
+    def build(self, *names):
+        self.store.register([recipe(name, "sha256:" + f"{i:064x}") for i, name in enumerate(names)])
+        self.ensurer.ensure(list(names))
+        for build_id in list(self.builders.status):
+            self.builders.finish(build_id, "succeeded")
+
+    def test_released_once_and_kept_images_are_not_retried(self):
+        self.build("t:1", "t:2")
+        ids = {name: self.store.lookup([name])[name]["image_id"] for name in ("t:1", "t:2")}
+        self.answers[ids["t:2"]] = "kept"  # An EROFS build.
+        statuses = self.ensurer.ensure(["t:1", "t:2"])
+        self.assertEqual(set(self.calls[0]), set(ids.values()))
+        self.assertEqual(self.calls[0][ids["t:1"]], statuses["t:1"]["reference"])
+        self.assertEqual(self.store.lookup(["t:1"])["t:1"]["oci"], "released")
+        self.assertEqual(self.store.lookup(["t:2"])["t:2"]["oci"], "kept")
+        self.ensurer.ensure(["t:1", "t:2"])
+        self.assertEqual(len(self.calls), 1)  # Neither is offered again.
+
+    def test_a_held_image_is_retried_and_a_rebuild_brings_its_copy_back(self):
+        self.build("t:1")
+        image_id = self.store.lookup(["t:1"])["t:1"]["image_id"]
+        self.answers[image_id] = "pending"  # A lease or a route still reads the manifest.
+        self.ensurer.ensure(["t:1"])
+        self.answers.pop(image_id)
+        self.ensurer.ensure(["t:1"])
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(self.store.lookup(["t:1"])["t:1"]["oci"], "released")
+        self.builders.adopted.clear()  # Gone (evicted); rebuilt.
+        self.ensurer.ensure(["t:1"])
+        self.assertEqual(self.store.lookup(["t:1"])["t:1"]["oci"], "present")

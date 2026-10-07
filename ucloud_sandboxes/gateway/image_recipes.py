@@ -19,6 +19,10 @@ processes never submit one image twice.
 
 Retention: ``pinned`` images stay registry-leased (a corpus built ahead);
 ``cached`` ones age out as any managed image does and are rebuilt on demand.
+
+With builder_format "rafs" a build ends in the chunk store; ensure then
+releases the image's OCI copy, as the M2 waves did for the corpus, but per
+image: it can always be rebuilt from its recipe, so no regeneration receipt.
 """
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -44,6 +48,8 @@ FAILURE_ATTEMPTS = 3
 # A submitted build no builder knows about (its builder went away) is
 # resubmitted after this long.
 LOST_BUILD_SECONDS = 180
+# OCI releases per ensure call; the rest wait for a later call.
+MAX_RELEASES = 64
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@+-]*")
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 
@@ -145,6 +151,9 @@ class ImageRecipeStore:
                     attempts INTEGER NOT NULL DEFAULT 0, changed REAL NOT NULL);
                 CREATE INDEX IF NOT EXISTS recipes_by_image ON recipes (image_id);
             """)
+            columns = {row[1] for row in db.execute("PRAGMA table_info(recipe_images)")}
+            if "oci" not in columns:  # present | released (chunk store only) | kept (an EROFS build)
+                db.execute("ALTER TABLE recipe_images ADD COLUMN oci TEXT NOT NULL DEFAULT 'present'")
         finally:
             db.close()
 
@@ -192,12 +201,12 @@ class ImageRecipeStore:
                 chunk = names[start:start + 500]
                 rows = db.execute(
                     "SELECT r.name, r.image_id, r.retention, i.recipe_sha256, i.recipe, i.state, i.build_id, "
-                    "i.error, i.attempts, i.changed FROM recipes r JOIN recipe_images i USING (image_id) "
+                    "i.error, i.attempts, i.changed, i.oci FROM recipes r JOIN recipe_images i USING (image_id) "
                     f"WHERE r.name IN ({','.join('?' * len(chunk))})", chunk)
-                for name, image_id, retention, sha, recipe, state, build_id, error, attempts, changed in rows:
+                for name, image_id, retention, sha, recipe, state, build_id, error, attempts, changed, oci in rows:
                     found[name] = {**json.loads(recipe), "name": name, "image_id": image_id, "retention": retention,
                                    "recipe_sha256": sha, "state": state, "build_id": build_id, "error": error,
-                                   "attempts": attempts, "changed": changed}
+                                   "attempts": attempts, "changed": changed, "oci": oci}
         return found
 
     def has(self, name):
@@ -237,6 +246,10 @@ class ImageRecipeStore:
             db.execute("UPDATE recipe_images SET changed = ? WHERE image_id = ? AND state = 'building'",
                        (time.time() if now is None else now, image_id))
 
+    def mark_oci(self, image_id, oci):
+        with self._db() as db:
+            db.execute("UPDATE recipe_images SET oci = ? WHERE image_id = ?", (oci, image_id))
+
     def pinned_image_ids(self):
         with self._db(write=False) as db:
             return {row[0] for row in db.execute("SELECT DISTINCT image_id FROM recipes WHERE retention = 'pinned'")}
@@ -265,10 +278,10 @@ class RecipeEnsurer:
     ``submit(payload)``: a Submission. ``protect(image_id)``: lease a pinned image.
     """
 
-    def __init__(self, store, *, resolve, build_status, adopt, submit, protect=None, now=time.time,
+    def __init__(self, store, *, resolve, build_status, adopt, submit, protect=None, release=None, now=time.time,
                  max_submits=MAX_SUBMITS_PER_ENSURE):
         self.store, self.resolve, self.build_status, self.adopt = store, resolve, build_status, adopt
-        self.submit, self.protect, self.now, self.max_submits = submit, protect, now, max_submits
+        self.submit, self.protect, self.release, self.now, self.max_submits = submit, protect, release, now, max_submits
 
     def ensure(self, names):
         names = list(dict.fromkeys(names))
@@ -284,7 +297,25 @@ class RecipeEnsurer:
             if recipe["image_id"] not in by_image:
                 by_image[recipe["image_id"]] = self._one(recipe, submits)
             out[name] = {"image_id": recipe["image_id"], **by_image[recipe["image_id"]]}
+        self._release(recipes, by_image)
         return out
+
+    def _release(self, recipes, by_image):
+        """Ready images built into the chunk store lose their OCI copy (a recipe
+        rebuilds it): ``release({image_id: reference})`` answers each released,
+        kept (no chunk-store root) or pending (held; retried on a later call)."""
+        if self.release is None:
+            return
+        candidates = {}
+        for recipe in recipes.values():
+            status = by_image.get(recipe["image_id"], {})
+            if status.get("state") == "ready" and recipe["oci"] == "present" and len(candidates) < MAX_RELEASES:
+                candidates[recipe["image_id"]] = status["reference"]
+        if not candidates:
+            return
+        for image_id, outcome in self.release(candidates).items():
+            if outcome in ("released", "kept"):
+                self.store.mark_oci(image_id, outcome)
 
     def _ready(self, recipe):
         reference = self.resolve(recipe["image_id"])
@@ -337,6 +368,7 @@ class RecipeEnsurer:
         if submission.state == "building":
             self.store.record(image_id, "building", build_id=submission.build_id, error=None, attempt=True,
                               now=self.now())
+            self.store.mark_oci(image_id, "present")
             return {"state": "building", "build_id": submission.build_id}
         if submission.state == "failed":
             self.store.record(image_id, "failed", error=submission.error, attempt=True, now=self.now())

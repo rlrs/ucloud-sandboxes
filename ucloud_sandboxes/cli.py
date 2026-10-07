@@ -548,6 +548,12 @@ def build_parser() -> argparse.ArgumentParser:
     builder_agent.add_argument("--environment-signing-key", type=Path)
     builder_agent.add_argument("--environment-allow-path", action="append", default=[])
     builder_agent.add_argument("--environment-preserve-mtimes", action="store_true")
+    builder_agent.add_argument("--environment-format", choices=("erofs", "rafs"), default="erofs",
+                               help="rafs: builds end in the chunk store (immutable_environments.builder_format)")
+    builder_agent.add_argument("--chunk-store-config", type=Path,
+                               help="the chunk_store block (JSON); with --environment-format rafs")
+    builder_agent.add_argument("--chunk-index-token-file", type=Path,
+                               help="the index's write token; with --environment-format rafs")
     builder_agent.add_argument("--max-active-image-builds", type=int, default=DEFAULT_MAX_ACTIVE_IMAGE_BUILDS)
     builder_agent.add_argument("--max-finishing-image-builds", type=int, default=0,
                                help="Additional bounded publication/cleanup slots; 0 disables pipelining.")
@@ -7047,6 +7053,15 @@ def vm_init_options_for_job(
                 raise ValueError("environment signing key is too large")
             environment_options["environment_signing_key_pem"] = payload.decode("ascii")
             environment_options["environment_preserve_mtimes"] = selected_environment.preserve_mtimes
+            if selected_environment.builder_format == "rafs":
+                # Builds end in the chunk store: the block, the write token and the S3 key.
+                from .environment_config import read_token
+                key, secret = chunk_store.credentials()
+                environment_options.update(
+                    environment_builder_format="rafs",
+                    chunk_store_config_json=json.dumps(chunk_store.to_dict(), sort_keys=True),
+                    chunk_store_write_token=read_token(chunk_store.write_token_file).decode(),
+                    chunk_store_s3_access_key_id=key, chunk_store_s3_secret_access_key=secret)
     if role == "store":
         # A chunk store node: the block, both index tokens (the gateway makes
         # them) and the S3 key from this process's environment.

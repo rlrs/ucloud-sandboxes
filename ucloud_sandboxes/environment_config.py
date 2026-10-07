@@ -74,6 +74,8 @@ def load_signing_key(key_path):
 def environment_publisher_from_args(args):
     registry = environment_registry_from_args(args)
     key_path = getattr(args, "environment_signing_key", None)
+    if getattr(args, "environment_format", "erofs") == "rafs":
+        return rafs_publisher_from_args(args, registry, key_path)
     allowlist = tuple(getattr(args, "environment_allow_path", ()) or ())
     preserve_mtimes = getattr(args, "environment_preserve_mtimes", False)
     if registry is None and key_path is None and not allowlist and not preserve_mtimes:
@@ -89,6 +91,26 @@ def environment_publisher_from_args(args):
                                       release_published_tag=True, preserve_mtimes=preserve_mtimes)
     return lambda spec: builder.publish_image(spec.tag, allowlist=allowlist)
 
+
+
+def rafs_publisher_from_args(args, registry, key_path):
+    """builder_format "rafs": builds end in the chunk store (chunk_convert.rafs_build_publisher).
+    Credentials and the pinned nydus-image are checked here, not at the first build."""
+    import hashlib
+    from .chunk_convert import rafs_build_publisher
+    from .chunk_index import ChunkIndexClient
+    config, token = getattr(args, "chunk_store_config", None), getattr(args, "chunk_index_token_file", None)
+    if registry is None or key_path is None or config is None or token is None:
+        raise ValueError("--environment-format rafs needs registry trust, a signing key, "
+                         "--chunk-store-config and --chunk-index-token-file")
+    store = ChunkStoreConfig.from_file(config)
+    store.credentials()
+    with open(store.nydus_image, "rb") as binary:
+        if store.nydus_image_sha256 is None or hashlib.sha256(binary.read()).hexdigest() != store.nydus_image_sha256:
+            raise ValueError(f"{store.nydus_image} is not the nydus-image chunk_store.nydus_image_sha256 pins")
+    index = ChunkIndexClient(store.index_url, read_token(token).decode())
+    return rafs_build_publisher(registry, store, index, load_signing_key(key_path),
+                                args.image_file.absolute().parent / "environment-build" / "rafs")
 
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
@@ -221,11 +243,14 @@ class ChunkStoreConfig:
     concurrent_misses: int
     store_node: StoreNodeConfig | None = None  # Phase B (C2.6); off when absent.
     nydusd: NydusdConfig | None = None  # C2.1: needs the store node's virtual blobs; off when absent.
+    # The nydus-image at ``nydus_image``, pinned: builders with builder_format
+    # "rafs" install it from their bundle and refuse any other.
+    nydus_image_sha256: str | None = None
 
     @classmethod
     def from_dict(cls, raw):
         from dataclasses import fields
-        optional = {"store_node", "nydusd"}
+        optional = {"store_node", "nydusd", "nydus_image_sha256"}
         names = {field.name for field in fields(cls)} - optional
         if not isinstance(raw, dict) or set(raw) - optional != names:
             raise ValueError("immutable_environments.chunk_store fields do not match schema")
@@ -234,6 +259,9 @@ class ChunkStoreConfig:
                         "nydusd": None if nydusd is None else NydusdConfig.from_dict(nydusd)})
         if result.nydusd is not None and result.store_node is None:
             raise ValueError("immutable_environments.chunk_store.nydusd needs store_node")
+        if result.nydus_image_sha256 is not None and not (isinstance(result.nydus_image_sha256, str)
+                                                          and re.fullmatch("[0-9a-f]{64}", result.nydus_image_sha256)):
+            raise ValueError("immutable_environments.chunk_store.nydus_image_sha256 must be a sha256 hex digest")
         for name in names - {"force_path_style", "url_ttl_seconds", "concurrent_misses"}:
             value = getattr(result, name)
             if not isinstance(value, str) or not value or any(c in value for c in "\0\r\n "):
@@ -273,7 +301,7 @@ class ChunkStoreConfig:
 
     def to_dict(self):
         raw = asdict(self)
-        for name in ("store_node", "nydusd"):
+        for name in ("store_node", "nydusd", "nydus_image_sha256"):
             if raw[name] is None:
                 del raw[name]  # Older releases reject unknown fields.
         if raw.get("store_node") and not raw["store_node"]["replica"]:
@@ -363,6 +391,9 @@ class EnvironmentDeploymentConfig:
     shared_traces: bool = False
     # Chunk-store (RAFS) images, off by default (C2.13, design §9 M1).
     chunk_store: ChunkStoreConfig | None = None
+    # What a build publishes: "erofs" components in the registry, or "rafs":
+    # the image converted into the chunk store on the builder (docs/image-recipes.md).
+    builder_format: str = "erofs"
 
     @classmethod
     def from_dict(cls, raw):
@@ -408,6 +439,11 @@ class EnvironmentDeploymentConfig:
             raise ValueError("immutable environment builder requires signing_key_file and allow_paths")
         if result.regenerate_bases and (result.chunk_store is None or result.chunk_store.store_node is None):
             raise ValueError("immutable environment regenerate_bases reads roots through chunk_store.store_node")
+        if result.builder_format not in ("erofs", "rafs"):
+            raise ValueError("immutable environment builder_format must be erofs or rafs")
+        if result.builder_format == "rafs" and (not result.builder_enabled or result.chunk_store is None
+                                                or result.chunk_store.nydus_image_sha256 is None):
+            raise ValueError("builder_format rafs needs builder_enabled and a chunk_store with nydus_image_sha256")
         return result
 
     def to_dict(self):
@@ -417,6 +453,8 @@ class EnvironmentDeploymentConfig:
         for name in ("preserve_mtimes", "regenerate_bases"):
             if not raw[name]:
                 del raw[name]
+        if self.builder_format == "erofs":
+            del raw["builder_format"]
         if self.device_budget_percent == DEFAULT_DEVICE_BUDGET_PERCENT:
             del raw["device_budget_percent"]
         if self.chunk_store is None:

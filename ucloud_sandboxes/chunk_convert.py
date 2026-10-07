@@ -444,6 +444,33 @@ class RafsConverter:
         return {"root": root, "components": digests, "source_image": config_digest, "metrics": dict(self.metrics)}
 
 
+
+def rafs_build_publisher(registry, store, index, signing_key, work_root):
+    """A builder's last step with ``immutable_environments.builder_format`` "rafs":
+    the pushed image converted into the chunk store, its tag moved to a copy
+    annotated with the new root; returns that manifest's digest, as the EROFS
+    publisher does. Layers another build converted (a foundation's) are reused
+    through the index's layer claims, so a task image costs its own layers.
+    No full-tree check: these images can be rebuilt from their recipes."""
+    from .environment_builder import _measure
+    from .managed_registry import registry_repository_tag_from_image_ref
+
+    def publish(spec):
+        coordinates = registry_repository_tag_from_image_ref(spec.tag)
+        if coordinates is None:
+            raise ValueError("chunk-store publication needs an image in the managed registry")
+        repository, tag = coordinates
+        converter = RafsConverter(registry, store.object_store(), index, signing_key, Path(work_root),
+                                  nydus_image=store.nydus_image, layout=store.mount_granularity,
+                                  nydusd_blobs=store.nydusd is not None)
+        started = time.monotonic()
+        result = converter.convert(repository, tag, attach_tag=tag)  # The build owns its tag.
+        _measure("rafs_convert_ms", round((time.monotonic() - started) * 1000, 3))
+        for name, value in result["metrics"].items():
+            _measure("rafs_" + name, value)
+        return result["image_manifest"]
+    return publish
+
 # --- Verification: the converted tree against the OCI layers (§3 step 7) ---
 
 def _normal(name):

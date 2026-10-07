@@ -10,6 +10,8 @@ KEY_FILE = "/etc/ucloud-sandboxes/environment/producer.pem"
 SOCKET = "/run/ucloud-environment/io.sock"
 SERVICE = "ucloud-environment-io.service"
 CHUNK_TOKEN_FILE = "/etc/ucloud-sandboxes/environment/chunk-index.token"
+WRITE_TOKEN_FILE = "/etc/ucloud-sandboxes/environment/chunk-index-write.token"  # rafs builders only.
+BUNDLED_NYDUS_IMAGE = "runtime/nydus/nydus-image"  # In the builder bundle (builder_format rafs).
 
 
 def settings(options):
@@ -39,8 +41,13 @@ $SUDO chown root:root {KEY_FILE}
             setup += ('UCLOUD_MKFS_USAGE="$(mkfs.erofs --help 2>&1 || true)"; for UCLOUD_MKFS_OPTION in --mkfs-time '
                       '--MZ; do case "$UCLOUD_MKFS_USAGE" in *"$UCLOUD_MKFS_OPTION"*) ;; *) echo "layout-2 publication'
                       ' requires erofs-utils 1.9+ (mkfs.erofs $UCLOUD_MKFS_OPTION)" >&2; exit 1 ;; esac; done\n')
+        rafs = ""
+        if getattr(options, "environment_builder_format", "erofs") == "rafs":
+            rafs_setup, rafs = _rafs_builder(options)
+            setup += rafs_setup
         return (registry_flags + " --environment-signing-key " + KEY_FILE + preserve + "".join(
-            " --environment-allow-path " + shlex.quote(path) for path in options.environment_allow_paths), setup, "")
+            " --environment-allow-path " + shlex.quote(path) for path in options.environment_allow_paths) + rafs,
+                setup, "")
     chunk_setup = chunk_flags = ""
     if options.environment_chunk_index_url:
         # Chunk-store images: the index's read token, never an S3 key.
@@ -97,6 +104,30 @@ ENVIRONMENT_IO_SERVICE
     # Absent at the default, so the rendered init is unchanged.
     rafs += "" if budget == DEFAULT_DEVICE_BUDGET_PERCENT else f" --environment-device-budget-percent {int(budget)}"
     return registry_flags + " --environment-backend-socket " + SOCKET + rafs, setup, start
+
+
+def _rafs_builder(options):
+    """(setup, flags) for builder_format "rafs": the chunk_store block, the index
+    write token and the S3 key (root-only), and the bundle's nydus-image checked
+    against chunk_store.nydus_image_sha256 and installed at chunk_store.nydus_image."""
+    from .chunk_store_node import STORE_CONFIG, STORE_ENV
+    from .environment_config import ChunkStoreConfig
+    store = ChunkStoreConfig.from_dict(json.loads(options.chunk_store_config_json))
+    b64 = lambda text: shlex.quote(base64.b64encode(text.encode()).decode())  # noqa: E731
+    secrets = (f"{store.access_key_id_env}={options.chunk_store_s3_access_key_id}\n"
+               f"{store.secret_access_key_env}={options.chunk_store_s3_secret_access_key}\n")
+    setup = f"""printf %s {b64(options.chunk_store_config_json)} | base64 -d | $SUDO tee {STORE_CONFIG} >/dev/null
+$SUDO chmod 0644 {STORE_CONFIG}
+$SUDO install -m 0600 /dev/null {WRITE_TOKEN_FILE}
+printf %s {b64(options.chunk_store_write_token)} | base64 -d | $SUDO tee {WRITE_TOKEN_FILE} >/dev/null
+$SUDO install -m 0600 /dev/null {STORE_ENV}
+printf %s {b64(secrets)} | base64 -d | $SUDO tee {STORE_ENV} >/dev/null
+[ "$($SUDO sha256sum "$UCLOUD_PACKAGE_BUNDLE_DIR/{BUNDLED_NYDUS_IMAGE}" | awk '{{print $1}}')" = {shlex.quote(store.nydus_image_sha256)} ] || {{ echo "the bundle's nydus-image does not match chunk_store.nydus_image_sha256" >&2; exit 1; }}
+$SUDO install -D -m 0755 -o root -g root "$UCLOUD_PACKAGE_BUNDLE_DIR/{BUNDLED_NYDUS_IMAGE}" {shlex.quote(store.nydus_image)}
+"""
+    flags = (" --environment-format rafs --chunk-store-config " + STORE_CONFIG
+             + " --chunk-index-token-file " + WRITE_TOKEN_FILE)
+    return setup, flags
 
 
 def validate(options):

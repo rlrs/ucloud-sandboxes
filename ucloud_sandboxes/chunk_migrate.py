@@ -414,7 +414,7 @@ def release_wave(roots, environments, usage, wave, *, keys=None, execute=False):
 # owners (image_roots answers for the image), and routes and create pulls (both
 # carry the dispatched root). Any other owner (a build's FROM, an image pull or
 # warmup, one unknown) keeps the manifest.
-OCI_FREE_OWNERS = DURABLE_OWNERS + ("sandbox-route:", "create-image-pull:")
+OCI_FREE_OWNERS = DURABLE_OWNERS + ("sandbox-route:", "create-image-pull:", "image-recipe-pinned:")
 
 
 def manifest_readers(routing_store):

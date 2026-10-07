@@ -3547,7 +3547,57 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 self.services.registry_refs.ensure_image_reference(reference, f"image-recipe-pinned:{image_id}")
 
         return RecipeEnsurer(self.image_recipes, resolve=resolve, build_status=build_status, adopt=adopt,
-                             submit=submit, protect=protect)
+                             submit=submit, protect=protect, release=self._release_recipe_images)
+
+    def _release_recipe_images(self, references: dict[str, str]) -> dict[str, str]:
+        """{image_id: reference} -> {image_id: released | kept | pending}. An image
+        built into the chunk store gets its image_roots row (born there: old and
+        new root are one) and loses its OCI manifest through release_oci's
+        fences; one held by a lease or a route waits for a later call."""
+        import logging
+        from .chunk_migrate import release_oci
+        from .environment_artifact import RafsEnvironmentComponent, load_image_environment
+        from .managed_registry import RegistryClient, manifest_digest_from_image_ref, registry_repository_tag_from_image_ref
+        refs = self.services.registry_refs
+        resolver = refs.dependency_resolver
+        roots = getattr(resolver, "image_roots", None)
+        if roots is None or refs.usage_store is None or not self.services.images.registry_url:
+            return {}
+        outcome, keys = {}, {}
+        for image_id, reference in references.items():
+            coordinates = registry_repository_tag_from_image_ref(reference)
+            digest = manifest_digest_from_image_ref(reference)
+            if coordinates is None or not digest:
+                continue
+            key = (coordinates[0], digest)
+            try:
+                row = roots.get(*key)
+                if row is None:
+                    root, environment = load_image_environment(resolver.registry, *key)
+                    if type(resolver.registry.load(environment.environment.base)) is not RafsEnvironmentComponent:
+                        outcome[image_id] = "kept"  # An EROFS build: its OCI copy is its image.
+                        continue
+                    roots.record_converted(*key, config_digest=environment.source_image, old_root=root,
+                                           new_root=root, wave="recipe", build_input=False,
+                                           detail="built into the chunk store from an image recipe")
+                    row = roots.get(*key)
+                for state in {"converted": ("switched", "released"), "switched": ("released",)}.get(row["state"], ()):
+                    roots.transition(*key, state, detail="image recipe")
+                keys[key] = image_id
+            except Exception as exc:  # noqa: BLE001 - registry trouble: retried on a later ensure.
+                logging.getLogger(__name__).warning("image recipe %s: not released yet: %s", image_id, exc)
+        if not keys:
+            return outcome
+        summary = release_oci(roots, RegistryClient(self.services.images.registry_url), refs.usage_store, "recipe",
+                              catalog_file=self.prepared_image_catalog.path, routing_store=self.routing_store,
+                              keys=set(keys), execute=True)
+        done = roots.oci_released()
+        released = {key for key in keys if key in done}
+        for key, image_id in keys.items():
+            outcome[image_id] = "released" if key in released else "pending"
+        if summary.get("errors"):
+            logging.getLogger(__name__).warning("image recipe release errors: %s", summary["errors"])
+        return outcome
 
     def _route_image_build(self) -> None:
         try:

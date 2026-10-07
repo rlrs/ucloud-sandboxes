@@ -279,8 +279,12 @@ class VmInitOptions:
     # chunk_store.nydusd: nydusd serves RAFS images from the store node (C2.1).
     environment_chunk_nydusd: str = ""
     environment_chunk_nydusd_sha256: str = ""
-    # The store role only: the chunk_store block (JSON), both index tokens and
-    # the S3 key the node fills from (chunk_store_node.store_init_script).
+    # immutable_environments.builder_format: "rafs" builders convert each build
+    # into the chunk store and get the block, the write token and the S3 key.
+    environment_builder_format: str = "erofs"
+    # The store role and rafs builders: the chunk_store block (JSON), the index
+    # tokens (the store role both, a builder the write token) and the S3 key
+    # (chunk_store_node.store_init_script, environment_bootstrap.settings).
     chunk_store_config_json: str = ""
     chunk_store_read_token: str = ""
     chunk_store_write_token: str = ""
@@ -727,6 +731,10 @@ fi
         # adapter and preserves ownership/xattrs in a private build view.
         node_service_user = "root"
         node_service_group = "root"
+    chunk_store_environment = ""
+    if options.role == "builder" and options.environment_builder_format == "rafs":
+        from .chunk_store_node import STORE_ENV
+        chunk_store_environment = f"EnvironmentFile={STORE_ENV}"  # The chunk store's S3 key, root-only.
     if environment_flags and options.role == "sandbox":
         node_service_after += " ucloud-environment-io.service"
         node_service_requires += " ucloud-environment-io.service"
@@ -2127,6 +2135,7 @@ User={node_service_user}
 Group={node_service_group}
 {node_service_supplementary_groups}
 EnvironmentFile={env_file}
+{chunk_store_environment}
 {buildkit_service_environment}
 WorkingDirectory={work_dir}
 {node_service_exec_start_pre}

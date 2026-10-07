@@ -285,3 +285,63 @@ class EnvironmentBootstrapTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RafsBuilderBootstrapTests(unittest.TestCase):
+    """immutable_environments.builder_format "rafs": builds end in the chunk store."""
+
+    def chunk_store(self, **changes):
+        from tests.test_chunk_store_formats import ChunkStoreConfigTests
+        return {**ChunkStoreConfigTests.RAW, "nydus_image_sha256": "a" * 64, **changes}
+
+    def test_config_needs_a_builder_and_a_pinned_nydus_image(self):
+        base = {"trusted_keys_file": "/etc/producers.json", "signing_key_file": "/etc/producer.pem",
+                "allow_paths": ["*"], "builder_enabled": True}
+        rafs = EnvironmentDeploymentConfig.from_dict(base | {"builder_format": "rafs",
+                                                             "chunk_store": self.chunk_store()})
+        self.assertEqual(rafs.builder_format, "rafs")
+        self.assertEqual(rafs.to_dict()["builder_format"], "rafs")
+        self.assertEqual(rafs.to_dict()["chunk_store"]["nydus_image_sha256"], "a" * 64)
+        erofs = EnvironmentDeploymentConfig.from_dict(base)
+        self.assertNotIn("builder_format", erofs.to_dict())  # Older releases reject the field.
+        for bad, message in (({"builder_format": "rafs"}, "nydus_image_sha256"),
+                             ({"builder_format": "rafs", "chunk_store": self.chunk_store(nydus_image_sha256=None)},
+                              "nydus_image_sha256"),
+                             ({"builder_format": "squashfs"}, "erofs or rafs")):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, message):
+                raw = base | bad
+                if raw.get("chunk_store", 1) is None:
+                    raw.pop("chunk_store")
+                EnvironmentDeploymentConfig.from_dict({k: v for k, v in raw.items() if v is not None})
+
+    def test_a_rafs_builder_gets_write_material_and_installs_the_pinned_nydus_image(self):
+        with TemporaryDirectory() as temporary:
+            key = provision(Path(temporary) / "key")
+            common = {"environment_registry_url": "http://registry:5000", "environment_repository": "environments",
+                      "environment_trusted_keys_json": Path(key["public_trust_file"]).read_text()}
+            builder = {**common, "role": "builder", "environment_signing_key_pem": Path(key["private_key_file"]).read_text(),
+                       "environment_allow_paths": ("*",)}
+            material = {"environment_builder_format": "rafs",
+                        "chunk_store_config_json": json.dumps(self.chunk_store()),
+                        "chunk_store_write_token": "w" * 64, "chunk_store_s3_access_key_id": "AKIDBUILDER1",
+                        "chunk_store_s3_secret_access_key": "secret-builder-key"}
+            script = render_vm_init_script(vm_fixtures.VmInitTests._options(**builder, **material))
+            self.assertIn(" --environment-format rafs --chunk-store-config /etc/ucloud-sandboxes/chunk-store.json"
+                          " --chunk-index-token-file /etc/ucloud-sandboxes/environment/chunk-index-write.token", script)
+            unit = script.split("Description=UCloud sandbox node agent", 1)[1].split("NODE_SERVICE", 1)[0]
+            self.assertIn("EnvironmentFile=/etc/ucloud-sandboxes/chunk-store.env", unit)
+            self.assertIn('"$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/nydus/nydus-image"', script)
+            self.assertIn("a" * 64, script)  # Checked before it is installed.
+            self.assertNotIn("AKIDBUILDER1", script)  # Written base64-encoded into a root-only file.
+            self.assertNotIn("w" * 64, script)
+            syntax = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
+            self.assertEqual(syntax.returncode, 0, syntax.stderr)
+            plain = render_vm_init_script(vm_fixtures.VmInitTests._options(**builder))
+            self.assertNotIn("--environment-format", plain)
+            self.assertNotIn("chunk-store.env", plain)
+            with self.assertRaisesRegex(ValueError, "not the read token"):  # Builders never read as workers do.
+                render_vm_init_script(vm_fixtures.VmInitTests._options(**builder, **material,
+                                                                       chunk_store_read_token="r" * 64))
+            with self.assertRaisesRegex(ValueError, "rafs builders"):  # Workers never get write material.
+                render_vm_init_script(vm_fixtures.VmInitTests._options(**common, **{
+                    k: v for k, v in material.items() if k != "environment_builder_format"}))

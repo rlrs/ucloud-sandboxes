@@ -1,0 +1,3774 @@
+{
+ "seed": 20261007,
+ "tasks": [
+  {
+   "id": "tmax-000",
+   "family": "TMax",
+   "task": "task_002188_447b960b",
+   "image": "prime/primeintellect/tmax:task_002188_447b960b",
+   "foundation_key": "2d3af646c1cc06906d8615b214beaa39d41fa812f8e6e774ba2b97bcd1f75781",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1110
+  },
+  {
+   "id": "tmax-001",
+   "family": "TMax",
+   "task": "task_003405_f3e437a3",
+   "image": "prime/primeintellect/tmax:task_003405_f3e437a3",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "bcf87efbab60f85870b2165b09e407d7e6e021fbded5b186a106b020d8ce4485",
+   "recipe_matches": true,
+   "context_bytes": 8426
+  },
+  {
+   "id": "tmax-002",
+   "family": "TMax",
+   "task": "task_000729_86249657",
+   "image": "prime/primeintellect/tmax:task_000729_86249657",
+   "foundation_key": "ede14eb08303f581c4101e5ceb93114fa9c9e7bee6073a97cbabc2a274f9aebc",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1096
+  },
+  {
+   "id": "tmax-003",
+   "family": "TMax",
+   "task": "task_002785_d7d4d4b4",
+   "image": "prime/primeintellect/tmax:task_002785_d7d4d4b4",
+   "foundation_key": "ae4b69478c886df2de4c538d34e8a4df5031d9a7c6bac4211d7cc4d405067625",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1755
+  },
+  {
+   "id": "tmax-004",
+   "family": "TMax",
+   "task": "task_006199_44ed4554",
+   "image": "prime/primeintellect/tmax:task_006199_44ed4554",
+   "foundation_key": "24572de91f9a5922b33a5a8a269fa071b83abade8ad2b81b74756ffe440e1f54",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1543
+  },
+  {
+   "id": "tmax-005",
+   "family": "TMax",
+   "task": "task_006488_b4a33f26",
+   "image": "prime/primeintellect/tmax:task_006488_b4a33f26",
+   "foundation_key": "e50437786e91b5314d01e7ca70cba551cd916b8d7c056bff7dca9e5f2360b92f",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 2089
+  },
+  {
+   "id": "tmax-006",
+   "family": "TMax",
+   "task": "task_008202_c47e4786",
+   "image": "prime/primeintellect/tmax:task_008202_c47e4786",
+   "foundation_key": "1df61e054cd9254e00211091674fb0b9f786cbc81ca0477b72e76c19068bbe53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1681
+  },
+  {
+   "id": "tmax-007",
+   "family": "TMax",
+   "task": "task_005376_fcbc3a2d",
+   "image": "prime/primeintellect/tmax:task_005376_fcbc3a2d",
+   "foundation_key": "476b7edbc762d1a65960a178851adc74fb586d88a80adb0c4f9fae8b45985a78",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 963
+  },
+  {
+   "id": "tmax-008",
+   "family": "TMax",
+   "task": "task_009058_ab71a7e5",
+   "image": "prime/primeintellect/tmax:task_009058_ab71a7e5",
+   "foundation_key": "35f7e719729f4889115e6896fe3e363e8150ae9c40fb02587bc3a58902bbf0ab",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1376
+  },
+  {
+   "id": "tmax-009",
+   "family": "TMax",
+   "task": "task_000966_d9c1fa5e",
+   "image": "prime/primeintellect/tmax:task_000966_d9c1fa5e",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "8c84cbcec1f5455827379f27243d054752ab03180ad05934cc9e7d4d1b17907d",
+   "recipe_matches": true,
+   "context_bytes": 20961
+  },
+  {
+   "id": "tmax-010",
+   "family": "TMax",
+   "task": "task_002677_e00b0197",
+   "image": "prime/primeintellect/tmax:task_002677_e00b0197",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "abecec654e62ef79a91a1af46db8c43525facb99969eeb5afda0231cfe61ab76",
+   "recipe_matches": true,
+   "context_bytes": 19865
+  },
+  {
+   "id": "tmax-011",
+   "family": "TMax",
+   "task": "task_001226_290d5a8e",
+   "image": "prime/primeintellect/tmax:task_001226_290d5a8e",
+   "foundation_key": "5c9e3aefd67e4cac5385b31fe8c5c68b026c6fb74cc24dd1a257fa339da93b35",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 908
+  },
+  {
+   "id": "tmax-012",
+   "family": "TMax",
+   "task": "task_004780_5ec5f2cb",
+   "image": "prime/primeintellect/tmax:task_004780_5ec5f2cb",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "abecec654e62ef79a91a1af46db8c43525facb99969eeb5afda0231cfe61ab76",
+   "recipe_matches": true,
+   "context_bytes": 19734
+  },
+  {
+   "id": "tmax-013",
+   "family": "TMax",
+   "task": "task_005296_57c1c5ca",
+   "image": "prime/primeintellect/tmax:task_005296_57c1c5ca",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "fb533387b1509d026231af550a18b65f97afff589b641dbe07dd925bbc121177",
+   "recipe_matches": true,
+   "context_bytes": 8142
+  },
+  {
+   "id": "tmax-014",
+   "family": "TMax",
+   "task": "task_009178_1c10310e",
+   "image": "prime/primeintellect/tmax:task_009178_1c10310e",
+   "foundation_key": "01e0d8638b79b37d754ef2e4f9ad661ad61d9ba20d4373aa2efaac5be2f10757",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 2137
+  },
+  {
+   "id": "tmax-015",
+   "family": "TMax",
+   "task": "task_000971_103e8d02",
+   "image": "prime/primeintellect/tmax:task_000971_103e8d02",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "8c84cbcec1f5455827379f27243d054752ab03180ad05934cc9e7d4d1b17907d",
+   "recipe_matches": true,
+   "context_bytes": 22756
+  },
+  {
+   "id": "tmax-016",
+   "family": "TMax",
+   "task": "task_000984_7f090cee",
+   "image": "prime/primeintellect/tmax:task_000984_7f090cee",
+   "foundation_key": "284135c07a9693f0042b089512454105accdee6551b834ab73f8b42f3171a4e0",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 2274
+  },
+  {
+   "id": "tmax-017",
+   "family": "TMax",
+   "task": "task_004528_9270c9fa",
+   "image": "prime/primeintellect/tmax:task_004528_9270c9fa",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "b2ac99652349a20ef15fc49597f86a128d7475a9d3130ef38af4a376eae01715",
+   "recipe_matches": true,
+   "context_bytes": 6190
+  },
+  {
+   "id": "tmax-018",
+   "family": "TMax",
+   "task": "task_000055_b82209d2",
+   "image": "prime/primeintellect/tmax:task_000055_b82209d2",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "fb533387b1509d026231af550a18b65f97afff589b641dbe07dd925bbc121177",
+   "recipe_matches": true,
+   "context_bytes": 8240
+  },
+  {
+   "id": "tmax-019",
+   "family": "TMax",
+   "task": "task_006693_cfa61fde",
+   "image": "prime/primeintellect/tmax:task_006693_cfa61fde",
+   "foundation_key": "1debda87f820fda98ed920d03f2c9e370d0b6ba0ce1041518727bbde8bccd22a",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1336
+  },
+  {
+   "id": "tmax-020",
+   "family": "TMax",
+   "task": "task_001824_bd53ac64",
+   "image": "prime/primeintellect/tmax:task_001824_bd53ac64",
+   "foundation_key": "123bc819f0822d1fd48894bdf69b108cc9712eeb53d85c89864045bd42a2f064",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1570
+  },
+  {
+   "id": "tmax-021",
+   "family": "TMax",
+   "task": "task_008588_44ac0866",
+   "image": "prime/primeintellect/tmax:task_008588_44ac0866",
+   "foundation_key": "e50437786e91b5314d01e7ca70cba551cd916b8d7c056bff7dca9e5f2360b92f",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 507
+  },
+  {
+   "id": "tmax-022",
+   "family": "TMax",
+   "task": "task_001145_36a44421",
+   "image": "prime/primeintellect/tmax:task_001145_36a44421",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "fb533387b1509d026231af550a18b65f97afff589b641dbe07dd925bbc121177",
+   "recipe_matches": true,
+   "context_bytes": 9421
+  },
+  {
+   "id": "tmax-023",
+   "family": "TMax",
+   "task": "task_005168_344d318d",
+   "image": "prime/primeintellect/tmax:task_005168_344d318d",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "b2ac99652349a20ef15fc49597f86a128d7475a9d3130ef38af4a376eae01715",
+   "recipe_matches": true,
+   "context_bytes": 6268
+  },
+  {
+   "id": "tmax-024",
+   "family": "TMax",
+   "task": "task_001594_36c21edd",
+   "image": "prime/primeintellect/tmax:task_001594_36c21edd",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "abecec654e62ef79a91a1af46db8c43525facb99969eeb5afda0231cfe61ab76",
+   "recipe_matches": true,
+   "context_bytes": 20135
+  },
+  {
+   "id": "tmax-025",
+   "family": "TMax",
+   "task": "task_001689_17a08063",
+   "image": "prime/primeintellect/tmax:task_001689_17a08063",
+   "foundation_key": "1df61e054cd9254e00211091674fb0b9f786cbc81ca0477b72e76c19068bbe53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1168
+  },
+  {
+   "id": "tmax-026",
+   "family": "TMax",
+   "task": "task_001051_052e7c2c",
+   "image": "prime/primeintellect/tmax:task_001051_052e7c2c",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "abecec654e62ef79a91a1af46db8c43525facb99969eeb5afda0231cfe61ab76",
+   "recipe_matches": true,
+   "context_bytes": 22026
+  },
+  {
+   "id": "tmax-027",
+   "family": "TMax",
+   "task": "task_003028_0d305c8a",
+   "image": "prime/primeintellect/tmax:task_003028_0d305c8a",
+   "foundation_key": "5f345e93c88203e29e5671319c1489f39e8e0a0b0ceba54093c1375c2d065aab",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1890
+  },
+  {
+   "id": "tmax-028",
+   "family": "TMax",
+   "task": "task_008032_1f391d8f",
+   "image": "prime/primeintellect/tmax:task_008032_1f391d8f",
+   "foundation_key": "35f7e719729f4889115e6896fe3e363e8150ae9c40fb02587bc3a58902bbf0ab",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1654
+  },
+  {
+   "id": "tmax-029",
+   "family": "TMax",
+   "task": "task_001883_031d9843",
+   "image": "prime/primeintellect/tmax:task_001883_031d9843",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "1f1fbec89781ac46c47b248623738aa5952a258af2f9624b0007c8d9421f206a",
+   "recipe_matches": true,
+   "context_bytes": 5889
+  },
+  {
+   "id": "tmax-030",
+   "family": "TMax",
+   "task": "task_003480_8b5b178f",
+   "image": "prime/primeintellect/tmax:task_003480_8b5b178f",
+   "foundation_key": "1df61e054cd9254e00211091674fb0b9f786cbc81ca0477b72e76c19068bbe53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 2340
+  },
+  {
+   "id": "tmax-031",
+   "family": "TMax",
+   "task": "task_006018_d4942de3",
+   "image": "prime/primeintellect/tmax:task_006018_d4942de3",
+   "foundation_key": "f6bae26bc766188bfeb08d3c8e3e5fee54f2ff20f5b18ec953c09ea21b47ec50",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1766
+  },
+  {
+   "id": "tmax-032",
+   "family": "TMax",
+   "task": "task_004613_2fded670",
+   "image": "prime/primeintellect/tmax:task_004613_2fded670",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "b2ac99652349a20ef15fc49597f86a128d7475a9d3130ef38af4a376eae01715",
+   "recipe_matches": true,
+   "context_bytes": 5899
+  },
+  {
+   "id": "tmax-033",
+   "family": "TMax",
+   "task": "task_002245_9c82db30",
+   "image": "prime/primeintellect/tmax:task_002245_9c82db30",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "fb533387b1509d026231af550a18b65f97afff589b641dbe07dd925bbc121177",
+   "recipe_matches": true,
+   "context_bytes": 8222
+  },
+  {
+   "id": "tmax-034",
+   "family": "TMax",
+   "task": "task_000025_b3c538ae",
+   "image": "prime/primeintellect/tmax:task_000025_b3c538ae",
+   "foundation_key": "1df61e054cd9254e00211091674fb0b9f786cbc81ca0477b72e76c19068bbe53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1328
+  },
+  {
+   "id": "tmax-035",
+   "family": "TMax",
+   "task": "task_005374_763d96ce",
+   "image": "prime/primeintellect/tmax:task_005374_763d96ce",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "8c84cbcec1f5455827379f27243d054752ab03180ad05934cc9e7d4d1b17907d",
+   "recipe_matches": true,
+   "context_bytes": 19775
+  },
+  {
+   "id": "tmax-036",
+   "family": "TMax",
+   "task": "task_003242_5c8f858c",
+   "image": "prime/primeintellect/tmax:task_003242_5c8f858c",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "abecec654e62ef79a91a1af46db8c43525facb99969eeb5afda0231cfe61ab76",
+   "recipe_matches": true,
+   "context_bytes": 20982
+  },
+  {
+   "id": "tmax-037",
+   "family": "TMax",
+   "task": "task_002537_a2af6f30",
+   "image": "prime/primeintellect/tmax:task_002537_a2af6f30",
+   "foundation_key": "1df61e054cd9254e00211091674fb0b9f786cbc81ca0477b72e76c19068bbe53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1582
+  },
+  {
+   "id": "tmax-038",
+   "family": "TMax",
+   "task": "task_008950_dfac4396",
+   "image": "prime/primeintellect/tmax:task_008950_dfac4396",
+   "foundation_key": "fd3a1d1fa8d2cede4da7915af352254810a0709be28a2c9e544a98e01ac3d0cf",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1470
+  },
+  {
+   "id": "tmax-039",
+   "family": "TMax",
+   "task": "task_005203_e15d5598",
+   "image": "prime/primeintellect/tmax:task_005203_e15d5598",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "b2ac99652349a20ef15fc49597f86a128d7475a9d3130ef38af4a376eae01715",
+   "recipe_matches": true,
+   "context_bytes": 5424
+  },
+  {
+   "id": "tmax-040",
+   "family": "TMax",
+   "task": "task_007256_823c4521",
+   "image": "prime/primeintellect/tmax:task_007256_823c4521",
+   "foundation_key": "1df61e054cd9254e00211091674fb0b9f786cbc81ca0477b72e76c19068bbe53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 2106
+  },
+  {
+   "id": "tmax-041",
+   "family": "TMax",
+   "task": "task_000448_cbea261c",
+   "image": "prime/primeintellect/tmax:task_000448_cbea261c",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "bcf87efbab60f85870b2165b09e407d7e6e021fbded5b186a106b020d8ce4485",
+   "recipe_matches": true,
+   "context_bytes": 7680
+  },
+  {
+   "id": "tmax-042",
+   "family": "TMax",
+   "task": "task_002042_5579f87d",
+   "image": "prime/primeintellect/tmax:task_002042_5579f87d",
+   "foundation_key": "feeacc076444f6ebb711ea898162850249ab60e32efe33b57da0cea160e7f0ab",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 665
+  },
+  {
+   "id": "tmax-043",
+   "family": "TMax",
+   "task": "task_005214_41a1bddb",
+   "image": "prime/primeintellect/tmax:task_005214_41a1bddb",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "b2ac99652349a20ef15fc49597f86a128d7475a9d3130ef38af4a376eae01715",
+   "recipe_matches": true,
+   "context_bytes": 5575
+  },
+  {
+   "id": "tmax-044",
+   "family": "TMax",
+   "task": "task_000552_d7cc1243",
+   "image": "prime/primeintellect/tmax:task_000552_d7cc1243",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "bcf87efbab60f85870b2165b09e407d7e6e021fbded5b186a106b020d8ce4485",
+   "recipe_matches": true,
+   "context_bytes": 5143
+  },
+  {
+   "id": "tmax-045",
+   "family": "TMax",
+   "task": "task_000458_f497a0ac",
+   "image": "prime/primeintellect/tmax:task_000458_f497a0ac",
+   "foundation_key": "e50437786e91b5314d01e7ca70cba551cd916b8d7c056bff7dca9e5f2360b92f",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1824
+  },
+  {
+   "id": "tmax-046",
+   "family": "TMax",
+   "task": "task_008697_79f40739",
+   "image": "prime/primeintellect/tmax:task_008697_79f40739",
+   "foundation_key": "ede14eb08303f581c4101e5ceb93114fa9c9e7bee6073a97cbabc2a274f9aebc",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1600
+  },
+  {
+   "id": "tmax-047",
+   "family": "TMax",
+   "task": "task_000835_57a68fab",
+   "image": "prime/primeintellect/tmax:task_000835_57a68fab",
+   "foundation_key": "1df61e054cd9254e00211091674fb0b9f786cbc81ca0477b72e76c19068bbe53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1106
+  },
+  {
+   "id": "tmax-048",
+   "family": "TMax",
+   "task": "task_000379_b1c532d7",
+   "image": "prime/primeintellect/tmax:task_000379_b1c532d7",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "abecec654e62ef79a91a1af46db8c43525facb99969eeb5afda0231cfe61ab76",
+   "recipe_matches": true,
+   "context_bytes": 19690
+  },
+  {
+   "id": "tmax-049",
+   "family": "TMax",
+   "task": "task_000160_121a396b",
+   "image": "prime/primeintellect/tmax:task_000160_121a396b",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "abecec654e62ef79a91a1af46db8c43525facb99969eeb5afda0231cfe61ab76",
+   "recipe_matches": true,
+   "context_bytes": 21962
+  },
+  {
+   "id": "tmax-050",
+   "family": "TMax",
+   "task": "task_000349_4fda7c21",
+   "image": "prime/primeintellect/tmax:task_000349_4fda7c21",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "1f1fbec89781ac46c47b248623738aa5952a258af2f9624b0007c8d9421f206a",
+   "recipe_matches": true,
+   "context_bytes": 5867
+  },
+  {
+   "id": "tmax-051",
+   "family": "TMax",
+   "task": "task_004878_6f9cb71b",
+   "image": "prime/primeintellect/tmax:task_004878_6f9cb71b",
+   "foundation_key": "1ee7127a2bd6229edf0d0aceaffc40b842057e0c83c69d79e7bbf78528d956a5",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1205
+  },
+  {
+   "id": "tmax-052",
+   "family": "TMax",
+   "task": "task_000252_aa3c814d",
+   "image": "prime/primeintellect/tmax:task_000252_aa3c814d",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "abecec654e62ef79a91a1af46db8c43525facb99969eeb5afda0231cfe61ab76",
+   "recipe_matches": true,
+   "context_bytes": 21122
+  },
+  {
+   "id": "tmax-053",
+   "family": "TMax",
+   "task": "task_004339_a344d746",
+   "image": "prime/primeintellect/tmax:task_004339_a344d746",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "1f1fbec89781ac46c47b248623738aa5952a258af2f9624b0007c8d9421f206a",
+   "recipe_matches": true,
+   "context_bytes": 7197
+  },
+  {
+   "id": "tmax-054",
+   "family": "TMax",
+   "task": "task_001098_4e7b2055",
+   "image": "prime/primeintellect/tmax:task_001098_4e7b2055",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "b2ac99652349a20ef15fc49597f86a128d7475a9d3130ef38af4a376eae01715",
+   "recipe_matches": true,
+   "context_bytes": 8764
+  },
+  {
+   "id": "tmax-055",
+   "family": "TMax",
+   "task": "task_006848_f0d6bdbc",
+   "image": "prime/primeintellect/tmax:task_006848_f0d6bdbc",
+   "foundation_key": "1df61e054cd9254e00211091674fb0b9f786cbc81ca0477b72e76c19068bbe53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 791
+  },
+  {
+   "id": "tmax-056",
+   "family": "TMax",
+   "task": "task_002763_a35b2067",
+   "image": "prime/primeintellect/tmax:task_002763_a35b2067",
+   "foundation_key": "b9094b50bb69653aea4ead821406772f9a7e17aaf5ebda3f2297a3e4a2520956",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1643
+  },
+  {
+   "id": "tmax-057",
+   "family": "TMax",
+   "task": "task_000456_86365763",
+   "image": "prime/primeintellect/tmax:task_000456_86365763",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "1f1fbec89781ac46c47b248623738aa5952a258af2f9624b0007c8d9421f206a",
+   "recipe_matches": true,
+   "context_bytes": 6320
+  },
+  {
+   "id": "tmax-058",
+   "family": "TMax",
+   "task": "task_003101_10b92351",
+   "image": "prime/primeintellect/tmax:task_003101_10b92351",
+   "foundation_key": "760466fb68f7fbe0abaa78b1465c1a92407cf227a066aa1349cacc0e99d3b8d6",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 830
+  },
+  {
+   "id": "tmax-059",
+   "family": "TMax",
+   "task": "task_006613_84de6b61",
+   "image": "prime/primeintellect/tmax:task_006613_84de6b61",
+   "foundation_key": "ccadafda28f90de282fec0fe3b3ee3a5ba7b56bb9f1395ef9b5ffaa04d7dcf28",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 910
+  },
+  {
+   "id": "tmax-060",
+   "family": "TMax",
+   "task": "task_000502_50b7fab6",
+   "image": "prime/primeintellect/tmax:task_000502_50b7fab6",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "1f1fbec89781ac46c47b248623738aa5952a258af2f9624b0007c8d9421f206a",
+   "recipe_matches": true,
+   "context_bytes": 6828
+  },
+  {
+   "id": "tmax-061",
+   "family": "TMax",
+   "task": "task_000477_fa8d2547",
+   "image": "prime/primeintellect/tmax:task_000477_fa8d2547",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "1f1fbec89781ac46c47b248623738aa5952a258af2f9624b0007c8d9421f206a",
+   "recipe_matches": true,
+   "context_bytes": 7706
+  },
+  {
+   "id": "tmax-062",
+   "family": "TMax",
+   "task": "task_008909_b8799733",
+   "image": "prime/primeintellect/tmax:task_008909_b8799733",
+   "foundation_key": "974abd87dabdeee6c8ed949a896e756badface70fa9a60b161839dfb3a25ea99",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1506
+  },
+  {
+   "id": "tmax-063",
+   "family": "TMax",
+   "task": "task_004400_5e69e89a",
+   "image": "prime/primeintellect/tmax:task_004400_5e69e89a",
+   "foundation_key": "5bc7d0bdcffea3b1299adb833c9f746b6fea9f177d2afc433b03e288e8e770cf",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1391
+  },
+  {
+   "id": "tmax-064",
+   "family": "TMax",
+   "task": "task_001842_7de8556b",
+   "image": "prime/primeintellect/tmax:task_001842_7de8556b",
+   "foundation_key": "1df61e054cd9254e00211091674fb0b9f786cbc81ca0477b72e76c19068bbe53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1438
+  },
+  {
+   "id": "tmax-065",
+   "family": "TMax",
+   "task": "task_004844_fd0ea3fa",
+   "image": "prime/primeintellect/tmax:task_004844_fd0ea3fa",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "1f1fbec89781ac46c47b248623738aa5952a258af2f9624b0007c8d9421f206a",
+   "recipe_matches": true,
+   "context_bytes": 6330
+  },
+  {
+   "id": "tmax-066",
+   "family": "TMax",
+   "task": "task_003650_f203f7dd",
+   "image": "prime/primeintellect/tmax:task_003650_f203f7dd",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "1f1fbec89781ac46c47b248623738aa5952a258af2f9624b0007c8d9421f206a",
+   "recipe_matches": true,
+   "context_bytes": 6467
+  },
+  {
+   "id": "tmax-067",
+   "family": "TMax",
+   "task": "task_004804_a0a130b0",
+   "image": "prime/primeintellect/tmax:task_004804_a0a130b0",
+   "foundation_key": "1df61e054cd9254e00211091674fb0b9f786cbc81ca0477b72e76c19068bbe53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 2177
+  },
+  {
+   "id": "tmax-068",
+   "family": "TMax",
+   "task": "task_008803_ffdc8171",
+   "image": "prime/primeintellect/tmax:task_008803_ffdc8171",
+   "foundation_key": "f40e20de7850430642f9e35a4de4f098a61a90e8d24fa9132d937b1d4be8fb1d",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 621
+  },
+  {
+   "id": "tmax-069",
+   "family": "TMax",
+   "task": "task_003782_62d3ea3d",
+   "image": "prime/primeintellect/tmax:task_003782_62d3ea3d",
+   "foundation_key": "ae0e17012fc1939945061f1e97f5254fd574322e61e3e017643ee86c6107aaa8",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 698
+  },
+  {
+   "id": "tmax-070",
+   "family": "TMax",
+   "task": "task_001257_5c6792a0",
+   "image": "prime/primeintellect/tmax:task_001257_5c6792a0",
+   "foundation_key": "6c6bca5146106ab06df160c7a6a99ba9bd1b1fcc5ac2c5d336483e5cdd80d84d",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 926
+  },
+  {
+   "id": "tmax-071",
+   "family": "TMax",
+   "task": "task_002132_096278fa",
+   "image": "prime/primeintellect/tmax:task_002132_096278fa",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "b2ac99652349a20ef15fc49597f86a128d7475a9d3130ef38af4a376eae01715",
+   "recipe_matches": true,
+   "context_bytes": 5390
+  },
+  {
+   "id": "tmax-072",
+   "family": "TMax",
+   "task": "task_005130_a5c81163",
+   "image": "prime/primeintellect/tmax:task_005130_a5c81163",
+   "foundation_key": "07dd87a3d96cdd92b1523d10fb7ea404e981c524b3bc6158728aa871deb297ef",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1623
+  },
+  {
+   "id": "tmax-073",
+   "family": "TMax",
+   "task": "task_005231_44f94db4",
+   "image": "prime/primeintellect/tmax:task_005231_44f94db4",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "fb533387b1509d026231af550a18b65f97afff589b641dbe07dd925bbc121177",
+   "recipe_matches": true,
+   "context_bytes": 9016
+  },
+  {
+   "id": "tmax-074",
+   "family": "TMax",
+   "task": "task_003737_d8a8caaa",
+   "image": "prime/primeintellect/tmax:task_003737_d8a8caaa",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "1f1fbec89781ac46c47b248623738aa5952a258af2f9624b0007c8d9421f206a",
+   "recipe_matches": true,
+   "context_bytes": 8115
+  },
+  {
+   "id": "tmax-075",
+   "family": "TMax",
+   "task": "task_006622_714b8dca",
+   "image": "prime/primeintellect/tmax:task_006622_714b8dca",
+   "foundation_key": "34440178256f45cd9602598febd4f4d08e35c2ae80cb03431716517fdec8fcd3",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1738
+  },
+  {
+   "id": "tmax-076",
+   "family": "TMax",
+   "task": "task_001319_7fb21e9a",
+   "image": "prime/primeintellect/tmax:task_001319_7fb21e9a",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "bcf87efbab60f85870b2165b09e407d7e6e021fbded5b186a106b020d8ce4485",
+   "recipe_matches": true,
+   "context_bytes": 6382
+  },
+  {
+   "id": "tmax-077",
+   "family": "TMax",
+   "task": "task_000849_e029c47c",
+   "image": "prime/primeintellect/tmax:task_000849_e029c47c",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "abecec654e62ef79a91a1af46db8c43525facb99969eeb5afda0231cfe61ab76",
+   "recipe_matches": true,
+   "context_bytes": 21832
+  },
+  {
+   "id": "tmax-078",
+   "family": "TMax",
+   "task": "task_004808_aa16b58a",
+   "image": "prime/primeintellect/tmax:task_004808_aa16b58a",
+   "foundation_key": "e37685da9003f4e5310b04d3fc356c1089aec00c1b8bcec50ca26b4af3b15dfd",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 2738
+  },
+  {
+   "id": "tmax-079",
+   "family": "TMax",
+   "task": "task_005288_4c2c6b8a",
+   "image": "prime/primeintellect/tmax:task_005288_4c2c6b8a",
+   "foundation_key": "662cd5d899390ff65e8ecf74916bf4268fce06e71c17c17c6f819de38cc88bc5",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 3215
+  },
+  {
+   "id": "tmax-080",
+   "family": "TMax",
+   "task": "task_006700_8f3aa427",
+   "image": "prime/primeintellect/tmax:task_006700_8f3aa427",
+   "foundation_key": "346505a47dc9c51ac2f00f37dd934ce8f279eece1ff7417c4cd0287676b8bb46",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 3395
+  },
+  {
+   "id": "tmax-081",
+   "family": "TMax",
+   "task": "task_003569_2e3e434b",
+   "image": "prime/primeintellect/tmax:task_003569_2e3e434b",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "b2ac99652349a20ef15fc49597f86a128d7475a9d3130ef38af4a376eae01715",
+   "recipe_matches": true,
+   "context_bytes": 4785
+  },
+  {
+   "id": "tmax-082",
+   "family": "TMax",
+   "task": "task_000305_0d6321e1",
+   "image": "prime/primeintellect/tmax:task_000305_0d6321e1",
+   "foundation_key": "1df61e054cd9254e00211091674fb0b9f786cbc81ca0477b72e76c19068bbe53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1446
+  },
+  {
+   "id": "tmax-083",
+   "family": "TMax",
+   "task": "task_004414_6b96da8f",
+   "image": "prime/primeintellect/tmax:task_004414_6b96da8f",
+   "foundation_key": "b9094b50bb69653aea4ead821406772f9a7e17aaf5ebda3f2297a3e4a2520956",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1365
+  },
+  {
+   "id": "tmax-084",
+   "family": "TMax",
+   "task": "task_002678_c39cb183",
+   "image": "prime/primeintellect/tmax:task_002678_c39cb183",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "b2ac99652349a20ef15fc49597f86a128d7475a9d3130ef38af4a376eae01715",
+   "recipe_matches": true,
+   "context_bytes": 7186
+  },
+  {
+   "id": "tmax-085",
+   "family": "TMax",
+   "task": "task_003337_221cf3cf",
+   "image": "prime/primeintellect/tmax:task_003337_221cf3cf",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "bcf87efbab60f85870b2165b09e407d7e6e021fbded5b186a106b020d8ce4485",
+   "recipe_matches": true,
+   "context_bytes": 6065
+  },
+  {
+   "id": "tmax-086",
+   "family": "TMax",
+   "task": "task_004208_aa2fa035",
+   "image": "prime/primeintellect/tmax:task_004208_aa2fa035",
+   "foundation_key": "ead146964e1d817a364bcf498ea21c842f03e25064f56ac7adef0966082d000b",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 822
+  },
+  {
+   "id": "tmax-087",
+   "family": "TMax",
+   "task": "task_006177_7434331a",
+   "image": "prime/primeintellect/tmax:task_006177_7434331a",
+   "foundation_key": "c2e1c6ffcfd52d6e2bbd479fad926eaa779deb59e6e8cef788ffc566e983cb45",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1143
+  },
+  {
+   "id": "tmax-088",
+   "family": "TMax",
+   "task": "task_000577_f42f11cc",
+   "image": "prime/primeintellect/tmax:task_000577_f42f11cc",
+   "foundation_key": "1df61e054cd9254e00211091674fb0b9f786cbc81ca0477b72e76c19068bbe53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1030
+  },
+  {
+   "id": "tmax-089",
+   "family": "TMax",
+   "task": "task_009803_0c5c7cab",
+   "image": "prime/primeintellect/tmax:task_009803_0c5c7cab",
+   "foundation_key": "c2e1c6ffcfd52d6e2bbd479fad926eaa779deb59e6e8cef788ffc566e983cb45",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 772
+  },
+  {
+   "id": "tmax-090",
+   "family": "TMax",
+   "task": "task_003896_535ec84a",
+   "image": "prime/primeintellect/tmax:task_003896_535ec84a",
+   "foundation_key": "f40e20de7850430642f9e35a4de4f098a61a90e8d24fa9132d937b1d4be8fb1d",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1022
+  },
+  {
+   "id": "tmax-091",
+   "family": "TMax",
+   "task": "task_003313_5ac8a3a1",
+   "image": "prime/primeintellect/tmax:task_003313_5ac8a3a1",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "bcf87efbab60f85870b2165b09e407d7e6e021fbded5b186a106b020d8ce4485",
+   "recipe_matches": true,
+   "context_bytes": 6502
+  },
+  {
+   "id": "tmax-092",
+   "family": "TMax",
+   "task": "task_003344_a22b749f",
+   "image": "prime/primeintellect/tmax:task_003344_a22b749f",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "abecec654e62ef79a91a1af46db8c43525facb99969eeb5afda0231cfe61ab76",
+   "recipe_matches": true,
+   "context_bytes": 21178
+  },
+  {
+   "id": "tmax-093",
+   "family": "TMax",
+   "task": "task_008828_fab80e8f",
+   "image": "prime/primeintellect/tmax:task_008828_fab80e8f",
+   "foundation_key": "1df61e054cd9254e00211091674fb0b9f786cbc81ca0477b72e76c19068bbe53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1243
+  },
+  {
+   "id": "tmax-094",
+   "family": "TMax",
+   "task": "task_002226_5ca3468d",
+   "image": "prime/primeintellect/tmax:task_002226_5ca3468d",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "b2ac99652349a20ef15fc49597f86a128d7475a9d3130ef38af4a376eae01715",
+   "recipe_matches": true,
+   "context_bytes": 6121
+  },
+  {
+   "id": "tmax-095",
+   "family": "TMax",
+   "task": "task_004455_ecb36e81",
+   "image": "prime/primeintellect/tmax:task_004455_ecb36e81",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "8c84cbcec1f5455827379f27243d054752ab03180ad05934cc9e7d4d1b17907d",
+   "recipe_matches": true,
+   "context_bytes": 22219
+  },
+  {
+   "id": "tmax-096",
+   "family": "TMax",
+   "task": "task_004525_5107249d",
+   "image": "prime/primeintellect/tmax:task_004525_5107249d",
+   "foundation_key": "0302e552057a149986b2617b4d8c493e150a83d631573b388bbcb76f2bb3276d",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1370
+  },
+  {
+   "id": "tmax-097",
+   "family": "TMax",
+   "task": "task_001869_fc5b2f67",
+   "image": "prime/primeintellect/tmax:task_001869_fc5b2f67",
+   "foundation_key": "1df61e054cd9254e00211091674fb0b9f786cbc81ca0477b72e76c19068bbe53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1881
+  },
+  {
+   "id": "tmax-098",
+   "family": "TMax",
+   "task": "task_002841_3d5be351",
+   "image": "prime/primeintellect/tmax:task_002841_3d5be351",
+   "foundation_key": "a955486e9236555b704daa2b7dfc8172aac2a5270a90c8f455d672f4fc3c30b2",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "9aea26c92ba4f0b63c1ce60c8c6e3b1b75fb19647f4b77359feebb5f8e862364",
+   "recipe_matches": true,
+   "context_bytes": 1430
+  },
+  {
+   "id": "tmax-099",
+   "family": "TMax",
+   "task": "task_003835_7530c783",
+   "image": "prime/primeintellect/tmax:task_003835_7530c783",
+   "foundation_key": "e92c631646c7c6e91d2b8aa16f2b9b4de39f00a383692dd8284b8bff4f253c53",
+   "remaining_build_work": [
+    "context_transfer",
+    "run_requires_qualification"
+   ],
+   "recipe_sha256": "8c84cbcec1f5455827379f27243d054752ab03180ad05934cc9e7d4d1b17907d",
+   "recipe_matches": true,
+   "context_bytes": 20172
+  },
+  {
+   "id": "terminal-lego-100",
+   "family": "Terminal-Lego",
+   "task": "task_10951",
+   "image": "terminal-lego/010951:latest",
+   "foundation_key": "ac333341ca83f1e000aa4d3fa33f343258f21a6272cb08a3a328a81df1b43b55",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "b0436d111b0fa3b8b16efdc34638279ff0acb5945fc84aca56f34dba8b0818bb",
+   "recipe_matches": true,
+   "context_bytes": 1646
+  },
+  {
+   "id": "terminal-lego-101",
+   "family": "Terminal-Lego",
+   "task": "task_01642",
+   "image": "terminal-lego/001642:latest",
+   "foundation_key": "e9d7ed0c5035a54e00397b47bf1550a341c320ea9327a28a3da5c75a04ecede2",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "f6723888e4c8159314c2976518c22ea21353ea667c68573058da8ae95a9232c9",
+   "recipe_matches": true,
+   "context_bytes": 1147
+  },
+  {
+   "id": "terminal-lego-102",
+   "family": "Terminal-Lego",
+   "task": "task_14768",
+   "image": "terminal-lego/014768:latest",
+   "foundation_key": "48ade8b4599975c6bdbaca1782e82cf40d20986a691b3d56079ee0a4aae8529f",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "edb31701fd87e9870d435da1b5ef63516a58a8ef309e96a9e483230240739695",
+   "recipe_matches": true,
+   "context_bytes": 3708
+  },
+  {
+   "id": "terminal-lego-103",
+   "family": "Terminal-Lego",
+   "task": "task_11224",
+   "image": "terminal-lego/011224:latest",
+   "foundation_key": "0c0c12ed27bec43ebee1e7ca10f7d4f92ea510a0142ab33207decbe50ad2dc73",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "f76d2703499170a46088426124cba1b28e4f01737d9dbe98879069f4b6070ee1",
+   "recipe_matches": true,
+   "context_bytes": 1033
+  },
+  {
+   "id": "terminal-lego-104",
+   "family": "Terminal-Lego",
+   "task": "task_01125",
+   "image": "terminal-lego/001125:latest",
+   "foundation_key": "e9d7ed0c5035a54e00397b47bf1550a341c320ea9327a28a3da5c75a04ecede2",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "a6cc305d5c8b11ad0215f2578f8da2c2b30cba2ac7d781d23533a6aee9c22345",
+   "recipe_matches": true,
+   "context_bytes": 1152
+  },
+  {
+   "id": "terminal-lego-105",
+   "family": "Terminal-Lego",
+   "task": "task_00035",
+   "image": "terminal-lego/000035:latest",
+   "foundation_key": "6a0bdb540a0111b2c21fb996bf3cf3a83612b30152301507f95742f02f29422a",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "e8dd44764f41aa6e652d861c6fa2be4da5f74fc840baca408a44fd6457cfcbfb",
+   "recipe_matches": true,
+   "context_bytes": 1154
+  },
+  {
+   "id": "terminal-lego-106",
+   "family": "Terminal-Lego",
+   "task": "task_03487",
+   "image": "terminal-lego/003487:latest",
+   "foundation_key": "3eca367daacff604c37458577803d68ed52ac2e71505345df3e2dd66c4c993de",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "d67e8d17039bf3cd0f662ec12249e283c8312d0bbe32f77006a7241d28a38c98",
+   "recipe_matches": true,
+   "context_bytes": 1096
+  },
+  {
+   "id": "terminal-lego-107",
+   "family": "Terminal-Lego",
+   "task": "task_08582",
+   "image": "terminal-lego/008582:latest",
+   "foundation_key": "0bbadf4c39ef316e01549b66e1e57442474c66805ef8b6a0251b3e42260ea18b",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "3d2aa129a1562614a5e05f4a27ebbb0f61a64bbe0181c40544ddfbe82b88d8e2",
+   "recipe_matches": true,
+   "context_bytes": 2044
+  },
+  {
+   "id": "terminal-lego-108",
+   "family": "Terminal-Lego",
+   "task": "task_14312",
+   "image": "terminal-lego/014312:latest",
+   "foundation_key": "51f6247a96633cdb4bc4dd2771128030590482ad3c7ff276266c6c45889ed97e",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "f317b025d65b1f7bc1d28fff54626c3e0b099bd66d145310bb7ce6779e712afe",
+   "recipe_matches": true,
+   "context_bytes": 1030
+  },
+  {
+   "id": "terminal-lego-109",
+   "family": "Terminal-Lego",
+   "task": "task_02102",
+   "image": "terminal-lego/002102:latest",
+   "foundation_key": "02eae63d395b84576967d0396134c0f7b0f9170ad678c9267fbb8fae472d5558",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "0ef194472292dbb363d38a87ab752bee4191fe065cabb24fd6bbf5b919ac7b4b",
+   "recipe_matches": true,
+   "context_bytes": 1116
+  },
+  {
+   "id": "terminal-lego-110",
+   "family": "Terminal-Lego",
+   "task": "task_13042",
+   "image": "terminal-lego/013042:latest",
+   "foundation_key": "3288115b0446db479510c5e1cd0de633f0ad90b2510da7e2ed0e7545920133fb",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "eaec16ca00e8b9747e8001572575ee63049ddbd3e06849913e67ceec79b3e3a5",
+   "recipe_matches": true,
+   "context_bytes": 1037
+  },
+  {
+   "id": "terminal-lego-111",
+   "family": "Terminal-Lego",
+   "task": "task_01122",
+   "image": "terminal-lego/001122:latest",
+   "foundation_key": "b2f64bc28639dee84062ffc6625910909a1fdde76251b194e696bcfceb2f3966",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "e56ed6227421420daba63246f4a398bdc16d90289884a8d2e1faba03d953945d",
+   "recipe_matches": true,
+   "context_bytes": 7203
+  },
+  {
+   "id": "terminal-lego-112",
+   "family": "Terminal-Lego",
+   "task": "task_02630",
+   "image": "terminal-lego/002630:latest",
+   "foundation_key": "20fc60fb8be4d3d7d90c10775b66319bb13d36e43f4bade5e2dd3166b7a48dac",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "e36491b05d5e633f861e3eac955612fc7ff61e13f5659fcba76e62601bf675dd",
+   "recipe_matches": true,
+   "context_bytes": 1095
+  },
+  {
+   "id": "terminal-lego-113",
+   "family": "Terminal-Lego",
+   "task": "task_04598",
+   "image": "terminal-lego/004598:latest",
+   "foundation_key": "e74c50cf9e8c243329e65046323e3e15e7d927d23afcd6d9a40d9a381fedfd3a",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "fa62f2db0788a3da058783fa4c2a719cf5053e5a961dd96e626cf7341ad3da38",
+   "recipe_matches": true,
+   "context_bytes": 1255
+  },
+  {
+   "id": "terminal-lego-114",
+   "family": "Terminal-Lego",
+   "task": "task_06627",
+   "image": "terminal-lego/006627:latest",
+   "foundation_key": "80e6716b84f8f9dd6f64ae7430cbebdcc0086c1471372a84eb3245bd106cd13a",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "4e48a049d0987ef439aaa6d5ff17699377ef76da3378fed956a7ee2592998dc5",
+   "recipe_matches": true,
+   "context_bytes": 1253
+  },
+  {
+   "id": "terminal-lego-115",
+   "family": "Terminal-Lego",
+   "task": "task_09654",
+   "image": "terminal-lego/009654:latest",
+   "foundation_key": "5626bb81f58df611737ce6daaf7a4ea67d064272958600a86fce7a3e732a1374",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "f5a019fe7ee5623c92ebff9d87580666563518604f0e59b571264437b856f087",
+   "recipe_matches": true,
+   "context_bytes": 1171
+  },
+  {
+   "id": "terminal-lego-116",
+   "family": "Terminal-Lego",
+   "task": "task_00150",
+   "image": "terminal-lego/000150:latest",
+   "foundation_key": "6a0bdb540a0111b2c21fb996bf3cf3a83612b30152301507f95742f02f29422a",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "dc634c9366ba9e7b26e6470708faec8fb1eaef2ac1c99470434cf495074fd888",
+   "recipe_matches": true,
+   "context_bytes": 1093
+  },
+  {
+   "id": "terminal-lego-117",
+   "family": "Terminal-Lego",
+   "task": "task_13401",
+   "image": "terminal-lego/013401:latest",
+   "foundation_key": "f706e77394367667f2868c09dd0af5d9e17b7504348cc688a0b6c1c749d89b3a",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "b7a7c1eb588c14734e30771f19970413a0c87f8b93a65824f9a22ad30adf0035",
+   "recipe_matches": true,
+   "context_bytes": 1006
+  },
+  {
+   "id": "terminal-lego-118",
+   "family": "Terminal-Lego",
+   "task": "task_06350",
+   "image": "terminal-lego/006350:latest",
+   "foundation_key": "bf5105313502a7eefae9f66a708a30416a1fd6eeb4dc9bacd0b857d3da727aa6",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "761db0145eda7ee79bfbae690a32d299b90c9775e4c730bab6e793efe9ee31d6",
+   "recipe_matches": true,
+   "context_bytes": 1312
+  },
+  {
+   "id": "terminal-lego-119",
+   "family": "Terminal-Lego",
+   "task": "task_07356",
+   "image": "terminal-lego/007356:latest",
+   "foundation_key": "7ee7186815b8a6dbb7bca07b64702b77c1ac778f0f7e191faab592cee0b6bbfd",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "54c98e25289da8083ec7671a10e6f1a5ab3366ba4dfe1980d46ce0b263cd8b30",
+   "recipe_matches": true,
+   "context_bytes": 1147
+  },
+  {
+   "id": "terminal-lego-120",
+   "family": "Terminal-Lego",
+   "task": "task_01311",
+   "image": "terminal-lego/001311:latest",
+   "foundation_key": "e9d7ed0c5035a54e00397b47bf1550a341c320ea9327a28a3da5c75a04ecede2",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "f2bf0bbe931d1a73783c212aba52202fc1caebf4f14614a0cbcdbd19869f13f0",
+   "recipe_matches": true,
+   "context_bytes": 1208
+  },
+  {
+   "id": "terminal-lego-121",
+   "family": "Terminal-Lego",
+   "task": "task_03763",
+   "image": "terminal-lego/003763:latest",
+   "foundation_key": "b5f47a8ca62cbbbb12a453ac1e61e7ae9263df9521a71aa1042c9a8dd8681e75",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "4383352af4ae2f1d125534a4bbf77acff2a9de8330de5e75887b81970319cb11",
+   "recipe_matches": true,
+   "context_bytes": 1257
+  },
+  {
+   "id": "terminal-lego-122",
+   "family": "Terminal-Lego",
+   "task": "task_02940",
+   "image": "terminal-lego/002940:latest",
+   "foundation_key": "a9c7b2f74e43cf620b5c5b16901ce6e481288161c949d6647ae38d49fece7788",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "a6378765257d77a78635a3ccd2ccfa683053be1c93765610f913bf89a3ce55db",
+   "recipe_matches": true,
+   "context_bytes": 5163
+  },
+  {
+   "id": "terminal-lego-123",
+   "family": "Terminal-Lego",
+   "task": "task_01371",
+   "image": "terminal-lego/001371:latest",
+   "foundation_key": "b5f47a8ca62cbbbb12a453ac1e61e7ae9263df9521a71aa1042c9a8dd8681e75",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "ac1bfd0bc41076e834b8d0a3f92aaa0b2779b4075dd12d451628d75509ad9c47",
+   "recipe_matches": true,
+   "context_bytes": 1128
+  },
+  {
+   "id": "terminal-lego-124",
+   "family": "Terminal-Lego",
+   "task": "task_03542",
+   "image": "terminal-lego/003542:latest",
+   "foundation_key": "07058e56819522f09c6baefa1cd934bea1eaa4f2147a4eefc0179f9df314a066",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "b5ac2617d031e72b4e32b6bb6aafe69394cbfc93d3ed7d16858f8782e6873542",
+   "recipe_matches": true,
+   "context_bytes": 1247
+  },
+  {
+   "id": "terminal-lego-125",
+   "family": "Terminal-Lego",
+   "task": "task_04552",
+   "image": "terminal-lego/004552:latest",
+   "foundation_key": "9ddcba10bb0ca29ae9ceb9762ca3c5c4a51c82e156b1e70364385be8d8a88b1f",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "0059cc1795f176e2deead697ce62254d98a50a5c47ed47352e0de3cea9316579",
+   "recipe_matches": true,
+   "context_bytes": 1191
+  },
+  {
+   "id": "terminal-lego-126",
+   "family": "Terminal-Lego",
+   "task": "task_13386",
+   "image": "terminal-lego/013386:latest",
+   "foundation_key": "adc08078598d5e82b9ef5e916912cfa2cbcae56a1bd5330a1481d7499077b6a2",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "773f0a514847a5d765e77b8786bee9fcc04be5cdeb0652446d7f75d6c3e548d4",
+   "recipe_matches": true,
+   "context_bytes": 1119
+  },
+  {
+   "id": "terminal-lego-127",
+   "family": "Terminal-Lego",
+   "task": "task_08264",
+   "image": "terminal-lego/008264:latest",
+   "foundation_key": "314cdd9d649602cbd7112f9ab7e455f54eb5e955c09c35b0d093fb920ca5faa9",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "b47bddf735a2ebb1e8d966ff9ea9f30c2c47c45ab2e3769bda169e3840fb2675",
+   "recipe_matches": true,
+   "context_bytes": 2111
+  },
+  {
+   "id": "terminal-lego-128",
+   "family": "Terminal-Lego",
+   "task": "task_11073",
+   "image": "terminal-lego/011073:latest",
+   "foundation_key": "1d535c47d8c855384092ad29aede0278ca2a657f22a8626789e329859302767d",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "cf1b16fb9751dd6956fa0d05807bc0c21f320855c5ecbd1af97e0dc9cc73a635",
+   "recipe_matches": true,
+   "context_bytes": 1601
+  },
+  {
+   "id": "terminal-lego-129",
+   "family": "Terminal-Lego",
+   "task": "task_10157",
+   "image": "terminal-lego/010157:latest",
+   "foundation_key": "84ca72d801d0ed8f5db4eca88553c8f0cd343b5d9fcff7c3445d51e2f20d74c4",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "71c2faa21efdbe585d0ba74d7b4edacbbf295ad6cf82bed6195f55d1cab8deda",
+   "recipe_matches": true,
+   "context_bytes": 1180
+  },
+  {
+   "id": "terminal-lego-130",
+   "family": "Terminal-Lego",
+   "task": "task_09227",
+   "image": "terminal-lego/009227:latest",
+   "foundation_key": "1e63d769802fea19fade59c33b7b39bbe82bf85c4f579a9750c1840f85e1ca97",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "d681d457f0d876290d32caa76e33d84fa2aac3060520f0d751ae64e1620079f8",
+   "recipe_matches": true,
+   "context_bytes": 1139
+  },
+  {
+   "id": "terminal-lego-131",
+   "family": "Terminal-Lego",
+   "task": "task_13839",
+   "image": "terminal-lego/013839:latest",
+   "foundation_key": "ebdb397d20fb78e50aa918f532d6d6b282099ec0a405a0501246df9b11ad89d6",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "938002ee6f0163831e37a435df5454c2083d54c84c4fb198bfe7821bd63eeb4e",
+   "recipe_matches": true,
+   "context_bytes": 991
+  },
+  {
+   "id": "terminal-lego-132",
+   "family": "Terminal-Lego",
+   "task": "task_13439",
+   "image": "terminal-lego/013439:latest",
+   "foundation_key": "e7a359640f6c81ca24c9d7d298f4061ac0cdfd31683a5dd2f9cf571644ff39ca",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "3a295e7accc60cf024cbd9d00f57e1723d517bceba8454682a7f93c6067ed35a",
+   "recipe_matches": true,
+   "context_bytes": 1006
+  },
+  {
+   "id": "terminal-lego-133",
+   "family": "Terminal-Lego",
+   "task": "task_00709",
+   "image": "terminal-lego/000709:latest",
+   "foundation_key": "46930f3b8ec599cdbc191a249d89be9974c680f1eca65f27ef9d1349485e7e70",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "42c8fa88077820adeed9f6a00ae493d736b2420a84b9e674c669a48177f0621e",
+   "recipe_matches": true,
+   "context_bytes": 1124
+  },
+  {
+   "id": "terminal-lego-134",
+   "family": "Terminal-Lego",
+   "task": "task_07173",
+   "image": "terminal-lego/007173:latest",
+   "foundation_key": "908b5c98b3451ef94cce2ad5083003388932f1b89d482ffbe9c5edee47bf9281",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "bf7cdcc51002fedd92cebcf08a87a8efb401aebb4d059c673df5b3ec2b9a3d71",
+   "recipe_matches": true,
+   "context_bytes": 1138
+  },
+  {
+   "id": "terminal-lego-135",
+   "family": "Terminal-Lego",
+   "task": "task_04287",
+   "image": "terminal-lego/004287:latest",
+   "foundation_key": "ce7c9a740fa4feba0f1203133964a297910706c658e80d86b8bb55d4e2bdd6de",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "ed37005da961ac006db8970e772a89f6d59cf12e61bf6523a6138e7333faac95",
+   "recipe_matches": true,
+   "context_bytes": 1373
+  },
+  {
+   "id": "terminal-lego-136",
+   "family": "Terminal-Lego",
+   "task": "task_10549",
+   "image": "terminal-lego/010549:latest",
+   "foundation_key": "3157da7aaabde00f38267427d7fbfa72323e89d125ed2f8f95dbe239d105ae12",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "79c7e0416163c0c168ac6e34ccabcb3acdbfe78cb08516ccd9d0f16fbea8ffc5",
+   "recipe_matches": true,
+   "context_bytes": 1164
+  },
+  {
+   "id": "terminal-lego-137",
+   "family": "Terminal-Lego",
+   "task": "task_00371",
+   "image": "terminal-lego/000371:latest",
+   "foundation_key": "36c0790cd215dc275dc069f175c8a85b3c2f776386f2d39435687cdc96ceb177",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "77341c84a2d3199083ce270ee7bc8385115fe750576c4190dd811ce5734ed62a",
+   "recipe_matches": true,
+   "context_bytes": 1294
+  },
+  {
+   "id": "terminal-lego-138",
+   "family": "Terminal-Lego",
+   "task": "task_00790",
+   "image": "terminal-lego/000790:latest",
+   "foundation_key": "f7f7956d6aeb4858e6faa927e9a6cbe2eac1fc1f4c2f251b06c5963344978471",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "0224d44484cfd14450a8f0af709cee520146949c1b19ee8d14c7a1825eafc676",
+   "recipe_matches": true,
+   "context_bytes": 2698
+  },
+  {
+   "id": "terminal-lego-139",
+   "family": "Terminal-Lego",
+   "task": "task_04240",
+   "image": "terminal-lego/004240:latest",
+   "foundation_key": "48934572bd64f5cd0e200b8dc1da6b8b86e8a81278c29020abec2d318dd2feb1",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "43d0937b7103331a7d86347066ada4a3e8c167bf5c1c55ad281fdbfbcca0b39e",
+   "recipe_matches": true,
+   "context_bytes": 2881
+  },
+  {
+   "id": "terminal-lego-140",
+   "family": "Terminal-Lego",
+   "task": "task_14870",
+   "image": "terminal-lego/014870:latest",
+   "foundation_key": "8967abbeba6c906611d69569e81437e36b2d805054d79417cb8204125ade8c7d",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "1ba347cfdc430ebaf6dfb7c4da641cf77309783ac808bd7a9e2c102b74ecbeac",
+   "recipe_matches": true,
+   "context_bytes": 1552
+  },
+  {
+   "id": "terminal-lego-141",
+   "family": "Terminal-Lego",
+   "task": "task_06767",
+   "image": "terminal-lego/006767:latest",
+   "foundation_key": "e9d7ed0c5035a54e00397b47bf1550a341c320ea9327a28a3da5c75a04ecede2",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "d834fe9d33e8d64ff9b7ea4bc3885b37791386331e600918420a3723f9904093",
+   "recipe_matches": true,
+   "context_bytes": 1156
+  },
+  {
+   "id": "terminal-lego-142",
+   "family": "Terminal-Lego",
+   "task": "task_05980",
+   "image": "terminal-lego/005980:latest",
+   "foundation_key": "ee1a6f2308d08d322a69c170e143e6ec99a4d5bab75eb7a2dbba4dd0a72293cd",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "42bb28c7db874f84caca466a54f6e39e386ea2a882e3ed307d3d8db9e64572aa",
+   "recipe_matches": true,
+   "context_bytes": 1596
+  },
+  {
+   "id": "terminal-lego-143",
+   "family": "Terminal-Lego",
+   "task": "task_01400",
+   "image": "terminal-lego/001400:latest",
+   "foundation_key": "48934572bd64f5cd0e200b8dc1da6b8b86e8a81278c29020abec2d318dd2feb1",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "23aec1869b2d9c47fa026d3342e5916ad64011c3779966bcef95339a6d4d208e",
+   "recipe_matches": true,
+   "context_bytes": 1396
+  },
+  {
+   "id": "terminal-lego-144",
+   "family": "Terminal-Lego",
+   "task": "task_10248",
+   "image": "terminal-lego/010248:latest",
+   "foundation_key": "fe89708cfd29ed9558454880015ded3a968e08672759fb26bfcea99e9cb842e5",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "a1a88f2ba929f544946a3582f45f1a36504baf59c2ede41ecc8ba8f7fdb155bb",
+   "recipe_matches": true,
+   "context_bytes": 1388
+  },
+  {
+   "id": "terminal-lego-145",
+   "family": "Terminal-Lego",
+   "task": "task_03675",
+   "image": "terminal-lego/003675:latest",
+   "foundation_key": "2d597856eb7829ada83275c88e5af6cbd30c91f8e7ce8b7e3ea642cf3b7414aa",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "90a0f87a56ba141ba54372e227e7c10ddb1c48818c0a70abbc29880662450427",
+   "recipe_matches": true,
+   "context_bytes": 1311
+  },
+  {
+   "id": "terminal-lego-146",
+   "family": "Terminal-Lego",
+   "task": "task_07297",
+   "image": "terminal-lego/007297:latest",
+   "foundation_key": "6269e73ac23256fd026adc6fce0b71193aca1816b6dd3767e80437953b342a92",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "630e5bbe465f880678a35f230a3e9bc64bdeedbfe13c4436554d473a25d21769",
+   "recipe_matches": true,
+   "context_bytes": 1223
+  },
+  {
+   "id": "terminal-lego-147",
+   "family": "Terminal-Lego",
+   "task": "task_11505",
+   "image": "terminal-lego/011505:latest",
+   "foundation_key": "566689590cba5ae5848c874db95a18736d3588a99530248a85bf9348806118c8",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "ec35bca8672bd57ebe4983926f734005cce4d632d2e50f8e7592e7030015aa66",
+   "recipe_matches": true,
+   "context_bytes": 1810
+  },
+  {
+   "id": "terminal-lego-148",
+   "family": "Terminal-Lego",
+   "task": "task_10148",
+   "image": "terminal-lego/010148:latest",
+   "foundation_key": "cb1ad0165b13bf142f942487fe3ebe95ab3c629a1c6f6ac67b86b7c6671cc35d",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "0d69ad12dc10f9f3171530596ed7cf6825ed59683b159182bc7eef96fdc15afb",
+   "recipe_matches": true,
+   "context_bytes": 1855
+  },
+  {
+   "id": "terminal-lego-149",
+   "family": "Terminal-Lego",
+   "task": "task_15034",
+   "image": "terminal-lego/015034:latest",
+   "foundation_key": "ebdb397d20fb78e50aa918f532d6d6b282099ec0a405a0501246df9b11ad89d6",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "4b95e3a3d5d6c7e4b71797efe3285aea39e9360ab599516111016d6e9fe7c133",
+   "recipe_matches": true,
+   "context_bytes": 990
+  },
+  {
+   "id": "terminal-lego-150",
+   "family": "Terminal-Lego",
+   "task": "task_04341",
+   "image": "terminal-lego/004341:latest",
+   "foundation_key": "b501e1ae628828be6084f9f046a8df8309f6faa72f924bfbfe2d877d78e32212",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "16b2fb3f08a6063695eaf21f1e3bd2a5dec4e2da618f89b0e77e49cd2247f0a9",
+   "recipe_matches": true,
+   "context_bytes": 1053
+  },
+  {
+   "id": "terminal-lego-151",
+   "family": "Terminal-Lego",
+   "task": "task_04992",
+   "image": "terminal-lego/004992:latest",
+   "foundation_key": "7e77d51936353dd596452d85d2a4eb6e4a75fd57e5a55d7d14d8153070c7b898",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "298bd44c4b7d63c68e350ba1a4dc480e21eafff2ce3c65aae1016008a2e49f70",
+   "recipe_matches": true,
+   "context_bytes": 1283
+  },
+  {
+   "id": "terminal-lego-152",
+   "family": "Terminal-Lego",
+   "task": "task_01276",
+   "image": "terminal-lego/001276:latest",
+   "foundation_key": "e9d7ed0c5035a54e00397b47bf1550a341c320ea9327a28a3da5c75a04ecede2",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "04cef9a7cf2251af87ecc3867c0b8895ea0a7a65f593de1d1a217f6b6d7ede45",
+   "recipe_matches": true,
+   "context_bytes": 1152
+  },
+  {
+   "id": "terminal-lego-153",
+   "family": "Terminal-Lego",
+   "task": "task_01369",
+   "image": "terminal-lego/001369:latest",
+   "foundation_key": "7fb103b1192cd76bfe052671c0432f6a3649e6ea20d624d674455fe5b869f0d1",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "865bc5d7359a679fb109e4ad7f5fdbaacef2fb43606422e024eb200db92fd8b4",
+   "recipe_matches": true,
+   "context_bytes": 1214
+  },
+  {
+   "id": "terminal-lego-154",
+   "family": "Terminal-Lego",
+   "task": "task_09104",
+   "image": "terminal-lego/009104:latest",
+   "foundation_key": "b5f47a8ca62cbbbb12a453ac1e61e7ae9263df9521a71aa1042c9a8dd8681e75",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "2b9377ac9eb848ae776a0f09b2a2df479e6f0311a4bf2ab295c8fac14a05e616",
+   "recipe_matches": true,
+   "context_bytes": 1132
+  },
+  {
+   "id": "terminal-lego-155",
+   "family": "Terminal-Lego",
+   "task": "task_02232",
+   "image": "terminal-lego/002232:latest",
+   "foundation_key": "eae1595344df8b92eb30b672e4927aca9010d4ce04a89904e87d11c7bba01e7f",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "8f2a6a8c42175f7aed79ec94a7ca126334622d4d43193621e33d9c3f3240b8d6",
+   "recipe_matches": true,
+   "context_bytes": 2041
+  },
+  {
+   "id": "terminal-lego-156",
+   "family": "Terminal-Lego",
+   "task": "task_06413",
+   "image": "terminal-lego/006413:latest",
+   "foundation_key": "b5f47a8ca62cbbbb12a453ac1e61e7ae9263df9521a71aa1042c9a8dd8681e75",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "5e5c192424d06e7f882a0553f8b3bd611524a1aee06fb3902f0e4aa76e6c5e13",
+   "recipe_matches": true,
+   "context_bytes": 1132
+  },
+  {
+   "id": "terminal-lego-157",
+   "family": "Terminal-Lego",
+   "task": "task_10363",
+   "image": "terminal-lego/010363:latest",
+   "foundation_key": "06da96201d0bdac1d467300a45001e749b451603d83cfbe789aa83c5dbe6a79c",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "8e07b9cc6f93d1e90f26954fa3db46a335736f2d4a7d55099836657407b4e72f",
+   "recipe_matches": true,
+   "context_bytes": 1086
+  },
+  {
+   "id": "terminal-lego-158",
+   "family": "Terminal-Lego",
+   "task": "task_12079",
+   "image": "terminal-lego/012079:latest",
+   "foundation_key": "6a0bdb540a0111b2c21fb996bf3cf3a83612b30152301507f95742f02f29422a",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "23d720cbe8d958b18d44142cada49f0c826fcbc7f32e1434e791fa449c00d4a6",
+   "recipe_matches": true,
+   "context_bytes": 1273
+  },
+  {
+   "id": "terminal-lego-159",
+   "family": "Terminal-Lego",
+   "task": "task_04321",
+   "image": "terminal-lego/004321:latest",
+   "foundation_key": "6c6aaf06127bce091cd100ca1b1a0f417c413a0a03a261c9c4c743558f2f2ea6",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "bac3fbd8e8e39a102a1013fbc6e018ad543a67e28c4a3bc06ea39cddd2cff369",
+   "recipe_matches": true,
+   "context_bytes": 1265
+  },
+  {
+   "id": "terminal-lego-160",
+   "family": "Terminal-Lego",
+   "task": "task_13373",
+   "image": "terminal-lego/013373:latest",
+   "foundation_key": "9dc10c9c274c42858b4c6d97c2d432787e9f7510c11bb22f5d026906b0b0c46f",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "627c53cf06eabd197819cf2e8754cd475f2b135f400ab5144afea5690c8088ac",
+   "recipe_matches": true,
+   "context_bytes": 1026
+  },
+  {
+   "id": "terminal-lego-161",
+   "family": "Terminal-Lego",
+   "task": "task_13508",
+   "image": "terminal-lego/013508:latest",
+   "foundation_key": "b501e1ae628828be6084f9f046a8df8309f6faa72f924bfbfe2d877d78e32212",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "0aad0d8fa94823a69724275cfe12093c2c00d3687c3eb2ed1baac72bdc0d1980",
+   "recipe_matches": true,
+   "context_bytes": 1002
+  },
+  {
+   "id": "terminal-lego-162",
+   "family": "Terminal-Lego",
+   "task": "task_03853",
+   "image": "terminal-lego/003853:latest",
+   "foundation_key": "84ca72d801d0ed8f5db4eca88553c8f0cd343b5d9fcff7c3445d51e2f20d74c4",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "b095fb72533d5c29494c7bca98a4107e74c5c8f36c847d6ac0134f93188681fe",
+   "recipe_matches": true,
+   "context_bytes": 1340
+  },
+  {
+   "id": "terminal-lego-163",
+   "family": "Terminal-Lego",
+   "task": "task_07030",
+   "image": "terminal-lego/007030:latest",
+   "foundation_key": "10af289b5fef3f261ea9205b74ae26e985022044ccbbe2db116b6bb33e24ba78",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "68042aeaeddd358681f65bd6e9c06a75b558cfe358f06d78d1f63eacd8bd5b77",
+   "recipe_matches": true,
+   "context_bytes": 1929
+  },
+  {
+   "id": "terminal-lego-164",
+   "family": "Terminal-Lego",
+   "task": "task_10819",
+   "image": "terminal-lego/010819:latest",
+   "foundation_key": "6aeb441391ccc945e6f95406e73badcecb309011b5fff3edfb4db993664b60e3",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "7e3cb817c5de5ac9a90730b99dc53206d554733e88104b52566b3a94cdcb21b4",
+   "recipe_matches": true,
+   "context_bytes": 1081
+  },
+  {
+   "id": "terminal-lego-165",
+   "family": "Terminal-Lego",
+   "task": "task_05768",
+   "image": "terminal-lego/005768:latest",
+   "foundation_key": "172861902e3e28f32edaae09d76def4963c032129a3f04d251c52c8d5eddeb66",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "6869d4c772f3e751f85aa23fbe893b956afe5aa8e18474fbd6612e0dc551ef93",
+   "recipe_matches": true,
+   "context_bytes": 1373
+  },
+  {
+   "id": "terminal-lego-166",
+   "family": "Terminal-Lego",
+   "task": "task_07343",
+   "image": "terminal-lego/007343:latest",
+   "foundation_key": "8bc94e93b40f259df51e54efe109dc19b60066470a8827b9227d0395daea3330",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "3725800ccd137df4e2c14d46f01dc40f28e8aeece483f9a57ae2eddf8503cd0e",
+   "recipe_matches": true,
+   "context_bytes": 1342
+  },
+  {
+   "id": "terminal-lego-167",
+   "family": "Terminal-Lego",
+   "task": "task_00930",
+   "image": "terminal-lego/000930:latest",
+   "foundation_key": "6a0bdb540a0111b2c21fb996bf3cf3a83612b30152301507f95742f02f29422a",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "d43183a71fedfa2c486b71a6621bf66f9e9de6cd1bebc3fcc6c36416fb24d35f",
+   "recipe_matches": true,
+   "context_bytes": 1093
+  },
+  {
+   "id": "terminal-lego-168",
+   "family": "Terminal-Lego",
+   "task": "task_12128",
+   "image": "terminal-lego/012128:latest",
+   "foundation_key": "34dee6c10746521f1766836aae503da7736ef90f153db3212fb4d5123d866ba6",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "78fe5c3f8665b2336737612a50477d74473cdc2347006af67bb8952436950060",
+   "recipe_matches": true,
+   "context_bytes": 1266
+  },
+  {
+   "id": "terminal-lego-169",
+   "family": "Terminal-Lego",
+   "task": "task_01569",
+   "image": "terminal-lego/001569:latest",
+   "foundation_key": "7ee7186815b8a6dbb7bca07b64702b77c1ac778f0f7e191faab592cee0b6bbfd",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "0b82798fe3a3bc05ae3eb113f50c8f88eb07baf4fcc6802d8ab64ba42adf1c1f",
+   "recipe_matches": true,
+   "context_bytes": 1109
+  },
+  {
+   "id": "terminal-lego-170",
+   "family": "Terminal-Lego",
+   "task": "task_00390",
+   "image": "terminal-lego/000390:latest",
+   "foundation_key": "3fd4d8490ec03a561f789e6fa7ffbfbf752d0c1062de95341f477b076f6785fd",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "5582b30ab4e3d4dbe4d8c332d2a38e6f8b73df0e54cae000d1c6bf4d7b3f2db1",
+   "recipe_matches": true,
+   "context_bytes": 1171
+  },
+  {
+   "id": "terminal-lego-171",
+   "family": "Terminal-Lego",
+   "task": "task_04911",
+   "image": "terminal-lego/004911:latest",
+   "foundation_key": "3c371ee9599d2754d0a4c83f515d013bc73b01187e1d8125358190cb7387833a",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "3ace44a9e226f94334801bb0799c9c7d0c3dd4d24c0222ac131503f419cea2c5",
+   "recipe_matches": true,
+   "context_bytes": 1315
+  },
+  {
+   "id": "terminal-lego-172",
+   "family": "Terminal-Lego",
+   "task": "task_05090",
+   "image": "terminal-lego/005090:latest",
+   "foundation_key": "7c4725d646c3e201dcfd31c4ddbe427a0c777ae53ad88fe1abe7dec7f04c5fea",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "fae849f4c7965a30674a6821c464f2cf51982f29c98a57c0d159713925d8d29c",
+   "recipe_matches": true,
+   "context_bytes": 1308
+  },
+  {
+   "id": "terminal-lego-173",
+   "family": "Terminal-Lego",
+   "task": "task_06515",
+   "image": "terminal-lego/006515:latest",
+   "foundation_key": "004b516ce6dcae2049162c9e3dce66bf7b5074ec2e81e75fd9c3d7b01c5944dc",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "4c2575968c69d03b5a2e0f6ea91d7eb83f3c771f0a11be2de08e23dd204bb528",
+   "recipe_matches": true,
+   "context_bytes": 4813
+  },
+  {
+   "id": "terminal-lego-174",
+   "family": "Terminal-Lego",
+   "task": "task_10324",
+   "image": "terminal-lego/010324:latest",
+   "foundation_key": "d3431fd7fe172fb3b39968ffe4e5972bd902fd6f6c65b579c5d29ea6e1e50476",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "369a55bece7eff44f1884c9c2cf449ef8d0c0c318e5f015986e99661df0a5144",
+   "recipe_matches": true,
+   "context_bytes": 1274
+  },
+  {
+   "id": "terminal-lego-175",
+   "family": "Terminal-Lego",
+   "task": "task_11288",
+   "image": "terminal-lego/011288:latest",
+   "foundation_key": "b501e1ae628828be6084f9f046a8df8309f6faa72f924bfbfe2d877d78e32212",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "4dfb17bb8f1cd9c69546d10e1756b0a99ce650843383d2833e1e4e877f19294e",
+   "recipe_matches": true,
+   "context_bytes": 1276
+  },
+  {
+   "id": "terminal-lego-176",
+   "family": "Terminal-Lego",
+   "task": "task_06448",
+   "image": "terminal-lego/006448:latest",
+   "foundation_key": "de86d2f6a8681307fa51640e037b164d6354075836576e64036acca0e1fbca0e",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "095b27967222f1cea4e5c3a3a84168fbd93e8c5d2f545fed3facb945d9dc7e08",
+   "recipe_matches": true,
+   "context_bytes": 1202
+  },
+  {
+   "id": "terminal-lego-177",
+   "family": "Terminal-Lego",
+   "task": "task_08963",
+   "image": "terminal-lego/008963:latest",
+   "foundation_key": "e9d7ed0c5035a54e00397b47bf1550a341c320ea9327a28a3da5c75a04ecede2",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "4e8fbc18557de737802596b953e7d2d24e40a5a8946e3bf29c02006941d0339f",
+   "recipe_matches": true,
+   "context_bytes": 1190
+  },
+  {
+   "id": "terminal-lego-178",
+   "family": "Terminal-Lego",
+   "task": "task_12864",
+   "image": "terminal-lego/012864:latest",
+   "foundation_key": "b501e1ae628828be6084f9f046a8df8309f6faa72f924bfbfe2d877d78e32212",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "94ed9e08f138265ae6a63e406dbe39458583c6525ea422ae46a44ded25083067",
+   "recipe_matches": true,
+   "context_bytes": 1001
+  },
+  {
+   "id": "terminal-lego-179",
+   "family": "Terminal-Lego",
+   "task": "task_09894",
+   "image": "terminal-lego/009894:latest",
+   "foundation_key": "b501e1ae628828be6084f9f046a8df8309f6faa72f924bfbfe2d877d78e32212",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "c13d93417167f67b4f5441170aa9e81c08f8b8e066f068bee92873fc0d55ceb9",
+   "recipe_matches": true,
+   "context_bytes": 1064
+  },
+  {
+   "id": "terminal-lego-180",
+   "family": "Terminal-Lego",
+   "task": "task_09413",
+   "image": "terminal-lego/009413:latest",
+   "foundation_key": "2d597856eb7829ada83275c88e5af6cbd30c91f8e7ce8b7e3ea642cf3b7414aa",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "26348adf4fbc9d26cf22a6bc9c9e731fd1b6c00159a4af4e6d840dbfe82ad239",
+   "recipe_matches": true,
+   "context_bytes": 1381
+  },
+  {
+   "id": "terminal-lego-181",
+   "family": "Terminal-Lego",
+   "task": "task_03614",
+   "image": "terminal-lego/003614:latest",
+   "foundation_key": "4045bbf5af9a29978bcd740619cdb0e9092155835065c1bb444e44a03c2f3276",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "47d742ef5706bc215680fdee98062d7543202ac2e04a0fb5a307e65e079137af",
+   "recipe_matches": true,
+   "context_bytes": 1275
+  },
+  {
+   "id": "terminal-lego-182",
+   "family": "Terminal-Lego",
+   "task": "task_06086",
+   "image": "terminal-lego/006086:latest",
+   "foundation_key": "9809e60b2704b3bc2e530358fe1807080b5b9400755ef8f0628c693ba794dc2c",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "af124e8094a73cb62f802ad10a0ac2a1401fab314b7c37ce7ff0fb2854033c92",
+   "recipe_matches": true,
+   "context_bytes": 1276
+  },
+  {
+   "id": "terminal-lego-183",
+   "family": "Terminal-Lego",
+   "task": "task_13513",
+   "image": "terminal-lego/013513:latest",
+   "foundation_key": "d0c598407c9860cda242fbfda6f53e7e228965cd7a2911eda4b360428e0b539b",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "9bf522a371b8874fb61a12978d6694293e5f4bd330659b2f2124a69b77f6b30b",
+   "recipe_matches": true,
+   "context_bytes": 3595
+  },
+  {
+   "id": "terminal-lego-184",
+   "family": "Terminal-Lego",
+   "task": "task_11597",
+   "image": "terminal-lego/011597:latest",
+   "foundation_key": "94cedade83f8e5d8914023bd3e0c5580ee4c18bb829a25c6879b10132e71da7c",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "6fa3ad25c804b1e2658a5e86f14564d542650d0a987bcda75aa5ed18dd2c5da6",
+   "recipe_matches": true,
+   "context_bytes": 1184
+  },
+  {
+   "id": "terminal-lego-185",
+   "family": "Terminal-Lego",
+   "task": "task_01414",
+   "image": "terminal-lego/001414:latest",
+   "foundation_key": "1bf29cdd8d1ac9da73aed0c2c244544cd8fb568af22dd0df2cb5d771d0e10f0b",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "a1ed5d385adbbf23e3ad0f4753cc021745ea14c41d0c5820d092ab1f127e9c6d",
+   "recipe_matches": true,
+   "context_bytes": 1159
+  },
+  {
+   "id": "terminal-lego-186",
+   "family": "Terminal-Lego",
+   "task": "task_03737",
+   "image": "terminal-lego/003737:latest",
+   "foundation_key": "2313a563c888e2315768776bf0229ed2afa648a0c57aa1ac16da42ab244a6b13",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "53f714eeb5d05a69f3a52ec43c4aa90a805c9fda36b57b6385c2399ac776f03b",
+   "recipe_matches": true,
+   "context_bytes": 1604
+  },
+  {
+   "id": "terminal-lego-187",
+   "family": "Terminal-Lego",
+   "task": "task_08848",
+   "image": "terminal-lego/008848:latest",
+   "foundation_key": "133ad5508e077b093c18349f4c4e7665e853f490b1fbe0ecade2d529a50d1197",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "b36ef6eb0ee8626aea62f6014be19f0ff7c4daa2909604fe47f8af15749ec81e",
+   "recipe_matches": true,
+   "context_bytes": 1542
+  },
+  {
+   "id": "terminal-lego-188",
+   "family": "Terminal-Lego",
+   "task": "task_05088",
+   "image": "terminal-lego/005088:latest",
+   "foundation_key": "1bf29cdd8d1ac9da73aed0c2c244544cd8fb568af22dd0df2cb5d771d0e10f0b",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "e680b7a666f1346c1a2307257da284fc9484752c918c31ca94423f93e2250bfb",
+   "recipe_matches": true,
+   "context_bytes": 1160
+  },
+  {
+   "id": "terminal-lego-189",
+   "family": "Terminal-Lego",
+   "task": "task_04185",
+   "image": "terminal-lego/004185:latest",
+   "foundation_key": "6c6aaf06127bce091cd100ca1b1a0f417c413a0a03a261c9c4c743558f2f2ea6",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "8dd7a2769550adb59a779d2419d574e4816e74299366f014788a01007003302f",
+   "recipe_matches": true,
+   "context_bytes": 1290
+  },
+  {
+   "id": "terminal-lego-190",
+   "family": "Terminal-Lego",
+   "task": "task_14555",
+   "image": "terminal-lego/014555:latest",
+   "foundation_key": "968c55fac7ed9c4b4127a800588f50b5a4744fb00e98dde9783a4a6566472380",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "bca2983aff32fc5f412c08a2a0655221da842857c603f08ad6961411c77fc6cb",
+   "recipe_matches": true,
+   "context_bytes": 1848
+  },
+  {
+   "id": "terminal-lego-191",
+   "family": "Terminal-Lego",
+   "task": "task_12369",
+   "image": "terminal-lego/012369:latest",
+   "foundation_key": "87c520596cc31320961d97bae8be371d62c5005061385faa368916da279fd798",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "b8328f1f53dd4d2ba3b4aa73d08e3efcd8f03df5f4f482141ee81ce248836c70",
+   "recipe_matches": true,
+   "context_bytes": 1044
+  },
+  {
+   "id": "terminal-lego-192",
+   "family": "Terminal-Lego",
+   "task": "task_01304",
+   "image": "terminal-lego/001304:latest",
+   "foundation_key": "e9d7ed0c5035a54e00397b47bf1550a341c320ea9327a28a3da5c75a04ecede2",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "74c2d885bd29b31c403deb32096cf1f527767cd1110655b2364ae99165ef0e35",
+   "recipe_matches": true,
+   "context_bytes": 1122
+  },
+  {
+   "id": "terminal-lego-193",
+   "family": "Terminal-Lego",
+   "task": "task_12753",
+   "image": "terminal-lego/012753:latest",
+   "foundation_key": "9e268b2d15ae078c88d84e920287afe66864581152fe7155d8bc0a04b286ab76",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "b753746984da73408a0b578de61679e69a5bc956a96ff9693a7691e2f7b3036b",
+   "recipe_matches": true,
+   "context_bytes": 1071
+  },
+  {
+   "id": "terminal-lego-194",
+   "family": "Terminal-Lego",
+   "task": "task_01881",
+   "image": "terminal-lego/001881:latest",
+   "foundation_key": "828a326b2b9f1c3ba6a02d749c8310195df4475dcb8022919b571f25f98cb478",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "99b4392ef94fe8a209d429d6b39f6b6435fb892618ab4aacf69df05b3419f32b",
+   "recipe_matches": true,
+   "context_bytes": 3606
+  },
+  {
+   "id": "terminal-lego-195",
+   "family": "Terminal-Lego",
+   "task": "task_03369",
+   "image": "terminal-lego/003369:latest",
+   "foundation_key": "652dbb6d97b094da0d6c8a13ad9dacc3a74b23b9040812afaa6e2f1c28ab17ad",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "078d9131ea7a618d2971b33770ee8b260317d8e6a7ade9925b88e3b368fec3ac",
+   "recipe_matches": true,
+   "context_bytes": 1075
+  },
+  {
+   "id": "terminal-lego-196",
+   "family": "Terminal-Lego",
+   "task": "task_00660",
+   "image": "terminal-lego/000660:latest",
+   "foundation_key": "6a0bdb540a0111b2c21fb996bf3cf3a83612b30152301507f95742f02f29422a",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "68e042bee7a55fdddd69e9b78ecc630a9dc2c309deeb2d4d278ffeaad9f4ac3b",
+   "recipe_matches": true,
+   "context_bytes": 1094
+  },
+  {
+   "id": "terminal-lego-197",
+   "family": "Terminal-Lego",
+   "task": "task_13004",
+   "image": "terminal-lego/013004:latest",
+   "foundation_key": "03dc0595c7a0bb0e35d8fdb7cb181395df371e5f0cb27706e750df0ddeaa3783",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "be7b9eab1524dbba2fde8e4a316146023271dfb24bcf9bb98d36917ac1a4f502",
+   "recipe_matches": true,
+   "context_bytes": 1413
+  },
+  {
+   "id": "terminal-lego-198",
+   "family": "Terminal-Lego",
+   "task": "task_07573",
+   "image": "terminal-lego/007573:latest",
+   "foundation_key": "ccf61eca62f3438202d586781559a2423b44629ab7cc0ffe63fbe03112c7dfd5",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "661b07ffb652399ae477b4e280c9258e89991e9685f2e3586f9b30bf058a250c",
+   "recipe_matches": true,
+   "context_bytes": 1174
+  },
+  {
+   "id": "terminal-lego-199",
+   "family": "Terminal-Lego",
+   "task": "task_07192",
+   "image": "terminal-lego/007192:latest",
+   "foundation_key": "ca50f1a79b1f609e014a6f6447ba75e734eac484a3f03b8e0b7c2173412ba9c7",
+   "remaining_build_work": [
+    "context_transfer",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "c370834c0b74e280c8f9bf6854a8ab668337e090863fff5346e783d3df6aa22c",
+   "recipe_matches": true,
+   "context_bytes": 2644
+  },
+  {
+   "id": "openswe-200",
+   "family": "OpenSWE",
+   "task": "openswe--getmoto__moto-7961",
+   "image": "openswe/getmoto.moto-7961:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "8439495c25128966611cee8a63185a1767f5f2a673a9629e4c61868fc6c8e859",
+   "recipe_matches": true,
+   "context_bytes": 1798
+  },
+  {
+   "id": "openswe-201",
+   "family": "OpenSWE",
+   "task": "openswe--ultralytics__yolov5-4919",
+   "image": "openswe/ultralytics.yolov5-4919:latest",
+   "foundation_key": "9032b856d86cc97b9deb1a9d5776cf2e2c6a94ad6ce8833f2a611ccd82a791e0",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "81e8a404f9d25ad5c75d69975cad742e79d97976c266d3107203163084333fd1",
+   "recipe_matches": true,
+   "context_bytes": 2363
+  },
+  {
+   "id": "openswe-202",
+   "family": "OpenSWE",
+   "task": "openswe--jsh9__pydoclint-25",
+   "image": "openswe/jsh9.pydoclint-25:latest",
+   "foundation_key": "24cb913a0a251d9580b0a960bed04816589a7bdccc581665703f6051e3271d45",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "30c784668403fefc29007e9370cc5dacf8c9267493c4646fcd2251b8b905c328",
+   "recipe_matches": true,
+   "context_bytes": 2898
+  },
+  {
+   "id": "openswe-203",
+   "family": "OpenSWE",
+   "task": "openswe--strawberry-graphql__strawberry-django-533",
+   "image": "openswe/strawberry-graphql.strawberry-django-533:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "0b644cbede6a367ce82e141aa960adeb65c4ccfc7d02cba1c6fcf6c7261ac078",
+   "recipe_matches": true,
+   "context_bytes": 2234
+  },
+  {
+   "id": "openswe-204",
+   "family": "OpenSWE",
+   "task": "openswe--galaxyproject__galaxy-language-server-100",
+   "image": "openswe/galaxyproject.galaxy-language-server-100:latest",
+   "foundation_key": "9032b856d86cc97b9deb1a9d5776cf2e2c6a94ad6ce8833f2a611ccd82a791e0",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "135d272c1e3beda7f8209337d6f0b009ba0a6d95e663db68d32c55c63877f6ef",
+   "recipe_matches": true,
+   "context_bytes": 1331
+  },
+  {
+   "id": "openswe-205",
+   "family": "OpenSWE",
+   "task": "openswe--antonagestam__phantom-types-56",
+   "image": "openswe/antonagestam.phantom-types-56:latest",
+   "foundation_key": "117ca927ec30d66379411f016997169f7dea95dba8f3456c9ba5b489d9f8fc6c",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "7c2b878417e5149669534bcb5e13235f36b8defcf0d61273be3e12b36d69b6a6",
+   "recipe_matches": true,
+   "context_bytes": 1204
+  },
+  {
+   "id": "openswe-206",
+   "family": "OpenSWE",
+   "task": "openswe--modin-project__modin-652",
+   "image": "openswe/modin-project.modin-652:latest",
+   "foundation_key": "3ca1c91e3fc3ae8f67e87437aefbaa02b2ca92b971f9a1bc3477499fc0b9d0b4",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "e6848ee5796d8087eb0d3d0bc7c4014b4f06807f5dd3c83f2f68f900731006f2",
+   "recipe_matches": true,
+   "context_bytes": 3849
+  },
+  {
+   "id": "openswe-207",
+   "family": "OpenSWE",
+   "task": "openswe--akarve__bipsea-65",
+   "image": "openswe/akarve.bipsea-65:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "07b6fa1998ddb2f8294def60cc606554db4d5631d85dac77da15f5ca5ec0f6f9",
+   "recipe_matches": true,
+   "context_bytes": 2470
+  },
+  {
+   "id": "openswe-208",
+   "family": "OpenSWE",
+   "task": "openswe--mpmath__mpmath-828",
+   "image": "openswe/mpmath.mpmath-828:latest",
+   "foundation_key": "35e4faa0d30e4ce979b8a61805eb26adf2e316791c0cc41c298247e0e394ed66",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "eda4fb2a2caa9cb78ad705b4de96eb65aaa4315e7827c60b2878e34cd98b7655",
+   "recipe_matches": true,
+   "context_bytes": 1607
+  },
+  {
+   "id": "openswe-209",
+   "family": "OpenSWE",
+   "task": "openswe--graphinglib__graphinglib-125",
+   "image": "openswe/graphinglib.graphinglib-125:latest",
+   "foundation_key": "24cb913a0a251d9580b0a960bed04816589a7bdccc581665703f6051e3271d45",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "6cfe27781de58bd5d0e8b11f7a34b7bba479b26e8daac24028c5ba84b65d9096",
+   "recipe_matches": true,
+   "context_bytes": 1193
+  },
+  {
+   "id": "openswe-210",
+   "family": "OpenSWE",
+   "task": "openswe--amundsen-io__amundsen-1330",
+   "image": "openswe/amundsen-io.amundsen-1330:latest",
+   "foundation_key": "944e5a6f9422cd9c07caf7b3d5035026183c682ac27299dc56f48bfc2f856902",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "7c1fe23870cbac5763b26ae419603775f32f3c6e85ab90e02e7dab03909341ab",
+   "recipe_matches": true,
+   "context_bytes": 1743
+  },
+  {
+   "id": "openswe-211",
+   "family": "OpenSWE",
+   "task": "openswe--ptb-mr__mrpro-234",
+   "image": "openswe/ptb-mr.mrpro-234:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "7e888333253eb23ece47f497e339c60262e7f8f630684d9348faf699596dd571",
+   "recipe_matches": true,
+   "context_bytes": 2904
+  },
+  {
+   "id": "openswe-212",
+   "family": "OpenSWE",
+   "task": "openswe--mandiant__capa-2014",
+   "image": "openswe/mandiant.capa-2014:latest",
+   "foundation_key": "24cb913a0a251d9580b0a960bed04816589a7bdccc581665703f6051e3271d45",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "1160f442e7ee27caa0d104dd9e89499f8e7e481cb202e65d1bb288f0779ddb13",
+   "recipe_matches": true,
+   "context_bytes": 3847
+  },
+  {
+   "id": "openswe-213",
+   "family": "OpenSWE",
+   "task": "openswe--ida-arbeitszeit__arbeitszeitapp-338",
+   "image": "openswe/ida-arbeitszeit.arbeitszeitapp-338:latest",
+   "foundation_key": "117ca927ec30d66379411f016997169f7dea95dba8f3456c9ba5b489d9f8fc6c",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "2d90f634773d536558ef4980e57b50c181332048b57b307a6bf184e78633bfaf",
+   "recipe_matches": true,
+   "context_bytes": 1596
+  },
+  {
+   "id": "openswe-214",
+   "family": "OpenSWE",
+   "task": "openswe--nonebot__nonebot-248",
+   "image": "openswe/nonebot.nonebot-248:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "49fa1939f876c051bf3fda3f62b2949818f1b39eaf18e03d51d3649c5c89b610",
+   "recipe_matches": true,
+   "context_bytes": 1501
+  },
+  {
+   "id": "openswe-215",
+   "family": "OpenSWE",
+   "task": "openswe--fniessink__toisto-659",
+   "image": "openswe/fniessink.toisto-659:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "6a25b668b74dbf264100eaa8faa7793f3a003931739cc02a8bdac62f7c6769cd",
+   "recipe_matches": true,
+   "context_bytes": 2698
+  },
+  {
+   "id": "openswe-216",
+   "family": "OpenSWE",
+   "task": "openswe--serokell__tezos-packaging-556",
+   "image": "openswe/serokell.tezos-packaging-556:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "968afd9fb00c4bf0d1d5815d28a75ed39a4b35969d8873aa28948827c239ec63",
+   "recipe_matches": true,
+   "context_bytes": 2407
+  },
+  {
+   "id": "openswe-217",
+   "family": "OpenSWE",
+   "task": "openswe--radioastronomysoftwaregroup__pyuvdata-1072",
+   "image": "openswe/radioastronomysoftwaregroup.pyuvdata-1072:latest",
+   "foundation_key": "117ca927ec30d66379411f016997169f7dea95dba8f3456c9ba5b489d9f8fc6c",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network",
+    "unknown_instruction"
+   ],
+   "recipe_sha256": "84c501830476fae59b87f47948fe3fe145f95ae777208a3f09976a314a95a82f",
+   "recipe_matches": true,
+   "context_bytes": 3926
+  },
+  {
+   "id": "openswe-218",
+   "family": "OpenSWE",
+   "task": "openswe--mongoengine__mongoengine-2393",
+   "image": "openswe/mongoengine.mongoengine-2393:latest",
+   "foundation_key": "9032b856d86cc97b9deb1a9d5776cf2e2c6a94ad6ce8833f2a611ccd82a791e0",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "390806b7cd23c37e21794520e3f5458a4cdebfaad29baef46f5eb42cb3779fb3",
+   "recipe_matches": true,
+   "context_bytes": 3594
+  },
+  {
+   "id": "openswe-219",
+   "family": "OpenSWE",
+   "task": "openswe--synbiodex__pysbol2-355",
+   "image": "openswe/synbiodex.pysbol2-355:latest",
+   "foundation_key": "9032b856d86cc97b9deb1a9d5776cf2e2c6a94ad6ce8833f2a611ccd82a791e0",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "7b3af5051e89c448b65c98e2035d4e4a90e4c7d8b79ecd0d34c18d08ccf6c77b",
+   "recipe_matches": true,
+   "context_bytes": 2210
+  },
+  {
+   "id": "openswe-220",
+   "family": "OpenSWE",
+   "task": "openswe--iamjackg__md2cf-30",
+   "image": "openswe/iamjackg.md2cf-30:latest",
+   "foundation_key": "f76865c684e04ed0c4429ade2d4945948b7ad0af880b0f173cb2742cd236f810",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "585bfb8f4b77e759aca30bd7681f27fbe685eb200ae1c4c2fa37df7fee3ac35d",
+   "recipe_matches": true,
+   "context_bytes": 1006
+  },
+  {
+   "id": "openswe-221",
+   "family": "OpenSWE",
+   "task": "openswe--daizutabi__hydraflow-58",
+   "image": "openswe/daizutabi.hydraflow-58:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "3e604e98ec75bb32ebf2e64f54eec5c923e8df7fee625598b79c14b791bb0e0c",
+   "recipe_matches": true,
+   "context_bytes": 1225
+  },
+  {
+   "id": "openswe-222",
+   "family": "OpenSWE",
+   "task": "openswe--getmoto__moto-9006",
+   "image": "openswe/getmoto.moto-9006:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "34cfe55c87b65b241e577cd7b3217a0c383dd9cbeda4f5f8f85536df7181ba08",
+   "recipe_matches": true,
+   "context_bytes": 2046
+  },
+  {
+   "id": "openswe-223",
+   "family": "OpenSWE",
+   "task": "openswe--borgbase__vorta-1855",
+   "image": "openswe/borgbase.vorta-1855:latest",
+   "foundation_key": "f76865c684e04ed0c4429ade2d4945948b7ad0af880b0f173cb2742cd236f810",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "adba3abda5f1a76e4db062436286755f10ff85016eecf698668e6f5438b8c502",
+   "recipe_matches": true,
+   "context_bytes": 2553
+  },
+  {
+   "id": "openswe-224",
+   "family": "OpenSWE",
+   "task": "openswe--keras-team__keras-20197",
+   "image": "openswe/keras-team.keras-20197:latest",
+   "foundation_key": "24cb913a0a251d9580b0a960bed04816589a7bdccc581665703f6051e3271d45",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "ca86dd83dd2b1881ec61baf475212e3e3d6cd204b9371cca333ff8349d85a7bf",
+   "recipe_matches": true,
+   "context_bytes": 2944
+  },
+  {
+   "id": "openswe-225",
+   "family": "OpenSWE",
+   "task": "openswe--thekevjames__coveralls-python-230",
+   "image": "openswe/thekevjames.coveralls-python-230:latest",
+   "foundation_key": "9032b856d86cc97b9deb1a9d5776cf2e2c6a94ad6ce8833f2a611ccd82a791e0",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "6bc6dca261434dd8ae7d89dd151612c7c63cc8c0b6648746288ac8dc103b2bb3",
+   "recipe_matches": true,
+   "context_bytes": 2200
+  },
+  {
+   "id": "openswe-226",
+   "family": "OpenSWE",
+   "task": "openswe--google__turbinia-1351",
+   "image": "openswe/google.turbinia-1351:latest",
+   "foundation_key": "f76865c684e04ed0c4429ade2d4945948b7ad0af880b0f173cb2742cd236f810",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "693798a24aa0b78d26e88b9932bf09f74da5a3c42c2d5a49d51aec62a76e2604",
+   "recipe_matches": true,
+   "context_bytes": 2477
+  },
+  {
+   "id": "openswe-227",
+   "family": "OpenSWE",
+   "task": "openswe--open-telemetry__opentelemetry-python-4259",
+   "image": "openswe/open-telemetry.opentelemetry-python-4259:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "f8a809377b69e83d45bb0abf6f4892cd9a88f0adeb69710b5f3b41fe98b98113",
+   "recipe_matches": true,
+   "context_bytes": 2519
+  },
+  {
+   "id": "openswe-228",
+   "family": "OpenSWE",
+   "task": "openswe--jax-ml__jax-18706",
+   "image": "openswe/jax-ml.jax-18706:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "498a71f55e785ad0226b3903483d9a89a4450642881ce0495049f0f5b9c3956a",
+   "recipe_matches": true,
+   "context_bytes": 2913
+  },
+  {
+   "id": "openswe-229",
+   "family": "OpenSWE",
+   "task": "openswe--mrwilson__adr-viewer-7",
+   "image": "openswe/mrwilson.adr-viewer-7:latest",
+   "foundation_key": "3ca1c91e3fc3ae8f67e87437aefbaa02b2ca92b971f9a1bc3477499fc0b9d0b4",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "a0685ea9362a21c344c99f4eabf6bbdf3856b2bb1c52e47f5562d76431583c85",
+   "recipe_matches": true,
+   "context_bytes": 1385
+  },
+  {
+   "id": "openswe-230",
+   "family": "OpenSWE",
+   "task": "openswe--devitocodes__devito-1413",
+   "image": "openswe/devitocodes.devito-1413:latest",
+   "foundation_key": "9032b856d86cc97b9deb1a9d5776cf2e2c6a94ad6ce8833f2a611ccd82a791e0",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "383d486014a1df8782c4ae891b719929b74149c248bd2cc2fea73e833868d844",
+   "recipe_matches": true,
+   "context_bytes": 2664
+  },
+  {
+   "id": "openswe-231",
+   "family": "OpenSWE",
+   "task": "openswe--containerbuildsystem__atomic-reactor-130",
+   "image": "openswe/containerbuildsystem.atomic-reactor-130:latest",
+   "foundation_key": "8fff7302a0e647ef9568a8c35debd54d7f0e1f85852eba2900ba1458f2b9431b",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "288b867170c9fa7fe4f752da9eb5da1f3b15348874591e39366c40883cff25d0",
+   "recipe_matches": true,
+   "context_bytes": 2134
+  },
+  {
+   "id": "openswe-232",
+   "family": "OpenSWE",
+   "task": "openswe--insight-platform__savant-521",
+   "image": "openswe/insight-platform.savant-521:latest",
+   "foundation_key": "f76865c684e04ed0c4429ade2d4945948b7ad0af880b0f173cb2742cd236f810",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "c29ff18ef04b22c36bacbe68ad656f9ded94c94c562ceffd192e556aca53e9a1",
+   "recipe_matches": true,
+   "context_bytes": 2973
+  },
+  {
+   "id": "openswe-233",
+   "family": "OpenSWE",
+   "task": "openswe--nbqa-dev__nbqa-590",
+   "image": "openswe/nbqa-dev.nbqa-590:latest",
+   "foundation_key": "9032b856d86cc97b9deb1a9d5776cf2e2c6a94ad6ce8833f2a611ccd82a791e0",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "4c6dd9ab39095b3733fbc7a39acb2bc48d4ce8ea0817af84eeeaa594d2154b69",
+   "recipe_matches": true,
+   "context_bytes": 2978
+  },
+  {
+   "id": "openswe-234",
+   "family": "OpenSWE",
+   "task": "openswe--pygments__pygments-1836",
+   "image": "openswe/pygments.pygments-1836:latest",
+   "foundation_key": "117ca927ec30d66379411f016997169f7dea95dba8f3456c9ba5b489d9f8fc6c",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "03e8addcae354da523760f6f2642cf99f06678202d50d38660768fa6e31be0f8",
+   "recipe_matches": true,
+   "context_bytes": 1396
+  },
+  {
+   "id": "openswe-235",
+   "family": "OpenSWE",
+   "task": "openswe--meta-pytorch__data-1376",
+   "image": "openswe/meta-pytorch.data-1376:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "5223ea77d31513cb00a28b78c286e3bb2a8cacabb50ec7bd3eded8b762b023d3",
+   "recipe_matches": true,
+   "context_bytes": 2959
+  },
+  {
+   "id": "openswe-236",
+   "family": "OpenSWE",
+   "task": "openswe--guardrails-ai__guardrails-1245",
+   "image": "openswe/guardrails-ai.guardrails-1245:latest",
+   "foundation_key": "24cb913a0a251d9580b0a960bed04816589a7bdccc581665703f6051e3271d45",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "0fe64b2390e7dc659c0399458eba399bcff455c2228bfa2e81c87dea205f7b00",
+   "recipe_matches": true,
+   "context_bytes": 2029
+  },
+  {
+   "id": "openswe-237",
+   "family": "OpenSWE",
+   "task": "openswe--AllYarnsAreBeautiful__ayab-desktop-443",
+   "image": "openswe/allyarnsarebeautiful.ayab-desktop-443:latest",
+   "foundation_key": "3ca1c91e3fc3ae8f67e87437aefbaa02b2ca92b971f9a1bc3477499fc0b9d0b4",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "f508246d8f5194c117dad382ac437223d463a28842f147bb1e4d8dc11c51878e",
+   "recipe_matches": true,
+   "context_bytes": 2524
+  },
+  {
+   "id": "openswe-238",
+   "family": "OpenSWE",
+   "task": "openswe--safe-global__safe-eth-py-1394",
+   "image": "openswe/safe-global.safe-eth-py-1394:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "2a60b75acded48f3c31c0a8ad93195d8bd7743e41b45ffdd77e1b39e0b0918ca",
+   "recipe_matches": true,
+   "context_bytes": 2619
+  },
+  {
+   "id": "openswe-239",
+   "family": "OpenSWE",
+   "task": "openswe--pytorch__ignite-1171",
+   "image": "openswe/pytorch.ignite-1171:latest",
+   "foundation_key": "9032b856d86cc97b9deb1a9d5776cf2e2c6a94ad6ce8833f2a611ccd82a791e0",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "c156f49e44aaddf2d8d08f904abf245ae3dc83089d95370082073382dc40c46c",
+   "recipe_matches": true,
+   "context_bytes": 2634
+  },
+  {
+   "id": "openswe-240",
+   "family": "OpenSWE",
+   "task": "openswe--kinnala__scikit-fem-679",
+   "image": "openswe/kinnala.scikit-fem-679:latest",
+   "foundation_key": "9032b856d86cc97b9deb1a9d5776cf2e2c6a94ad6ce8833f2a611ccd82a791e0",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "32ff30e601ec0f55b18b4e69e7f76f69137b47dc2efb28cfc53fb3bbcc8f4fc7",
+   "recipe_matches": true,
+   "context_bytes": 2251
+  },
+  {
+   "id": "openswe-241",
+   "family": "OpenSWE",
+   "task": "openswe--marin-community__draccus-27",
+   "image": "openswe/marin-community.draccus-27:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "ef2d3b610521ec236735e69dc24fe42c55f61000b7d490d50edc9bbe106fe5f1",
+   "recipe_matches": true,
+   "context_bytes": 1326
+  },
+  {
+   "id": "openswe-242",
+   "family": "OpenSWE",
+   "task": "openswe--alpacahq__alpaca-py-489",
+   "image": "openswe/alpacahq.alpaca-py-489:latest",
+   "foundation_key": "24cb913a0a251d9580b0a960bed04816589a7bdccc581665703f6051e3271d45",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "bc53f6728075104edd699f1e31c6c9b4afa6d764d36201464a074d39491de664",
+   "recipe_matches": true,
+   "context_bytes": 2161
+  },
+  {
+   "id": "openswe-243",
+   "family": "OpenSWE",
+   "task": "openswe--data-apis__array-api-690",
+   "image": "openswe/data-apis.array-api-690:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "0f3df2d4d61f81bfef775f40914502133c2426191174c9aaf437f6260ced2bd0",
+   "recipe_matches": true,
+   "context_bytes": 1860
+  },
+  {
+   "id": "openswe-244",
+   "family": "OpenSWE",
+   "task": "openswe--BlueBrain__nexus-forge-240",
+   "image": "openswe/bluebrain.nexus-forge-240:latest",
+   "foundation_key": "9032b856d86cc97b9deb1a9d5776cf2e2c6a94ad6ce8833f2a611ccd82a791e0",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "419815a7e88cb71daf83d7f0a037e2a16522e572c1188eccdafedc107c49f39b",
+   "recipe_matches": true,
+   "context_bytes": 2191
+  },
+  {
+   "id": "openswe-245",
+   "family": "OpenSWE",
+   "task": "openswe--snejus__beetcamp-27",
+   "image": "openswe/snejus.beetcamp-27:latest",
+   "foundation_key": "117ca927ec30d66379411f016997169f7dea95dba8f3456c9ba5b489d9f8fc6c",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "5a743334bff9b2263b9e79866ab320b6deee022d09f68f8b2138d2d0a9876869",
+   "recipe_matches": true,
+   "context_bytes": 2170
+  },
+  {
+   "id": "openswe-246",
+   "family": "OpenSWE",
+   "task": "openswe--helxplatform__dug-149",
+   "image": "openswe/helxplatform.dug-149:latest",
+   "foundation_key": "9032b856d86cc97b9deb1a9d5776cf2e2c6a94ad6ce8833f2a611ccd82a791e0",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "d04a404220d18b846e9ea8843ac2466a1071b2856a3416ab48c7d32f1f394598",
+   "recipe_matches": true,
+   "context_bytes": 1570
+  },
+  {
+   "id": "openswe-247",
+   "family": "OpenSWE",
+   "task": "openswe--langgenius__dify-official-plugins-912",
+   "image": "openswe/langgenius.dify-official-plugins-912:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "0e9251ad85c4382a222a32469902c7facdb0e0e9c24e7aa1bd6c23402c3f21c9",
+   "recipe_matches": true,
+   "context_bytes": 1756
+  },
+  {
+   "id": "openswe-248",
+   "family": "OpenSWE",
+   "task": "openswe--beeware__toga-2781",
+   "image": "openswe/beeware.toga-2781:latest",
+   "foundation_key": "ede7449b01be2dba1a3ed5bc98f8fe464294ef119ad5ffa8af34eeaf2f8a974c",
+   "remaining_build_work": [
+    "compilation",
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "c9a9a5a52aa1de82de00cea182f143ffe8996361fa1fee22ab65e49eb1637bc3",
+   "recipe_matches": true,
+   "context_bytes": 2218
+  },
+  {
+   "id": "openswe-249",
+   "family": "OpenSWE",
+   "task": "openswe--kulpin74__zabbix-1c-19",
+   "image": "openswe/kulpin74.zabbix-1c-19:latest",
+   "foundation_key": "944e5a6f9422cd9c07caf7b3d5035026183c682ac27299dc56f48bfc2f856902",
+   "remaining_build_work": [
+    "package_manager",
+    "run_requires_qualification",
+    "source_or_network"
+   ],
+   "recipe_sha256": "95cf520bc45be7316a4b5e02af2f6d0241af56f011824daf3fd0d9b8bfee4549",
+   "recipe_matches": true,
+   "context_bytes": 3217
+  }
+ ]
+}

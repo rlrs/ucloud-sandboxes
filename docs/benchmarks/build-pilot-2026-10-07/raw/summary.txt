@@ -1,0 +1,59 @@
+250 builds
+
+== TMax: 100/100 succeeded
+  end-to-end s          n=100 p50=28.2 p90=190.8 max=245.3 mean=75.8
+  docker build+push s   n=100 p50=9.6 p90=91.0 max=93.9 mean=27.3
+  environment publish s n=100 p50=17.2 p90=70.8 max=104.3 mean=33.6
+  queue wait s          n=100 p50=0.0 p90=0.0 max=0.1 mean=0.0
+  base regeneration s   n=35 p50=91.4 p90=291.5 max=421.3 mean=143.0
+  client wall s         n=100 p50=125.4 p90=276.5 max=466.6 mean=132.4
+  new OCI MB            n=100 p50=0.460 p90=58.737 max=618.998 mean=38.173
+  EROFS MB, first on its foundation n=35 p50=352.7 p90=607.3 max=2050.9 mean=503.4
+  EROFS MB, later on a foundation   n=64 p50=80.8 p90=89.5 max=2049.0 mean=101.5
+  foundations: 36
+
+== Terminal-Lego: 98/100 succeeded
+  end-to-end s          n=98 p50=35.1 p90=56.9 max=114.8 mean=38.9
+  docker build+push s   n=98 p50=20.4 p90=28.9 max=81.6 mean=22.0
+  environment publish s n=98 p50=13.6 p90=23.0 max=60.4 mean=15.1
+  queue wait s          n=98 p50=0.0 p90=0.0 max=0.1 mean=0.0
+  base regeneration s   n=79 p50=50.3 p90=180.7 max=322.0 mean=77.8
+  client wall s         n=98 p50=95.8 p90=221.0 max=402.5 mean=111.9
+  new OCI MB            n=98 p50=122.395 p90=159.628 max=441.296 mean=131.757
+  EROFS MB, first on its foundation n=74 p50=325.0 p90=651.5 max=1591.8 mean=386.6
+  EROFS MB, later on a foundation   n=24 p50=220.4 p90=306.4 max=361.5 mean=212.9
+  foundations: 76
+  failures: {'apt': 1, 'recipe step failed': 1}
+    terminal-lego-124 task_03542 |   15 |     RUN echo 8aecad03018abffe87c6d7d2d947f4f722b3eadd05bf06da054c715d506a816c > /opt/terminal-lego-verifier.sha256 / -------------------- / ERROR: failed to build: failed to solve: process "/bin/sh -c bash -e /opt/verifier-bootstrap.sh" did not complete successfully: exit code: 1
+    terminal-lego-181 task_03614 |   15 |     RUN echo 232b54eea46f1018e147d0efa922457ee12bff2d87392dcc3dec385442224a5d > /opt/terminal-lego-verifier.sha256 / -------------------- / ERROR: failed to build: failed to solve: process "/bin/sh -c bash -e /opt/verifier-bootstrap.sh" did not complete successfully: exit code: 1
+
+== OpenSWE: 40/50 succeeded
+  end-to-end s          n=40 p50=96.8 p90=237.9 max=425.0 mean=126.8
+  docker build+push s   n=40 p50=54.6 p90=160.2 max=338.6 mean=75.5
+  environment publish s n=40 p50=43.4 p90=86.3 max=135.5 mean=47.7
+  queue wait s          n=40 p50=0.0 p90=0.0 max=0.0 mean=0.0
+  base regeneration s   n=13 p50=110.4 p90=271.3 max=362.5 mean=131.7
+  client wall s         n=40 p50=110.6 p90=381.3 max=451.9 mean=161.5
+  new OCI MB            n=40 p50=207.359 p90=1375.649 max=4326.636 mean=609.069
+  EROFS MB, first on its foundation n=8 p50=1334.1 p90=2105.6 max=2105.6 mean=1398.4
+  EROFS MB, later on a foundation   n=31 p50=264.0 p90=1343.4 max=4717.9 mean=701.7
+  foundations: 9
+  failures: {'python build': 1, 'apt': 6, 'dependency resolution': 3}
+    openswe-203 openswe--strawberry-graphql__strawberry-django-533 |   33 |     # According to CI configuration, install specific Django version via pip after poetry install / -------------------- / ERROR: failed to build: failed to solve: process "/bin/bash -lc poetry install --no-interaction --with dev --extras \"debug-toolbar enum\"" 
+    openswe-205 openswe--antonagestam__phantom-types-56 |   16 |     # Note: The tests will be run separately via eval script / -------------------- / ERROR: failed to build: failed to solve: process "/bin/sh -c conda run --no-capture-output -n testbed bash -c 'conda activate testbed && pip
+    openswe-215 openswe--fniessink__toisto-659 |   38 |      / -------------------- / ERROR: failed to build: failed to solve: process "/bin/sh -c conda run --no-capture-output -n testbed bash -c 'pip install --upgrade pip whe
+    openswe-224 openswe--keras-team__keras-20197 |   30 |     # Install common dependencies from requirements-common.txt (excluding protobuf) / -------------------- / ERROR: failed to build: failed to solve: process "/bin/sh -c conda run --no-capture-output -n testbed bash -c \"pip install --root-user-acti
+
+builder 12415042: 74 builds, peak 6 at once, span 20.6 min
+builder 12415055: 43 builds, peak 6 at once, span 17.2 min
+builder 12415061: 40 builds, peak 6 at once, span 14.6 min
+builder 12415063: 27 builds, peak 4 at once, span 11.1 min
+builder 12415065: 21 builds, peak 4 at once, span 10.0 min
+builder 12415101: 6 builds, peak 4 at once, span 5.3 min
+builder 12415102: 10 builds, peak 4 at once, span 3.8 min
+builder 12415103: 6 builds, peak 5 at once, span 4.7 min
+builder 12415104: 6 builds, peak 4 at once, span 4.6 min
+builder 12415105: 9 builds, peak 4 at once, span 5.5 min
+builder 12415106: 8 builds, peak 4 at once, span 5.1 min
+
+wall span 41.9 min, 238 succeeded, 341 builds/hour

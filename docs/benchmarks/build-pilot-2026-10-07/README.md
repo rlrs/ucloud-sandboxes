@@ -51,6 +51,23 @@ checked against the selection's `recipe_sha256`, submitted as an integration wou
   - The first build on a foundation also re-converts the regenerated base: 350 MB p50 for TMax,
     1.3 GB for OpenSWE. Later builds convert only their own layers.
 
+## Chunk-store bytes (TMax and Terminal-Lego)
+
+`scripts/measure_chunks.py` cut every file in each built image's added layers into 256 KiB
+chunks (sha256, zstd level 3) and charged an image only for chunks no earlier image of its family
+had added. Base chunks were not loaded, so this is an upper bound.
+
+| | Compressed per task, p50 / mean | **New chunks, p50 / mean** | All tasks, no dedup | **All tasks, with dedup** |
+|---|---|---|---|---|
+| TMax (100) | 0.5 / 37 MB | **0.01 / 8.5 MB** (later half: 4.8) | 540 GB | **about 70 GB** |
+| Terminal-Lego (98) | 118 / 127 MB | **2.3 / 11.4 MB** (later half: 15) | 1.75 TB | **about 210 GB** |
+
+- The 100 TMax tasks added 0.85 GB of new chunks, the 98 Terminal-Lego tasks 1.1 GB.
+- Terminal-Lego's repeated verifier install deduplicates, as expected.
+- Prebuilding both families costs about 300 GB in the chunk store, but only if the built images
+  are converted into the chunk store and their per-image EROFS and OCI copies released.
+  Otherwise the registry keeps about 80–220 MB per image.
+
 ## Found and fixed on the way
 
 - **0.9.52: building from any released foundation had been broken since the move to UCloud.**
@@ -79,14 +96,12 @@ a foundation. Suggested split:
 - **OpenSWE:** build on demand, shortly before the sampler needs each task. Cache the built
   images with eviction, and exclude tasks whose recipes fail (20% here) from the selection.
   Storing all of it is the multi-TB case.
-- **TMax:** cheap to store (p50 0.5 MB, mean 38 MB), never failed. Prebuilding is optional;
-  on-demand works too.
-- **Terminal-Lego:** measure chunk-level bytes, or move the verifier's Python into the toolkit,
-  before deciding. 2% fail.
+- **TMax:** prebuild: about 70 GB of chunks for all 14,600 tasks. None failed.
+- **Terminal-Lego:** prebuild too: about 210 GB of chunks for all 13,777 tasks. 2% fail.
 - **Before training starts on a new selection:** regenerate its foundations ahead (one per
   foundation, minutes each), not during the first step.
 
-Not measured: chunk-store bytes (deduplicated) per family, builder saturation, and whether
+Not measured: OpenSWE's deduplicated bytes, builder saturation, and whether
 the built images pass their tasks' verifiers.
 
 ## Files
@@ -97,4 +112,4 @@ the built images pass their tasks' verifiers.
   come from the retry on 0.9.53 with complete contexts.
 - `raw/first-run-results.jsonl`: the first run, with the store-related and context-related
   failures.
-- `raw/summary.txt`: `summarize.py`'s output.
+- `raw/summary.txt`: `summarize.py`'s output. `raw/chunks.json`: `measure_chunks.py`'s per-image bytes.

@@ -1,0 +1,1586 @@
+[
+ {
+  "id": "tmax-000",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 5242880,
+  "own_zstd": 7620,
+  "new_zstd": 7620
+ },
+ {
+  "id": "terminal-lego-100",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1044643840,
+  "own_zstd": 90292536,
+  "new_zstd": 90292536
+ },
+ {
+  "id": "tmax-007",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4456448,
+  "own_zstd": 2803,
+  "new_zstd": 1611
+ },
+ {
+  "id": "tmax-008",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 3932160,
+  "own_zstd": 3306,
+  "new_zstd": 1066
+ },
+ {
+  "id": "terminal-lego-101",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90291933,
+  "new_zstd": 1067155
+ },
+ {
+  "id": "terminal-lego-104",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90291934,
+  "new_zstd": 63
+ },
+ {
+  "id": "terminal-lego-107",
+  "family": "Terminal-Lego",
+  "layers": 10,
+  "raw_bytes": 2570059776,
+  "own_zstd": 134746399,
+  "new_zstd": 49121351
+ },
+ {
+  "id": "terminal-lego-106",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1010302976,
+  "own_zstd": 88004299,
+  "new_zstd": 1117630
+ },
+ {
+  "id": "terminal-lego-111",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 1269563392,
+  "own_zstd": 92516431,
+  "new_zstd": 6636885
+ },
+ {
+  "id": "terminal-lego-108",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2149580800,
+  "own_zstd": 158539462,
+  "new_zstd": 77219490
+ },
+ {
+  "id": "tmax-005",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4718592,
+  "own_zstd": 3374,
+  "new_zstd": 1134
+ },
+ {
+  "id": "tmax-002",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4718592,
+  "own_zstd": 5340,
+  "new_zstd": 2513
+ },
+ {
+  "id": "terminal-lego-102",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2133852160,
+  "own_zstd": 129834028,
+  "new_zstd": 5786837
+ },
+ {
+  "id": "terminal-lego-105",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 2149580800,
+  "own_zstd": 158536356,
+  "new_zstd": 2472084
+ },
+ {
+  "id": "tmax-003",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4456448,
+  "own_zstd": 3748,
+  "new_zstd": 1508
+ },
+ {
+  "id": "tmax-011",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4456448,
+  "own_zstd": 2897,
+  "new_zstd": 657
+ },
+ {
+  "id": "tmax-004",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 12058624,
+  "own_zstd": 15920,
+  "new_zstd": 13654
+ },
+ {
+  "id": "terminal-lego-116",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2149580800,
+  "own_zstd": 158536487,
+  "new_zstd": 2322237
+ },
+ {
+  "id": "terminal-lego-110",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90293937,
+  "new_zstd": 1211057
+ },
+ {
+  "id": "tmax-006",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4456448,
+  "own_zstd": 3677,
+  "new_zstd": 1437
+ },
+ {
+  "id": "terminal-lego-114",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1030750208,
+  "own_zstd": 90102519,
+  "new_zstd": 1921225
+ },
+ {
+  "id": "tmax-016",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 14417920,
+  "own_zstd": 19510,
+  "new_zstd": 3620
+ },
+ {
+  "id": "terminal-lego-115",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1043070976,
+  "own_zstd": 90291895,
+  "new_zstd": 1067117
+ },
+ {
+  "id": "terminal-lego-103",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2414346240,
+  "own_zstd": 166620295,
+  "new_zstd": 13063280
+ },
+ {
+  "id": "terminal-lego-109",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1421606912,
+  "own_zstd": 137567918,
+  "new_zstd": 2386525
+ },
+ {
+  "id": "terminal-lego-119",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90296144,
+  "new_zstd": 1217714
+ },
+ {
+  "id": "tmax-014",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 5767168,
+  "own_zstd": 3859,
+  "new_zstd": 1619
+ },
+ {
+  "id": "terminal-lego-113",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1303642112,
+  "own_zstd": 106395972,
+  "new_zstd": 18251361
+ },
+ {
+  "id": "terminal-lego-118",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2760114176,
+  "own_zstd": 141826780,
+  "new_zstd": 17519446
+ },
+ {
+  "id": "tmax-019",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 167772160,
+  "own_zstd": 84101,
+  "new_zstd": 70496
+ },
+ {
+  "id": "terminal-lego-120",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90292110,
+  "new_zstd": 1067332
+ },
+ {
+  "id": "tmax-021",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 3932160,
+  "own_zstd": 2495,
+  "new_zstd": 255
+ },
+ {
+  "id": "tmax-025",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4718592,
+  "own_zstd": 5580,
+  "new_zstd": 939
+ },
+ {
+  "id": "terminal-lego-117",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1019740160,
+  "own_zstd": 89211677,
+  "new_zstd": 1067066
+ },
+ {
+  "id": "terminal-lego-112",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2147221504,
+  "own_zstd": 158388155,
+  "new_zstd": 2488528
+ },
+ {
+  "id": "tmax-028",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 16252928,
+  "own_zstd": 3321053,
+  "new_zstd": 3316412
+ },
+ {
+  "id": "terminal-lego-125",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1303642112,
+  "own_zstd": 106396214,
+  "new_zstd": 1074803
+ },
+ {
+  "id": "tmax-030",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4718592,
+  "own_zstd": 5567,
+  "new_zstd": 926
+ },
+ {
+  "id": "tmax-020",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4718592,
+  "own_zstd": 5754,
+  "new_zstd": 1113
+ },
+ {
+  "id": "terminal-lego-123",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90292081,
+  "new_zstd": 1066872
+ },
+ {
+  "id": "terminal-lego-121",
+  "family": "Terminal-Lego",
+  "layers": 9,
+  "raw_bytes": 1171783680,
+  "own_zstd": 93262050,
+  "new_zstd": 4036828
+ },
+ {
+  "id": "terminal-lego-126",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1019740160,
+  "own_zstd": 89232313,
+  "new_zstd": 1234050
+ },
+ {
+  "id": "terminal-lego-129",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1516503040,
+  "own_zstd": 144394160,
+  "new_zstd": 2766149
+ },
+ {
+  "id": "tmax-034",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4194304,
+  "own_zstd": 3279,
+  "new_zstd": 1039
+ },
+ {
+  "id": "tmax-037",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 5505024,
+  "own_zstd": 5516,
+  "new_zstd": 875
+ },
+ {
+  "id": "terminal-lego-128",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1416101888,
+  "own_zstd": 137108293,
+  "new_zstd": 2406452
+ },
+ {
+  "id": "terminal-lego-131",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90292018,
+  "new_zstd": 1067240
+ },
+ {
+  "id": "terminal-lego-122",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1356595200,
+  "own_zstd": 97050676,
+  "new_zstd": 2354333
+ },
+ {
+  "id": "tmax-040",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4980736,
+  "own_zstd": 7818,
+  "new_zstd": 3177
+ },
+ {
+  "id": "terminal-lego-132",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1019740160,
+  "own_zstd": 89211840,
+  "new_zstd": 1067229
+ },
+ {
+  "id": "terminal-lego-141",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90291958,
+  "new_zstd": 1067180
+ },
+ {
+  "id": "terminal-lego-136",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 1421606912,
+  "own_zstd": 137568008,
+  "new_zstd": 2301393
+ },
+ {
+  "id": "terminal-lego-130",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1516503040,
+  "own_zstd": 144394482,
+  "new_zstd": 2342530
+ },
+ {
+  "id": "terminal-lego-134",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1516503040,
+  "own_zstd": 144394285,
+  "new_zstd": 2340572
+ },
+ {
+  "id": "terminal-lego-133",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2149580800,
+  "own_zstd": 158536478,
+  "new_zstd": 2322228
+ },
+ {
+  "id": "terminal-lego-127",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2150105088,
+  "own_zstd": 158543336,
+  "new_zstd": 2479064
+ },
+ {
+  "id": "terminal-lego-135",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2036334592,
+  "own_zstd": 120300566,
+  "new_zstd": 14975050
+ },
+ {
+  "id": "terminal-lego-140",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042546688,
+  "own_zstd": 89535312,
+  "new_zstd": 1108062
+ },
+ {
+  "id": "tmax-031",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4980736,
+  "own_zstd": 5832,
+  "new_zstd": 1191
+ },
+ {
+  "id": "terminal-lego-138",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1043595264,
+  "own_zstd": 90297348,
+  "new_zstd": 1218918
+ },
+ {
+  "id": "tmax-045",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4194304,
+  "own_zstd": 3514,
+  "new_zstd": 1274
+ },
+ {
+  "id": "tmax-046",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 3932160,
+  "own_zstd": 3438,
+  "new_zstd": 1198
+ },
+ {
+  "id": "tmax-038",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4194304,
+  "own_zstd": 3035,
+  "new_zstd": 795
+ },
+ {
+  "id": "terminal-lego-137",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2144337920,
+  "own_zstd": 158100146,
+  "new_zstd": 2536744
+ },
+ {
+  "id": "tmax-047",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4980736,
+  "own_zstd": 5336,
+  "new_zstd": 695
+ },
+ {
+  "id": "terminal-lego-142",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 1701052416,
+  "own_zstd": 117862111,
+  "new_zstd": 11895120
+ },
+ {
+  "id": "tmax-042",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 5242880,
+  "own_zstd": 4990,
+  "new_zstd": 349
+ },
+ {
+  "id": "terminal-lego-144",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1043070976,
+  "own_zstd": 90292273,
+  "new_zstd": 1069020
+ },
+ {
+  "id": "terminal-lego-149",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90292114,
+  "new_zstd": 1067336
+ },
+ {
+  "id": "terminal-lego-139",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2028470272,
+  "own_zstd": 120294803,
+  "new_zstd": 1180898
+ },
+ {
+  "id": "terminal-lego-143",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 1700265984,
+  "own_zstd": 117857464,
+  "new_zstd": 1148705
+ },
+ {
+  "id": "terminal-lego-147",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1421869056,
+  "own_zstd": 137568162,
+  "new_zstd": 2301903
+ },
+ {
+  "id": "terminal-lego-152",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90291907,
+  "new_zstd": 1066698
+ },
+ {
+  "id": "terminal-lego-146",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 1019740160,
+  "own_zstd": 89211803,
+  "new_zstd": 1068717
+ },
+ {
+  "id": "terminal-lego-154",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90291913,
+  "new_zstd": 1066704
+ },
+ {
+  "id": "tmax-055",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 5242880,
+  "own_zstd": 4890,
+  "new_zstd": 249
+ },
+ {
+  "id": "terminal-lego-150",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1303642112,
+  "own_zstd": 106396022,
+  "new_zstd": 1074611
+ },
+ {
+  "id": "terminal-lego-145",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1355546624,
+  "own_zstd": 97049027,
+  "new_zstd": 2281459
+ },
+ {
+  "id": "terminal-lego-156",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90292075,
+  "new_zstd": 1066866
+ },
+ {
+  "id": "terminal-lego-161",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1303642112,
+  "own_zstd": 106396023,
+  "new_zstd": 62
+ },
+ {
+  "id": "tmax-027",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 6170869760,
+  "own_zstd": 230447403,
+  "new_zstd": 230445163
+ },
+ {
+  "id": "terminal-lego-153",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90291907,
+  "new_zstd": 1067129
+ },
+ {
+  "id": "terminal-lego-151",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1668022272,
+  "own_zstd": 128956247,
+  "new_zstd": 39436963
+ },
+ {
+  "id": "terminal-lego-158",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 2149842944,
+  "own_zstd": 158536416,
+  "new_zstd": 2322166
+ },
+ {
+  "id": "terminal-lego-155",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2144600064,
+  "own_zstd": 158131577,
+  "new_zstd": 2754189
+ },
+ {
+  "id": "terminal-lego-157",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2144075776,
+  "own_zstd": 158098348,
+  "new_zstd": 2530874
+ },
+ {
+  "id": "terminal-lego-162",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 1517027328,
+  "own_zstd": 144393891,
+  "new_zstd": 2340292
+ },
+ {
+  "id": "tmax-067",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4718592,
+  "own_zstd": 5929,
+  "new_zstd": 1288
+ },
+ {
+  "id": "tmax-064",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 9175040,
+  "own_zstd": 5865,
+  "new_zstd": 1224
+ },
+ {
+  "id": "terminal-lego-159",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1706819584,
+  "own_zstd": 117863570,
+  "new_zstd": 1154811
+ },
+ {
+  "id": "terminal-lego-148",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 3011248128,
+  "own_zstd": 302310375,
+  "new_zstd": 207614144
+ },
+ {
+  "id": "terminal-lego-169",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90296387,
+  "new_zstd": 1068121
+ },
+ {
+  "id": "terminal-lego-167",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2149580800,
+  "own_zstd": 158536159,
+  "new_zstd": 2321909
+ },
+ {
+  "id": "tmax-056",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 6815744,
+  "own_zstd": 5511,
+  "new_zstd": 870
+ },
+ {
+  "id": "tmax-062",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4718592,
+  "own_zstd": 3514,
+  "new_zstd": 1274
+ },
+ {
+  "id": "terminal-lego-175",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1303904256,
+  "own_zstd": 106396382,
+  "new_zstd": 1074540
+ },
+ {
+  "id": "terminal-lego-178",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1303642112,
+  "own_zstd": 106396022,
+  "new_zstd": 61
+ },
+ {
+  "id": "terminal-lego-164",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2149580800,
+  "own_zstd": 158542078,
+  "new_zstd": 2474260
+ },
+ {
+  "id": "terminal-lego-177",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1043595264,
+  "own_zstd": 90292065,
+  "new_zstd": 1066856
+ },
+ {
+  "id": "terminal-lego-171",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 2066481152,
+  "own_zstd": 144124592,
+  "new_zstd": 13687604
+ },
+ {
+  "id": "terminal-lego-179",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1019740160,
+  "own_zstd": 89212016,
+  "new_zstd": 1020892
+ },
+ {
+  "id": "terminal-lego-166",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1477181440,
+  "own_zstd": 143104640,
+  "new_zstd": 3026533
+ },
+ {
+  "id": "terminal-lego-160",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1700003840,
+  "own_zstd": 117857256,
+  "new_zstd": 1148497
+ },
+ {
+  "id": "tmax-075",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 5505024,
+  "own_zstd": 5982,
+  "new_zstd": 1341
+ },
+ {
+  "id": "tmax-082",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 5505024,
+  "own_zstd": 5822,
+  "new_zstd": 1181
+ },
+ {
+  "id": "tmax-068",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4718592,
+  "own_zstd": 5000,
+  "new_zstd": 359
+ },
+ {
+  "id": "terminal-lego-168",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2044461056,
+  "own_zstd": 124077844,
+  "new_zstd": 2362441
+ },
+ {
+  "id": "terminal-lego-180",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1355546624,
+  "own_zstd": 97049094,
+  "new_zstd": 2280745
+ },
+ {
+  "id": "terminal-lego-165",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 1043070976,
+  "own_zstd": 90296521,
+  "new_zstd": 1068255
+ },
+ {
+  "id": "terminal-lego-173",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1533280256,
+  "own_zstd": 149179290,
+  "new_zstd": 8354364
+ },
+ {
+  "id": "terminal-lego-172",
+  "family": "Terminal-Lego",
+  "layers": 9,
+  "raw_bytes": 3086483456,
+  "own_zstd": 141190537,
+  "new_zstd": 50413244
+ },
+ {
+  "id": "tmax-083",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4456448,
+  "own_zstd": 2685,
+  "new_zstd": 445
+ },
+ {
+  "id": "terminal-lego-163",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2150105088,
+  "own_zstd": 158540644,
+  "new_zstd": 2476372
+ },
+ {
+  "id": "tmax-079",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 7340032,
+  "own_zstd": 1307373,
+  "new_zstd": 1305133
+ },
+ {
+  "id": "terminal-lego-170",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 4146855936,
+  "own_zstd": 277175690,
+  "new_zstd": 111578513
+ },
+ {
+  "id": "tmax-088",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 5505024,
+  "own_zstd": 5403,
+  "new_zstd": 762
+ },
+ {
+  "id": "terminal-lego-189",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 1700003840,
+  "own_zstd": 117857282,
+  "new_zstd": 1148098
+ },
+ {
+  "id": "terminal-lego-176",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 1411383296,
+  "own_zstd": 102796192,
+  "new_zstd": 2290232
+ },
+ {
+  "id": "tmax-090",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4194304,
+  "own_zstd": 2955,
+  "new_zstd": 715
+ },
+ {
+  "id": "terminal-lego-192",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90291906,
+  "new_zstd": 61
+ },
+ {
+  "id": "tmax-051",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 36444045312,
+  "own_zstd": 379778176,
+  "new_zstd": 379771832
+ },
+ {
+  "id": "tmax-086",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4980736,
+  "own_zstd": 5243,
+  "new_zstd": 602
+ },
+ {
+  "id": "tmax-093",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 5767168,
+  "own_zstd": 5395,
+  "new_zstd": 754
+ },
+ {
+  "id": "tmax-070",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 5242880,
+  "own_zstd": 3159,
+  "new_zstd": 919
+ },
+ {
+  "id": "tmax-069",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4718592,
+  "own_zstd": 5093,
+  "new_zstd": 452
+ },
+ {
+  "id": "terminal-lego-190",
+  "family": "Terminal-Lego",
+  "layers": 9,
+  "raw_bytes": 1521221632,
+  "own_zstd": 144765397,
+  "new_zstd": 2930441
+ },
+ {
+  "id": "terminal-lego-187",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1096024064,
+  "own_zstd": 95540583,
+  "new_zstd": 6519734
+ },
+ {
+  "id": "tmax-089",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 3932160,
+  "own_zstd": 2728,
+  "new_zstd": 488
+ },
+ {
+  "id": "tmax-087",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 8912896,
+  "own_zstd": 475013,
+  "new_zstd": 472773
+ },
+ {
+  "id": "terminal-lego-182",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2149842944,
+  "own_zstd": 158542079,
+  "new_zstd": 2323417
+ },
+ {
+  "id": "terminal-lego-191",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90297728,
+  "new_zstd": 1214804
+ },
+ {
+  "id": "terminal-lego-193",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1529348096,
+  "own_zstd": 145171099,
+  "new_zstd": 2470230
+ },
+ {
+  "id": "tmax-097",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 5242880,
+  "own_zstd": 6000,
+  "new_zstd": 1359
+ },
+ {
+  "id": "terminal-lego-196",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2149580800,
+  "own_zstd": 158536204,
+  "new_zstd": 2321954
+ },
+ {
+  "id": "terminal-lego-185",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90292089,
+  "new_zstd": 1067311
+ },
+ {
+  "id": "terminal-lego-188",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90291957,
+  "new_zstd": 1067179
+ },
+ {
+  "id": "terminal-lego-195",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 2149580800,
+  "own_zstd": 158536412,
+  "new_zstd": 2322162
+ },
+ {
+  "id": "terminal-lego-186",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 2150105088,
+  "own_zstd": 158542223,
+  "new_zstd": 2323561
+ },
+ {
+  "id": "tmax-072",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4194304,
+  "own_zstd": 3430,
+  "new_zstd": 2238
+ },
+ {
+  "id": "tmax-058",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4456448,
+  "own_zstd": 2735,
+  "new_zstd": 495
+ },
+ {
+  "id": "tmax-096",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 3932160,
+  "own_zstd": 3327,
+  "new_zstd": 1087
+ },
+ {
+  "id": "terminal-lego-198",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 1042808832,
+  "own_zstd": 90292169,
+  "new_zstd": 1067400
+ },
+ {
+  "id": "tmax-078",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 221511680,
+  "own_zstd": 175278,
+  "new_zstd": 161789
+ },
+ {
+  "id": "terminal-lego-184",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 1421869056,
+  "own_zstd": 137568143,
+  "new_zstd": 2301514
+ },
+ {
+  "id": "terminal-lego-174",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 10899685376,
+  "own_zstd": 372032997,
+  "new_zstd": 241798818
+ },
+ {
+  "id": "tmax-098",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 30670848,
+  "own_zstd": 21974,
+  "new_zstd": 17333
+ },
+ {
+  "id": "tmax-059",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4194304,
+  "own_zstd": 2854,
+  "new_zstd": 614
+ },
+ {
+  "id": "terminal-lego-194",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1421869056,
+  "own_zstd": 137568807,
+  "new_zstd": 2302178
+ },
+ {
+  "id": "terminal-lego-197",
+  "family": "Terminal-Lego",
+  "layers": 7,
+  "raw_bytes": 1465384960,
+  "own_zstd": 142941000,
+  "new_zstd": 2869771
+ },
+ {
+  "id": "tmax-080",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4456448,
+  "own_zstd": 4683,
+  "new_zstd": 2443
+ },
+ {
+  "id": "tmax-063",
+  "family": "TMax",
+  "layers": 2,
+  "raw_bytes": 4194304,
+  "own_zstd": 3128,
+  "new_zstd": 888
+ },
+ {
+  "id": "terminal-lego-199",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 10899685376,
+  "own_zstd": 372033490,
+  "new_zstd": 2372262
+ },
+ {
+  "id": "terminal-lego-183",
+  "family": "Terminal-Lego",
+  "layers": 8,
+  "raw_bytes": 387710976,
+  "own_zstd": 75056289,
+  "new_zstd": 1226816
+ },
+ {
+  "id": "tmax-050",
+  "family": "TMax",
+  "layers": 3,
+  "raw_bytes": 136314880,
+  "own_zstd": 56352570,
+  "new_zstd": 56350159
+ },
+ {
+  "id": "tmax-001",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 91488256,
+  "own_zstd": 55650660,
+  "new_zstd": 283283
+ },
+ {
+  "id": "tmax-022",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 88080384,
+  "own_zstd": 55614265,
+  "new_zstd": 343232
+ },
+ {
+  "id": "tmax-035",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 86245376,
+  "own_zstd": 55362678,
+  "new_zstd": 91645
+ },
+ {
+  "id": "tmax-010",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 108003328,
+  "own_zstd": 57997817,
+  "new_zstd": 2703375
+ },
+ {
+  "id": "tmax-041",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 87556096,
+  "own_zstd": 55278371,
+  "new_zstd": 6725
+ },
+ {
+  "id": "tmax-033",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 86507520,
+  "own_zstd": 55726839,
+  "new_zstd": 455806
+ },
+ {
+  "id": "tmax-029",
+  "family": "TMax",
+  "layers": 3,
+  "raw_bytes": 85458944,
+  "own_zstd": 55277370,
+  "new_zstd": 6337
+ },
+ {
+  "id": "tmax-023",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 88342528,
+  "own_zstd": 55273388,
+  "new_zstd": 2355
+ },
+ {
+  "id": "tmax-043",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 87818240,
+  "own_zstd": 55272665,
+  "new_zstd": 1214
+ },
+ {
+  "id": "tmax-048",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 85721088,
+  "own_zstd": 55276066,
+  "new_zstd": 5015
+ },
+ {
+  "id": "tmax-024",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 111673344,
+  "own_zstd": 55277654,
+  "new_zstd": 6591
+ },
+ {
+  "id": "tmax-012",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 97255424,
+  "own_zstd": 56545043,
+  "new_zstd": 1181722
+ },
+ {
+  "id": "tmax-052",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 85458944,
+  "own_zstd": 55284710,
+  "new_zstd": 13659
+ },
+ {
+  "id": "tmax-032",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 321388544,
+  "own_zstd": 59567725,
+  "new_zstd": 4296274
+ },
+ {
+  "id": "tmax-053",
+  "family": "TMax",
+  "layers": 3,
+  "raw_bytes": 89128960,
+  "own_zstd": 55319211,
+  "new_zstd": 44060
+ },
+ {
+  "id": "tmax-017",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 87818240,
+  "own_zstd": 55273155,
+  "new_zstd": 1704
+ },
+ {
+  "id": "tmax-036",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 306708480,
+  "own_zstd": 65171039,
+  "new_zstd": 6714671
+ },
+ {
+  "id": "tmax-018",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 332922880,
+  "own_zstd": 178697439,
+  "new_zstd": 123402903
+ },
+ {
+  "id": "tmax-060",
+  "family": "TMax",
+  "layers": 3,
+  "raw_bytes": 85983232,
+  "own_zstd": 55277602,
+  "new_zstd": 6569
+ },
+ {
+  "id": "tmax-081",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 89391104,
+  "own_zstd": 55378619,
+  "new_zstd": 107168
+ },
+ {
+  "id": "tmax-077",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 175374336,
+  "own_zstd": 62527263,
+  "new_zstd": 7232781
+ },
+ {
+  "id": "tmax-084",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 105381888,
+  "own_zstd": 55916965,
+  "new_zstd": 622024
+ },
+ {
+  "id": "tmax-013",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 96206848,
+  "own_zstd": 56415545,
+  "new_zstd": 293666
+ },
+ {
+  "id": "tmax-049",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 85721088,
+  "own_zstd": 55288671,
+  "new_zstd": 17620
+ },
+ {
+  "id": "tmax-044",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 111411200,
+  "own_zstd": 57069845,
+  "new_zstd": 1774790
+ },
+ {
+  "id": "tmax-015",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 86769664,
+  "own_zstd": 56111584,
+  "new_zstd": 840551
+ },
+ {
+  "id": "tmax-099",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 86245376,
+  "own_zstd": 55661255,
+  "new_zstd": 382526
+ },
+ {
+  "id": "tmax-039",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 18307612672,
+  "own_zstd": 435047648,
+  "new_zstd": 2917
+ },
+ {
+  "id": "tmax-009",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 86245376,
+  "own_zstd": 55512941,
+  "new_zstd": 241908
+ },
+ {
+  "id": "tmax-026",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 85458944,
+  "own_zstd": 55277218,
+  "new_zstd": 6167
+ },
+ {
+  "id": "tmax-057",
+  "family": "TMax",
+  "layers": 3,
+  "raw_bytes": 85721088,
+  "own_zstd": 55277265,
+  "new_zstd": 6232
+ },
+ {
+  "id": "tmax-061",
+  "family": "TMax",
+  "layers": 3,
+  "raw_bytes": 137101312,
+  "own_zstd": 60506208,
+  "new_zstd": 5049454
+ },
+ {
+  "id": "tmax-092",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 88080384,
+  "own_zstd": 55276762,
+  "new_zstd": 5711
+ },
+ {
+  "id": "tmax-054",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 87556096,
+  "own_zstd": 55274932,
+  "new_zstd": 3481
+ },
+ {
+  "id": "tmax-073",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 95944704,
+  "own_zstd": 57054841,
+  "new_zstd": 1756325
+ },
+ {
+  "id": "tmax-071",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 137363456,
+  "own_zstd": 76598554,
+  "new_zstd": 21326979
+ },
+ {
+  "id": "tmax-065",
+  "family": "TMax",
+  "layers": 3,
+  "raw_bytes": 86245376,
+  "own_zstd": 55282455,
+  "new_zstd": 11422
+ },
+ {
+  "id": "tmax-066",
+  "family": "TMax",
+  "layers": 3,
+  "raw_bytes": 121372672,
+  "own_zstd": 60341399,
+  "new_zstd": 282875
+ },
+ {
+  "id": "tmax-094",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 91750400,
+  "own_zstd": 56335870,
+  "new_zstd": 1064419
+ },
+ {
+  "id": "tmax-085",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 99352576,
+  "own_zstd": 56653552,
+  "new_zstd": 163736
+ },
+ {
+  "id": "tmax-074",
+  "family": "TMax",
+  "layers": 3,
+  "raw_bytes": 85983232,
+  "own_zstd": 55284173,
+  "new_zstd": 9078
+ },
+ {
+  "id": "tmax-076",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 87556096,
+  "own_zstd": 55281278,
+  "new_zstd": 9632
+ },
+ {
+  "id": "tmax-095",
+  "family": "TMax",
+  "layers": 4,
+  "raw_bytes": 86769664,
+  "own_zstd": 55569461,
+  "new_zstd": 298428
+ },
+ {
+  "id": "tmax-091",
+  "family": "TMax",
+  "layers": 6,
+  "raw_bytes": 99352576,
+  "own_zstd": 56655963,
+  "new_zstd": 60355
+ }
+]

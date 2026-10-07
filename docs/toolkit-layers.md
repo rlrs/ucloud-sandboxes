@@ -1,6 +1,6 @@
 # Toolkit layers (C2.5): design for review
 
-Status: proposed, 2026-10-07. Plan entry: [rl-scale-architecture-plan.md](rl-scale-architecture-plan.md), C2.5.
+Status: built and in production (0.9.51, 2026-10-07); measurements at the end. Plan entry: [rl-scale-architecture-plan.md](rl-scale-architecture-plan.md), C2.5.
 
 ## Why
 
@@ -202,3 +202,28 @@ Nodes' mount, lease and recovery code does not change.
    create? Per run is safer for reproducibility.
 3. **The managed init and file helper** (C2.5's original items) move into a
    platform toolkit in a second step, deleting the per-create init copy.
+
+## Measured (0.9.51, 2026-10-07)
+
+The stub-model dry run (verifiers `bash` harness, gsm8k, the stub OpenAI server, two
+64-vCPU workers), with the toolkit `vf-harness:e914dc9` (the bash and null harnesses
+and gsm8k's verifier prebuilt; `uv_toolkit = "vf-harness"`) and without it:
+
+| Rollouts | Setup p50 | p95 | max | Errors |
+|---|---|---|---|---|
+| 8, no toolkit | about 12 s | | | 0 |
+| 8, toolkit (warm node) | 0.6 s | | | 0 |
+| 512, no toolkit | **71.8 s** | 105 s | 111 s | 0 |
+| 512, toolkit | **4.2 s** | 10.1 s | 16.7 s | 0 |
+
+- **What the toolkit removes:** every sandbox installing uv and its scripts'
+  dependencies from PyPI, about a thousand installs at once at 512. In a toolkit
+  sandbox, `uv` is the toolkit's and the preparation finds its prebuilt environment
+  (0.5 s first time, 0.18 s after, measured in one sandbox).
+- **What is left at 512:** each script costs one upload (`runtime.write`, p50 1.3 s
+  under the burst, through the Python node agent) and one exec (p50 0.6 s); gsm8k
+  prepares two scripts per rollout. Files over the daemon (phase 2d) is the lever.
+- **Task scripts count too:** gsm8k's verifier, prepared by the task's own setup,
+  took 2 s per rollout until it went into the toolkit. Training's environments will
+  have their own; `build.sh` takes them as paths in the verifiers checkout.
+- **Not reached:** the setup p50 under 1 s gate holds at 8 rollouts, not at 512.

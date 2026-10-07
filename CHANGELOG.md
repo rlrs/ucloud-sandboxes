@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.51 - 2026-10-07 (gateway; workers)
+
+- **Toolkit layers (C2.5, [docs/toolkit-layers.md](docs/toolkit-layers.md)).** A sandbox can ask for read-only toolkits (`SandboxSpec.toolkits`, at most 4, `name:tag` or `name@sha256:<root>`). The gateway pins them and dispatches the image's root with the toolkits' components on top, signed with the deployment's environment key; nodes mount and share it like any root. Files live under `/opt/ucloud/toolkits/<name>`; nothing in the sandbox's environment changes.
+  - `toolkit-register` / `toolkit-list` manage `name:tag` in `toolkits.sqlite3`; retention keeps registered toolkits and every composition.
+  - A retry keeps the toolkits its route pinned. Committed images and toolkits that are not one whole-image component are refused.
+  - Specs without toolkits are unchanged, fingerprints included.
+- **The verifiers harness toolkit build** (`runtime/toolkits/vf-harness`): uv, a managed Python and each harness program's prebuilt environment. In a fresh image with no network, verifiers' preparation takes 110 ms (12 s per rollout in the 2026-10-06 dry run, installing from PyPI).
+
 ## 0.9.50 - 2026-10-06 (gateway; workers)
 
 - **Workspaces format without a whole-device discard (`mkfs.xfs -K`).** Format was 80% of `PrepareVolume` in the two-worker rehearsal (mean 350 ms, p95 956 ms; 10 ms on a loop device): a discard of the whole virtual size through ublk, on an upper that is fresh and reads as zeros anyway.

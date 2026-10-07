@@ -473,6 +473,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     server_version = "ucloud-sandboxes-control-plane/0.1"
     routing_write_process = None
     dispatch_environment_roots = False
+    # Toolkit layers (docs/toolkit-layers.md); None without a signing key.
+    toolkit_composer = None
     create_placement = "ranked"
 
     @traced_http_request
@@ -2641,6 +2643,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     if existing.spec and spec.environment_root != existing.spec.get("environment_root"):
                         # A retry keeps the root its route pinned, even across a switch.
                         spec = replace(spec, environment_root=existing.spec.get("environment_root"))
+                    pinned_toolkits = tuple(existing.spec.get("toolkits") or ()) if existing.spec else ()
+                    if spec.toolkits and [ref.split("@")[0] for ref in pinned_toolkits] == [
+                            ref.split("@")[0] for ref in spec.toolkits]:
+                        # And the toolkits it pinned, even after a tag moved.
+                        spec = replace(spec, toolkits=pinned_toolkits)
                     requested_hash = sandbox_spec_fingerprint(spec)
                     existing_spec_matches = True
                     if existing.spec:
@@ -3141,7 +3148,38 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             if dispatched is not None:
                 spec = replace(spec, environment_root=dispatched)
                 root.set_attribute("environment_root", dispatched)
+        if spec.toolkits:
+            spec = self._compose_toolkits(spec, root)
         return spec
+
+    def _compose_toolkits(self, spec: SandboxSpec, root: Any) -> SandboxSpec | None:
+        """Pin the requested toolkits and dispatch the image's root with them on
+        top (docs/toolkit-layers.md); None after writing the refusal."""
+        from .gateway.toolkits import ToolkitError
+        composer = self.toolkit_composer
+        if composer is None:
+            self._write_json({"error": "toolkits are not available on this deployment",
+                              "error_code": "toolkits_unavailable"}, status=HTTPStatus.BAD_REQUEST)
+            return None
+        try:
+            pinned = composer.pin(spec.toolkits)
+            image_root = spec.environment_root or self.services.registry_refs.dependency_resolver.root(spec.image)
+            if image_root is None:
+                raise ToolkitError("toolkits need an image with a signed environment")
+            composed = composer.compose(image_root, pinned)
+        except ToolkitError as exc:
+            root.set_attribute("outcome", "toolkit_refused")
+            self._write_json({"error": str(exc), "error_code": "toolkit_refused"}, status=HTTPStatus.BAD_REQUEST)
+            return None
+        except Exception as exc:  # noqa: BLE001 - registry trouble: the caller may retry.
+            root.set_attribute("outcome", "toolkit_composition_unavailable")
+            self._write_json({"error": f"toolkit composition is unavailable: {exc}",
+                              "error_code": "toolkit_composition_unavailable", "retryable": True},
+                             status=HTTPStatus.SERVICE_UNAVAILABLE,
+                             headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"})
+            return None
+        root.set_attribute("environment_root", composed)
+        return replace(spec, toolkits=pinned, environment_root=composed)
 
     def _write_no_ready_node(self, demand: Any, error_code: str) -> None:
         self._write_json(
@@ -5732,6 +5770,7 @@ def build_server(
     registry_usage_file: Path | None = None,
     environment_registry: object | None = None,
     dispatch_environment_roots: bool = False,
+    environment_signing_key_file: str = "",
     base_regeneration: object | None = None,
     import_external_images: bool = False,
     create_placement: str = "ranked",
@@ -5887,6 +5926,13 @@ def build_server(
         dependency_resolver = EnvironmentDependencyResolver(
             environment_registry, image_roots=ImageRootsStore(roots_path(image_file)))
     BoundHandler.dispatch_environment_roots = bool(dispatch_environment_roots and dependency_resolver is not None)
+    BoundHandler.toolkit_composer = None
+    if dependency_resolver is not None and environment_signing_key_file:
+        from .environment_config import load_signing_key
+        from .gateway.toolkits import ToolkitComposer, ToolkitStore, toolkits_path
+        BoundHandler.toolkit_composer = ToolkitComposer(
+            environment_registry, ToolkitStore(toolkits_path(image_file)),
+            load_signing_key(environment_signing_key_file))
     BoundHandler.services = build_services(
         store=store, routing_store=routing_store, metrics_store=metrics_store,
         telemetry=resolved_telemetry, heartbeat_ttl_seconds=heartbeat_ttl_seconds,

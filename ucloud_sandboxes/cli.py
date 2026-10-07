@@ -331,6 +331,21 @@ def build_parser() -> argparse.ArgumentParser:
     from .chunk_migrate import add_commands as add_chunk_migrate_commands
     add_chunk_migrate_commands(subparsers)
 
+    toolkit_register = subparsers.add_parser(
+        "toolkit-register",
+        help="Point a toolkit name:tag at a published toolkit image's signed root (docs/toolkit-layers.md).",
+    )
+    add_config_args(toolkit_register)
+    toolkit_register.add_argument("--name", required=True)
+    toolkit_register.add_argument("--tag", required=True)
+    toolkit_register.add_argument("--image-ref", required=True,
+                                  help="The toolkit image, published with publish-environment "
+                                       "--environment-allow-path opt/ucloud/toolkits/<name>.")
+    toolkit_register.set_defaults(func=cmd_toolkit_register)
+    toolkit_list = subparsers.add_parser("toolkit-list", help="List registered toolkits.")
+    add_config_args(toolkit_list)
+    toolkit_list.set_defaults(func=cmd_toolkit_list)
+
     publish_environment = subparsers.add_parser(
         "publish-environment", help="Publish a fresh allowlisted immutable artifact for an existing OCI image.",
     )
@@ -1049,6 +1064,32 @@ def cmd_inspect_job(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_toolkit_register(args: argparse.Namespace) -> int:
+    from .environment_artifact import load_image_environment
+    from .environment_config import environment_registry_from_deployment
+    from .gateway.toolkits import ToolkitComposer, ToolkitStore, toolkits_path
+    from .managed_registry import manifest_digest_from_image_ref, registry_repository_tag_from_image_ref
+    config = load_config(args)
+    registry = environment_registry_from_deployment(config)
+    coordinates = registry_repository_tag_from_image_ref(args.image_ref)
+    if registry is None or coordinates is None:
+        raise ValueError("toolkits need immutable environments and a managed toolkit image")
+    repository, tag = coordinates
+    root, _environment = load_image_environment(
+        registry, repository, manifest_digest_from_image_ref(args.image_ref) or tag)
+    store = ToolkitStore(toolkits_path(config.image_file()))
+    component = ToolkitComposer(registry, store, signing_key=None).validate_toolkit(args.name, root)
+    store.register(args.name, args.tag, root)
+    print(json.dumps({"name": args.name, "tag": args.tag, "root": root, "component": component}, sort_keys=True))
+    return 0
+
+
+def cmd_toolkit_list(args: argparse.Namespace) -> int:
+    from .gateway.toolkits import ToolkitStore, toolkits_path
+    print(json.dumps(ToolkitStore(toolkits_path(load_config(args).image_file())).listing(), indent=2))
+    return 0
+
+
 def cmd_publish_environment(args: argparse.Namespace) -> int:
     from .environment_builder import publish_from_args
     return publish_from_args(args)
@@ -1133,6 +1174,8 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         environment_registry=environment_registry_from_args(args) or environment_registry_from_deployment(config),
         dispatch_environment_roots=bool(config.immutable_environments is not None
                                         and config.immutable_environments.dispatch_roots),
+        environment_signing_key_file=(config.immutable_environments.signing_key_file
+                                      if config.immutable_environments is not None else ""),
         base_regeneration=base_regeneration_from_deployment(config, args.config),
         import_external_images=bool(
             config.immutable_environments is not None

@@ -38,16 +38,23 @@ def roots_path(image_file):
 
 
 def retention_view(image_file):
-    """(roots retention keeps for their rows alone, images whose annotation no
+    """(roots retention keeps for their rows alone, toolkit roots and
+    compositions included, images whose annotation no
     longer counts) (plan §3.3). A dispatched image's old root is kept only by
     references (routes, owners), so a build input, whose manifest stays,
     still releases its EROFS root. Empty before the gateway opens the table."""
     path = roots_path(image_file)
+    toolkits = Path(image_file).with_name("toolkits.sqlite3")  # gateway/toolkits.py
+    # Registered toolkits and every composition with them (docs/toolkit-layers.md).
+    toolkit_roots = set()
+    if toolkits.exists():
+        from .toolkits import ToolkitStore
+        toolkit_roots = ToolkitStore(toolkits).live_roots()
     if not path.exists():
-        return set(), set()
+        return toolkit_roots, set()
     store = ImageRootsStore(path)
-    return store.live_roots(), {(row["repository"], row["manifest_digest"])
-                                for state in DISPATCHED for row in store.rows(state=state)}
+    return store.live_roots() | toolkit_roots, {(row["repository"], row["manifest_digest"])
+                                                for state in DISPATCHED for row in store.rows(state=state)}
 
 
 def released_lookup(image_file):

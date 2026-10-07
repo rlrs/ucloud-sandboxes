@@ -53,19 +53,10 @@ def environment_registry_from_args(args):
         getattr(args, "environment_registry_repository", ""), getattr(args, "environment_trusted_keys", None))
 
 
-def environment_publisher_from_args(args):
-    registry = environment_registry_from_args(args)
-    key_path = getattr(args, "environment_signing_key", None)
-    allowlist = tuple(getattr(args, "environment_allow_path", ()) or ())
-    preserve_mtimes = getattr(args, "environment_preserve_mtimes", False)
-    if registry is None and key_path is None and not allowlist and not preserve_mtimes:
-        return None
-    if registry is None or key_path is None or not allowlist:
-        raise ValueError("environment builder requires registry trust, a signing key, and an explicit immutable path allowlist")
+def load_signing_key(key_path):
+    """The Ed25519 environment signing key: a private, owned regular file."""
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from cryptography.hazmat.primitives.serialization import load_pem_private_key
-    from .environment_builder import FreshEnvironmentBuilder
-    from .image_rootfs import DockerOverlay2RootfsStore
     descriptor = os.open(key_path, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(descriptor, "rb") as stream:
         info = os.fstat(stream.fileno())
@@ -77,6 +68,21 @@ def environment_publisher_from_args(args):
     key = load_pem_private_key(payload, password=None)
     if not isinstance(key, Ed25519PrivateKey):
         raise ValueError("environment signing requires an Ed25519 key")
+    return key
+
+
+def environment_publisher_from_args(args):
+    registry = environment_registry_from_args(args)
+    key_path = getattr(args, "environment_signing_key", None)
+    allowlist = tuple(getattr(args, "environment_allow_path", ()) or ())
+    preserve_mtimes = getattr(args, "environment_preserve_mtimes", False)
+    if registry is None and key_path is None and not allowlist and not preserve_mtimes:
+        return None
+    if registry is None or key_path is None or not allowlist:
+        raise ValueError("environment builder requires registry trust, a signing key, and an explicit immutable path allowlist")
+    from .environment_builder import FreshEnvironmentBuilder
+    from .image_rootfs import DockerOverlay2RootfsStore
+    key = load_signing_key(key_path)
     root = args.image_file.absolute().parent / "environment-build"
     builder = FreshEnvironmentBuilder(DockerOverlay2RootfsStore(root / "images", docker_binary=args.docker_binary),
                                       registry, key, root / "scratch", preparation_subprocess=True,

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.55 - 2026-10-07 (gateway)
+
+- **Image recipes submit builds without waiting for them.** The recipe build payload lacked `wait: false`, so a builder ran each submission synchronously and one ensure call held its request through nine builds (530 s) in the first live check.
+
 ## 0.9.54 - 2026-10-07 (gateway)
 
 - **Image recipes (C2.7, [docs/image-recipes.md](docs/image-recipes.md)).** Training names images and never sends recipes; the gateway resolved only images prepared as sources, so a foundation-backed task's name had nothing to resolve to. Now:

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.52 - 2026-10-07 (gateway)
+
+- **Released build bases regenerate again.** Stored chunk locators keep the store node URL of the day they were built, and production's still named the Hetzner store node (10.42.0.200), so since the move to UCloud every regeneration failed ("chunk locator names a source other than the configured store node"), and with it every build from a released foundation: all of OpenSWE, TMax and Terminal-Lego's foundation-backed tasks. The Python chunk reader now takes only the object path from a locator and reads it on its configured store node; anything that is not a store object path is still refused. Workers were unaffected (nydusd names objects by key). Found by the C2.14 build pilot.
+
 ## 0.9.51 - 2026-10-07 (gateway; workers)
 
 - **Toolkit layers (C2.5, [docs/toolkit-layers.md](docs/toolkit-layers.md)).** A sandbox can ask for read-only toolkits (`SandboxSpec.toolkits`, at most 4, `name:tag` or `name@sha256:<root>`). The gateway pins them and dispatches the image's root with the toolkits' components on top, signed with the deployment's environment key; nodes mount and share it like any root. Files live under `/opt/ucloud/toolkits/<name>`; nothing in the sandbox's environment changes.

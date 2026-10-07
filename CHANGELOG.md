@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.54 - 2026-10-07 (gateway)
+
+- **Image recipes (C2.7, [docs/image-recipes.md](docs/image-recipes.md)).** Training names images and never sends recipes; the gateway resolved only images prepared as sources, so a foundation-backed task's name had nothing to resolve to. Now:
+  - `POST /v1/image-recipes` registers names with their build (an uploaded context, Dockerfile path, build arguments) and a retention class, `pinned` or `cached`. Identical recipes share one image, `recipe-<sha40>`; contexts are kept past the upload store's one-day expiry.
+  - `POST /v1/images/ensure` reports each name (`ready` with its reference, `building`, `queued`, `failed`, `unknown`) and submits missing builds through the ordinary build dispatch, at most 32 per call. Build state is the gateway's own, since builders forget theirs.
+  - A create naming a registered recipe gets the built image, or a retryable 503 `image_building` that starts its build.
+  - SDK 0.4.37: `ImageRecipe`, `register_image_recipes`, `ensure_images`, `wait_for_images`.
+- `/v1/images/build`'s dispatch is a method that returns its answer, shared with recipes; its responses are unchanged.
+
 ## 0.9.53 - 2026-10-07 (gateway)
 
 - **Base regeneration retries a store node's transient errors.** A store node answers 503 when its S3 fill misses a deadline (a cold cache under load). Regeneration took the first such answer as final; in the C2.14 build pilot one failed TMax's largest foundation and, through the 600 s failure backoff, 45 of 100 builds. Regeneration and unpack now retry 502/503/504 and connection errors for about a minute; a 4xx or unverifiable bytes still fail at once. Workers' reads are unchanged.

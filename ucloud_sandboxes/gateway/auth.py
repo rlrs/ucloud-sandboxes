@@ -37,6 +37,8 @@ def _is_sdk_api_request(method: str, path: str) -> bool:
         ("GET", "/v1/images/builds"),
         ("POST", "/v1/images/build"),
         ("POST", "/v1/images/pull"),
+        ("POST", "/v1/images/ensure"),
+        ("POST", "/v1/image-recipes"),
         ("POST", "/v1/sandboxes:batch"),
     }
     if (method, path) in exact_routes:

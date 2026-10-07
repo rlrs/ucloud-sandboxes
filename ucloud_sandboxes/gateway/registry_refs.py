@@ -91,6 +91,21 @@ class RegistryReferences:
                 "registry image-use state could not be persisted"
             ) from exc
 
+    def ensure_image_reference(self, image_ref: str, owner: str) -> None:
+        """A durable reference, released only by its owner: a pinned image recipe."""
+        store = self.usage_store
+        if store is None or self.managed_coordinates(image_ref) is None:
+            return
+        try:
+            _persist_registry_image_protection(
+                store, image_ref, owner, touch=True, persistent=True,
+                dependency_resolver=self.dependency_resolver,
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            raise RegistryImageReferenceUnavailable(
+                "registry image-use state could not be persisted"
+            ) from exc
+
     def ensure_route_reference(self, route: SandboxRoute, *, touch: bool) -> None:
         image_ref = str(route.spec.get("image") or "")
         store = self.usage_store

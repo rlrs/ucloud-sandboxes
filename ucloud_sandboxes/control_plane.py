@@ -4,7 +4,7 @@ import asyncio
 from collections import OrderedDict
 from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from contextlib import contextmanager, nullcontext
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from http import HTTPStatus
 import hashlib
@@ -475,6 +475,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     dispatch_environment_roots = False
     # Toolkit layers (docs/toolkit-layers.md); None without a signing key.
     toolkit_composer = None
+    image_recipes = None
+    image_recipe_contexts = None
     create_placement = "ranked"
 
     @traced_http_request
@@ -720,6 +722,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             return True
         if path == "/v1/images/builds" and self.command == "GET":
             self._list_image_builds_across_nodes()
+            return True
+        if path == "/v1/image-recipes" and self.command == "POST":
+            self._register_image_recipes()
+            return True
+        if path == "/v1/images/ensure" and self.command == "POST":
+            self._ensure_images()
             return True
         build_key = _image_build_key_from_path(path)
         if build_key is not None and self.command == "GET":
@@ -3115,6 +3123,24 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     def _resolve_create_spec(self, spec: SandboxSpec, root: Any) -> SandboxSpec | None:
         """Image reference, external import and root dispatch, once per create
         or group; None once an error response is written."""
+        if self.image_recipes is not None and self.image_recipes.has(spec.image):
+            status = self._recipe_ensurer().ensure([spec.image])[spec.image]
+            root.set_attribute("image_recipe_state", status["state"])
+            if status["state"] != "ready":
+                root.status = "error"
+                root.set_attribute("outcome", "image_recipe_" + status["state"])
+                if status["state"] == "failed":
+                    self._write_json({"error": f"image {spec.image} failed to build: {status.get('error')}",
+                                      "error_code": "image_build_failed", "image_id": status.get("image_id")},
+                                     status=HTTPStatus.CONFLICT)
+                else:
+                    self._write_json({"error": f"image {spec.image} is being built ({status['state']})",
+                                      "error_code": "image_building", "retryable": True,
+                                      "image_id": status.get("image_id")},
+                                     status=HTTPStatus.SERVICE_UNAVAILABLE,
+                                     headers={"Retry-After": "15", "X-UCloud-Sandbox-Retryable": "true"})
+                return None
+            spec = replace(spec, image=status["reference"])
         with self.telemetry.span(
             "gateway.sandbox_resolve_image",
             attributes={"container.image.name": spec.image},
@@ -3411,15 +3437,148 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return record
         return None
 
+    def _register_image_recipes(self) -> None:
+        """POST /v1/image-recipes {"recipes": [{name, context_archive_digest,
+        context_archive_size, dockerfile?, build_args?, retention?}]}: names a
+        trainer will ask for, with the recipe that builds each (contexts are
+        uploaded first through /v1/image-contexts)."""
+        from .gateway.image_recipes import MAX_RECIPES_PER_REQUEST, RecipeError, keep_context, validate_recipe
+        if self.image_recipes is None:
+            self._write_json({"error": "image recipes are not available on this deployment",
+                              "error_code": "image_recipes_unavailable"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        try:
+            raw = self._read_json_body()
+            rows = raw.get("recipes") if isinstance(raw, dict) and set(raw) == {"recipes"} else None
+            if not isinstance(rows, list) or not 0 < len(rows) <= MAX_RECIPES_PER_REQUEST:
+                raise RecipeError(f"payload must be {{\"recipes\": [...]}} with 1-{MAX_RECIPES_PER_REQUEST} recipes")
+            recipes = [validate_recipe(row) for row in rows]
+            missing = []
+            for recipe in recipes:
+                digest, size = recipe["context_archive_digest"], recipe["context_archive_size"]
+                try:
+                    uploaded_build_context_reference({"context_archive_digest": digest, "context_archive_size": size,
+                                                      "context_archive_format": "tar.gz", "context_path": "."},
+                                                     self.build_context_store)
+                    keep_context(self.build_context_store, self.image_recipe_contexts, digest, size)
+                except (FileNotFoundError, ValueError):
+                    missing.append(recipe["name"])
+            if missing:
+                self._write_json({"error": "build contexts are not uploaded", "error_code": "build_context_missing",
+                                  "names": missing[:100]}, status=HTTPStatus.BAD_REQUEST)
+                return
+            registered = self.image_recipes.register(recipes)
+        except (json.JSONDecodeError, ValueError) as exc:
+            self._write_json({"error": str(exc), "error_code": "invalid_image_recipe"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        self._write_json({"registered": len(registered), "changed": sum(row["changed"] for row in registered),
+                          "recipes": registered})
+
+    def _ensure_images(self) -> None:
+        """POST /v1/images/ensure {"names": [...]}: each registered name's state
+        (ready with its reference, building, queued, failed, unknown); missing
+        images are submitted for building. Idempotent: callers poll it."""
+        from .gateway.image_recipes import RecipeError
+        if self.image_recipes is None:
+            self._write_json({"error": "image recipes are not available on this deployment",
+                              "error_code": "image_recipes_unavailable"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        try:
+            raw = self._read_json_body()
+            names = raw.get("names") if isinstance(raw, dict) and set(raw) == {"names"} else None
+            if not isinstance(names, list) or not names or not all(isinstance(n, str) and n for n in names):
+                raise RecipeError('payload must be {"names": [non-empty strings]}')
+            images = self._recipe_ensurer().ensure(names)
+        except (json.JSONDecodeError, ValueError) as exc:
+            self._write_json({"error": str(exc), "error_code": "invalid_ensure_request"},
+                             status=HTTPStatus.BAD_REQUEST)
+            return
+        counts: dict[str, int] = {}
+        for status in images.values():
+            counts[status["state"]] = counts.get(status["state"], 0) + 1
+        self._write_json({"images": images, "counts": counts})
+
+    def _recipe_ensurer(self) -> Any:
+        from .gateway.image_recipes import RecipeEnsurer, Submission, restore_context
+
+        def resolve(image_id: str) -> str | None:
+            reference, error = self.services.images.resolve(self, image_id, reference_kind="name")
+            return None if error is not None or reference == image_id else reference
+
+        def build_status(build_id: str) -> tuple[str | None, dict[str, Any] | None]:
+            try:
+                records = self._image_build_records_for_key(build_id)
+            except Exception:  # noqa: BLE001 - builders unreachable: unknown for now, not lost.
+                return "unknown", None
+            if not records:
+                return None, None
+            build = records[0]
+            status = str(build.get("status") or "")
+            return (status if status in {"succeeded", "failed"} else "running"), build
+
+        def adopt(build: dict[str, Any]) -> None:
+            image = build.get("image")
+            if isinstance(image, dict) and _image_record_available_to_sandboxes(image):
+                image = self.services.images.record_with_digest(image)
+                try:
+                    self.image_manager.store.upsert(ImageRecord.from_dict(image))
+                except ValueError:
+                    return
+                self.services.images.invalidate_inventory()
+
+        def submit(payload: dict[str, Any]) -> Any:
+            restore_context(self.image_recipe_contexts, self.build_context_store,
+                            payload["context_archive_digest"], payload["context_archive_size"])
+            result = self._dispatch_image_build(payload)
+            body = result.response.json() if result.response is not None else (result.payload or {})
+            if 200 <= int(result.status) < 300 and isinstance(body.get("build"), dict):
+                build = body["build"]
+                if build.get("status") == "failed":
+                    return Submission("failed", error=str(build.get("error") or "build failed")[:2000])
+                return Submission("building", build_id=str(build.get("build_id") or payload["id"]))
+            error = str(body.get("error") or f"build dispatch answered {int(result.status)}")[:2000]
+            if int(result.status) >= 500 or body.get("retryable"):
+                return Submission("queued", error=error)
+            return Submission("failed", error=error)
+
+        def protect(image_id: str) -> None:
+            reference = resolve(image_id)
+            if reference is not None:
+                self.services.registry_refs.ensure_image_reference(reference, f"image-recipe-pinned:{image_id}")
+
+        return RecipeEnsurer(self.image_recipes, resolve=resolve, build_status=build_status, adopt=adopt,
+                             submit=submit, protect=protect)
+
     def _route_image_build(self) -> None:
-        reserved_job_id = ""
         try:
             body = self._read_raw_body(max_bytes=self.max_json_body_bytes)
-            if self._write_registry_disk_pressure("image builds"):
-                return
             raw = json.loads(body.decode("utf-8")) if body else None
             if not isinstance(raw, dict):
                 raise ValueError("image build payload must be a JSON object")
+        except (json.JSONDecodeError, ValueError) as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+        self._write_build_dispatch(self._dispatch_image_build(raw))
+
+    def _write_build_dispatch(self, result: "_BuildDispatch") -> None:
+        if result.response is not None:
+            self._send_proxied_response(result.response)
+        else:
+            self._write_json(result.payload, status=result.status, headers=result.headers)
+
+    def _dispatch_image_build(self, raw: dict[str, Any]) -> "_BuildDispatch":
+        """Submit one build through the gateway's path (prepared foundations,
+        regenerated bases, builder selection): /v1/images/build and image recipes."""
+        reserved_job_id = ""
+        try:
+            pressure = self.services.images.disk_refusal()
+            if pressure is not None:
+                return _BuildDispatch(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    registry_disk_pressure_payload(pressure, action="image builds"),
+                    {"Retry-After": str(REGISTRY_DISK_RETRY_AFTER_SECONDS), "X-UCloud-Sandbox-Retryable": "true"},
+                )
+            raw = dict(raw)
             raw.pop("base_contexts", None)  # Only the gateway names regenerated bases.
             context_reference = uploaded_build_context_reference(
                 raw, self.build_context_store
@@ -3504,17 +3663,16 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         root.status = "error"
                         root.set_attribute("outcome", "queued_no_builder")
                         root.set_attribute("pending_image_builds", pending_builds)
-                        self._write_json(
+                        return _BuildDispatch(
+                            HTTPStatus.SERVICE_UNAVAILABLE,
                             {
                                 "error": "no ready builder execution slot is available",
                                 "error_code": "builder_not_ready",
                                 "retryable": True,
                                 "pending_image_builds": pending_builds,
                             },
-                            status=HTTPStatus.SERVICE_UNAVAILABLE,
-                            headers={"Retry-After": "2", "X-UCloud-Sandbox-Retryable": "true"},
+                            {"Retry-After": "2", "X-UCloud-Sandbox-Retryable": "true"},
                         )
-                        return
                     with self.telemetry.span(
                         "gateway.image_build_enqueue",
                         attributes={"node.id": heartbeat.node_id},
@@ -3538,8 +3696,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         root.status = "error"
                         root.set_attribute("outcome", "context_proxy_failed")
                         root.set_attribute("status_code", int(context_response.status))
-                        self._send_proxied_response(context_response)
-                        return
+                        return _BuildDispatch(context_response.status, response=context_response)
                     self.services.registry_refs.protect_build_target(
                         spec,
                         push=push,
@@ -3604,25 +3761,21 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         root.status = "error"
                         root.set_attribute("outcome", "builder_failed")
                         root.set_attribute("status_code", int(response.status))
-                    self._send_proxied_response(response)
-                    return
+                    return _BuildDispatch(response.status, response=response)
         except BaseReleased as exc:
-            self._write_json({"error": str(exc), "error_code": "base_released"}, status=HTTPStatus.CONFLICT)
-            return
+            return _BuildDispatch(HTTPStatus.CONFLICT, {"error": str(exc), "error_code": "base_released"})
         except (json.JSONDecodeError, ValueError) as exc:
-            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
-            return
-        except RegistryImageReferenceUnavailable as exc:
-            self._write_registry_lease_unavailable(exc)
-            return
+            return _BuildDispatch(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+        except RegistryImageReferenceUnavailable:
+            return _BuildDispatch(HTTPStatus.SERVICE_UNAVAILABLE,
+                                  {"error": "registry image-use state is unavailable", "retryable": True},
+                                  {"Retry-After": "2"})
         except BaseRegenerating as exc:
-            self._write_json({"error": str(exc), "error_code": "base_regenerating", "retryable": True},
-                             status=HTTPStatus.SERVICE_UNAVAILABLE,
-                             headers={"Retry-After": "30", "X-UCloud-Sandbox-Retryable": "true"})
-            return
+            return _BuildDispatch(HTTPStatus.SERVICE_UNAVAILABLE,
+                                  {"error": str(exc), "error_code": "base_regenerating", "retryable": True},
+                                  {"Retry-After": "30", "X-UCloud-Sandbox-Retryable": "true"})
         except RuntimeError as exc:
-            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
-            return
+            return _BuildDispatch(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
 
         finally:
             if reserved_job_id:
@@ -5926,6 +6079,10 @@ def build_server(
         dependency_resolver = EnvironmentDependencyResolver(
             environment_registry, image_roots=ImageRootsStore(roots_path(image_file)))
     BoundHandler.dispatch_environment_roots = bool(dispatch_environment_roots and dependency_resolver is not None)
+    from .gateway.image_recipes import ImageRecipeStore, recipes_path
+    BoundHandler.image_recipes = ImageRecipeStore(recipes_path(image_file))
+    BoundHandler.image_recipe_contexts = BuildContextBlobStore(
+        image_file.parent / f"{image_file.stem}-recipe-contexts", max_blob_bytes=DEFAULT_MAX_PROXY_BODY_BYTES)
     BoundHandler.toolkit_composer = None
     if dependency_resolver is not None and environment_signing_key_file:
         from .environment_config import load_signing_key
@@ -6490,6 +6647,15 @@ def _retryable_image_pull_response(response: ProxiedResponse) -> bool:
 
 def _precise_elapsed_ms(started: float) -> float:
     return round(max(0.0, (time.monotonic() - started) * 1000), 3)
+
+
+@dataclass(frozen=True)
+class _BuildDispatch:
+    """One build dispatch's answer: a proxied builder response, or a JSON one."""
+    status: int
+    payload: dict[str, Any] | None = None
+    headers: dict[str, str] | None = None
+    response: ProxiedResponse | None = None
 
 
 def _image_build_response_terminal(payload: dict[str, Any]) -> bool:

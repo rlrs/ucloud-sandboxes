@@ -36,6 +36,7 @@ import json
 import re
 import subprocess
 import sys
+import threading
 import time
 import tomllib
 import urllib.request
@@ -155,14 +156,18 @@ class GitObjects:
         found = {}
         with subprocess.Popen(["git", "-C", str(self.repo), "cat-file", "--batch"], stdin=subprocess.PIPE,
                               stdout=subprocess.PIPE) as process:
-            process.stdin.write("\n".join(oids).encode() + b"\n")
-            process.stdin.close()
+            def feed():  # Concurrently: git blocks writing once we stop reading.
+                process.stdin.write("\n".join(oids).encode() + b"\n")
+                process.stdin.close()
+            writer = threading.Thread(target=feed, daemon=True)
+            writer.start()
             for oid in oids:
                 header = process.stdout.readline().split()
                 if len(header) != 3:
                     raise ValueError(f"blob {oid} is missing from {self.repo}")
                 found[oid] = process.stdout.read(int(header[2]))
                 process.stdout.read(1)
+            writer.join()
         return found
 
 

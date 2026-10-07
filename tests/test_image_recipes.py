@@ -72,6 +72,7 @@ class ImageRecipeTests(unittest.TestCase):
         self.assertEqual(self.builders.submitted[0], build_payload(self.store.lookup(["prime/tmax:task_1"])
                                                                    ["prime/tmax:task_1"]))
         self.assertTrue(self.builders.submitted[0]["push"])
+        self.assertIs(self.builders.submitted[0]["wait"], False)  # A synchronous build would hold the ensure call.
 
     def test_a_build_goes_from_building_to_ready_and_stays_ready_without_its_builder(self):
         self.store.register([recipe("t:1", retention="pinned")])

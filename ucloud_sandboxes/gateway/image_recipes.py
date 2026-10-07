@@ -124,7 +124,7 @@ def build_payload(recipe):
             "context_archive_digest": recipe["context_archive_digest"],
             "context_archive_size": recipe["context_archive_size"], "context_archive_format": "tar.gz",
             "build_args": dict(recipe["build_args"]), "labels": {"ucloud-sandboxes.recipe": recipe["recipe_sha256"]},
-            "push": True}
+            "push": True, "wait": False}  # Submit and return: ensure polls; never hold a request for a build.
 
 
 class ImageRecipeStore:

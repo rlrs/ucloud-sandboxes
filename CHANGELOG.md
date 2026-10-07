@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.56 - 2026-10-07 (gateway; builders)
+
+- **Builds end in the chunk store (`immutable_environments.builder_format: "rafs"`, on in production).** A build's last step, where the EROFS publisher ran, converts the pushed image into the chunk store; its tag names a copy annotated with the chunk-store root, so resolution and dispatch are unchanged.
+  - Layers another build converted are reused through the index's layer claims: a foundation is converted once (93 s for TMax's largest), later task images about 20 s each.
+  - Builders get the chunk_store block, the index write token and the S3 key (root-only, as the store node), and install the builder bundle's `nydus-image`, checked against the new `chunk_store.nydus_image_sha256`.
+- **Recipe images lose their OCI copy once built into the chunk store.** Ensure records each one's `image_roots` row (one root, wave `recipe`) and deletes its manifest through `release_oci`'s fences; a lease or route defers it to a later call. A recipe rebuilds its image, so no regeneration receipt. Pinned recipes are an OCI-free owner. The registry no longer keeps 80-220 MB per task image; the chunk store adds about 5-15 MB (the build pilot).
+- **Importer** (`scripts/import_image_recipes.py`): exports a pinned TMax or Terminal-Lego checkout's recipes (whole `environment/` trees, LFS objects resolved and checked) and registers them, optionally building them N at a time.
+
 ## 0.9.55 - 2026-10-07 (gateway)
 
 - **Image recipes submit builds without waiting for them.** The recipe build payload lacked `wait: false`, so a builder ran each submission synchronously and one ensure call held its request through nine builds (530 s) in the first live check.

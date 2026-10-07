@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.57 - 2026-10-07 (gateway; store node)
+
+- **Build package cache on the store node** (`chunk_store.store_node.package_cache`, `ucloud-package-cache`). Canonical's archive times out from UCloud, so every Ubuntu-based sandbox build stalled in `apt` (the sandbox-build pilot's slow tail: 502 s for five small packages). An HTTP proxy for allowlisted package hosts, each served by a configured upstream (Ubuntu's by `mirrors.dotsrc.org`); package files kept for good (LRU past `max_bytes`), index files for `index_seconds` with a stale copy on upstream failure, one fetch per file at a time. Sandboxes may reach it (`sandbox.direct_network_allow_tcp`); build steps use it as `http_proxy`.
+
 ## 0.9.56 - 2026-10-07 (gateway; builders)
 
 - **Builds end in the chunk store (`immutable_environments.builder_format: "rafs"`, on in production).** A build's last step, where the EROFS publisher ran, converts the pushed image into the chunk store; its tag names a copy annotated with the chunk-store root, so resolution and dispatch are unchanged.

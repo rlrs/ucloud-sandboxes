@@ -1,6 +1,7 @@
 """ucloud-chunk-store (C2.6) against an S3 stand-in with injected latency,
 stalls and errors; locators naming it; workers reading only through it."""
 from concurrent.futures import ThreadPoolExecutor
+import dataclasses
 import hashlib
 import json
 from pathlib import Path
@@ -316,6 +317,16 @@ class ChunkStoreNodeTests(unittest.TestCase):
             image._use(presigned._locator)
         with self.assertRaises(ValueError):
             reader(presigned._locator.packs[0][1], 0, 10)
+        # A stored locator from before the store node moved names its old
+        # address: only the object paths count, read through today's node.
+        moved = dataclasses.replace(
+            locator, packs=tuple((pack, url.replace(store.url, "http://10.42.0.200:5091")) for pack, url in locator.packs),
+            meta={name: url.replace(store.url, "http://10.42.0.200:5091") for name, url in locator.meta.items()})
+        again = load_rafs_image(digest, component, _Presigned(moved), reader=reader, getter=getter, origin=store.url)
+        self.assertEqual(again._locator.packs, locator.packs)
+        self.assertEqual(again._locator.meta, locator.meta)
+        offset, size = again.map.offsets[0], again.map.sizes[0]
+        self.assertEqual(hashlib.sha256(cache.read(again, offset, size)).digest(), again.map.ids[0])
 
     def test_a_worker_fails_closed_when_the_node_is_down(self):
         fixture = ChunkStoreFixture(self)

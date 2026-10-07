@@ -17,6 +17,7 @@ import hashlib
 import os
 from pathlib import Path
 import threading
+from urllib.parse import urlsplit
 
 from .chunk_index import http_range, http_request
 from .chunk_store import (BLOCK, RAW, ChunkMap, bootstrap_devices, chunk_map_regions, decode_chunk, pack_key,
@@ -95,7 +96,7 @@ class RafsImage:
 
     def _use(self, locator):
         """Adopt a locator after bounds checks against the verified map."""
-        require_origin(locator, self.origin)
+        locator = on_origin(locator, self.origin)
         if len(locator.entries) != len(self.chunks) or any(
                 flags == RAW and clen != size for (_, _, clen, flags), size in zip(locator.entries, self.map.sizes)):
             raise ValueError("chunk locator does not fit its chunk map")
@@ -242,12 +243,24 @@ def store_locator(locator, base_url, prefix):
     return dataclasses.replace(locator, packs=packs)
 
 
-def require_origin(locator, origin):
-    """With a store node configured, a locator naming anything else (S3, a
-    presigned URL) is refused: workers fail closed, never reach S3."""
-    if origin is not None and any(not url.startswith(store_prefix(origin))
-                                  for url in [url for _, url in locator.packs] + list(locator.meta.values())):
-        raise ValueError("chunk locator names a source other than the configured store node")
+def on_origin(locator, origin):
+    """With a store node configured, ``locator`` with every URL on ``origin``.
+
+    Stored locators keep the store node URL of the day they were built (the
+    index and S3 hold them for good), so a store node that moves leaves them
+    naming the old one; only the object path is the locator's to say. Anything
+    that is not a store object path (S3, a presigned URL) is refused: workers
+    fail closed, never reach S3."""
+    if origin is None:
+        return locator
+
+    def rebased(url):
+        parts = urlsplit(url)
+        if parts.query or parts.fragment or not parts.path.startswith("/v1/objects/"):
+            raise ValueError("chunk locator names a source other than the configured store node")
+        return store_prefix(origin) + parts.path.removeprefix("/v1/objects/")
+    return dataclasses.replace(locator, packs=tuple((digest, rebased(url)) for digest, url in locator.packs),
+                               meta={name: rebased(url) for name, url in locator.meta.items()})
 
 
 def store_access(base_url, token):
@@ -274,7 +287,7 @@ def load_rafs_image(digest, component, index, *, getter=_get, reader=http_range,
     locator = index.locator(digest)
     if set(locator.meta) != {"bootstrap", "chunk_map"}:
         raise ValueError("chunk locator lacks the image metadata URLs")
-    require_origin(locator, origin)
+    locator = on_origin(locator, origin)
     boot_size, map_size = component.bootstrap["size"], component.chunk_map["size"]
     with ThreadPoolExecutor(2, thread_name_prefix="rafs-meta") as pool:
         compressed = pool.submit(getter, locator.meta["bootstrap"], boot_size + boot_size // 64 + (1 << 20))

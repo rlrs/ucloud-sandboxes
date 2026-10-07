@@ -47,6 +47,26 @@ and give each sandbox a copy-on-write upper over its composition.
   root their route pinned, as today. The group create (`:batch`) resolves one
   spec per group, so a group composes once.
 
+### 1b. With RAFS images (chunk store, nydusd)
+
+- **Production images** are RAFS in the `image` layout: one merged bootstrap per
+  image, so their root has one component. nydusd exports it as an NBD block
+  device that the kernel mounts as EROFS, and the composition bind-mounts it.
+- **With a toolkit** the root has two components, and the composition becomes a
+  read-only overlay of two lowers (image, then toolkit on top). That path exists
+  (layer-layout images stack up to 33 components); both lowers are kernel EROFS
+  mounts from NBD devices. It is new for single-bootstrap roots, so it gets its
+  own test, including a toolkit path the image's merged bootstrap also has a
+  parent directory for (`/opt`).
+- **Toolkits are RAFS too:** built, then converted by the chunk converter
+  (`image` layout) and served from the chunk store by nydusd, like images. Not
+  left as EROFS components on the Python NBD export, whose registry storage is
+  being retired. Cost: one nydusd process and one NBD device per toolkit per
+  node, shared by every composition.
+- **No bootstrap merge:** merging the toolkit into each image's bootstrap would
+  build a new bootstrap (up to 128 MB) per (image, toolkit) pair; stacking a
+  second lower avoids that.
+
 ### 2. A fixed, namespaced path; files only
 
 - Every toolkit file is under `opt/ucloud/toolkits/<name>/`. Prebuilt Python
@@ -141,7 +161,7 @@ shared across all sandboxes on a node.
 | gateway | compose + sign + publish combined roots; toolkit registry table and endpoints; resolve `toolkits` in the create and group-create spec path | medium |
 | Python models / SDK | `SandboxSpec.toolkits` (omitted when empty), validation, docs | small |
 | daemon (`registry/spec.rs`) | the field in the spec codec, byte-identical | small |
-| builder | the toolkit publish check (prefix, no whiteouts, no setuid, size) | small |
+| builder, chunk converter | the toolkit publish check (prefix, no whiteouts, no setuid, size); convert the toolkit to RAFS (`image` layout) | small |
 | toolkit build | a script that builds the verifiers harness toolkit | small |
 | verifiers-ucloud | `toolkits` config, harness-process env | small |
 | verifiers | use an existing `uv` | tiny |

@@ -31,8 +31,9 @@ and give each sandbox a copy-on-write upper over its composition.
 
 ### 1. Compose at the gateway, not on the node
 
-- **Gateway composition:** combined root = the image root's components, then the
-  toolkits' components on top, with the image's `source_image` and
+- **Gateway composition:** combined root = the image root's manifest with the
+  toolkits' components appended to `EnvironmentManifest.toolkits` (the slot the
+  signed-artifact rules already reserve for them), so they sit on top, with the image's `source_image` and
   `image_config` unchanged. Signed with `immutable_environments.signing_key_file`
   (the gateway holds it to ship it to builders, so nothing new is exposed).
   Published to the environment repository content-addressed, so composing twice
@@ -58,11 +59,15 @@ and give each sandbox a copy-on-write upper over its composition.
   mounts from NBD devices. It is new for single-bootstrap roots, so it gets its
   own test, including a toolkit path the image's merged bootstrap also has a
   parent directory for (`/opt`).
-- **Toolkits are RAFS too:** built, then converted by the chunk converter
-  (`image` layout) and served from the chunk store by nydusd, like images. Not
-  left as EROFS components on the Python NBD export, whose registry storage is
-  being retired. Cost: one nydusd process and one NBD device per toolkit per
-  node, shared by every composition.
+- **Toolkits are plain signed EROFS components**, not RAFS. The signed-artifact
+  rules already reserve this: an image's RAFS (or layer) components lead its root
+  and rebuild exactly its layers, and "only independently signed toolkits follow"
+  (`bind_rafs_layers`, `bind_source_layers`), as whole-image EROFS components in
+  `EnvironmentManifest.toolkits`. A toolkit lives in the registry and is served by
+  the Python NBD export. That is cheap here: the composition is mounted once per
+  node and shared, so its pages cross the export once per node and come from the
+  page cache for every later sandbox. RAFS toolkits would need a change to those
+  rules; a later option, not needed now.
 - **No bootstrap merge:** merging the toolkit into each image's bootstrap would
   build a new bootstrap (up to 128 MB) per (image, toolkit) pair; stacking a
   second lower avoids that.
@@ -161,7 +166,7 @@ shared across all sandboxes on a node.
 | gateway | compose + sign + publish combined roots; toolkit registry table and endpoints; resolve `toolkits` in the create and group-create spec path | medium |
 | Python models / SDK | `SandboxSpec.toolkits` (omitted when empty), validation, docs | small |
 | daemon (`registry/spec.rs`) | the field in the spec codec, byte-identical | small |
-| builder, chunk converter | the toolkit publish check (prefix, no whiteouts, no setuid, size); convert the toolkit to RAFS (`image` layout) | small |
+| builder | the toolkit publish check (prefix, no whiteouts, no setuid, size); toolkits publish as whole-image EROFS components | small |
 | toolkit build | a script that builds the verifiers harness toolkit | small |
 | verifiers-ucloud | `toolkits` config, harness-process env | small |
 | verifiers | use an existing `uv` | tiny |

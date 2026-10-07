@@ -94,9 +94,12 @@ class GitObjects:
         return entries
 
     def fetch_missing(self, oids):
-        oids = sorted(set(oids))
-        check = self.git("cat-file", "--batch-check", input="\n".join(oids).encode() + b"\n").decode().splitlines()
-        missing = [line.split()[0] for line in check if line.endswith(" missing")]
+        # Asking about a missing object in a partial clone fetches it, one at a
+        # time: list what is local instead, then fetch the rest in batches.
+        local = {line.split()[0] for line in self.git(
+            "cat-file", "--batch-all-objects", "--batch-check=%(objectname) %(objecttype)").decode().splitlines()
+            if line.endswith(" blob")}
+        missing = sorted(set(oids) - local)
         for start in range(0, len(missing), FETCH_BATCH):
             group = missing[start:start + FETCH_BATCH]
             subprocess.run(["git", "-c", "gc.auto=0", "-C", str(self.repo), "fetch", "--no-tags",

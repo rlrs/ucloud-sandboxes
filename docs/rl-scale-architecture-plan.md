@@ -2011,6 +2011,13 @@ Creates, execs, pause and local waits moved into `ucloud-noded` ([rust-node-daem
 - **After the fix:** 8/8, then **64/64 rollouts succeeded**, 192 model calls (3 each), commands ran in the image (Ubuntu 22.04, `python3`), 30 s for the 64, every sandbox deleted.
 - **Not covered:** a real model, training's own environments and scoring, and model waits long enough to pause (the stub answers in milliseconds). That needs the trainer side.
 
+### 2026-10-07: toolkit layers (C2.5) in production (0.9.51)
+
+- **Built:** `SandboxSpec.toolkits` (`name:tag` or `name@<root>`, at most 4). The gateway pins tags to roots (`toolkits.sqlite3`), composes the image's root with the toolkits' whole-image EROFS components in `EnvironmentManifest.toolkits`, signs it and dispatches it as the sandbox's root; nodes are unchanged. `toolkit-register` and `toolkit-list` in the CLI; `runtime/toolkits/vf-harness/build.sh` builds the verifiers toolkit (uv, a managed Python, prebuilt environments for the harness programs and named task scripts). Design and numbers: `docs/toolkit-layers.md`.
+- **verifiers side (local commits, unpushed):** verifiers uses an existing `uv` and a preset `UV_INSTALL_DIR`, and merges the runtime's `uv_env` into script preparation; `verifiers-ucloud` gains `toolkits` and `uv_toolkit`.
+- **Measured, the stub-model dry run at 512 rollouts:** setup p50 **71.8 s → 4.2 s**, p95 105 s → 10 s, 512/512 succeeded both ways; 0.6 s at 8 rollouts. What is left at 512 is per-script upload (`runtime.write`, p50 1.3 s through the Python node agent) and exec: files over the daemon (2d) is next.
+- **Deleted from the plan:** nothing yet. The init copy is still per create; C2.5's "the init copy disappears" half of the gate is open.
+
 ## Appendix: evidence index
 
 - Image path:

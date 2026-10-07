@@ -1,6 +1,6 @@
 # Image recipes: names built on demand or ahead (C2.7)
 
-Status: built, 2026-10-07. Motivated by the
+Status: in production since 0.9.54 (2026-10-07); the live check is at the end. Motivated by the
 [build pilot](benchmarks/build-pilot-2026-10-07/README.md).
 
 ## The gap
@@ -81,3 +81,15 @@ training is still correct, just slower on a task's first use.
 - **An importer** that walks a pinned dataset revision and registers its recipes, writing the
   whole `environment/` tree as the pilot's `prepare.py` does.
 - **The trainer-side lookahead call.**
+
+## Live check (0.9.54, 2026-10-07)
+
+- **What ran:** 9 pilot tasks (3 per family) were registered under fresh names through the new SDK
+  with no builders running.
+- **Building:** ensure reported `queued` until builders came up, then `building`, then `ready`
+  for all 9, each with a pinned `ucloud-managed/recipe-…@sha256:` reference.
+- **Creating by name:** the first sandbox needed a worker boot (83 s). On a warm worker, managed
+  sandboxes started in 0.2–0.9 s, ran commands, and had their task files (`/app`, `/testbed`).
+- **Found:** recipe builds were submitted without `wait: false`, so one ensure call held its
+  request through all nine builds (530 s). Fixed in 0.9.55.
+

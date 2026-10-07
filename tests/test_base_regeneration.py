@@ -311,3 +311,36 @@ class PinnedTarNamesTests(unittest.TestCase):
             chunk_convert.pin_tar_names(converter, users={0: "root"}, groups={0: "root"}, **hosts)
             self.assertEqual(gateway.read_bytes(), converter.read_bytes())  # Already the converters': unchanged.
             self.assertEqual([member.uname for member in tarfile.open(gateway).getmembers()], ["", "root"])
+
+
+class StoreReadRetryTests(unittest.TestCase):
+    """Regeneration waits out a store node's transient errors, not real ones."""
+
+    def flaky(self, failures):
+        calls = []
+
+        def read(url, start, length):
+            calls.append(url)
+            if len(calls) <= len(failures):
+                raise failures[len(calls) - 1]
+            return b"bytes"
+        return read, calls
+
+    def test_transient_store_errors_are_retried(self):
+        from ucloud_sandboxes.managed_registry import RegistryRequestError
+        read, calls = self.flaky([RegistryRequestError(503, "GET", "/v1/objects/p", "fill failed"),
+                                  ConnectionResetError()])
+        slept = []
+        self.assertEqual(chunk_convert._retrying(read, sleep=slept.append)("u", 0, 5), b"bytes")
+        self.assertEqual((len(calls), slept), (3, [2, 4]))
+
+    def test_a_client_error_or_an_exhausted_budget_is_final(self):
+        from ucloud_sandboxes.managed_registry import RegistryRequestError
+        read, calls = self.flaky([RegistryRequestError(404, "GET", "/v1/objects/p", "missing")])
+        with self.assertRaises(RegistryRequestError):
+            chunk_convert._retrying(read, sleep=lambda _: None)("u", 0, 5)
+        self.assertEqual(len(calls), 1)
+        read, calls = self.flaky([RegistryRequestError(503, "GET", "/p", "x")] * 9)
+        with self.assertRaises(RegistryRequestError):
+            chunk_convert._retrying(read, delays=(1, 1), sleep=lambda _: None)("u", 0, 5)
+        self.assertEqual(len(calls), 3)

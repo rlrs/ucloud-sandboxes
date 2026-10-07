@@ -35,6 +35,7 @@ from .environment_artifact import (EMPTY_LAYER_DIFF_ID, ENVIRONMENT_ANNOTATION, 
                                    RafsEnvironmentComponent, canonical_bytes, content_digest, load_environment,
                                    publish_environment, require_digest, sign_rafs_component)
 from .erofs_metadata import symlink_targets
+from .managed_registry import RegistryRequestError
 
 _LOG = logging.getLogger(__name__)
 DOCKER_MANIFEST = "application/vnd.docker.distribution.manifest.v2+json"
@@ -936,14 +937,35 @@ def convert_command(args):
     return 0
 
 
+# A store node answers 503 when its own S3 fill misses a deadline (a cold
+# cache under load); that is worth waiting for, unlike a 4xx or bad bytes.
+STORE_READ_DELAYS = (2, 4, 8, 16, 30)
+
+
+def _retrying(read, delays=STORE_READ_DELAYS, sleep=time.sleep):
+    def attempt(*args, **kwargs):
+        for delay in (*delays, None):
+            try:
+                return read(*args, **kwargs)
+            except (RegistryRequestError, OSError) as exc:
+                transient = (exc.status_code in (502, 503, 504) if isinstance(exc, RegistryRequestError)
+                             else True)
+                if not transient or delay is None:
+                    raise
+                sleep(delay)
+    return attempt
+
+
 def store_reads(store, token_file):
-    """Locators name the store node: read there, with the token (else None)."""
+    """Locators name the store node: read there, with the token (else None).
+    For regeneration and unpack, not workers: transient store errors are
+    retried for about a minute (STORE_READ_DELAYS)."""
     if store.store_node is None:
         return None
     from .environment_config import read_token
     from .environment_rafs import store_access
     reader, getter = store_access(store.store_node.url, read_token(token_file).decode())
-    return {"reader": reader, "getter": getter, "origin": store.store_node.url}
+    return {"reader": _retrying(reader), "getter": _retrying(getter), "origin": store.store_node.url}
 
 
 def unpack_command(args):

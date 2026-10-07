@@ -5930,9 +5930,14 @@ def build_server(
     if dependency_resolver is not None and environment_signing_key_file:
         from .environment_config import load_signing_key
         from .gateway.toolkits import ToolkitComposer, ToolkitStore, toolkits_path
-        BoundHandler.toolkit_composer = ToolkitComposer(
-            environment_registry, ToolkitStore(toolkits_path(image_file)),
-            load_signing_key(environment_signing_key_file))
+        try:
+            BoundHandler.toolkit_composer = ToolkitComposer(
+                environment_registry, ToolkitStore(toolkits_path(image_file)),
+                load_signing_key(environment_signing_key_file))
+        except (OSError, ValueError) as exc:
+            # Toolkit requests are refused; the gateway serves everything else.
+            import logging
+            logging.getLogger(__name__).warning("toolkit layers are unavailable: %s", exc)
     BoundHandler.services = build_services(
         store=store, routing_store=routing_store, metrics_store=metrics_store,
         telemetry=resolved_telemetry, heartbeat_ttl_seconds=heartbeat_ttl_seconds,

@@ -26,6 +26,11 @@ from .models import ResourceQuantity, utc_now
 
 SANDBOX_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 ENVIRONMENT_ROOT_RE = re.compile(r"sha256:[0-9a-f]{64}")
+# A toolkit (docs/toolkit-layers.md): files under /opt/ucloud/toolkits/<name>,
+# named by tag in a request and pinned by root digest by the gateway.
+TOOLKIT_NAME_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
+TOOLKIT_REF_RE = re.compile(r"([a-z0-9][a-z0-9-]{0,62})(?::([A-Za-z0-9_][A-Za-z0-9_.-]{0,127})|@(sha256:[0-9a-f]{64}))")
+MAX_TOOLKITS = 4
 OPERATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 SANDBOX_RESERVED_LABEL_PREFIX = "ucloud-sandboxes."
@@ -464,6 +469,9 @@ class SandboxSpec:
     # by the gateway only, it pins a sandbox's root for its whole life, moves
     # included. Absent, the worker reads the image's annotation.
     environment_root: str | None = None
+    # Toolkits stacked on the image (docs/toolkit-layers.md): `name:tag` in a
+    # request, `name@sha256:<root>` once the gateway pinned them.
+    toolkits: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.security is None:
@@ -516,6 +524,7 @@ class SandboxSpec:
             "required_features",
             "security",
             "ssh",
+            "toolkits",
             "ttl_seconds",
             "working_dir",
         }
@@ -600,6 +609,7 @@ class SandboxSpec:
                 if raw.get("environment_root") is not None
                 else None
             ),
+            toolkits=_json_string_list(raw.get("toolkits", []), "toolkits"),
         )
 
     def validate(self) -> None:
@@ -612,6 +622,13 @@ class SandboxSpec:
             raise ValueError("sandbox image is required.")
         if self.environment_root is not None and not ENVIRONMENT_ROOT_RE.fullmatch(self.environment_root):
             raise ValueError("environment_root must be a sha256 digest.")
+        if len(self.toolkits) > MAX_TOOLKITS:
+            raise ValueError(f"at most {MAX_TOOLKITS} toolkits are supported.")
+        names = [match[1] if (match := TOOLKIT_REF_RE.fullmatch(ref)) else None for ref in self.toolkits]
+        if None in names:
+            raise ValueError("toolkits must be name:tag or name@sha256:<digest>.")
+        if len(set(names)) != len(names):
+            raise ValueError("each toolkit may appear once.")
         if any("\0" in argument for argument in self.command):
             raise ValueError("sandbox command cannot contain NUL.")
         for key, value in self.env.items():
@@ -727,6 +744,10 @@ class SandboxSpec:
         raw["linux_host"] = self.linux_host.to_dict()
         if self.environment_root is None:
             raw.pop("environment_root")  # Specs without it keep their fingerprints.
+        if self.toolkits:
+            raw["toolkits"] = list(self.toolkits)
+        else:
+            raw.pop("toolkits")  # As environment_root: fingerprints stay unchanged.
         return raw
 
     def requested_resources(self) -> ResourceQuantity:

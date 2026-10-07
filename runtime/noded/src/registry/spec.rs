@@ -118,6 +118,8 @@ pub struct SandboxSpec {
     linux_host: LinuxHost,
     labels: BTreeMap<String, String>,
     environment_root: Option<String>,
+    /// Toolkits the gateway pinned (`name@sha256:<root>`); omitted when empty.
+    toolkits: Vec<String>,
     /// `to_dict()` and its canonical JSON, fixed at construction.
     dict: Value,
     encoded: String,
@@ -522,7 +524,7 @@ impl SandboxSpec {
         let Value::Object(raw) = raw else {
             return Err("sandbox must be a JSON object".into());
         };
-        const ALLOWED: [&str; 22] = [
+        const ALLOWED: [&str; 23] = [
             "command",
             "cpus",
             "disk_mb",
@@ -543,6 +545,7 @@ impl SandboxSpec {
             "required_features",
             "security",
             "ssh",
+            "toolkits",
             "ttl_seconds",
             "working_dir",
         ];
@@ -602,6 +605,7 @@ impl SandboxSpec {
         let linux_host = LinuxHost::from_dict(linux_host_raw.as_ref())?;
         let environment_root =
             present(raw, "environment_root").map(|v| json_string(v, "environment_root")).transpose()?;
+        let toolkits = field(raw, "toolkits").map_or(Ok(vec![]), |v| json_string_list(v, "toolkits"))?;
         let mut spec = SandboxSpec {
             id,
             image,
@@ -625,6 +629,7 @@ impl SandboxSpec {
             linux_host,
             labels,
             environment_root,
+            toolkits,
             dict: Value::Null,
             encoded: String::new(),
         };
@@ -669,6 +674,9 @@ impl SandboxSpec {
         out.insert("labels".into(), string_map(&self.labels));
         if let Some(root) = &self.environment_root {
             out.insert("environment_root".into(), root.clone().into());
+        }
+        if !self.toolkits.is_empty() {
+            out.insert("toolkits".into(), strings(&self.toolkits));
         }
         Ok(Value::Object(out))
     }

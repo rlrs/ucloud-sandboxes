@@ -183,8 +183,15 @@ Nodes' mount, lease and recovery code does not change.
 ## Open questions
 
 1. **Does `uv sync --script` on a satisfied cached environment touch the network?**
-   The build step must prove it does not (with `UV_OFFLINE=1`, and with the
-   network cut), or the fallback rule above becomes the default.
+   **No (measured 2026-10-07).** The bash harness program (sha256 `5ddf3f27…`,
+   the file the dry run prepared) prebuilt with uv 0.12.23 and a managed
+   Python 3.12 under `/opt/ucloud/toolkits/vf-harness`, then copied into a fresh
+   Ubuntu 22.04 image as a layer: with `--network none`, verifiers' preparation
+   (`uv sync --script` and `uv python find --script`) succeeds in 110 ms with or
+   without `UV_OFFLINE=1`, the imports load and the program starts. The toolkit
+   is 216 MB. `UV_PYTHON_PREFERENCE=only-managed` is required: without it uv
+   builds the environment on the image's own Python (the dry run's image has a
+   Miniconda 3.12), which differs per image.
 2. **Toolkit tags across releases:** should a create that names `name:tag` pin the
    digest for the whole training run (the client resolves once at start), or per
    create? Per run is safer for reproducibility.

@@ -122,3 +122,15 @@ training is still correct, just slower on a task's first use.
 - **Found:** recipe builds were submitted without `wait: false`, so one ensure call held its
   request through all nine builds (530 s). Fixed in 0.9.55.
 
+## Live check, builds into the chunk store (0.9.56, 2026-10-07)
+
+- **What ran:** 20 never-built tasks (12 TMax pinned, 8 Terminal-Lego cached), registered by
+  `scripts/import_image_recipes.py register --prebuild 16`.
+- **Built:** all 20 ready, the 12 TMax in 18 minutes (including builder boot) and the 8
+  Terminal-Lego in 4. Conversion on the builders took 16–33 s per image; most added a few KB
+  of new chunks, the largest 61 MB.
+- **Released:** ensure released all 20 OCI copies. Their `image_roots` rows are `released` (wave
+  `recipe`) and their manifests answer 404.
+- **Created by name** from chunk-store roots only: 0.4–0.5 s on a warm worker (86 s for the first,
+  a worker boot), with commands and task files as expected.
+

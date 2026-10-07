@@ -6,7 +6,7 @@ Production runs in the DFM Pretraining project. Its deployment ID is
 | Part | Where | Durable state |
 | --- | --- | --- |
 | Gateway | job 12412561 (`cpu-amd-zen5-8-vcpu`), 10.36.101.16 | Local disk: PostgreSQL 18 and `/var/lib/ucloud-sandboxes/state` |
-| Store node | job 12412562, 10.36.103.152 | Local disk: chunk index and replica |
+| Store node | job 12414961, 10.36.78.225 (since 2026-10-07; was job 12412562) | Local disk: chunk index and replica |
 | Workers and builders | autoscaled (`cpu-amd-zen5-64-vcpu` / `-16-vcpu`) | None |
 | Registry | `/work/data/ucloud-sandboxes-prod/registry` | Project drive |
 | Chunk store | Hetzner S3 `ucloud-sandboxes-prod-20260926`, `production/chunks` | Permanent |
@@ -101,13 +101,17 @@ registry wake elsewhere. Running ones on a lost worker are lost (see
 
 **The store node.** Workers' reads fall back to S3 through the index only while
 the index is up, and the index runs on the store node. To replace it:
-1. Create a VM like job 12412562: `ucloud-sandboxes/store` label, private network, 2,000 GB disk.
-2. Put the newest chunk-index snapshot at `/var/lib/ucloud-chunk-index/index.sqlite` (owner `ucloud`, 0600).
+1. Create a VM like the current one: `submit-vm --role node --hostname sandboxes-store-1 --no-public-link --product-id cpu-amd-zen5-8-vcpu --disk-gb 2000 --label ucloud-sandboxes/store=true`, then, in the payload, drop `timeAllocation` (1 h by default) and the `ucloud-sandboxes/node` label (the autoscaler must not own it) before submitting.
+2. Put the newest chunk-index snapshot at `/var/lib/ucloud-chunk-index/index.sqlite` (owner `ucloud`, 0600). From the gateway, `gunzip -c` the snapshot into `ssh -i /var/lib/ucloud-sandboxes/state/ssh/gateway-init ucloud@<new private IP>`, then `PRAGMA quick_check`.
 3. Run `init-vm <job> --role store` from the gateway, with the current release's sandbox bundle and `/etc/ucloud-sandboxes/s3.env` loaded.
 
 The replica refills from S3 by itself, in under 2 h for 331 GB. If the new
 address differs, update `chunk_store.index_url`, `index_listen`, and
-`store_node.listen` and `url`, then restart the gateway services.
+`store_node.listen` and `url`, then restart `ucloud-sandbox-gateway`,
+`-autoscaler`, `-placement` and `-relay`.
+
+Done on 2026-10-07, when job 12412562 stopped at 12:00 UTC from outside the
+gateway: the index restore took 33 s and the store init 22 s.
 
 **The gateway.**
 1. Create a VM like job 12412561, with the private network, the project drive mounted, and the two public links.

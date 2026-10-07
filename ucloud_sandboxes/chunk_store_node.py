@@ -24,6 +24,7 @@ import hmac
 from http import HTTPStatus
 import itertools
 import json
+import sys
 import logging
 import os
 from pathlib import Path
@@ -1240,11 +1241,28 @@ def warm_command(args):
     return 0
 
 
+def serve_package_cache(args):
+    """``ucloud-package-cache``; exits 78 where the store node has none configured."""
+    from .environment_config import ChunkStoreConfig
+    from .package_cache import serve
+    node = ChunkStoreConfig.from_file(args.chunk_store_config).store_node
+    if node is None or node.package_cache is None:
+        print("chunk_store.store_node.package_cache is not configured", file=sys.stderr)
+        return 78
+    serve(node.package_cache)
+    return 0
+
+
 def add_commands(subparsers):
     serve = subparsers.add_parser("serve-chunk-store", help="Run a chunk store node (ucloud-chunk-store).")
     serve.add_argument("--chunk-store-config", type=Path, required=True,
                        help="JSON of immutable_environments.chunk_store, as node init writes it")
     serve.set_defaults(func=serve_chunk_store)
+    cache = subparsers.add_parser("serve-package-cache",
+                                  help="Run the build package cache (chunk_store.store_node.package_cache).")
+    cache.add_argument("--chunk-store-config", type=Path, required=True,
+                       help="JSON of immutable_environments.chunk_store, as node init writes it")
+    cache.set_defaults(func=serve_package_cache)
     warm = subparsers.add_parser("warm-chunk-store", help="Fill the store node with components' packs ahead of a burst.")
     warm.add_argument("--config", type=Path, required=True, help="deployment.json with chunk_store.store_node")
     warm.add_argument("--component", action="append", required=True, help="registered RAFS component digest")
@@ -1347,9 +1365,13 @@ def store_init_script(options):
     if node.native_server_sha256:
         units["ucloud-chunk-serve.service"] = _unit("UCloud chunk store reads (runtime/chunk_serve)",
                                                     f"{NATIVE_SERVER} --config {STORE_CONFIG}", user, mounts)
+    if node.package_cache is not None:
+        units["ucloud-package-cache.service"] = _unit("UCloud build package cache (store_node.package_cache)",
+                                                      command("serve-package-cache"), user)
     lines = [f"printf %s {b64(text)} | base64 -d | $SUDO tee /etc/systemd/system/{name} >/dev/null"
              for name, text in units.items()]
-    for name, wanted in (("ucloud-chunk-index", node.serve_index), ("ucloud-chunk-serve", node.native_server_sha256)):
+    for name, wanted in (("ucloud-chunk-index", node.serve_index), ("ucloud-chunk-serve", node.native_server_sha256),
+                         ("ucloud-package-cache", node.package_cache is not None)):
         if not wanted:
             lines.append(f"$SUDO systemctl disable --now {name}.service >/dev/null 2>&1 || true")
     native = "" if not node.native_server_sha256 else "\n".join([  # Verified against the pin, then installed.
@@ -1360,7 +1382,7 @@ def store_init_script(options):
         f'store_node.native_server_sha256" >&2; exit 1; }}',
         f'$SUDO install -D -m 0755 -o root -g root "$UCLOUD_BUNDLE_TMP/runtime/chunk_serve/ucloud-chunk-serve" '
         f"{NATIVE_SERVER}"])
-    directories = list(binds.values())
+    directories = list(binds.values()) + ([node.package_cache.cache_dir] if node.package_cache is not None else [])
     data = ""
     if node.data_device:  # Never formatted here: a Volume arrives as ext4 and may already hold the replica.
         device, mount = quote(node.data_device), STORE_DATA_MOUNT

@@ -150,14 +150,21 @@ class StoreNodeConfig:
     # ``listen`` and answers reads from resident extents on every core; this
     # node then answers on 127.0.0.1 at the same port, behind it.
     native_server_sha256: str | None = None
+    # The build package cache on this node (ucloud_sandboxes.package_cache): an
+    # allowlisted, caching HTTP proxy for package mirrors; builds use it as http_proxy.
+    package_cache: object = None
 
     @classmethod
     def from_dict(cls, raw):
         from dataclasses import fields
         names = {field.name for field in fields(cls)}
-        if not isinstance(raw, dict) or not names - {"replica", "mirror_seconds", "data_device", "native_server_sha256"} <= set(raw) <= names:
+        if not isinstance(raw, dict) or not names - {"replica", "mirror_seconds", "data_device", "native_server_sha256",
+                                                     "package_cache"} <= set(raw) <= names:
             raise ValueError("immutable_environments.chunk_store.store_node fields do not match schema")
         result = cls(**raw)
+        if result.package_cache is not None:
+            from .package_cache import PackageCacheConfig
+            result = replace(result, package_cache=PackageCacheConfig.from_dict(result.package_cache))
         _origin(result.url, "store_node.url")
         host, _, port = result.listen.rpartition(":") if isinstance(result.listen, str) else ("", "", "")
         if not host or not port.isdigit() or not 0 < int(port) < 65536 or any(c in host for c in "\0\r\n /"):
@@ -307,7 +314,7 @@ class ChunkStoreConfig:
         if raw.get("store_node") and not raw["store_node"]["replica"]:
             for name in ("replica", "mirror_seconds"):
                 del raw["store_node"][name]
-        for name in ("data_device", "native_server_sha256"):
+        for name in ("data_device", "native_server_sha256", "package_cache"):
             if raw.get("store_node") and raw["store_node"][name] is None:
                 del raw["store_node"][name]
         return raw

@@ -407,6 +407,36 @@ class StoreNodeConfigTests(unittest.TestCase):
             with self.subTest(data_device=bad), self.assertRaises(ValueError):
                 ChunkStoreConfig.from_dict(self.raw(data_device=bad))
 
+    def test_a_store_node_can_run_the_build_package_cache(self):
+        import base64
+        import re
+        import subprocess
+        from tests import test_vm_init as vm_fixtures
+        from ucloud_sandboxes.environment_config import ChunkStoreConfig
+        from ucloud_sandboxes.vm_init import render_vm_init_script
+        cache = {"listen": "10.42.0.10:3142", "url": "http://10.42.0.10:3142", "cache_dir": "/var/lib/ucloud-package-cache",
+                 "max_bytes": 200 * 1024 ** 3, "upstreams": {"archive.ubuntu.com": "http://mirrors.dotsrc.org"}}
+        store = ChunkStoreConfig.from_dict(self.raw(package_cache=cache))
+        self.assertEqual(store.to_dict()["store_node"]["package_cache"]["listen"], "10.42.0.10:3142")
+        self.assertNotIn("package_cache", ChunkStoreConfig.from_dict(self.raw()).to_dict()["store_node"])
+        options = vm_fixtures.VmInitTests._options(
+            role="store", chunk_store_config_json=json.dumps(store.to_dict()), chunk_store_read_token=READ,
+            chunk_store_write_token=WRITE, chunk_store_s3_access_key_id="AKIDSTORENODE",
+            chunk_store_s3_secret_access_key="secret-store-node-key")
+        script = render_vm_init_script(options)
+        units = "".join(base64.b64decode(blob).decode() for blob in re.findall(
+            r"printf %s '?([A-Za-z0-9+/=]+)'? \| base64 -d \| \$SUDO tee /etc/systemd/system/", script))
+        self.assertIn("serve-package-cache --chunk-store-config /etc/ucloud-sandboxes/chunk-store.json", units)
+        self.assertIn("/var/lib/ucloud-package-cache", script)  # Created for the service user.
+        self.assertNotIn("systemctl disable --now ucloud-package-cache", script)
+        syntax = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+        plain = render_vm_init_script(vm_fixtures.VmInitTests._options(**{
+            **options.__dict__, "chunk_store_config_json": json.dumps(ChunkStoreConfig.from_dict(self.raw()).to_dict())}))
+        self.assertIn("systemctl disable --now ucloud-package-cache", plain)
+        with self.assertRaises(ValueError):
+            ChunkStoreConfig.from_dict(self.raw(package_cache={**cache, "upstreams": {}}))
+
     def test_the_store_role_renders_a_node_without_fleet_services(self):
         from tests import test_vm_init as vm_fixtures
         from ucloud_sandboxes.environment_config import ChunkStoreConfig

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.53 - 2026-10-07 (gateway)
+
+- **Base regeneration retries a store node's transient errors.** A store node answers 503 when its S3 fill misses a deadline (a cold cache under load). Regeneration took the first such answer as final; in the C2.14 build pilot one failed TMax's largest foundation and, through the 600 s failure backoff, 45 of 100 builds. Regeneration and unpack now retry 502/503/504 and connection errors for about a minute; a 4xx or unverifiable bytes still fail at once. Workers' reads are unchanged.
+
 ## 0.9.52 - 2026-10-07 (gateway)
 
 - **Released build bases regenerate again.** Stored chunk locators keep the store node URL of the day they were built, and production's still named the Hetzner store node (10.42.0.200), so since the move to UCloud every regeneration failed ("chunk locator names a source other than the configured store node"), and with it every build from a released foundation: all of OpenSWE, TMax and Terminal-Lego's foundation-backed tasks. The Python chunk reader now takes only the object path from a locator and reads it on its configured store node; anything that is not a store object path is still refused. Workers were unaffected (nydusd names objects by key). Found by the C2.14 build pilot.

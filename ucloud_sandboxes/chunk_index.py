@@ -332,12 +332,16 @@ class ChunkIndex:
                 self._writer.execute("ROLLBACK")
                 raise
 
-    def commit(self, packs, layer=None, now=None):
+    def commit(self, packs, layer=None, now=None, supersede=()):
         """Record durable packs and complete a layer in one transaction (§3 step 5).
 
         ``packs`` is [(digest hex, size, footer entries)]. The first committed
-        copy of a chunk wins; a condemned row moves to the new copy.
+        copy of a chunk wins; a condemned row moves to the new copy, and so do
+        the ids in ``supersede``: a nydusd converter found them stored in
+        another encoding than nydus's, which its blobs need (every reader
+        decodes either; roots already registered keep their packs).
         """
+        supersede = set(supersede)
         now = int(time.time() if now is None else now)
         inserted = 0
         with self._write_lock:
@@ -356,6 +360,10 @@ class ChunkIndex:
                         "WHERE chunks.condemned != 0",
                         [(chunk_id, pack, offset, clen, ulen, flags) for chunk_id, offset, clen, ulen, flags in entries])
                     inserted += self._writer.total_changes - before
+                    self._writer.executemany(
+                        "UPDATE chunks SET pack = ?, off = ?, clen = ?, ulen = ?, flags = ?, condemned = 0 WHERE id = ?",
+                        [(pack, offset, clen, ulen, flags, chunk_id) for chunk_id, offset, clen, ulen, flags in entries
+                         if chunk_id in supersede])
                     self._writer.executemany("DELETE FROM reservations WHERE id = ?",
                                              [(entry[0],) for entry in entries])
                 self._writer.execute("DELETE FROM reservations WHERE until <= ?", (now,))
@@ -472,7 +480,10 @@ class ChunkIndexService:
             layer = (layer["diff_id"], _converter(layer["converter"]), layer["bootstrap"])
             if self.store.size(bootstrap_key(self.store.prefix, require_digest(layer[2])[7:])) is None:
                 raise ValueError("layer bootstrap is not durable in the object store")
-        return self.index.commit(packs, layer)
+        supersede = request.get("supersede") or []
+        if not isinstance(supersede, list) or len(supersede) > MAX_MAP_ENTRIES:
+            raise ValueError("invalid supersede list")
+        return self.index.commit(packs, layer, supersede={bytes.fromhex(require_hex(item)) for item in supersede})
 
     def register(self, request):
         chunk_map = request["chunk_map"]
@@ -703,8 +714,11 @@ class ChunkIndexClient:
         return json.loads(self._call("POST", "/v1/layers/claim",
                                      {"diff_id": diff_id, "converter": converter, "owner": owner}))
 
-    def commit(self, packs, layer=None):
-        return json.loads(self._call("POST", "/v1/chunks/commit", {"packs": packs, "layer": layer}))
+    def commit(self, packs, layer=None, supersede=()):
+        body = {"packs": packs, "layer": layer}
+        if supersede:  # Only when needed: an older index refuses the field.
+            body["supersede"] = sorted(chunk_id.hex() for chunk_id in supersede)
+        return json.loads(self._call("POST", "/v1/chunks/commit", body))
 
     def register(self, component, bootstrap, chunk_map):
         # The index reads each blob's tail table and writes layouts and the

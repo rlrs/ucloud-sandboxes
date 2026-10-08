@@ -253,3 +253,65 @@ class RealVirtualBlobTests(VirtualBlobTests):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReencodedChunkTests(unittest.TestCase):
+    """A chunk first stored raw by a conversion without nydusd blobs (it saved
+    under 3% compressed) must not leave a later nydusd blob unrebuildable:
+    production's first sandbox builds read SIGBUS ("the store holds this chunk
+    re-encoded")."""
+
+    def setUp(self):
+        from tests.chunk_store_support import layer, pseudo_random, push_image
+        kept = TemporaryDirectory()
+        self.addCleanup(kept.cleanup)
+        self.kept = Path(kept.name)
+        os.environ["FAKE_NYDUS_KEEP"] = kept.name
+        self.addCleanup(os.environ.pop, "FAKE_NYDUS_KEEP", None)
+        self.store = ChunkStoreFixture(self)
+        barely = pseudo_random("barely", 250_000) + b"\0" * 6000  # zstd saves about 2%.
+        self.shared = layer([("opt", "dir"), ("opt/shared.bin", barely)])
+        push_image(self.store.client, "old", [layer([("etc", "dir"), ("etc/old", b"x")]), self.shared])
+        push_image(self.store.client, "new", [layer([("etc", "dir"), ("etc/new", b"y")]),
+                                              layer([("opt", "dir"), ("opt/shared.bin", barely),
+                                                     ("opt/own", pseudo_random("own", 9000))])])
+        push_image(self.store.client, "again", [layer([("srv", "dir"), ("srv/x", b"z")]), self.shared])
+        self.store.converter.convert(REPOSITORY, "old")  # nydusd_blobs off: the shared chunk is stored raw.
+        node = ChunkStoreNode(ExtentCache(self.store.root / "node", 64 * 1024 ** 2),
+                              S3Source(self.store.objects.presigner, "test/chunks", concurrency=4),
+                              extent_bytes=1024 ** 2, warm_concurrency=2)
+        self.addCleanup(node.close)
+        self.blobs = VirtualBlobs(node, self.store.index.writer)
+        self.store.converter.nydusd_blobs = True
+
+    def rebuilt(self, blob):
+        size, segments = self.blobs.layout(blob)
+        return b"".join(self.blobs._bytes(relative, offset, offset + length - 1)[1]
+                        for _, length, relative, offset in segments)
+
+    def test_a_nydusd_conversion_restores_nydus_encoding_and_old_roots_still_read(self):
+        before = set(self.kept.iterdir())
+        result = self.store.converter.convert(REPOSITORY, "new")
+        self.assertGreaterEqual(result["metrics"].get("chunks_reencoded", 0), 1)
+        for blob in sorted(set(self.kept.iterdir()) - before):
+            with self.subTest(blob=blob.name):
+                self.assertEqual(self.rebuilt(blob.name), blob.read_bytes())
+
+    def test_a_reused_layer_with_a_misencoded_chunk_is_converted_again(self):
+        from ucloud_sandboxes.chunk_convert import RafsConverter
+        # With a store node, registration stores each blob's layout, as production's did for the broken blob.
+        self.store.index.service.store_url = "http://store-node"
+        before = set(self.kept.iterdir())
+        with mock.patch.object(RafsConverter, "_misencoded", return_value=set()):  # As 0.9.56-0.9.58 converted.
+            self.store.converter.convert(REPOSITORY, "again")
+        broken = sorted(set(self.kept.iterdir()) - before)
+        with self.assertRaises(ValueError):
+            [self.rebuilt(blob.name) for blob in broken]
+        self.store.converter.metrics.clear()
+        self.store.converter.convert(REPOSITORY, "again")  # The shared layer's claim is complete: reused before.
+        self.assertEqual(self.store.converter.metrics.get("layers_repaired"), 1)
+        self.blobs._layouts.clear()
+        self.assertTrue(all(self.store.objects.stat(f"test/chunks/meta/{blob.name}.layout") for blob in broken))
+        for blob in broken:  # The stale stored layout is checked and bypassed.
+            with self.subTest(blob=blob.name):
+                self.assertEqual(self.rebuilt(blob.name), blob.read_bytes())

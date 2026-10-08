@@ -27,10 +27,10 @@ import tarfile
 from tempfile import TemporaryDirectory
 import time
 
-from .chunk_index import BUSY, RESERVED
+from .chunk_index import BUSY, KNOWN, RESERVED
 from .chunk_store import (BLOCK, MAX_BOOTSTRAP_BYTES, Locator, PackWriter, bootstrap_key, chunk_map_from_bootstrap,
                           blob_layout, chunk_map_key, decode_chunk, encode_tail, pack_key, parse_bootstrap,
-                          store_encoding, tail_key, zstd_compress, zstd_content_size, zstd_decompress)
+                          RAW, ZSTD, store_encoding, tail_key, zstd_compress, zstd_content_size, zstd_decompress)
 from .environment_artifact import (EMPTY_LAYER_DIFF_ID, ENVIRONMENT_ANNOTATION, OCI_IMAGE, RAFS_CONVERTER,
                                    RafsEnvironmentComponent, canonical_bytes, content_digest, load_environment,
                                    publish_environment, require_digest, sign_rafs_component)
@@ -153,6 +153,14 @@ def overlay_whiteouts(source, destination):
                 writer.addfile(member, reader.extractfile(member) if member.isfile() else None)
 
 
+def _by_id(bootstrap):
+    """A parsed bootstrap's chunk records by id, the first (in blob order) of each."""
+    first = {}
+    for chunk in sorted(bootstrap.chunks, key=lambda chunk: chunk[5]):
+        first.setdefault(chunk[0], chunk)
+    return first
+
+
 @dataclass
 class LayerResult:
     diff_id: str
@@ -266,8 +274,13 @@ class RafsConverter:
             if content_digest(bootstrap) != claim["bootstrap"]:
                 raise ValueError("cached layer bootstrap identity mismatch")
             parsed = parse_bootstrap(bootstrap)
-            self._count("layers_reused")
-            return LayerResult(diff_id, bootstrap, parsed.devices[0][0] if parsed.devices else "", True), tar
+            if not self._misencoded(_by_id(parsed), list(_by_id(parsed))):
+                self._count("layers_reused")
+                return LayerResult(diff_id, bootstrap, parsed.devices[0][0] if parsed.devices else "", True), tar
+            # Converted before its chunks' encodings were checked: convert it again.
+            self._count("layers_repaired")
+            if tar is None:
+                tar = self._download(repository, descriptor, diff_id, scratch)
         work = scratch / diff_id[7:19]
         (work / "blobs").mkdir(parents=True)
         layer, gzipped = tar, descriptor.get("mediaType", "").endswith(("gzip", "tar.gzip"))
@@ -339,11 +352,14 @@ class RafsConverter:
         builder's own pack is committed, so no two builders wait on each other;
         a dead builder's hold lapses and the chunk is packed here. Every chunk
         is committed before the layer is.
+
+        nydusd's blobs are rebuilt from stored chunks byte for byte, so with
+        ``nydusd_blobs`` a known chunk stored in another encoding (a
+        conversion without it stores some chunks raw that nydus compressed) is
+        packed again as nydus wrote it, and its index row moves to that copy.
         """
-        first = {}
-        for chunk in sorted(bootstrap.chunks, key=lambda chunk: chunk[5]):
-            first.setdefault(chunk[0], chunk)
-        count, writer = 0, None
+        first = _by_id(bootstrap)
+        count, writer, superseding = 0, None, []
 
         def flush(writer):
             digest, size = writer.finish()
@@ -351,7 +367,8 @@ class RafsConverter:
             self._count("pack_bytes", size)
             self._step("pack_put", diff_id=diff_id, pack=digest)
             # A pack is durable in S3 before any index row names it.
-            self.index.commit([{"digest": digest, "size": size}])
+            self.index.commit([{"digest": digest, "size": size}], supersede=tuple(superseding))
+            superseding.clear()
             self._step("pack_committed", diff_id=diff_id, pack=digest)
 
         def pack(ids, source):
@@ -361,10 +378,12 @@ class RafsConverter:
             while start < len(ids):
                 batch = ids[start:start + LOOKUP_BATCH]
                 following = start + len(batch)
-                for offset, (chunk_id, state) in enumerate(zip(batch, self.index.reserve(batch, self.owner))):
+                states = self.index.reserve(batch, self.owner)
+                restore = self._misencoded(first, [i for i, state in zip(batch, states) if state == KNOWN])
+                for offset, (chunk_id, state) in enumerate(zip(batch, states)):
                     if state == BUSY:
                         held.append(chunk_id)
-                    if state != RESERVED:
+                    if state != RESERVED and chunk_id not in restore:
                         continue
                     _, _, flags, csize, usize, coff, _ = first[chunk_id]
                     payload = os.pread(source.fileno(), csize, coff)
@@ -378,7 +397,11 @@ class RafsConverter:
                         writer = PackWriter(work / f"pack-{count}")
                         count += 1
                     writer.add(chunk_id, stored, usize, encoding)
-                    self._count("chunks_new")
+                    if chunk_id in restore:
+                        superseding.append(chunk_id)
+                        self._count("chunks_reencoded")
+                    else:
+                        self._count("chunks_new")
                     self._count("chunk_bytes_new", len(stored))
                 start = following
             if writer is not None:
@@ -392,6 +415,17 @@ class RafsConverter:
                 self._count("chunks_waited", len(held))
                 time.sleep(delay)  # The holder commits them, or its hold lapses.
                 held, delay = pack(held, source), min(30, delay * 2)
+        if self._misencoded(first, list(first)):
+            raise ValueError("chunks of this layer stay stored in another encoding than its nydusd blob needs")
+
+    def _misencoded(self, chunks, ids):
+        """The ``ids`` (of ``chunks``, bootstrap chunk records by id) whose
+        stored copy is not the one a nydusd blob needs; none without nydusd blobs."""
+        if not self.nydusd_blobs or not ids:
+            return set()
+        found = self.index.locate(ids)
+        return {chunk_id for chunk_id, (_, _, clen, flags) in zip(ids, found.entries)
+                if (clen, flags) != (chunks[chunk_id][3], ZSTD if chunks[chunk_id][2] & 1 else RAW)}
 
     def extend(self, parent_root, layer, diff_id, *, image_config, repository):
         """A root one layer above ``parent_root``, a whole-image chunk-store root:

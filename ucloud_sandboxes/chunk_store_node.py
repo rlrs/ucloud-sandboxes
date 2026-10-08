@@ -838,16 +838,25 @@ class VirtualBlobs:
         total, header = self._bytes(tail, 0, TAIL_HEADER.size - 1)
         count = TAIL_HEADER.unpack(header)[1]
         chunks, start = decode_tail_table(self._bytes(tail, 0, TAIL_HEADER.size + count * TAIL_ENTRY.size - 1)[1])
+        def matches(found):
+            return len(found.entries) == len(chunks) and all(
+                clen == csize and flags == (ZSTD if compressed else RAW)
+                for (_, csize, _, compressed), (_, _, clen, flags) in zip(chunks, found.entries))
+
         try:  # Built at registration; the index is the fallback for older conversions.
             found = Locator.decode(self._bytes(object_key(blob_id, "layout"))[1])
         except NotFound:
+            found = None
+        if (found is None or not matches(found)) and self.index is not None:
+            # A stored layout written before a converter re-stored chunks in
+            # nydus's encoding (0.9.59) names the old copies: ask the index.
             found = self.index.locate([digest for _, _, digest, _ in chunks])
-        if len(found.entries) != len(chunks):
+        if found is None or len(found.entries) != len(chunks):
             raise ValueError("a blob layout does not match its tail table")
+        if not matches(found):
+            raise ValueError("the store holds this chunk re-encoded; convert with --nydusd-blobs")
         segments = []
         for (coff, csize, _, compressed), (pack, offset, clen, flags) in zip(chunks, found.entries):
-            if clen != csize or flags != (ZSTD if compressed else RAW):
-                raise ValueError("the store holds this chunk re-encoded; convert with --nydusd-blobs")
             key, last = object_key(found.packs[pack][0], "pack"), segments[-1] if segments else None
             if last and last[2] == key and last[3] + last[1] == offset:
                 segments[-1] = (last[0], last[1] + csize, key, last[3])

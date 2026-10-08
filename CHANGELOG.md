@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.59 - 2026-10-08 (gateway; store node; builders)
+
+- **Images built into the chunk store stay readable by nydusd.** nydusd's blobs are rebuilt on the store node from stored chunks byte for byte, but the index keeps the first stored copy of a chunk, and conversions without nydusd blobs (M1/M2 era) stored a chunk raw when zstd saved under 3% where nydus compressed it. A new layer sharing such a chunk got a blob the store node could not rebuild: in 0.9.58's live check, Terminal-Lego and OpenSWE images built in sandboxes died with SIGBUS on their first command ("the store holds this chunk re-encoded"). Builder-built (`builder_format: rafs`) images had the same exposure.
+  - The converter (sandbox builds and rafs builders) finds known chunks stored in another encoding, packs them again as nydus wrote them, and the index (`commit`'s new `supersede`) moves them to that copy; roots already registered keep their packs. Before signing, every chunk of a converted layer must be stored as its blob needs, or the build fails.
+  - A reused layer whose chunks are misencoded is converted again.
+  - The store node checks a stored blob layout against the blob's own chunk table and takes the index's current locations when they differ, so layouts written before the fix heal.
+
 ## 0.9.58 - 2026-10-08 (gateway)
 
 - **Sandbox builds (C2.14, [docs/sandbox-builds.md](docs/sandbox-builds.md)).** A recipe whose Dockerfile the prepared catalog splits into a chunk-store base and a remainder is built without Docker: a sandbox starts from the base's root on a worker, the remainder runs as one generated script, the worker's `commit-export` stages what changed, and only that layer is converted and stacked on the base (`RafsConverter.extend`, `nydus-image merge --parent-bootstrap`). No foundation copy, no Docker push or pull, no reconversion, no builder VM. Recipes it cannot run (multi-stage, `ARG`, `ADD`, a private `COPY --from`) still go to the builders.

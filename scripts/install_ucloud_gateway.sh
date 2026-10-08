@@ -78,7 +78,7 @@ install -d -m 0755 "$registry_root"
 
 python3 -m venv "$venv_dir"
 # bin/python -m pip, as upgrades install: scripts keep the same shebang across releases.
-"$venv_dir/bin/python" -m pip install -q --disable-pip-version-check --force-reinstall "$wheel[postgres]"
+"$venv_dir/bin/python" -m pip install -q --disable-pip-version-check --force-reinstall "${wheel}[postgres]"
 
 systemd_source="$("$venv_dir/bin/python" -c 'from importlib import resources; print(resources.files("ucloud_sandboxes").joinpath("systemd"))')"
 for unit in \

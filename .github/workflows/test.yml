@@ -142,30 +142,24 @@ jobs:
         run: docker rm --force ucloud-test-registry 2>/dev/null || true
       - name: Run the S3-compatible contract
         if: matrix.python-version == '3.13'
+        # MinIO's community images are no longer public (quay.io and Docker
+        # Hub refuse anonymous pulls); moto's server speaks the same S3 API.
         run: |
-          docker run --detach --name ucloud-test-minio \
-            --publish 9000:9000 \
-            --env MINIO_ROOT_USER=minioadmin \
-            --env MINIO_ROOT_PASSWORD=minioadmin \
-            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z \
-            server /data --address :9000
+          uvx --from "moto[server]==5.1.*" moto_server -p 9000 > moto.log 2>&1 &
           for attempt in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then
+            if curl --silent --output /dev/null http://127.0.0.1:9000/; then
               break
             fi
             if [ "$attempt" = 30 ]; then
-              docker logs ucloud-test-minio
+              cat moto.log
               exit 1
             fi
             sleep 1
           done
           UCLOUD_TEST_S3_ENDPOINT=http://127.0.0.1:9000 \
-          UCLOUD_TEST_S3_ACCESS_KEY=minioadmin \
-          UCLOUD_TEST_S3_SECRET_KEY=minioadmin \
+          UCLOUD_TEST_S3_ACCESS_KEY=testing \
+          UCLOUD_TEST_S3_SECRET_KEY=testing \
             uv run python scripts/run_tests.py tests.test_s3_compatible_contract
-      - name: Remove the S3-compatible contract container
-        if: always() && matrix.python-version == '3.13'
-        run: docker rm --force ucloud-test-minio 2>/dev/null || true
       - name: Exercise managed-process fuzz targets
         if: github.event_name == 'schedule' && matrix.python-version == '3.13'
         working-directory: runtime/managed_process

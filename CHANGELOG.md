@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.65 - 2026-10-08 (gateway)
+
+- **The sandbox builds service no longer stops on a build finishing while it lists jobs.** `Spool.pending` sorted job files by their mtime, so a job file removed between the listing and the stat raised `FileNotFoundError` out of the service's loop.
+
 ## 0.9.64 - 2026-10-08 (gateway)
 
 - **Build sandboxes get a `/tmp` of half their memory** (4 GB by default; other sandboxes keep 64 MB). Docker's `/tmp` is disk, and recipes that download into `/tmp` by name failed in a sandbox: openswe-218 fetches MongoDB's archive there.

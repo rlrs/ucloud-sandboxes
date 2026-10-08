@@ -93,7 +93,8 @@ def cmd_show(args):
         print(json.dumps(detail, indent=2))
         return
     made = (f"prepared image {detail['prepared_reference']}" if detail["kind"] == "prepared" else
-            f"recipe {detail['dockerfile']} in context {detail['context_archive_digest']}")
+            f"recipe {detail['dockerfile']} in context {detail['context_archive_digest']}"
+            + (f", on {detail['base']['kind']} {detail['base']['reference']}" if detail.get("base") else ""))
     lines = [f"name         {detail['name']}",
              f"environment  {detail['environment']}",
              f"state        {detail['state']}" + (f" (attempts {detail['attempts']})" if detail["attempts"] else ""),

@@ -3457,7 +3457,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             if not isinstance(rows, list) or not 0 < len(rows) <= MAX_RECIPES_PER_REQUEST:
                 raise RecipeError(f"payload must be {{\"recipes\": [...]}} with 1-{MAX_RECIPES_PER_REQUEST} recipes")
             recipes = [validate_recipe(row) for row in rows]
-            missing, unprepared = [], []
+            missing, unprepared, baseless = [], [], []
             for recipe in recipes:
                 if recipe.get("prepared_reference"):
                     if self._prepared_image_reference(recipe["prepared_reference"]) is None:
@@ -3471,13 +3471,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     keep_context(self.build_context_store, self.image_recipe_contexts, digest, size)
                 except (FileNotFoundError, ValueError):
                     missing.append(recipe["name"])
+                    continue
+                if recipe.get("environment"):  # An index name: only what builds on a prepared image.
+                    recipe["base"] = self._prepared_base(recipe)
+                    if recipe["base"] is None:
+                        baseless.append(recipe["name"])
             if missing:
                 self._write_json({"error": "build contexts are not uploaded", "error_code": "build_context_missing",
                                   "names": missing[:100]}, status=HTTPStatus.BAD_REQUEST)
                 return
-            if unprepared:
-                self._write_json({"error": "prepared images are not in the chunk store",
-                                  "error_code": "image_not_prepared", "names": unprepared[:100]},
+            if unprepared or baseless:
+                self._write_json({"error": "prepared images are not in the chunk store" if unprepared else
+                                  "these recipes build on no prepared image",
+                                  "error_code": "image_not_prepared", "names": (unprepared + baseless)[:100]},
                                  status=HTTPStatus.BAD_REQUEST)
                 return
             registered = self.image_recipes.register(recipes)
@@ -3521,6 +3527,29 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         if row is None or row["state"] not in ("switched", "released"):
             return None
         return f"{host}/{repository}@{digest}"
+
+    def _prepared_base(self, recipe: dict[str, Any]) -> dict[str, str] | None:
+        """The prepared image a recipe builds on, {kind, reference} (the build
+        path's own match: prepared_images.choose), while the chunk store holds
+        it; None when the recipe builds on nothing prepared."""
+        from .managed_registry import manifest_digest_from_image_ref, registry_repository_tag_from_image_ref
+        from .prepared_images import MAX_TEXT_BYTES, read_context
+        catalog = getattr(self, "prepared_image_catalog", None)
+        if catalog is None or recipe["build_args"]:
+            return None
+        try:
+            _members, files = read_context(self.build_context_store, recipe["context_archive_digest"])
+            text = files.get(recipe["dockerfile"], b"")
+            decision = catalog.choose(text.decode(), files) if 0 < len(text) <= MAX_TEXT_BYTES else None
+        except (ValueError, OSError, EOFError, UnicodeError):
+            return None
+        if not decision or decision.get("kind") not in ("foundation", "source", "complete_recipe"):
+            return None
+        coordinates = registry_repository_tag_from_image_ref(decision["reference"])
+        digest = manifest_digest_from_image_ref(decision["reference"])
+        if coordinates is None or not digest or self._prepared_image_reference(f"{coordinates[0]}@{digest}") is None:
+            return None
+        return {"kind": decision["kind"], "reference": f"{coordinates[0]}@{digest}"}
 
     def _read_image_index(self, path: str) -> None:
         """GET /v1/image-index: names per environment and state.

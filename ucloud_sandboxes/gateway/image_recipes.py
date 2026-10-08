@@ -218,6 +218,8 @@ class ImageRecipeStore:
                 db.execute("ALTER TABLE recipe_images ADD COLUMN oci TEXT NOT NULL DEFAULT 'present'")
             if "kind" not in columns:  # build (a recipe) | prepared (already in the chunk store)
                 db.execute("ALTER TABLE recipe_images ADD COLUMN kind TEXT NOT NULL DEFAULT 'build'")
+            if "base" not in columns:  # A recipe's prepared base, {kind, reference}, as registration matched it.
+                db.execute("ALTER TABLE recipe_images ADD COLUMN base TEXT")
             columns = {row[1] for row in db.execute("PRAGMA table_info(recipes)")}
             if "environment" not in columns:
                 db.execute("ALTER TABLE recipes ADD COLUMN environment TEXT")
@@ -266,6 +268,9 @@ class ImageRecipeStore:
                 db.execute("INSERT OR IGNORE INTO recipe_images (image_id, recipe_sha256, recipe, state, changed, kind) "
                            "VALUES (?, ?, ?, ?, ?, ?)",
                            (image_id, sha, json.dumps(stored, sort_keys=True), state, now, kind))
+                if recipe.get("base"):
+                    db.execute("UPDATE recipe_images SET base = ? WHERE image_id = ?",
+                               (json.dumps(recipe["base"], sort_keys=True), image_id))
                 environment, source = recipe.get("environment"), json.dumps(recipe.get("source") or {}, sort_keys=True)
                 row = db.execute("SELECT image_id, retention, environment, source, registered FROM recipes "
                                  "WHERE name = ?", (recipe["name"],)).fetchone()
@@ -292,15 +297,16 @@ class ImageRecipeStore:
                 chunk = names[start:start + 500]
                 rows = db.execute(
                     "SELECT r.name, r.image_id, r.retention, i.recipe_sha256, i.recipe, i.state, i.build_id, "
-                    "i.error, i.attempts, i.changed, i.oci, i.kind, r.environment, r.source "
+                    "i.error, i.attempts, i.changed, i.oci, i.kind, r.environment, r.source, i.base "
                     "FROM recipes r JOIN recipe_images i USING (image_id) "
                     f"WHERE r.name IN ({','.join('?' * len(chunk))})", chunk)
                 for (name, image_id, retention, sha, recipe, state, build_id, error, attempts, changed, oci, kind,
-                     environment, source) in rows:
+                     environment, source, base) in rows:
                     found[name] = {**json.loads(recipe), "name": name, "image_id": image_id, "retention": retention,
                                    "recipe_sha256": sha, "state": state, "build_id": build_id, "error": error,
                                    "attempts": attempts, "changed": changed, "oci": oci, "kind": kind,
-                                   "environment": environment, "source": json.loads(source or "{}")}
+                                   "environment": environment, "source": json.loads(source or "{}"),
+                                   "base": json.loads(base) if base else None}
         return found
 
     def has(self, name):
@@ -410,8 +416,9 @@ class ImageRecipeStore:
             aliases = [row[0] for row in db.execute("SELECT name FROM recipes WHERE image_id = ? AND name != ? "
                                                     "ORDER BY name LIMIT 20", (recipe["image_id"], name))]
         made = ({"prepared_reference": recipe["reference"]} if recipe["kind"] == "prepared" else
-                {key: recipe[key] for key in ("context_archive_digest", "context_archive_size", "dockerfile",
-                                              "build_args")})
+                {"base": recipe["base"], **{key: recipe[key] for key in ("context_archive_digest",
+                                                                         "context_archive_size", "dockerfile",
+                                                                         "build_args")}})
         return {"name": name, "environment": recipe["environment"], "source": recipe["source"],
                 "kind": recipe["kind"], "state": name_state(recipe["kind"], recipe["state"], recipe["attempts"]),
                 "image_id": recipe["image_id"], **made, "build_id": recipe["build_id"], "error": recipe["error"],

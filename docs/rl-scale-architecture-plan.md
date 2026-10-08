@@ -2025,6 +2025,23 @@ Creates, execs, pause and local waits moved into `ucloud-noded` ([rust-node-daem
 - **Fixed:** building from released foundations had been broken since the move to UCloud: stored locators named the Hetzner store node (0.9.52). One transient store 503 failed a whole foundation for 10 minutes (0.9.53).
 - **Direction for C2.14, pending the user:** build OpenSWE on demand ahead of the sampler, with eviction and recipe-failure exclusion, instead of storing all of it.
 
+### 2026-10-08: sandbox builds (0.9.58-0.9.64), the client releases, and the rehearsal on 0.9.64
+
+- **Sandbox builds (C2.14)** are in production: a recipe on a chunk-store base builds in a sandbox on the workers and is born in the chunk store ([sandbox-builds.md](sandbox-builds.md)). Stacking a 5.6 GB layer takes 54 s (442 s in 0.9.58); build sandboxes get a 4 GB `/tmp` (0.9.64).
+- **Released:** SDK 0.4.37 from `main` (image recipes, toolkits); `verifiers-ucloud` `main` pins it and carries the managed-agent, toolkit and `uv_toolkit` work.
+- **Rehearsal on 0.9.64, two workers** (production's cap; 1,024 relay rollouts over 128 images, 8 turns each), the first since 0.9.50:
+
+| Warm, two workers | Ready by 10 s | 20 s | 30 s | All ready | p50 |
+|---|---|---|---|---|---|
+| 0.9.48 | 323 | 643 | 895 | 37.3 s | |
+| 0.9.49 | 390 | 708 | 988 | 31.9 s | 13.4 s |
+| **0.9.64** | 385 | 640 | 892 | **35.9 s** | 14.5 s |
+
+  - 984/1,024 rollouts succeeded, every turn included; the 40 others are the images without Python, as always. Relay answer-to-resume p95 43 ms.
+  - From zero: all ready by 149 s (0.9.49: 137 s); worker boot dominates.
+  - Node-side `manager_create` p50 2.5 s, p95 5.9 s (0.9.49: 2.1, 4.3 s). One of the two workers was about 30% slower single-threaded (98 against 75 ms), the VM spread 0.9.50's CPU check retires above 35 ms of its own loop.
+- **Training gate (M2 with slack, two workers):** readiness all by 36 s against 30 s, exec 1,239-1,306/s per node (met), creates/s not met (about 30/s). No regression since 0.9.49 beyond VM spread.
+
 ## Appendix: evidence index
 
 - Image path:

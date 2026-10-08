@@ -163,9 +163,22 @@ exposure: 8 of the 20 recipe images built in 0.9.56's live check were unreadable
 moves them, `supersede`), checks every converted layer before signing, and makes the store node
 check stored layouts against blob tables. The 11 images were rebuilt.
 
+**Faster stacking (0.9.61-0.9.63).** Measured per phase on production builds:
+- The commit filter wrote names in string order and the converter wants path order, so every
+  layer was copied twice before conversion; it is written in path order now.
+- Uploads to the bucket run about 11 MB/s per stream from UCloud and 66 MB/s with four; packs now
+  upload four at a time while the next fills (two in 0.9.61, one before).
+- The pack writer summed its entries on every chunk it took, quadratic in a pack's chunks; it
+  keeps a running size.
+
+Results: openswe-211's 5.6 GB layer stacked in 54 s (442 s in the 0.9.58 dry run), openswe-208's
+in 63 s, Terminal-Lego's in about 9 s (13-37 s). Large OpenSWE builds with fresh content upload at
+40-64 MB/s (5-6 before). What remains is `nydus-image create` (single-threaded, 2-30 s) and the
+index's whole-image work at registration (2-10 s); the steps themselves now dominate a build.
+
 ## Not yet
 
 - **Cached recipe images are never collected.** An `image_roots` row keeps its root (and
   chunks) for good; this was already true of builder-built recipe images.
 - Multi-stage Dockerfiles, `ARG` and `ADD` stay on the builders.
-- The stacking step reads the whole parent chunk map (index work grows with the foundation).
+- Registration's index work grows with the whole image (2-10 s), not with the new layer.

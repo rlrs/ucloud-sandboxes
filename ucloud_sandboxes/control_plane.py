@@ -730,6 +730,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         if path == "/v1/images/ensure" and self.command == "POST":
             self._ensure_images()
             return True
+        if path.startswith("/v1/image-index") and self.command == "GET":
+            self._read_image_index(path)
+            return True
         build_key = _image_build_key_from_path(path)
         if build_key is not None and self.command == "GET":
             self._get_image_build(build_key)
@@ -3454,8 +3457,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             if not isinstance(rows, list) or not 0 < len(rows) <= MAX_RECIPES_PER_REQUEST:
                 raise RecipeError(f"payload must be {{\"recipes\": [...]}} with 1-{MAX_RECIPES_PER_REQUEST} recipes")
             recipes = [validate_recipe(row) for row in rows]
-            missing = []
+            missing, unprepared = [], []
             for recipe in recipes:
+                if recipe.get("prepared_reference"):
+                    if self._prepared_image_reference(recipe["prepared_reference"]) is None:
+                        unprepared.append(recipe["name"])
+                    continue
                 digest, size = recipe["context_archive_digest"], recipe["context_archive_size"]
                 try:
                     uploaded_build_context_reference({"context_archive_digest": digest, "context_archive_size": size,
@@ -3467,6 +3474,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             if missing:
                 self._write_json({"error": "build contexts are not uploaded", "error_code": "build_context_missing",
                                   "names": missing[:100]}, status=HTTPStatus.BAD_REQUEST)
+                return
+            if unprepared:
+                self._write_json({"error": "prepared images are not in the chunk store",
+                                  "error_code": "image_not_prepared", "names": unprepared[:100]},
+                                 status=HTTPStatus.BAD_REQUEST)
                 return
             registered = self.image_recipes.register(recipes)
         except (json.JSONDecodeError, ValueError) as exc:
@@ -3498,6 +3510,60 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         for status in images.values():
             counts[status["state"]] = counts.get(status["state"], 0) + 1
         self._write_json({"images": images, "counts": counts})
+
+    def _prepared_image_reference(self, reference: str) -> str | None:
+        """repository@digest of a prepared image -> the reference a sandbox
+        creates from (this registry's host), while the chunk store holds it."""
+        repository, _, digest = reference.partition("@")
+        roots = getattr(self.services.registry_refs.dependency_resolver, "image_roots", None)
+        host = urlparse(self.services.images.registry_url or "").netloc
+        row = roots.get(repository, digest) if roots is not None and host else None
+        if row is None or row["state"] not in ("switched", "released"):
+            return None
+        return f"{host}/{repository}@{digest}"
+
+    def _read_image_index(self, path: str) -> None:
+        """GET /v1/image-index: names per environment and state.
+        GET /v1/image-index/names?environment=&state=&after=&limit=: a page of names.
+        GET /v1/image-index/name?name=: one name in full.
+        GET /v1/image-index/task-ids?environment=: the tasks a trainer may sample."""
+        from .gateway.image_recipes import RecipeError
+        if self.image_recipes is None:
+            self._write_json({"error": "image recipes are not available on this deployment",
+                              "error_code": "image_recipes_unavailable"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        query = {key: values[-1] for key, values in parse_qs(urlparse(self.path).query).items()}
+        try:
+            if path == "/v1/image-index":
+                summary = self.image_recipes.summary()
+                totals: dict[str, int] = {}
+                for row in summary.values():
+                    for key in ("names", "tasks", "prepared", "recipes"):
+                        totals[key] = totals.get(key, 0) + row[key]
+                self._write_json({"environments": summary, "totals": totals})
+            elif path == "/v1/image-index/names":
+                names, cursor = self.image_recipes.names(
+                    environment=query.get("environment"), state=query.get("state"), after=query.get("after", ""),
+                    limit=int(query.get("limit", 500)))
+                self._write_json({"names": names, "next": cursor})
+            elif path == "/v1/image-index/name":
+                detail = self.image_recipes.detail(query.get("name", ""))
+                if detail is None:
+                    self._write_json({"error": "name is not registered", "error_code": "image_name_unknown"},
+                                     status=HTTPStatus.NOT_FOUND)
+                else:
+                    self._write_json(detail)
+            elif path == "/v1/image-index/task-ids":
+                environment = query.get("environment")
+                if not environment:
+                    raise RecipeError("environment is required")
+                task_ids, excluded = self.image_recipes.task_ids(environment)
+                self._write_json({"environment": environment, "task_ids": task_ids, "excluded": excluded})
+            else:
+                self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+        except ValueError as exc:
+            self._write_json({"error": str(exc), "error_code": "invalid_image_index_request"},
+                             status=HTTPStatus.BAD_REQUEST)
 
     def _recipe_ensurer(self) -> Any:
         from .gateway.image_recipes import RecipeEnsurer, Submission, restore_context
@@ -3556,7 +3622,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 self.services.registry_refs.ensure_image_reference(reference, f"image-recipe-pinned:{image_id}")
 
         return RecipeEnsurer(self.image_recipes, resolve=resolve, build_status=build_status, adopt=adopt,
-                             submit=submit, protect=protect, release=self._release_recipe_images)
+                             submit=submit, protect=protect, release=self._release_recipe_images,
+                             resolve_prepared=self._prepared_image_reference)
 
     def _release_recipe_images(self, references: dict[str, str]) -> dict[str, str]:
         """{image_id: reference} -> {image_id: released | kept | pending}. An image

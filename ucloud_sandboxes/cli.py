@@ -332,6 +332,8 @@ def build_parser() -> argparse.ArgumentParser:
     add_chunk_migrate_commands(subparsers)
     from .sandbox_build import add_commands as add_sandbox_build_commands
     add_sandbox_build_commands(subparsers)
+    from .image_index_cli import add_commands as add_image_index_commands
+    add_image_index_commands(subparsers)
 
     toolkit_register = subparsers.add_parser(
         "toolkit-register",

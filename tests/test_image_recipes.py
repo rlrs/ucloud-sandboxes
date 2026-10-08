@@ -203,6 +203,88 @@ class ImageRecipeReleaseTests(unittest.TestCase):
         self.assertEqual(self.store.lookup(["t:1"])["t:1"]["oci"], "present")
 
 
+PREPARED = "ucloud-managed/precomputed-abc@sha256:" + "d" * 64
+
+
+class ImageIndexTests(unittest.TestCase):
+    """The index of training names: prepared images, recipes, their tasks and states."""
+
+    def setUp(self):
+        self.temp = TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.store = ImageRecipeStore(Path(self.temp.name) / "image-recipes.sqlite3")
+        self.builders, self.present = Builders(), {PREPARED}
+        self.ensurer = RecipeEnsurer(self.store, resolve=self.builders.resolve, build_status=self.builders.build_status,
+                                     adopt=self.builders.adopt, submit=self.builders.submit,
+                                     resolve_prepared=lambda ref: f"registry/{ref}" if ref in self.present else None)
+
+    def prepared(self, name, reference=PREPARED, **extra):
+        return validate_recipe({"name": name, "prepared_reference": reference, **extra})
+
+    def test_a_prepared_name_is_ready_without_a_build(self):
+        self.store.register([self.prepared("aweaiteam/scaleswe:x_pr1", environment="scaleswe",
+                                           tasks=["x__1", "x__2"], source={"dataset": "PrimeIntellect/Scale-SWE"})])
+        status = self.ensurer.ensure(["aweaiteam/scaleswe:x_pr1"])["aweaiteam/scaleswe:x_pr1"]
+        self.assertEqual(status["state"], "ready")
+        self.assertEqual(status["reference"], f"registry/{PREPARED}")
+        self.assertEqual(self.builders.submitted, [])
+        detail = self.store.detail("aweaiteam/scaleswe:x_pr1")
+        self.assertEqual((detail["kind"], detail["state"], detail["prepared_reference"], detail["tasks"]),
+                         ("prepared", "ready", PREPARED, 2))
+        self.assertEqual(detail["source"], {"dataset": "PrimeIntellect/Scale-SWE"})
+
+    def test_a_prepared_image_the_chunk_store_lost_fails_and_leaves_the_allowlist(self):
+        self.store.register([self.prepared("a:1", environment="scaleswe", tasks=["t1"])])
+        self.present.clear()
+        self.assertEqual(self.ensurer.ensure(["a:1"])["a:1"]["state"], "failed")
+        self.assertEqual(self.store.task_ids("scaleswe"), ([], {"failed": 1}))
+        self.present.add(PREPARED)  # Back (restored): ready again.
+        self.assertEqual(self.ensurer.ensure(["a:1"])["a:1"]["state"], "ready")
+        self.assertEqual(self.store.task_ids("scaleswe"), (["t1"], {}))
+
+    def test_validation_of_prepared_names_and_index_fields(self):
+        for bad in ({"name": "x", "prepared_reference": "10.0.0.1:5000/" + PREPARED},  # A host moves; never stored.
+                    {"name": "x", "prepared_reference": PREPARED, "dockerfile": "Dockerfile"},
+                    {"name": "x", "prepared_reference": "ucloud-managed/x:latest"},
+                    {"name": "x", "prepared_reference": PREPARED, "tasks": ["t"]},  # Tasks need an environment.
+                    {"name": "x", "prepared_reference": PREPARED, "environment": "Has Spaces"},
+                    {"name": "x", "prepared_reference": PREPARED, "environment": "e", "tasks": [""]}):
+            with self.subTest(bad=bad), self.assertRaises(RecipeError):
+                validate_recipe(bad)
+
+    def test_summary_names_and_task_ids_follow_each_names_state(self):
+        self.store.register([
+            self.prepared("p:1", environment="scaleswe", tasks=["s1"]),
+            recipe("tmax:1", "sha256:" + "1" * 64, environment="tmax", tasks=["task_1"]),
+            recipe("tmax:2", "sha256:" + "2" * 64, environment="tmax", tasks=["task_2"]),
+            recipe("tmax:3", "sha256:" + "3" * 64, environment="tmax", tasks=["task_3"]),
+        ])
+        broken = self.store.lookup(["tmax:3"])["tmax:3"]["image_id"]
+        for _ in range(FAILURE_ATTEMPTS):  # Recipe rot: failed for good.
+            self.store.record(broken, "failed", error="step 2 exited 1", attempt=True)
+        retrying = self.store.lookup(["tmax:2"])["tmax:2"]["image_id"]
+        self.store.record(retrying, "failed", error="network", attempt=True)
+        summary = self.store.summary()
+        self.assertEqual(summary["scaleswe"]["states"]["ready"], 1)
+        self.assertEqual((summary["tmax"]["names"], summary["tmax"]["recipes"], summary["tmax"]["tasks"]), (3, 3, 3))
+        self.assertEqual({k: v for k, v in summary["tmax"]["states"].items() if v},
+                         {"not_built": 1, "retrying": 1, "failed": 1})
+        self.assertEqual(self.store.task_ids("tmax"), (["task_1", "task_2"], {"failed": 1}))
+        self.assertEqual([row["name"] for row in self.store.names(environment="tmax", state="failed")[0]], ["tmax:3"])
+        page, cursor = self.store.names(limit=2)
+        self.assertEqual(([row["name"] for row in page], cursor), (["p:1", "tmax:1"], "tmax:1"))
+        self.assertEqual([row["name"] for row in self.store.names(after=cursor)[0]], ["tmax:2", "tmax:3"])
+        self.assertEqual(self.store.detail("tmax:3")["error"], "step 2 exited 1")
+
+    def test_reregistering_replaces_a_names_tasks_and_one_image_lists_its_other_names(self):
+        self.store.register([self.prepared("a:1", environment="swesmith", tasks=["t1", "t2"]),
+                             self.prepared("b:1", environment="swesmith", tasks=["t3"])])
+        self.store.register([self.prepared("a:1", environment="swesmith", tasks=["t2", "t4"])])
+        self.assertEqual(self.store.task_ids("swesmith")[0], ["t2", "t3", "t4"])
+        self.assertEqual(self.store.detail("a:1")["other_names"], ["b:1"])
+        self.assertIsNone(self.store.detail("nobody:1"))
+
+
 class PinnedReferenceTests(unittest.TestCase):
     def test_a_rebuilt_pinned_image_moves_its_reference(self):
         # Rebuilding a pinned recipe names another digest under the same tag:

@@ -434,6 +434,12 @@ class ControlPlaneTests(unittest.TestCase):
             )
         )
 
+    def test_the_image_index_is_readable_with_the_sdk_key(self) -> None:
+        for path in ("/v1/image-index", "/v1/image-index/names", "/v1/image-index/name",
+                     "/v1/image-index/task-ids"):
+            self.assertTrue(auth._is_sdk_api_request("GET", path))  # noqa: SLF001
+            self.assertFalse(auth._is_sdk_api_request("POST", path))  # noqa: SLF001
+
     def test_create_pipeline_target_is_bound_from_configuration(self) -> None:
         with _temporary_root() as root:
             server = _gateway_server(

@@ -326,6 +326,7 @@ class PackWriter:
 
     def __init__(self, path):
         self.path, self.entries, self._hash = path, [], hashlib.sha256()
+        self._data = 0  # Chunk bytes so far: summing the entries per add made filling a pack quadratic.
         self._stream = open(path, "xb")
         self._write(PACK_HEADER.pack(_PACK_MAGIC, 1, 0))
 
@@ -335,7 +336,7 @@ class PackWriter:
 
     @property
     def size(self):
-        return PACK_HEADER.size + sum(entry[2] for entry in self.entries)
+        return PACK_HEADER.size + self._data
 
     def fits(self, clen):
         return self.size + clen + (len(self.entries) + 1) * PACK_ENTRY.size + PACK_TRAILER.size <= MAX_PACK_BYTES
@@ -344,6 +345,7 @@ class PackWriter:
         if not self.fits(len(payload)) or flags not in (RAW, ZSTD) or (flags == RAW and len(payload) != ulen):
             raise ValueError("chunk does not fit this pack")
         self.entries.append((chunk_id, self.size, len(payload), ulen, flags))
+        self._data += len(payload)
         self._write(payload)
 
     def finish(self):

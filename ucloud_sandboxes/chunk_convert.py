@@ -381,7 +381,8 @@ class RafsConverter:
         uploader = ThreadPoolExecutor(UPLOADS_IN_FLIGHT, thread_name_prefix="pack-upload")
 
         def upload(writer, digest, size, supersede):
-            self.store.put_file(pack_key(self.store.prefix, digest), writer.path, size)
+            with self._timed("pack_put"):  # Summed over packs uploading at once.
+                self.store.put_file(pack_key(self.store.prefix, digest), writer.path, size)
             self._count("pack_bytes", size)
             self._step("pack_put", diff_id=diff_id, pack=digest)
             # A pack is durable in S3 before any index row names it.
@@ -395,12 +396,14 @@ class RafsConverter:
             superseding.clear()
             pending = [future for future in uploads if not future.done()]
             if len(pending) > UPLOADS_IN_FLIGHT:  # Bounded scratch: at most this many filled packs wait.
-                wait(pending, return_when=FIRST_COMPLETED)
+                with self._timed("pack_upload_wait"):  # Filling waits for uploads: they are the limit.
+                    wait(pending, return_when=FIRST_COMPLETED)
 
         def drain():
             """Every pack this run filled is committed (or its error raised)."""
-            for future in uploads:
-                future.result()
+            with self._timed("pack_upload_wait"):
+                for future in uploads:
+                    future.result()
             uploads.clear()
 
         def pack(ids, source):

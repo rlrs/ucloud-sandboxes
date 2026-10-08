@@ -44,6 +44,7 @@ SYSTEMD_UNIT_NAMES = (
     "ucloud-sandbox-snapshot-gc.timer",
     "ucloud-sandbox-chunk-index.service",
     "ucloud-sandbox-autoscaler.service",
+    "ucloud-sandbox-builds.service",
     "ucloud-sandbox-upstream-mirror@.service",
     "ucloud-sandbox-upstream-mirror-trim.service",
     "ucloud-sandbox-upstream-mirror-trim.timer",
@@ -54,6 +55,7 @@ PERSISTENT_STATE_SYSTEMD_UNITS = (
     "ucloud-sandbox-relay.service",
     "ucloud-sandbox-registry-prune.service",
     "ucloud-sandbox-autoscaler.service",
+    "ucloud-sandbox-builds.service",
 )
 REGISTRY_STORAGE_SYSTEMD_UNITS = (
     "ucloud-sandbox-registry.service",

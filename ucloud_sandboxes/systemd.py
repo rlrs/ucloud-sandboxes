@@ -392,6 +392,7 @@ def reconcile_gateway_services(
         "ucloud-sandbox-gateway.service",
         "ucloud-sandbox-relay.service",
         "ucloud-sandbox-autoscaler.service",
+        "ucloud-sandbox-builds.service",  # Exits 78 while sandbox_builds is off.
     ):
         systemctl("enable", service)
     # ucloud-chunk-index (decision 5: on the gateway until C2.6), only once
@@ -422,6 +423,7 @@ def reconcile_gateway_services(
         "ucloud-sandbox-gateway.service",
         "ucloud-sandbox-relay.service",
         "ucloud-sandbox-autoscaler.service",
+        "ucloud-sandbox-builds.service",
     ):
         systemctl("restart", service)
     wait_for("gateway", f"http://127.0.0.1:{config.gateway_port}/healthz")

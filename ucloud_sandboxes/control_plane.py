@@ -475,6 +475,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     dispatch_environment_roots = False
     # Toolkit layers (docs/toolkit-layers.md); None without a signing key.
     toolkit_composer = None
+    sandbox_builds = None
     image_recipes = None
     image_recipe_contexts = None
     create_placement = "ranked"
@@ -3506,6 +3507,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             return None if error is not None or reference == image_id else reference
 
         def build_status(build_id: str) -> tuple[str | None, dict[str, Any] | None]:
+            if self.sandbox_builds is not None and build_id.startswith("sandbox:"):
+                return self.sandbox_builds.status(build_id)
             try:
                 records = self._image_build_records_for_key(build_id)
             except Exception:  # noqa: BLE001 - builders unreachable: unknown for now, not lost.
@@ -3518,6 +3521,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
         def adopt(build: dict[str, Any]) -> None:
             image = build.get("image")
+            if build.get("sandbox_build") and self.sandbox_builds is not None:
+                image = self.sandbox_builds.adopt(build)
             if isinstance(image, dict) and _image_record_available_to_sandboxes(image):
                 image = self.services.images.record_with_digest(image)
                 try:
@@ -3529,6 +3534,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         def submit(payload: dict[str, Any]) -> Any:
             restore_context(self.image_recipe_contexts, self.build_context_store,
                             payload["context_archive_digest"], payload["context_archive_size"])
+            if self.sandbox_builds is not None:
+                build_id = self.sandbox_builds.submit(payload)
+                if build_id is not None:
+                    return Submission("building", build_id=build_id)
             result = self._dispatch_image_build(payload)
             body = result.response.json() if result.response is not None else (result.payload or {})
             if 200 <= int(result.status) < 300 and isinstance(body.get("build"), dict):
@@ -5975,6 +5984,7 @@ def build_server(
     dispatch_environment_roots: bool = False,
     environment_signing_key_file: str = "",
     base_regeneration: object | None = None,
+    sandbox_builds: dict[str, Any] | None = None,
     import_external_images: bool = False,
     create_placement: str = "ranked",
     registry_disk_monitor: RegistryDiskMonitor | None = None,
@@ -6129,6 +6139,16 @@ def build_server(
         dependency_resolver = EnvironmentDependencyResolver(
             environment_registry, image_roots=ImageRootsStore(roots_path(image_file)))
     BoundHandler.dispatch_environment_roots = bool(dispatch_environment_roots and dependency_resolver is not None)
+    BoundHandler.sandbox_builds = None
+    if sandbox_builds is not None and dependency_resolver is not None:
+        # Recipes on a chunk-store base build in sandboxes (docs/sandbox-builds.md).
+        from .gateway.sandbox_builds import SandboxBuilds
+        from .sandbox_build import Spool
+        BoundHandler.sandbox_builds = SandboxBuilds(
+            Spool(sandbox_builds["spool"]), catalog=BoundHandler.prepared_image_catalog,
+            contexts=build_context_store, roots=dependency_resolver.image_roots, environments=environment_registry,
+            tag_for=lambda image_id: _managed_registry_build_tag(image_id, registry_worker_url or ""),
+            apt_proxy=sandbox_builds.get("apt_proxy"))
     from .gateway.image_recipes import ImageRecipeStore, recipes_path
     BoundHandler.image_recipes = ImageRecipeStore(recipes_path(image_file))
     BoundHandler.image_recipe_contexts = BuildContextBlobStore(

@@ -330,6 +330,8 @@ def build_parser() -> argparse.ArgumentParser:
     add_chunk_store_commands(subparsers)
     from .chunk_migrate import add_commands as add_chunk_migrate_commands
     add_chunk_migrate_commands(subparsers)
+    from .sandbox_build import add_commands as add_sandbox_build_commands
+    add_sandbox_build_commands(subparsers)
 
     toolkit_register = subparsers.add_parser(
         "toolkit-register",
@@ -1125,6 +1127,15 @@ def cmd_serve_environment_io(args: argparse.Namespace) -> int:
     return 0
 
 
+def _sandbox_builds(config: DeploymentConfig) -> dict | None:
+    """The gateway's side of sandbox builds: their spool, and the apt cache steps use."""
+    from .gateway.sandbox_builds import apt_proxy, spool_root
+    selected = config.immutable_environments
+    if selected is None or selected.sandbox_builds is None or not selected.sandbox_builds.enabled:
+        return None
+    return {"spool": spool_root(config), "apt_proxy": apt_proxy(config)}
+
+
 def cmd_serve_control_plane(args: argparse.Namespace) -> int:
     from .environment_config import environment_registry_from_args, environment_registry_from_deployment
     from .gateway.base_regeneration import from_deployment as base_regeneration_from_deployment
@@ -1183,6 +1194,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         environment_signing_key_file=(config.immutable_environments.signing_key_file
                                       if config.immutable_environments is not None else ""),
         base_regeneration=base_regeneration_from_deployment(config, args.config),
+        sandbox_builds=_sandbox_builds(config),
         import_external_images=bool(
             config.immutable_environments is not None
             and config.immutable_environments.worker_enabled

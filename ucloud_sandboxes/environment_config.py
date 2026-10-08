@@ -224,6 +224,37 @@ class NydusdConfig:
 
 
 @dataclass(frozen=True)
+class SandboxBuildsConfig:
+    """``immutable_environments.sandbox_builds`` (docs/sandbox-builds.md):
+    recipes on a chunk-store base build in sandboxes on the workers, run by
+    ``serve-sandbox-builds`` on the gateway host; ``slots`` builds at once,
+    each sandbox with these resources and ``timeout_seconds`` for its steps."""
+    enabled: bool = False
+    slots: int = 8
+    cpus: float = 4.0
+    memory_mb: int = 8192
+    disk_mb: int = 32768
+    timeout_seconds: int = 1800
+
+    @classmethod
+    def from_dict(cls, raw):
+        from dataclasses import fields
+        if not isinstance(raw, dict) or set(raw) - {item.name for item in fields(cls)}:
+            raise ValueError("immutable_environments.sandbox_builds fields do not match schema")
+        result = cls(**raw)
+        if (type(result.enabled) is not bool or type(result.slots) is not int or not 1 <= result.slots <= 64
+                or isinstance(result.cpus, bool) or not isinstance(result.cpus, (int, float))
+                or not 0.5 <= result.cpus <= 64 or type(result.memory_mb) is not int or result.memory_mb < 1024
+                or type(result.disk_mb) is not int or result.disk_mb < 4096
+                or type(result.timeout_seconds) is not int or not 60 <= result.timeout_seconds <= 4 * 3600):
+            raise ValueError("immutable_environments.sandbox_builds has an invalid value")
+        return result
+
+    def to_dict(self):
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class ChunkStoreConfig:
     """``immutable_environments.chunk_store`` (docs/chunk-store-design.md).
 
@@ -401,6 +432,8 @@ class EnvironmentDeploymentConfig:
     # What a build publishes: "erofs" components in the registry, or "rafs":
     # the image converted into the chunk store on the builder (docs/image-recipes.md).
     builder_format: str = "erofs"
+    # Sandbox builds (docs/sandbox-builds.md); None: every recipe builds on builders.
+    sandbox_builds: SandboxBuildsConfig | None = None
 
     @classmethod
     def from_dict(cls, raw):
@@ -414,6 +447,8 @@ class EnvironmentDeploymentConfig:
         values = dict(raw)
         if values.get("chunk_store") is not None:
             values["chunk_store"] = ChunkStoreConfig.from_dict(values["chunk_store"])
+        if values.get("sandbox_builds") is not None:
+            values["sandbox_builds"] = SandboxBuildsConfig.from_dict(values["sandbox_builds"])
         paths = values.get("allow_paths", [])
         if not isinstance(paths, (list, tuple)):
             raise ValueError("immutable environment allow_paths must be a list")
@@ -451,6 +486,11 @@ class EnvironmentDeploymentConfig:
         if result.builder_format == "rafs" and (not result.builder_enabled or result.chunk_store is None
                                                 or result.chunk_store.nydus_image_sha256 is None):
             raise ValueError("builder_format rafs needs builder_enabled and a chunk_store with nydus_image_sha256")
+        if result.sandbox_builds is not None and result.sandbox_builds.enabled and (
+                not result.signing_key_file or not result.dispatch_roots or result.chunk_store is None
+                or result.chunk_store.nydus_image_sha256 is None or result.chunk_store.store_node is None):
+            raise ValueError("sandbox_builds needs signing_key_file, dispatch_roots and a chunk_store with "
+                             "nydus_image_sha256 and a store_node")
         return result
 
     def to_dict(self):
@@ -468,6 +508,10 @@ class EnvironmentDeploymentConfig:
             del raw["chunk_store"]
         else:
             raw["chunk_store"] = self.chunk_store.to_dict()
+        if self.sandbox_builds is None:
+            del raw["sandbox_builds"]
+        else:
+            raw["sandbox_builds"] = self.sandbox_builds.to_dict()
         return raw
 
 

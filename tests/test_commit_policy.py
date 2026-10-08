@@ -165,6 +165,22 @@ class ResidueRuleTests(unittest.TestCase):
             "workspace/build2"])
         self.assertEqual(DirectOciConfigBuilder.platform_written_paths(replace_spec(spec, enabled=False)), ())
 
+    def test_sandbox_builds_keep_build_residue_and_agent_policies_are_unchanged(self):
+        members = [ROOT, directory("./root"), directory("./root/.cache"), directory("./root/.cache/pip"),
+                   entry("./root/.cache/pip/w", b"x"), directory("./var"), directory("./var/cache"),
+                   directory("./var/cache/apt"), directory("./var/cache/apt/archives"),
+                   entry("./var/cache/apt/archives/a.deb", b"d"), entry("./tmp/x", b"t")]
+        kept = CommitPolicy.of(keep_build_residue=True)
+        result, listing, _, _ = run(members, kept)
+        self.assertIn("root/.cache/pip/w", listing)
+        self.assertIn("var/cache/apt/archives/a.deb", listing)
+        self.assertEqual(result.drops, {"volatile": 1})
+        self.assertEqual(CommitPolicy.from_dict(kept.to_dict()), kept)
+        plain = CommitPolicy.of()
+        self.assertNotIn("keep_build_residue", plain.to_dict())  # Agent commits hash as before.
+        with self.assertRaises(ValueError):
+            CommitPolicy.from_dict({**plain.to_dict(), "keep_build_residue": False})
+
     def test_include_paths_keep_ancestor_metadata_but_not_outside_deletions(self):
         policy = CommitPolicy.of(include_paths=["/workspace/project"])
         members = [ROOT, directory("./workspace", mode=0o700, xattrs={"trusted.overlay.opaque": "y"}),
@@ -195,6 +211,20 @@ class NormalizationTests(unittest.TestCase):
         _, listing, _, _ = results[0]
         self.assertEqual(sorted(listing), [".", "d", "d/.wh.x", "data", "data/.wh..wh..opq", "data/.wh.original"])
         self.assertNotIn("SCHILY.xattr.trusted.overlay.opaque", listing["data"].pax_headers)
+
+    def test_runsc_hard_links_to_a_whiteout_are_whiteouts(self):
+        # runsc's upper tar: every deletion after the first links to the first whiteout device.
+        members = [ROOT, directory("./etc"), whiteout("./etc/issue.net"),
+                   entry("./etc/update-motd.d", kind=tarfile.LNKTYPE, linkname="./etc/issue.net"),
+                   directory("./opt"), entry("./opt/old", kind=tarfile.LNKTYPE, linkname="./etc/issue.net")]
+        oci = [ROOT, directory("./etc"), entry("./etc/.wh.issue.net", b""), entry("./etc/.wh.update-motd.d", b""),
+               directory("./opt"), entry("./opt/.wh.old", b"")]
+        (result, listing, _, _), (expected, *_) = run(members), run(oci)
+        self.assertEqual(sorted(listing), [".", "etc", "etc/.wh.issue.net", "etc/.wh.update-motd.d", "opt",
+                                           "opt/.wh.old"])
+        self.assertEqual(result.diff_id, expected.diff_id)
+        # A link to a regular file stays a link, and one to an absent target is still refused.
+        refused(self, "commit_residue_forbidden", [ROOT, entry("./a", kind=tarfile.LNKTYPE, linkname="./gone")])
 
     def test_metadata_kept_and_symlinks_never_followed(self):
         members = [ROOT, directory("./bin", mode=0o751, uid=1000),

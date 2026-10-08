@@ -2,6 +2,7 @@
 write-path step (design §3), granularity, and the tree verifier."""
 import dataclasses
 import hashlib
+import json
 from pathlib import Path
 import tarfile
 from tempfile import TemporaryDirectory
@@ -23,6 +24,18 @@ TEST_TIER = "contract"
 
 class Crash(Exception):
     pass
+
+
+CONFIG = {"Entrypoint": [], "Cmd": [], "Env": [], "WorkingDir": "", "User": ""}
+
+
+def commit_layer(root):
+    """A filtered commit layer (uncompressed, sorted) over sample image A."""
+    path = Path(root) / "commit.tar"
+    blob, diff_id = layer([("etc", "dir"), ("etc/.wh.hosts", b""), ("opt", "dir"), ("opt/.wh..wh..opq", b""),
+                           ("opt/fresh", pseudo_random("fresh", 40_000))], compress=False)
+    path.write_bytes(blob)
+    return path, diff_id
 
 
 class ConverterTests(unittest.TestCase):
@@ -53,6 +66,48 @@ class ConverterTests(unittest.TestCase):
         self.assertEqual(len(store.packs()), len(packs_after_a) + 1)
         self.assertGreater(new_a, 5)
         self.assertNotEqual(first["root"], second["root"])
+
+    def test_a_layer_extends_a_chunk_store_root_without_any_oci(self):
+        store = self.store()
+        parent = store.converter.convert(REPOSITORY, "a")["root"]
+        base = store.registry.load(load_environment(store.registry, parent).environment.base)
+        tar, diff_id = commit_layer(store.root)
+        config = {"Entrypoint": [], "Cmd": ["bash"], "Env": ["PATH=/bin", "A=1"], "WorkingDir": "/app", "User": ""}
+        store.converter.metrics.clear()
+        tags_before = set(store.client.tags)
+        result = store.converter.extend(parent, tar, diff_id, image_config=config, repository="ucloud-managed/x")
+        environment = load_environment(store.registry, result["root"])
+        component = store.registry.load(environment.environment.base)
+        self.assertEqual(component.source_layers, (*base.source_layers, diff_id))
+        self.assertEqual((environment.source_image, environment.image_config), (result["config"], config))
+        self.assertEqual(environment.environment.toolkits, ())
+        written = json.loads(store.client.blobs[result["config"]])
+        self.assertEqual(written["rootfs"]["diff_ids"], [*base.source_layers, diff_id])
+        # Only the new file's chunk is packed; the parent's bootstrap is the merge's base.
+        self.assertEqual(store.converter.metrics.get("chunks_new"), 1)
+        devices = chunk_store.parse_bootstrap(self.bootstrap(store, component)).devices
+        parent_devices = chunk_store.parse_bootstrap(self.bootstrap(store, base)).devices
+        self.assertEqual([d[0] for d in devices[:-1]], [d[0] for d in parent_devices])
+        # No image manifest: the new tags are the component's and the root's.
+        self.assertEqual(sorted(tag.split("-")[0] + "-" + tag.split("-")[1] if tag.startswith("rafs-root") else
+                                tag.split("-")[0] for tag in set(store.client.tags) - tags_before),
+                         ["rafs", "rafs-root"])
+        again = store.converter.extend(parent, tar, diff_id, image_config=config, repository="ucloud-managed/x")
+        self.assertEqual(again["root"], result["root"])
+
+    def test_only_whole_image_chunk_store_roots_are_extended(self):
+        store = ChunkStoreFixture(self, signer=self.signer, layout="layer")
+        sample_images(store.client)
+        parent = store.converter.convert(REPOSITORY, "a")["root"]
+        tar, diff_id = commit_layer(store.root)
+        with self.assertRaises(ValueError):
+            store.converter.extend(parent, tar, diff_id, image_config=CONFIG, repository="ucloud-managed/x")
+
+    @staticmethod
+    def bootstrap(store, component):
+        key = chunk_store.bootstrap_key(store.index.store.prefix, component.bootstrap["digest"][7:])
+        compressed = store.objects.objects[key]
+        return chunk_store.zstd_decompress(compressed, chunk_store.zstd_content_size(compressed, 1 << 30))
 
     def test_a_rerun_converges_on_the_same_root_without_new_packs(self):
         store = self.store()

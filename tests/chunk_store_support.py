@@ -321,21 +321,31 @@ def _create(arguments, blob_toc=False):
 
 
 def _merge(arguments):
+    """``--parent-bootstrap`` keeps a merged parent's blobs and chunks first."""
     from ucloud_sandboxes.chunk_store import parse_bootstrap
-    options = dict(zip(arguments[:6:2], arguments[1:6:2]))
-    sources = [parse_bootstrap(Path(path).read_bytes()) for path in arguments[6:]]
+    options, index = {}, 0
+    while arguments[index].startswith("-"):
+        options[arguments[index]] = arguments[index + 1]
+        index += 2
+    sources = [parse_bootstrap(Path(path).read_bytes()) for path in arguments[index:]]
     ids = options["--original-blob-ids"].split(",")
-    layers = [(blob_id, source) for blob_id, source in zip(ids, sources) if source.devices]
-    count = sum(len(source.chunks) for _, source in layers)
+    inherited = []
+    if "--parent-bootstrap" in options:
+        parent = parse_bootstrap(Path(options["--parent-bootstrap"]).read_bytes())
+        inherited = [(device[0], [chunk for chunk in parent.chunks if chunk[1] == position], device[1])
+                     for position, device in enumerate(parent.devices)]
+    layers = inherited + [(blob_id, source.chunks, source.devices[0][1])
+                          for blob_id, source in zip(ids, sources) if source.devices]
+    count = sum(len(layer_chunks) for _, layer_chunks, _ in layers)
     size = len(write_bootstrap([("0" * 64, 1, 128)] * len(layers), [(b"\0" * 32, 0, 0, 1, 1, 0, 0)] * count))
     devices, chunks, cursor = [], [], 0
-    for position, (blob_id, source) in enumerate(layers):
+    for position, (blob_id, layer_chunks, blocks) in enumerate(layers):
         mapped = _mapped(size, cursor)
-        devices.append((blob_id, source.devices[0][1], mapped))
-        cursor = mapped + source.devices[0][1]
-        chunks += [(chunk[0], position, *chunk[2:]) for chunk in source.chunks]
+        devices.append((blob_id, blocks, mapped))
+        cursor = mapped + blocks
+        chunks += [(chunk[0], position, *chunk[2:]) for chunk in layer_chunks]
     Path(options["-B"]).write_bytes(write_bootstrap(devices, chunks))
-    Path(options["-J"]).write_text(json.dumps({"blobs": [blob_id for blob_id, _ in layers]}))
+    Path(options["-J"]).write_text(json.dumps({"blobs": [blob_id for blob_id, _, _ in layers]}))
 
 
 def main(argv):

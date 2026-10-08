@@ -44,6 +44,7 @@ STEPS = ("layer_converted", "pack_put", "pack_committed", "layer_bootstrap_put",
 _OPAQUE = ".wh..wh..opq"
 _OVERLAY_OPAQUE = "SCHILY.xattr.trusted.overlay.opaque"
 MAX_LAYERS_PER_ROOT = 33  # The base and 32 toolkits (ImmutableEnvironment).
+IMAGE_CONFIG_KEYS = ("Entrypoint", "Cmd", "Env", "WorkingDir", "User")
 LOOKUP_BATCH = 256  # Chunk ids per index reservation while packing: about one 64 MiB pack.
 RESERVE_RETRY_SECONDS = 1.0  # First wait for chunks another builder holds; doubles to 30 s.
 
@@ -244,8 +245,9 @@ class RafsConverter:
             self._step("verified")
             return self._publish(signed, config_digest, config.get("config") or {}, diff_ids)
 
-    def _layer(self, repository, descriptor, diff_id, scratch):
-        """Claim, convert, pack and commit one layer, or reuse its bootstrap."""
+    def _layer(self, repository, descriptor, diff_id, scratch, *, local=None):
+        """Claim, convert, pack and commit one layer, or reuse its bootstrap.
+        ``local`` is the layer as an uncompressed tar already on disk."""
         converter = converter_identity(self.layout, self.nydusd_blobs)
         while True:
             claim = self.index.claim_layer(diff_id, converter, self.owner)
@@ -253,7 +255,10 @@ class RafsConverter:
                 break
             time.sleep(min(30, max(1, claim.get("retry_after", 1))))  # Another builder converts it.
         need_tar = self.verifier is not None or claim["state"] != "complete"
-        tar = self._download(repository, descriptor, diff_id, scratch) if need_tar else None
+        if local is not None:
+            tar, descriptor = Path(local), {"mediaType": "application/vnd.oci.image.layer.v1.tar"}
+        else:
+            tar = self._download(repository, descriptor, diff_id, scratch) if need_tar else None
         if claim["state"] == "complete":
             key = bootstrap_key(self.store.prefix, require_digest(claim["bootstrap"])[7:])
             compressed = self.store.get(key, MAX_BOOTSTRAP_BYTES)
@@ -387,6 +392,54 @@ class RafsConverter:
                 self._count("chunks_waited", len(held))
                 time.sleep(delay)  # The holder commits them, or its hold lapses.
                 held, delay = pack(held, source), min(30, delay * 2)
+
+    def extend(self, parent_root, layer, diff_id, *, image_config, repository):
+        """A root one layer above ``parent_root``, a whole-image chunk-store root:
+        sandbox builds (docs/sandbox-builds.md). ``layer`` is the filtered commit
+        layer (an uncompressed OCI layer tar) and ``diff_id`` its digest. No OCI
+        image is read or written: the parent's merged bootstrap is the merge's
+        ``--parent-bootstrap``, so only the new layer is converted. The config
+        uploaded to ``repository`` names the parent's layers and this one, with
+        ``image_config`` (Entrypoint, Cmd, Env, WorkingDir, User)."""
+        from .environment_artifact import _upload_blob
+        if self.layout != "image":
+            raise ValueError("sandbox builds extend whole-image roots only")
+        parent = load_environment(self.registry, parent_root)
+        base = self.registry.load(parent.environment.base)
+        if (parent.environment.workspace is not None or parent.environment.toolkits
+                or not isinstance(base, RafsEnvironmentComponent) or base.format["layout"] != "image"):
+            raise ValueError("the parent is not one whole-image chunk-store root")
+        diff_ids = [*base.source_layers, require_digest(diff_id)]
+        config = canonical_bytes({"architecture": "amd64", "os": "linux",
+                                  "config": {key: image_config[key] for key in IMAGE_CONFIG_KEYS},
+                                  "rootfs": {"type": "layers", "diff_ids": diff_ids}})
+        config_digest = content_digest(config)
+        _upload_blob(self.registry.client, repository, config, config_digest)
+        self.work_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with TemporaryDirectory(dir=self.work_root) as temporary:
+            scratch = Path(temporary)
+            result, _ = self._layer(None, None, diff_id, scratch, local=layer)
+            compressed = self.store.get(bootstrap_key(self.store.prefix, base.bootstrap["digest"][7:]),
+                                        MAX_BOOTSTRAP_BYTES)
+            bootstrap = zstd_decompress(compressed, zstd_content_size(compressed, MAX_BOOTSTRAP_BYTES))
+            if content_digest(bootstrap) != base.bootstrap["digest"]:
+                raise ValueError("parent bootstrap identity mismatch")
+            merged = self._stack(bootstrap, result, scratch)
+            self._step("image_merged")
+            signed = [self._component(merged, config_digest, diff_ids)]
+            self._step("verified")
+            return self._publish(signed, config_digest, image_config, diff_ids) | {"config": config_digest,
+                                                                                   "config_size": len(config)}
+
+    def _stack(self, parent, result, scratch):
+        """``result``'s layer merged above the merged bootstrap ``parent``."""
+        (scratch / "parent.boot").write_bytes(parent)
+        (scratch / "layer.boot").write_bytes(result.bootstrap)
+        output = scratch / "stacked.boot"
+        subprocess.run([self.nydus_image, "merge", "--parent-bootstrap", str(scratch / "parent.boot"),
+                        "--original-blob-ids", result.blob_id, "-B", str(output), "-J", str(scratch / "stacked.json"),
+                        str(scratch / "layer.boot")], check=True, capture_output=True, timeout=600)
+        return output.read_bytes()
 
     def _merge(self, results, scratch):
         paths = []

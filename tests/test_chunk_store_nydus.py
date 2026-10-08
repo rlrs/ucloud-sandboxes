@@ -71,6 +71,34 @@ class RealConversionTests(unittest.TestCase):
                                     image_config=base64.b64decode(receipt["config"]))
         self.assertEqual(result["diff_id"], receipt["diff_id"])  # Deterministic: volume-free builds rely on it.
 
+    def test_an_extended_root_unpacks_to_its_parent_with_the_layer_applied(self):
+        from tests.test_chunk_convert import commit_layer
+        store, _, roots = self.convert("image")
+        tar, diff_id = commit_layer(store.root)
+        config = {"Entrypoint": [], "Cmd": ["sh"], "Env": ["PATH=/bin"], "WorkingDir": "/", "User": ""}
+        child = store.converter.extend(roots[0], tar, diff_id, image_config=config, repository=REPOSITORY)["root"]
+        cache = VerifiedEnvironmentCache(store.root / "cache", None)
+        self.addCleanup(cache.close)
+        digest = load_environment(store.registry, child).environment.base
+        image = load_rafs_image(digest, store.registry.load(digest), store.index.reader)
+        cache.read(image, 0, image.image_size)  # Parent and new chunks verify.
+        unpack_environment(store.registry, store.index.reader, child, repository=REPOSITORY, tag="child",
+                           work_root=store.root, nydus_image=BINARY)
+        document, _ = store.client.manifest_document(REPOSITORY, "child")
+        regenerated = store.root / "child.tar.gz"
+        regenerated.write_bytes(store.client.blobs[document["layers"][0]["digest"]])
+        originals = []
+        manifest, _ = store.client.manifest_document(REPOSITORY, "a")
+        for index, item in enumerate(manifest["layers"]):
+            originals.append(store.root / f"original-{index}.tar.gz")
+            originals[-1].write_bytes(store.client.blobs[item["digest"]])
+        self.assertEqual(compare_trees(expected_tree([*originals, tar]), expected_tree([regenerated])), [])
+        with tarfile.open(regenerated) as reader:
+            names = set(reader.getnames())
+        self.assertIn("opt/fresh", names)
+        self.assertFalse({"etc/hosts", "opt/a", "opt/a-only"} & names)  # Whiteout and opaque applied.
+        self.assertIn("usr/lib/text", names)
+
 
 if __name__ == "__main__":
     unittest.main()

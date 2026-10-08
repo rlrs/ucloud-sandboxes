@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.58 - 2026-10-08 (gateway)
+
+- **Sandbox builds (C2.14, [docs/sandbox-builds.md](docs/sandbox-builds.md)).** A recipe whose Dockerfile the prepared catalog splits into a chunk-store base and a remainder is built without Docker: a sandbox starts from the base's root on a worker, the remainder runs as one generated script, the worker's `commit-export` stages what changed, and only that layer is converted and stacked on the base (`RafsConverter.extend`, `nydus-image merge --parent-bootstrap`). No foundation copy, no Docker push or pull, no reconversion, no builder VM. Recipes it cannot run (multi-stage, `ARG`, `ADD`, a private `COPY --from`) still go to the builders.
+  - Docker's rules for `RUN`, `COPY` (and `COPY --from` a public image, pulled on the gateway host), `ENV`, `WORKDIR`, `USER`, `SHELL`, `CMD` and `ENTRYPOINT`; build caches are kept as Docker keeps them.
+  - The images are born in the chunk store: an `image_roots` row `released` from the start (wave `sandbox-build`) and a gateway record named by the manifest they would have had.
+  - `ucloud-sandbox-builds.service` (`serve-sandbox-builds`) runs them on the gateway host and alone holds the chunk store's S3 key there; the gateway hands it jobs through a spool directory. Off unless `immutable_environments.sandbox_builds.enabled`.
+- **Commit exports with more than one deletion no longer fail the filter.** runsc writes every whiteout after the first as a hard link to the first whiteout device; the filter refused those links (`commit_residue_forbidden`), so any commit deleting two paths failed. They are whiteouts now.
+- **`CommitPolicy.keep_build_residue`**: sandbox builds keep pip, uv and npm caches and apt archives; agent commits drop them as before (their policies and hashes are unchanged).
+
 ## 0.9.57 - 2026-10-07 (gateway; store node)
 
 - **Build package cache on the store node** (`chunk_store.store_node.package_cache`, `ucloud-package-cache`). Canonical's archive times out from UCloud, so every Ubuntu-based sandbox build stalled in `apt` (the sandbox-build pilot's slow tail: 502 s for five small packages). An HTTP proxy for allowlisted package hosts, each served by a configured upstream (Ubuntu's by `mirrors.dotsrc.org`); package files kept for good (LRU past `max_bytes`), index files for `index_seconds` with a stale copy on upstream failure, one fetch per file at a time. Sandboxes may reach it (`sandbox.direct_network_allow_tcp`); build steps use it as `http_proxy`.

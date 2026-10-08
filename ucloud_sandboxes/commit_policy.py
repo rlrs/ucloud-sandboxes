@@ -103,6 +103,8 @@ class CommitPolicy:
     exclude: tuple[str, ...] = ()
     identity: tuple[str, ...] = ()
     max_bytes: int = COMMIT_MAX_BYTES
+    # Sandbox builds keep package caches, as Docker images do (docs/sandbox-builds.md).
+    keep_build_residue: bool = False
 
     def __post_init__(self):
         for name in ("include_paths", "exclude", "identity"):
@@ -111,24 +113,31 @@ class CommitPolicy:
                 raise ValueError(f"commit policy {name} must be sorted unique guest paths")
         if type(self.max_bytes) is not int or not 0 < self.max_bytes <= 1 << 40:
             raise ValueError("commit max_bytes must be a positive bounded integer")
+        if type(self.keep_build_residue) is not bool:
+            raise ValueError("commit keep_build_residue must be a boolean")
         if len(canonical(self.to_dict())) > MAX_POLICY_BYTES:
             raise ValueError("commit policy rules exceed their byte bound")
 
     @classmethod
-    def of(cls, *, include_paths=(), exclude=(), identity=(), max_bytes=COMMIT_MAX_BYTES):
-        return cls(_rules(include_paths), _rules(exclude), _rules(identity, pattern=True), max_bytes)
+    def of(cls, *, include_paths=(), exclude=(), identity=(), max_bytes=COMMIT_MAX_BYTES, keep_build_residue=False):
+        return cls(_rules(include_paths), _rules(exclude), _rules(identity, pattern=True), max_bytes,
+                   keep_build_residue)
 
     def to_dict(self):
+        # Written only when set: the policies (and hashes) of agent commits stay as they were.
         return {"schema": POLICY_SCHEMA, "include_paths": list(self.include_paths),
-                "exclude": list(self.exclude), "identity": list(self.identity), "max_bytes": self.max_bytes}
+                "exclude": list(self.exclude), "identity": list(self.identity), "max_bytes": self.max_bytes,
+                **({"keep_build_residue": True} if self.keep_build_residue else {})}
 
     @classmethod
     def from_dict(cls, raw):
-        if not isinstance(raw, dict) or set(raw) != {"schema", "include_paths", "exclude", "identity", "max_bytes"} \
-                or raw["schema"] != POLICY_SCHEMA or not all(
+        fields = {"schema", "include_paths", "exclude", "identity", "max_bytes"}
+        if not isinstance(raw, dict) or set(raw) - {"keep_build_residue"} != fields \
+                or raw["schema"] != POLICY_SCHEMA or raw.get("keep_build_residue", True) is not True or not all(
                     isinstance(raw[name], list) for name in ("include_paths", "exclude", "identity")):
             raise ValueError("invalid commit policy")
-        return cls(tuple(raw["include_paths"]), tuple(raw["exclude"]), tuple(raw["identity"]), raw["max_bytes"])
+        return cls(tuple(raw["include_paths"]), tuple(raw["exclude"]), tuple(raw["identity"]), raw["max_bytes"],
+                   "keep_build_residue" in raw)
 
     @property
     def sha256(self) -> str:
@@ -147,7 +156,8 @@ class CommitPolicy:
             return "identity"
         if any(_under(path, prefix) for prefix in VOLATILE):
             return "volatile"
-        if (any(_under(path, prefix) for prefix in BUILD_RESIDUE) or path.startswith(APT_ARCHIVES)
+        if not self.keep_build_residue and (
+                any(_under(path, prefix) for prefix in BUILD_RESIDUE) or path.startswith(APT_ARCHIVES)
                 and path.endswith(".deb") and "/" not in path[len(APT_ARCHIVES):]):
             return "build_residue"
         if any(_under(path, rule[1:]) for rule in self.exclude):
@@ -478,12 +488,18 @@ def filter_upper(source, destination, policy: CommitPolicy, secret_digests=(), *
 def _classify(archive, policy, check):
     """Kept entries by output name, drop counts, and hardlink names by target."""
     entries, drops, links = {}, {}, {}
-    seen, ancestors = {}, set()
+    seen, ancestors, whiteouts = {}, set(), set()
     for count, member in enumerate(archive, 1):
         check()
         if count > MAX_MEMBERS:
             raise CommitRefused("commit_too_large", "the upper has too many members")
         path, kind, opaque, xattrs = _parse(member)
+        if kind == "link" and _member_path(member.linkname) in whiteouts:
+            # runsc writes each deletion after the first as a hard link to the
+            # first whiteout device (they share its inode): a whiteout too.
+            kind = "whiteout"
+        if kind == "whiteout" and member.ischr():
+            whiteouts.add(path)
         # An opaque marker sits below its directory, so that path must be one.
         below = _output_name(path, kind) if kind == "opaque" else path
         parents = [below[:index] for index in range(len(below)) if below[index] == "/"]

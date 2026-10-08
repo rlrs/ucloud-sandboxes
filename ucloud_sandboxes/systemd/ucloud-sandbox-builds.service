@@ -1,0 +1,23 @@
+[Unit]
+Description=UCloud Sandbox builds (immutable_environments.sandbox_builds)
+After=network-online.target ucloud-sandbox-gateway.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ucloud
+Group=ucloud
+WorkingDirectory=/work/ucloud-sandboxes
+# HETZNER_S3_* (or the names chunk_store configures): sandbox builds write
+# chunks; the gateway's API processes never hold the key.
+EnvironmentFile=-/etc/ucloud-sandboxes/s3.env
+EnvironmentFile=-/etc/ucloud-sandboxes/chunk-store.env
+ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes serve-sandbox-builds --config /etc/ucloud-sandboxes/deployment.json
+Restart=always
+RestartSec=5
+# Exit 78: sandbox_builds is off; stay stopped until it is on.
+SuccessExitStatus=78
+RestartPreventExitStatus=78
+
+[Install]
+WantedBy=multi-user.target

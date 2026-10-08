@@ -105,10 +105,14 @@ Only the trainer's sampler knows the next step's tasks. When it samples step N+1
 `ensure_images` with their image names, so the builds overlap step N. Without that call,
 training is still correct, just slower on a task's first use.
 
+## Sandbox builds
+
+Since 0.9.58, ensure builds a recipe on a chunk-store base in a sandbox on the workers instead
+of on a builder, when its Dockerfile allows: see [sandbox-builds.md](sandbox-builds.md).
+Everything above (states, retries, create by name, release) is unchanged.
+
 ## Not yet
 
-- **An importer** that walks a pinned dataset revision and registers its recipes, writing the
-  whole `environment/` tree as the pilot's `prepare.py` does.
 - **The trainer-side lookahead call.**
 
 ## Live check (0.9.54, 2026-10-07)

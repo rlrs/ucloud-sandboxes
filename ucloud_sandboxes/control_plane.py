@@ -3443,9 +3443,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
     def _register_image_recipes(self) -> None:
         """POST /v1/image-recipes {"recipes": [{name, context_archive_digest,
-        context_archive_size, dockerfile?, build_args?, retention?}]}: names a
-        trainer will ask for, with the recipe that builds each (contexts are
-        uploaded first through /v1/image-contexts)."""
+        context_archive_size, dockerfile?, build_args?, retention?}], "partial"?}:
+        names a trainer will ask for, with the recipe that builds each (contexts
+        are uploaded first through /v1/image-contexts) or the prepared image
+        (prepared_reference), and their environment, tasks and source. A refused
+        name refuses the request, unless "partial": the rest register and the
+        refused come back with their reasons."""
         from .gateway.image_recipes import MAX_RECIPES_PER_REQUEST, RecipeError, keep_context, validate_recipe
         if self.image_recipes is None:
             self._write_json({"error": "image recipes are not available on this deployment",
@@ -3453,7 +3456,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             return
         try:
             raw = self._read_json_body()
-            rows = raw.get("recipes") if isinstance(raw, dict) and set(raw) == {"recipes"} else None
+            rows = raw.get("recipes") if isinstance(raw, dict) and set(raw) <= {"recipes", "partial"} else None
+            partial = raw.get("partial") is True if isinstance(raw, dict) else False
             if not isinstance(rows, list) or not 0 < len(rows) <= MAX_RECIPES_PER_REQUEST:
                 raise RecipeError(f"payload must be {{\"recipes\": [...]}} with 1-{MAX_RECIPES_PER_REQUEST} recipes")
             recipes = [validate_recipe(row) for row in rows]
@@ -3476,6 +3480,17 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     recipe["base"] = self._prepared_base(recipe)
                     if recipe["base"] is None:
                         baseless.append(recipe["name"])
+            refused = ([{"name": name, "error_code": "build_context_missing"} for name in missing]
+                       + [{"name": name, "error_code": "image_not_prepared",
+                           "error": "the prepared image is not in the chunk store"} for name in unprepared]
+                       + [{"name": name, "error_code": "image_not_prepared",
+                           "error": "the recipe builds on no prepared image"} for name in baseless])
+            if partial:
+                skip = {row["name"] for row in refused}
+                registered = self.image_recipes.register([r for r in recipes if r["name"] not in skip])
+                self._write_json({"registered": len(registered), "changed": sum(row["changed"] for row in registered),
+                                  "recipes": registered, "refused": refused})
+                return
             if missing:
                 self._write_json({"error": "build contexts are not uploaded", "error_code": "build_context_missing",
                                   "names": missing[:100]}, status=HTTPStatus.BAD_REQUEST)

@@ -120,6 +120,8 @@ class ImageRecipeGatewayTests(unittest.TestCase):
                 baseless = call(f"{base}/v1/image-recipes", {"recipes": [{
                     "name": "tmax:task_9", "context_archive_digest": context, "context_archive_size": len(archive),
                     "environment": "tmax", "tasks": ["task_9"]}]})
+                mixed = call(f"{base}/v1/image-recipes", {"partial": True, "recipes": [
+                    row, {**row, "name": "x:2", "prepared_reference": f"{repository}@sha256:{'0' * 64}"}]})
                 ensured = call(f"{base}/v1/images/ensure", {"names": [name]})[1]["images"][name]
                 summary = call(f"{base}/v1/image-index", method="GET")
                 detail = call(f"{base}/v1/image-index/name?name={quote(name)}", method="GET")
@@ -144,6 +146,8 @@ class ImageRecipeGatewayTests(unittest.TestCase):
         self.assertIn("scaleswe", printed.getvalue())
         self.assertEqual((missing[0], missing[1]["error_code"], missing[1]["names"]), (400, "image_not_prepared", ["x:1"]))
         self.assertEqual(registered[0], 200)
+        self.assertEqual((mixed[0], mixed[1]["registered"], [r["name"] for r in mixed[1]["refused"]]),
+                         (200, 1, ["x:2"]))
         # A recipe in the index must build on something prepared; this one builds on debian:12.
         self.assertEqual((baseless[0], baseless[1]["error_code"], baseless[1]["names"]),
                          (400, "image_not_prepared", ["tmax:task_9"]))

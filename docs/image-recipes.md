@@ -1,5 +1,8 @@
 # Image recipes: names built on demand or ahead (C2.7)
 
+Training's names, and which tasks a trainer may sample, are in the image index:
+[image-index.md](image-index.md). This page is how a recipe name builds.
+
 Status: in production since 0.9.54 (2026-10-07); the live check is at the end. Motivated by the
 [build pilot](benchmarks/build-pilot-2026-10-07/README.md).
 

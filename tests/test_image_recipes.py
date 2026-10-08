@@ -201,3 +201,24 @@ class ImageRecipeReleaseTests(unittest.TestCase):
         self.builders.adopted.clear()  # Gone (evicted); rebuilt.
         self.ensurer.ensure(["t:1"])
         self.assertEqual(self.store.lookup(["t:1"])["t:1"]["oci"], "present")
+
+
+class PinnedReferenceTests(unittest.TestCase):
+    def test_a_rebuilt_pinned_image_moves_its_reference(self):
+        # Rebuilding a pinned recipe names another digest under the same tag:
+        # the reference moves (it refused, "digest is immutable", and ensure
+        # answered 503 for every name in the call).
+        from tempfile import TemporaryDirectory
+        from ucloud_sandboxes.gateway.registry_refs import RegistryReferences
+        from ucloud_sandboxes.managed_registry import RegistryUsageStore
+        with TemporaryDirectory() as directory:
+            store = RegistryUsageStore(Path(directory) / "usage.sqlite")
+            refs = RegistryReferences(registry_url="http://10.0.0.1:5000", registry_worker_url="http://10.0.0.1:5000",
+                                      usage_store=store, deployment_id="d", dependency_resolver=None)
+            tag = "10.0.0.1:5000/ucloud-managed/recipe-x-abc:latest"
+            old, new = "sha256:" + "a" * 64, "sha256:" + "b" * 64
+            refs.ensure_image_reference(f"{tag}@{old}", "image-recipe-pinned:recipe-x")
+            refs.ensure_image_reference(f"{tag}@{new}", "image-recipe-pinned:recipe-x")
+            lease = store.get_lease("ucloud-managed/recipe-x-abc", "latest", "image-recipe-pinned:recipe-x")
+            self.assertEqual((lease.digest, lease.expires_at), (new, ""))
+            refs.ensure_image_reference(f"{tag}@{new}", "image-recipe-pinned:recipe-x")  # Unchanged: a no-op.

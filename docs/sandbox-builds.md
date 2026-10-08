@@ -1,6 +1,6 @@
 # Sandbox builds: recipe images built on the workers (C2.14)
 
-Status: implemented for 0.9.58 (2026-10-08); dry runs against production are below.
+Status: in production since 0.9.58 (2026-10-08), fixed in 0.9.59; results are below.
 Motivated by the [build pilot](benchmarks/build-pilot-2026-10-07/README.md) and
 [image recipes](image-recipes.md).
 
@@ -120,6 +120,48 @@ serves it from a Danish mirror.
 It requires `signing_key_file`, `dispatch_roots` and a `chunk_store` with
 `nydus_image_sha256` and a `store_node`. Off, every recipe builds on the builders as before.
 The service exits 78 and stays stopped.
+
+## Results (2026-10-08)
+
+**Dry runs** (the runner against production, no gateway state written; 33 pilot tasks, 6 at once):
+
+| | TMax | Terminal-Lego | OpenSWE |
+|---|---|---|---|
+| Built (Docker in the pilot) | 11/11 (11/11) | 11/11 (11/11) | 8/11 (8/11): the same 3 fail, recipe rot |
+| Total per build, warm worker | 6–30 s | 27–79 s | 91–227 s (one 640 s outlier) |
+| Steps | 1–9 s | 11–32 s | 23–139 s |
+| Stacking on the gateway | 3–26 s | 7–37 s | 32–127 s (442 s for 5.8 GB) |
+| New chunk bytes | 0.2 KB–23 MB | 1–8 MB | 29–275 MB (2.7 GB outlier) |
+
+The outlier, openswe-211, is large under Docker too (4.3 GB of new OCI, 390 s end to end).
+
+**Same trees as Docker.** The final trees of 24 dry-run builds were compared with the pilot's
+Docker images of the same tasks (3 more had aged out of the registry) by path, kind, mode,
+owner, size and content:
+- every TMax tree has the same paths; content differs only where the build is
+  nondeterministic (`/etc/shadow`'s date, generated SSH keys, git objects);
+- Terminal-Lego differs only in uv's randomly named cache entries (two directory modes came from
+  the dry run's own context packing, not the executor);
+- OpenSWE differs only by upstream drift (boto3 1.43.108 to .109 between the runs).
+
+**Live checks through ensure.**
+- 0.9.58: 15 never-built tasks (6 TMax, 6 Terminal-Lego, 3 OpenSWE) all built in sandboxes and
+  became ready in 100–240 s, worker boot included. TMax sandboxes created by name ran, but
+  Terminal-Lego's and OpenSWE's died with SIGBUS on their first command: nydusd could not read
+  the new layers' blobs (below).
+- 0.9.59: 14 more never-built tasks all built in sandboxes; sandboxes created by name started in
+  0.6 s and ran (`/app/task_file` and `uvx 0.9.5` for Terminal-Lego, the testbed's commit and
+  Python for OpenSWE).
+
+**Found: blobs nydusd could not read (fixed in 0.9.59).** Workers read RAFS images with nydusd
+from blobs the store node rebuilds from stored chunks, which must be nydus's own encoding. The
+index keeps a chunk's first stored copy, and conversions without nydusd blobs stored a chunk raw
+when zstd saved under 3% where nydus compressed it. A new layer sharing such a chunk (apt-installed
+files, for example) got an unreadable blob. Builds into the chunk store by builders had the same
+exposure: 8 of the 20 recipe images built in 0.9.56's live check were unreadable, as were 3 of
+0.9.58's sandbox builds. 0.9.59 re-stores such chunks in nydus's encoding (the index's `commit`
+moves them, `supersede`), checks every converted layer before signing, and makes the store node
+check stored layouts against blob tables. The 11 images were rebuilt.
 
 ## Not yet
 

@@ -92,11 +92,18 @@ class RegistryReferences:
             ) from exc
 
     def ensure_image_reference(self, image_ref: str, owner: str) -> None:
-        """A durable reference, released only by its owner: a pinned image recipe."""
+        """A durable reference, released only by its owner: a pinned image recipe.
+        A rebuild names another digest under the same tag: the owner's
+        reference (and its environment's) moves to it."""
         store = self.usage_store
-        if store is None or self.managed_coordinates(image_ref) is None:
+        coordinates = self.managed_coordinates(image_ref)
+        if store is None or coordinates is None:
             return
         try:
+            existing = store.get_lease(*coordinates, owner)
+            if existing is not None and existing.digest != manifest_digest_from_image_ref(image_ref):
+                store.release_owner(owner)
+                store.release_owner(owner + ":environment")
             _persist_registry_image_protection(
                 store, image_ref, owner, touch=True, persistent=True,
                 dependency_resolver=self.dependency_resolver,

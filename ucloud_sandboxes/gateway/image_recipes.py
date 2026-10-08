@@ -28,11 +28,14 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import re
 import sqlite3
 import time
+
+_LOG = logging.getLogger(__name__)
 
 RETENTIONS = ("pinned", "cached")
 MAX_RECIPES_PER_REQUEST = 1000
@@ -323,7 +326,12 @@ class RecipeEnsurer:
             return None
         if recipe["state"] != "ready":  # Once, as it becomes ready: a durable reference for a pinned image.
             if recipe["retention"] == "pinned" and self.protect is not None:
-                self.protect(recipe["image_id"])
+                try:
+                    self.protect(recipe["image_id"])
+                except Exception:  # noqa: BLE001 - usable now; pinned on a later call, never blocking others.
+                    _LOG.warning("image recipe %s: pinning failed; retried on the next ensure", recipe["image_id"],
+                                 exc_info=True)
+                    return {"state": "ready", "reference": reference}
             self.store.record(recipe["image_id"], "ready", error=None, now=self.now())
         return {"state": "ready", "reference": reference}
 

@@ -288,8 +288,8 @@ class SpoolTests(unittest.TestCase):
             thread = threading.Thread(target=sandbox_build.serve, args=(spool, Runner()),
                                       kwargs={"poll": 0.05, "stop": stop})
             thread.start()
-            for _ in range(200):
-                if spool.status("recipe-1", "sandbox:recipe-1:a")[0] == "succeeded":
+            for _ in range(200):  # The result is written first, then the job removed.
+                if spool.status("recipe-1", "sandbox:recipe-1:a")[0] == "succeeded" and not spool.pending():
                     break
                 threading.Event().wait(0.02)
             stop.set()

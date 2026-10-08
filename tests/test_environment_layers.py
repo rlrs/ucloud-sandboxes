@@ -828,7 +828,7 @@ class LayerPublicationTests(unittest.TestCase):
         self.assertEqual(mount[:5], ("env", "-C", str(components), "LIBMOUNT_FORCE_MOUNT2=always", "mount"))
         lowers = mount[mount.index("-o") + 1].removeprefix("ro,lowerdir=").split(":")
         self.assertEqual(lowers, [component[7:] for component in reversed(environment.components)])
-        self.assertEqual(ensured[:3], list(environment.components))
+        self.assertEqual(sorted(ensured[:3]), sorted(environment.components))  # Attached concurrently.
         self.assertEqual(store.operation_snapshot()["environment_devices_in_use"], 3)
         self.assertEqual(store.operation_snapshot()["environment_devices_free"], 5)
         self.assertTrue(store.collect_image(image.image_id, is_referenced=lambda _: False))

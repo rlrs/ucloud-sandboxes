@@ -857,7 +857,14 @@ class Spool:
             (self.root / "jobs" / f"{job['image_id']}.json").unlink(missing_ok=True)
 
     def pending(self):
-        return sorted(self.root.glob("jobs/*.json"), key=lambda path: path.stat().st_mtime)
+        """Job files, oldest first; one finished meanwhile is left out."""
+        jobs = []
+        for path in self.root.glob("jobs/*.json"):
+            try:
+                jobs.append((path.stat().st_mtime, path))
+            except FileNotFoundError:
+                continue
+        return [path for _, path in sorted(jobs)]
 
     @staticmethod
     def _read(path):

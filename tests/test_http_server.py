@@ -115,6 +115,10 @@ class HttpServerTests(unittest.TestCase):
         thread.start()
         try:
             for i in range(20):
+                # A worker returns to idle after its client has the answer; reuse needs it back.
+                deadline = time.monotonic() + 2
+                while server._idle_request_workers < len(workers) and time.monotonic() < deadline:
+                    time.sleep(0.005)
                 client = HTTPConnection(*server.server_address, timeout=2)
                 try:
                     client.request('GET', '/fail' if i == 10 else '/healthz')

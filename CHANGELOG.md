@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.66 - 2026-10-08 (gateway)
+
+- **The image index ([docs/image-index.md](docs/image-index.md)).** The gateway's index of training image names: every name verifiers asks for, backed by an image or a base already in the chunk store.
+  - A name is `prepared` (the whole image is in the chunk store, ready from registration) or a recipe (built on first use on its prepared base). The gateway refuses either when nothing it needs is prepared.
+  - Each name carries its environment, the dataset tasks that use it and its source.
+  - `GET /v1/image-index` (names and tasks per environment, by state), `/names`, `/name?name=` and `/task-ids?environment=` (the tasks a trainer may sample: every name not failed for good), readable with the SDK key; `ucloud-sandboxes image-index summary | show | list | task-ids | export-task-ids` reads them.
+  - `POST /v1/image-recipes` takes `prepared_reference`, `environment`, `tasks`, `source` and `"partial": true` (register the rest and list the refused).
+- `scripts/build_image_index.py` exports and registers all nine training environments from the 2026-10-01 inventory: 66,786 names, 130,253 tasks.
+
 ## 0.9.65 - 2026-10-08 (gateway)
 
 - **The sandbox builds service no longer stops on a build finishing while it lists jobs.** `Spool.pending` sorted job files by their mtime, so a job file removed between the listing and the stat raised `FileNotFoundError` out of the service's loop.

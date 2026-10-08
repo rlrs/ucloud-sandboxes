@@ -683,11 +683,13 @@ class BuildRunner:
     """Runs one spooled job: sandbox, export, filter, stack, with the service's credentials."""
 
     def __init__(self, *, gateway, registry_client, converter, externals, work_root, resources=BuildResources(),
-                 apt_proxy=None, poll=1.0):
+                 apt_proxy=None, poll=1.0, local_slots=2):
         # ``converter()``: a RafsConverter for one job (they keep per-run metrics).
         self.gateway, self.registry_client, self.converter = gateway, registry_client, converter
         self.externals, self.work_root, self.resources = externals, Path(work_root), resources
         self.apt_proxy, self.poll = apt_proxy, poll
+        # Steps run on the workers; filtering and stacking run here, beside the gateway's API.
+        self.local = threading.BoundedSemaphore(local_slots)
 
     def run(self, job):
         """The result for ``job``: ``succeeded`` with the root, or ``failed`` with an error."""
@@ -741,7 +743,9 @@ class BuildRunner:
         policy = CommitPolicy.of(exclude=(BUILD_DIR, BUILD_TMP), identity=export.identity, keep_build_residue=True)
         commit = commit_build(export, policy, parent_image=job["base_reference"], parent_root=job["parent_root"])
         self.work_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with TemporaryDirectory(dir=self.work_root) as scratch:
+        timer = time.monotonic()
+        with self.local, TemporaryDirectory(dir=self.work_root) as scratch:
+            metrics["local_wait_s"] = round(time.monotonic() - timer, 3)
             timer = time.monotonic()
             filtered = prepare_commit_in_subprocess(self.registry_client, commit, scratch,
                                                     timeout_seconds=max(60, deadline - time.monotonic()))

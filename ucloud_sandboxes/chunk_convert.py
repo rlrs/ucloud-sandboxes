@@ -416,9 +416,17 @@ class RafsConverter:
         config_digest = content_digest(config)
         _upload_blob(self.registry.client, repository, config, config_digest)
         self.work_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        timer = time.monotonic()
+
+        def lap(name):
+            nonlocal timer
+            self.metrics[name + "_s"] = round(time.monotonic() - timer, 3)
+            timer = time.monotonic()
+
         with TemporaryDirectory(dir=self.work_root) as temporary:
             scratch = Path(temporary)
             result, _ = self._layer(None, None, diff_id, scratch, local=layer)
+            lap("extend_layer")
             compressed = self.store.get(bootstrap_key(self.store.prefix, base.bootstrap["digest"][7:]),
                                         MAX_BOOTSTRAP_BYTES)
             bootstrap = zstd_decompress(compressed, zstd_content_size(compressed, MAX_BOOTSTRAP_BYTES))
@@ -426,10 +434,13 @@ class RafsConverter:
                 raise ValueError("parent bootstrap identity mismatch")
             merged = self._stack(bootstrap, result, scratch)
             self._step("image_merged")
+            lap("extend_merge")
             signed = [self._component(merged, config_digest, diff_ids)]
             self._step("verified")
-            return self._publish(signed, config_digest, image_config, diff_ids) | {"config": config_digest,
-                                                                                   "config_size": len(config)}
+            lap("extend_component")
+            published = self._publish(signed, config_digest, image_config, diff_ids)
+            lap("extend_publish")
+            return {**published, "metrics": dict(self.metrics), "config": config_digest, "config_size": len(config)}
 
     def _stack(self, parent, result, scratch):
         """``result``'s layer merged above the merged bootstrap ``parent``."""

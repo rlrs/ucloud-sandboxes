@@ -385,6 +385,41 @@ class RunnerTests(unittest.TestCase):
         from ucloud_sandboxes.sandbox import SandboxSpec
         SandboxSpec.from_dict(gateway.spec)  # The gateway's own schema accepts it.
 
+    def test_filtering_and_stacking_share_the_local_slots(self):
+        active, peak, guard = [0], [0], threading.Lock()
+
+        class Converter:
+            def extend(self, parent, layer, diff_id, *, image_config, repository):
+                with guard:
+                    active[0] += 1
+                    peak[0] = max(peak[0], active[0])
+                threading.Event().wait(0.05)
+                with guard:
+                    active[0] -= 1
+                return {"root": "sha256:" + "e" * 64, "config": "sha256:" + "f" * 64, "config_size": 9, "metrics": {}}
+
+        def filtered(client, commit, root, timeout_seconds):
+            from ucloud_sandboxes.commit_policy import FilterResult
+            Path(root, "filtered.tar").write_bytes(b"layer")
+            return FilterResult("sha256:" + "9" * 64, 5, 1, {})
+
+        shared, results = threading.BoundedSemaphore(1), []
+
+        def one():  # A fake gateway per build (it counts its own calls); one service's slots.
+            runner = BuildRunner(gateway=FakeGateway(), registry_client=object(), converter=Converter, externals=None,
+                                 work_root=self.work, poll=0)
+            runner.local = shared
+            results.append(runner.run(self.job()))
+
+        with patch("ucloud_sandboxes.environment_prepare.prepare_commit_in_subprocess", filtered):
+            threads = [threading.Thread(target=one) for _ in range(3)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        self.assertEqual([result["status"] for result in results], ["succeeded"] * 3, results)
+        self.assertEqual(peak[0], 1)
+
     def test_a_failed_step_is_the_recipes_failure_and_the_sandbox_goes(self):
         gateway = FakeGateway(exit_code=1)
         result = self.runner(gateway, None).run(self.job())

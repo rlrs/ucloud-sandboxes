@@ -13,6 +13,8 @@ WorkingDirectory=/work/ucloud-sandboxes
 EnvironmentFile=-/etc/ucloud-sandboxes/s3.env
 EnvironmentFile=-/etc/ucloud-sandboxes/chunk-store.env
 ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes serve-sandbox-builds --config /etc/ucloud-sandboxes/deployment.json
+# Filtering and stacking share this host with the gateway's API: they yield to it.
+Nice=10
 Restart=always
 RestartSec=5
 # Exit 78: sandbox_builds is off; stay stopped until it is on.

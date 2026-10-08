@@ -3,6 +3,7 @@ from dataclasses import replace
 import hashlib
 import io
 import json
+from pathlib import Path
 import random
 import tarfile
 from types import SimpleNamespace
@@ -225,6 +226,22 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(result.diff_id, expected.diff_id)
         # A link to a regular file stays a link, and one to an absent target is still refused.
         refused(self, "commit_residue_forbidden", [ROOT, entry("./a", kind=tarfile.LNKTYPE, linkname="./gone")])
+
+    def test_the_layer_is_in_the_converters_path_order(self):
+        # Converting an out-of-order layer rewrites it whole first (GBs for OpenSWE commits).
+        from tempfile import TemporaryDirectory
+        from ucloud_sandboxes.chunk_convert import path_ordered_layer
+        members = [ROOT, directory("./usr"), directory("./usr/lib"), directory("./usr/lib/python3.12"),
+                   entry("./usr/lib/python3.12/x.py", b"x"), directory("./usr/lib/python3"),
+                   entry("./usr/lib/python3/y.py", b"y"), entry("./usr/lib/python3.12.conf", b"c"),
+                   entry("./usr/lib/a", b"a"), entry("./usr/lib/b", kind=tarfile.LNKTYPE, linkname="./usr/lib/a")]
+        _, listing, _, payload = run(members)
+        self.assertLess(list(listing).index("usr/lib/python3/y.py"), list(listing).index("usr/lib/python3.12"))
+        with TemporaryDirectory() as directory_:
+            layer = Path(directory_) / "layer.tar"
+            layer.write_bytes(payload)
+            self.assertFalse(path_ordered_layer(layer, Path(directory_) / "ordered.tar"))
+        self.assertTrue(listing["usr/lib/b"].islnk() or listing["usr/lib/a"].islnk())
 
     def test_metadata_kept_and_symlinks_never_followed(self):
         members = [ROOT, directory("./bin", mode=0o751, uid=1000),

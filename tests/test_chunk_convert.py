@@ -159,8 +159,10 @@ class ConverterTests(unittest.TestCase):
                         break
                     time.sleep(0.01)
         store.converter.step = step
+        # One upload in flight: q's pack waits behind p's, so x still holds q when y asks.
         with patch.object(chunk_store, "MAX_PACK_BYTES", 300_000), patch.object(chunk_convert, "LOOKUP_BATCH", 1), \
-                patch.object(chunk_convert, "RESERVE_RETRY_SECONDS", 0.02):
+                patch.object(chunk_convert, "RESERVE_RETRY_SECONDS", 0.02), \
+                patch.object(chunk_convert, "UPLOADS_IN_FLIGHT", 1):
             store.converter.convert(REPOSITORY, "x")
             ran[0].join(30)
         self.assertEqual(len(ran), 2)  # y finished.
@@ -172,6 +174,29 @@ class ConverterTests(unittest.TestCase):
                                          "p.pack)) FROM packs p").fetchone()
         self.assertEqual((packs, dead), (len(store.packs()), 0))  # No pack is dead weight.
         self.assertEqual(connection.execute("SELECT COUNT(*) FROM reservations").fetchone(), (0,))
+
+    def test_packs_upload_while_the_next_fills(self):
+        store = self.store()
+        push_image(store.client, "many", [layer([("d", "dir"), *((f"d/{n}", pseudo_random(f"m{n}", 200_000))
+                                                                  for n in range(6))])])
+        active, peak, guard, put = [0], [0], threading.Lock(), store.index.store.put_file
+
+        def slow_put(*args, **kwargs):
+            with guard:
+                active[0] += 1
+                peak[0] = max(peak[0], active[0])
+            time.sleep(0.2)
+            try:
+                return put(*args, **kwargs)
+            finally:
+                with guard:
+                    active[0] -= 1
+        with patch.object(chunk_store, "MAX_PACK_BYTES", 300_000), \
+                patch.object(store.index.store, "put_file", slow_put):
+            result = store.converter.convert(REPOSITORY, "many")
+        self.assertGreater(peak[0], 1)
+        self.assertEqual(result["metrics"]["chunks_new"], 6)
+        self.assertEqual(len(store.packs()), 6)  # Every pack committed before the layer.
 
     def test_a_dead_builders_reservation_lapses_and_the_chunk_is_packed(self):
         store = self.store()

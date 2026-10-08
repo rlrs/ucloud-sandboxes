@@ -683,7 +683,7 @@ class BuildRunner:
     """Runs one spooled job: sandbox, export, filter, stack, with the service's credentials."""
 
     def __init__(self, *, gateway, registry_client, converter, externals, work_root, resources=BuildResources(),
-                 apt_proxy=None, poll=1.0, local_slots=2):
+                 apt_proxy=None, poll=1.0, local_slots=3):
         # ``converter()``: a RafsConverter for one job (they keep per-run metrics).
         self.gateway, self.registry_client, self.converter = gateway, registry_client, converter
         self.externals, self.work_root, self.resources = externals, Path(work_root), resources
@@ -939,8 +939,8 @@ def serve_command(args):
                          externals=ExternalImages(root / "external-images"), work_root=work,
                          resources=BuildResources(settings.cpus, settings.memory_mb, settings.disk_mb,
                                                   settings.timeout_seconds),
-                         apt_proxy=apt_proxy(config))
-    _LOG.info("sandbox builds: %d slots, spool %s", settings.slots, root)
+                         apt_proxy=apt_proxy(config), local_slots=settings.stack_slots)
+    _LOG.info("sandbox builds: %d slots (%d stacking), spool %s", settings.slots, settings.stack_slots, root)
     serve(Spool(root), runner, slots=settings.slots)
     return 0
 

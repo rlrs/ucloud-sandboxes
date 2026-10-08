@@ -112,7 +112,7 @@ serves it from a Danish mirror.
 
 ```json
 "immutable_environments": {
-  "sandbox_builds": {"enabled": true, "slots": 8, "cpus": 4.0, "memory_mb": 8192,
+  "sandbox_builds": {"enabled": true, "slots": 8, "stack_slots": 3, "cpus": 4.0, "memory_mb": 8192,
                      "disk_mb": 32768, "timeout_seconds": 1800}
 }
 ```

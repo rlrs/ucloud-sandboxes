@@ -10,6 +10,7 @@ rerun converges on the same root digest.
 """
 from __future__ import annotations
 
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 import copy
 from dataclasses import dataclass, field
@@ -24,6 +25,7 @@ import socket
 import stat
 import subprocess
 import tarfile
+import threading
 from tempfile import TemporaryDirectory
 import time
 
@@ -46,6 +48,7 @@ _OVERLAY_OPAQUE = "SCHILY.xattr.trusted.overlay.opaque"
 MAX_LAYERS_PER_ROOT = 33  # The base and 32 toolkits (ImmutableEnvironment).
 IMAGE_CONFIG_KEYS = ("Entrypoint", "Cmd", "Env", "WorkingDir", "User")
 LOOKUP_BATCH = 256  # Chunk ids per index reservation while packing: about one 64 MiB pack.
+UPLOADS_IN_FLIGHT = 2  # Filled packs uploading while the next fills.
 RESERVE_RETRY_SECONDS = 1.0  # First wait for chunks another builder holds; doubles to 30 s.
 
 
@@ -186,13 +189,23 @@ class RafsConverter:
     owner: str = field(default_factory=lambda: f"{socket.gethostname()}:{os.getpid()}")
     step: object = None  # Crash injection: called with each name in STEPS.
     metrics: dict = field(default_factory=dict)
+    _metrics_guard: object = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def _step(self, name, **details):
         if self.step is not None:
             self.step(name, **details)
 
     def _count(self, name, value=1):
-        self.metrics[name] = self.metrics.get(name, 0) + value
+        with self._metrics_guard:  # Pack uploads count from their threads.
+            self.metrics[name] = self.metrics.get(name, 0) + value
+
+    @contextmanager
+    def _timed(self, name):
+        started = time.monotonic()
+        try:
+            yield
+        finally:
+            self._count(name + "_s", round(time.monotonic() - started, 3))
 
     def convert(self, repository, reference, *, attach_tag=None):
         """Convert one image already in our registry; returns its root digest.
@@ -284,8 +297,10 @@ class RafsConverter:
         work = scratch / diff_id[7:19]
         (work / "blobs").mkdir(parents=True)
         layer, gzipped = tar, descriptor.get("mediaType", "").endswith(("gzip", "tar.gzip"))
-        if path_ordered_layer(tar, work / "ordered.tar"):  # The verifier still reads the original.
-            layer, gzipped = work / "ordered.tar", False
+        with self._timed("layer_order"):
+            if path_ordered_layer(tar, work / "ordered.tar"):  # The verifier still reads the original.
+                layer, gzipped = work / "ordered.tar", False
+                self._count("layers_reordered")
         if self.layout == "layer":
             source, kind = work / "overlay.tar", ["-t", "tar-rafs", "--whiteout-spec", "none"]
             overlay_whiteouts(layer, source)
@@ -294,10 +309,11 @@ class RafsConverter:
         output = work / "layer.json"
         if self.nydusd_blobs:
             kind = [*kind, "--features", "blob-toc"]
-        subprocess.run([self.nydus_image, "create", *kind, "--fs-version", "6", "--digester", "sha256",
-                        "--compressor", "zstd", "--chunk-size", "0x40000",
-                        "-D", str(work / "blobs"), "-B", str(work / "layer.boot"), "-J", str(output), str(source)],
-                       check=True, capture_output=True, timeout=3600)
+        with self._timed("layer_create"):
+            subprocess.run([self.nydus_image, "create", *kind, "--fs-version", "6", "--digester", "sha256",
+                            "--compressor", "zstd", "--chunk-size", "0x40000",
+                            "-D", str(work / "blobs"), "-B", str(work / "layer.boot"), "-J", str(output), str(source)],
+                           check=True, capture_output=True, timeout=3600)
         blobs = json.loads(output.read_text())["blobs"]
         bootstrap = (work / "layer.boot").read_bytes()
         parsed = parse_bootstrap(bootstrap)
@@ -305,7 +321,8 @@ class RafsConverter:
             raise ValueError("nydus-image produced an unexpected blob table for one layer")
         self._step("layer_converted", diff_id=diff_id)
         if blobs:
-            self._pack(parsed, work / "blobs" / blobs[0], work, diff_id)
+            with self._timed("layer_pack"):
+                self._pack(parsed, work / "blobs" / blobs[0], work, diff_id)
             if self.nydusd_blobs:
                 self.store.put_bytes(tail_key(self.store.prefix, blobs[0]), blob_tail(parsed, work / "blobs" / blobs[0]))
         bootstrap_digest = content_digest(bootstrap)
@@ -359,17 +376,32 @@ class RafsConverter:
         packed again as nydus wrote it, and its index row moves to that copy.
         """
         first = _by_id(bootstrap)
-        count, writer, superseding = 0, None, []
+        count, writer, superseding, uploads = 0, None, [], []
+        # Packs upload while the next one fills: a pack's put and commit overlap packing.
+        uploader = ThreadPoolExecutor(UPLOADS_IN_FLIGHT, thread_name_prefix="pack-upload")
 
-        def flush(writer):
-            digest, size = writer.finish()
+        def upload(writer, digest, size, supersede):
             self.store.put_file(pack_key(self.store.prefix, digest), writer.path, size)
             self._count("pack_bytes", size)
             self._step("pack_put", diff_id=diff_id, pack=digest)
             # A pack is durable in S3 before any index row names it.
-            self.index.commit([{"digest": digest, "size": size}], supersede=tuple(superseding))
-            superseding.clear()
+            self.index.commit([{"digest": digest, "size": size}], supersede=supersede)
             self._step("pack_committed", diff_id=diff_id, pack=digest)
+            Path(writer.path).unlink(missing_ok=True)
+
+        def flush(writer):
+            digest, size = writer.finish()
+            uploads.append(uploader.submit(upload, writer, digest, size, tuple(superseding)))
+            superseding.clear()
+            pending = [future for future in uploads if not future.done()]
+            if len(pending) > UPLOADS_IN_FLIGHT:  # Bounded scratch: at most this many filled packs wait.
+                wait(pending, return_when=FIRST_COMPLETED)
+
+        def drain():
+            """Every pack this run filled is committed (or its error raised)."""
+            for future in uploads:
+                future.result()
+            uploads.clear()
 
         def pack(ids, source):
             """Pack the ids this builder reserves; returns those another holds."""
@@ -407,14 +439,18 @@ class RafsConverter:
             if writer is not None:
                 flush(writer)
                 writer = None
+            drain()  # Our own chunks are committed before we ask again for others' holds.
             return held
 
-        with open(blob, "rb") as source:
-            held, delay = pack(list(first), source), RESERVE_RETRY_SECONDS
-            while held:
-                self._count("chunks_waited", len(held))
-                time.sleep(delay)  # The holder commits them, or its hold lapses.
-                held, delay = pack(held, source), min(30, delay * 2)
+        try:
+            with open(blob, "rb") as source:
+                held, delay = pack(list(first), source), RESERVE_RETRY_SECONDS
+                while held:
+                    self._count("chunks_waited", len(held))
+                    time.sleep(delay)  # The holder commits them, or its hold lapses.
+                    held, delay = pack(held, source), min(30, delay * 2)
+        finally:
+            uploader.shutdown(wait=True)
         if self._misencoded(first, list(first)):
             raise ValueError("chunks of this layer stay stored in another encoding than its nydusd blob needs")
 

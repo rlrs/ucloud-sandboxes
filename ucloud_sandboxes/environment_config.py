@@ -228,9 +228,11 @@ class SandboxBuildsConfig:
     """``immutable_environments.sandbox_builds`` (docs/sandbox-builds.md):
     recipes on a chunk-store base build in sandboxes on the workers, run by
     ``serve-sandbox-builds`` on the gateway host; ``slots`` builds at once,
-    each sandbox with these resources and ``timeout_seconds`` for its steps."""
+    each sandbox with these resources and ``timeout_seconds`` for its steps;
+    ``stack_slots`` of them filter and stack on the gateway host at once."""
     enabled: bool = False
     slots: int = 8
+    stack_slots: int = 3
     cpus: float = 4.0
     memory_mb: int = 8192
     disk_mb: int = 32768
@@ -243,6 +245,7 @@ class SandboxBuildsConfig:
             raise ValueError("immutable_environments.sandbox_builds fields do not match schema")
         result = cls(**raw)
         if (type(result.enabled) is not bool or type(result.slots) is not int or not 1 <= result.slots <= 64
+                or type(result.stack_slots) is not int or not 1 <= result.stack_slots <= 16
                 or isinstance(result.cpus, bool) or not isinstance(result.cpus, (int, float))
                 or not 0.5 <= result.cpus <= 64 or type(result.memory_mb) is not int or result.memory_mb < 1024
                 or type(result.disk_mb) is not int or result.disk_mb < 4096

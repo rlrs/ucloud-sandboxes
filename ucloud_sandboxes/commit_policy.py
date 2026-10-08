@@ -443,6 +443,12 @@ def _parse(member):
     raise CommitRefused("commit_residue_forbidden", f"{path!r} has an unsupported member type")
 
 
+def _output_order(name: str) -> tuple[str, ...]:
+    """Depth-first path order (``a/b`` before ``a.b``), the order the chunk
+    store's converter wants, so a commit layer is converted without a rewrite."""
+    return () if name == "." else tuple(name.split("/"))
+
+
 def _output_name(path: str, kind: str) -> str:
     parent, _, base = path.rpartition("/")
     prefix = parent + "/" if parent else ""
@@ -454,7 +460,7 @@ def _output_name(path: str, kind: str) -> str:
 
 
 def filter_upper(source, destination, policy: CommitPolicy, secret_digests=(), *, check=lambda: None) -> FilterResult:
-    """Write runsc's upper tar ``source`` (seekable) as a sorted OCI layer tar.
+    """Write runsc's upper tar ``source`` (seekable) as an OCI layer tar in path order.
 
     Whiteouts become ``.wh.<name>`` and opaque directories ``.wh..wh..opq``
     from either encoding: a 0:0 character device and the opaque xattr, or OCI
@@ -476,7 +482,7 @@ def filter_upper(source, destination, policy: CommitPolicy, secret_digests=(), *
             for target, names in links.items():
                 if entries.get(target, (None, ""))[1] != "file":  # absent, dropped or not regular
                     raise CommitRefused("commit_residue_forbidden", f"{names[0]!r} links to a dropped or absent target")
-                names = sorted((target, *names))
+                names = sorted((target, *names), key=_output_order)
                 data_of.update((name, (target, names[0])) for name in names)
             if sum(member.size for member, kind, _ in entries.values() if kind == "file") > policy.max_bytes:
                 raise CommitRefused("commit_too_large", "the filtered upper exceeds max_bytes")
@@ -527,7 +533,7 @@ def _write(archive, entries, data_of, destination, policy, tokens, drops, check)
     sink = DigestWriter(destination)
     with tarfile.open(fileobj=sink, mode="w", format=tarfile.PAX_FORMAT, encoding="utf-8",
                       errors="surrogateescape", copybufsize=1 << 20) as output:
-        for name in sorted(entries, key=lambda item: (item != ".", item)):
+        for name in sorted(entries, key=_output_order):
             check()
             member, kind, xattrs = entries[name]
             target, first = data_of.get(name, (name, name))

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.62 - 2026-10-08 (gateway; builders)
+
+- **Four pack uploads in flight (was two).** Uploads to the chunk store's bucket run about 11 MB/s per stream from UCloud and 66 MB/s with four (70 with eight); 0.9.61's sandbox builds with hundreds of MB of new chunks spent most of their stacking time uploading at 5-6 MB/s.
+
 ## 0.9.61 - 2026-10-08 (gateway; builders)
 
 - **Faster stacking for sandbox builds.** The commit filter wrote a layer's names in string order (`a.b` before `a/b`), the converter needs path order, so every sandbox layer was copied twice before `nydus-image create` (gigabytes for OpenSWE). The filter writes path order now (future commit diff IDs differ from older releases'). Packs upload to S3 and commit while the next one fills (two in flight), for builders' conversions too. `sandbox_builds.stack_slots` (default 3, was a fixed 2) sets how many builds filter and stack at once; the layer step records its reorder, create and pack times.

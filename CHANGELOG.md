@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.61 - 2026-10-08 (gateway; builders)
+
+- **Faster stacking for sandbox builds.** The commit filter wrote a layer's names in string order (`a.b` before `a/b`), the converter needs path order, so every sandbox layer was copied twice before `nydus-image create` (gigabytes for OpenSWE). The filter writes path order now (future commit diff IDs differ from older releases'). Packs upload to S3 and commit while the next one fills (two in flight), for builders' conversions too. `sandbox_builds.stack_slots` (default 3, was a fixed 2) sets how many builds filter and stack at once; the layer step records its reorder, create and pack times.
+
 ## 0.9.60 - 2026-10-08 (gateway)
 
 - **Rebuilding a pinned recipe image no longer breaks ensure.** A rebuild names a new digest under the image's tag, and the pinned owner's durable reference refused it ("digest is immutable"); ensure answered a retryable 503 for every name in the call, so the SDK's `wait_for_images` never finished. The reference (and its environment's) now moves to the new digest, and a pin that fails is retried on the next call instead of failing the others. Found rebuilding the 11 images 0.9.59 fixed.

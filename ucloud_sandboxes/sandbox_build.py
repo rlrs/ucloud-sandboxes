@@ -721,6 +721,8 @@ class BuildRunner:
         spec = {"id": sandbox_id, "image": job["base_reference"], "cpus": self.resources.cpus,
                 "memory_mb": self.resources.memory_mb, "disk_mb": self.resources.disk_mb,
                 "ttl_seconds": self.resources.timeout_seconds + 900, "managed_process": True, "parkable": True,
+                # /tmp is disk under Docker; recipes download archives there (MongoDB's, for one).
+                "filesystem": {"tmpfs_mb": self.resources.memory_mb // 2},
                 "security": {"user": "0:0", "cap_drop": [], "no_new_privileges": False, "pids_limit": None},
                 "labels": {"sandbox-build": job["image_id"][:63]}}
         deadline = time.monotonic() + self.resources.timeout_seconds

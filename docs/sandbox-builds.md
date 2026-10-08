@@ -62,8 +62,10 @@ Every Terminal-Lego task copies uv from `ghcr.io/astral-sh/uv:0.9.5`. TMax uses 
 
 - `/tmp` and `/run` are not committed. A sandbox mounts tmpfs there, so an image's files there
   were never visible to a sandbox anyway.
-- Steps get `TMPDIR=/var/tmp/.ucloud-build-tmp` (removed before the commit). The sandbox's
-  `/tmp` is a 64 MB tmpfs, and one OpenSWE build needed several GB of temporaries.
+- Steps get `TMPDIR=/var/tmp/.ucloud-build-tmp` (removed before the commit): one OpenSWE build
+  needed several GB of temporaries. Recipes that write to `/tmp` by name (MongoDB's archive in
+  openswe-218) get a tmpfs of half the build's memory there (4 GB by default; 64 MB in other
+  sandboxes).
 - `HOSTNAME` is not set in steps.
 - Build caches are kept, as in a Docker image: pip, uv and npm caches and apt archives (the
   commit policy's `keep_build_residue`; agent commits still drop them).

@@ -383,7 +383,7 @@ class RunnerTests(unittest.TestCase):
         self.assertTrue(result["manifest_digest"].startswith("sha256:"))
         self.assertTrue(gateway.spec["managed_process"] and gateway.spec["parkable"])
         from ucloud_sandboxes.sandbox import SandboxSpec
-        SandboxSpec.from_dict(gateway.spec)  # The gateway's own schema accepts it.
+        self.assertEqual(SandboxSpec.from_dict(gateway.spec).filesystem.tmpfs_mb, 4096)  # Half the memory.
 
     def test_filtering_and_stacking_share_the_local_slots(self):
         active, peak, guard = [0], [0], threading.Lock()

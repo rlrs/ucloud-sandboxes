@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.60 - 2026-10-08 (gateway)
+
+- **Rebuilding a pinned recipe image no longer breaks ensure.** A rebuild names a new digest under the image's tag, and the pinned owner's durable reference refused it ("digest is immutable"); ensure answered a retryable 503 for every name in the call, so the SDK's `wait_for_images` never finished. The reference (and its environment's) now moves to the new digest, and a pin that fails is retried on the next call instead of failing the others. Found rebuilding the 11 images 0.9.59 fixed.
+
 ## 0.9.59 - 2026-10-08 (gateway; store node; builders)
 
 - **Images built into the chunk store stay readable by nydusd.** nydusd's blobs are rebuilt on the store node from stored chunks byte for byte, but the index keeps the first stored copy of a chunk, and conversions without nydusd blobs (M1/M2 era) stored a chunk raw when zstd saved under 3% where nydus compressed it. A new layer sharing such a chunk got a blob the store node could not rebuild: in 0.9.58's live check, Terminal-Lego and OpenSWE images built in sandboxes died with SIGBUS on their first command ("the store holds this chunk re-encoded"). Builder-built (`builder_format: rafs`) images had the same exposure.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.63 - 2026-10-08 (gateway; builders)
+
+- **Packing many small chunks is no longer quadratic.** A pack writer summed its entries on every chunk it took, so a layer of small files spent most of its stacking time there (a 495 MB OpenSWE layer of 15,546 chunks packed at 6 MB/s); locally, 6,000 small chunks pack in 1.5 s instead of 5.0 s. The layer step now reports time waiting on uploads (`pack_upload_wait_s`) apart from the uploads themselves (`pack_put_s`).
+
 ## 0.9.62 - 2026-10-08 (gateway; builders)
 
 - **Four pack uploads in flight (was two).** Uploads to the chunk store's bucket run about 11 MB/s per stream from UCloud and 66 MB/s with four (70 with eight); 0.9.61's sandbox builds with hundreds of MB of new chunks spent most of their stacking time uploading at 5-6 MB/s.

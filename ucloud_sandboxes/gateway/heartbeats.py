@@ -203,16 +203,16 @@ class HeartbeatIngest:
             outcome = "error"
             try:
                 outcome = self._pull(previous, read_worker)
+                if self.metrics_store is not None:  # Recorded before the waiters see the pull done.
+                    self.metrics_store.append("node_heartbeat_pull", {
+                        "node_id": previous.node_id, "job_id": previous.job_id,
+                        "node_epoch": previous.node_epoch, "outcome": outcome,
+                        "receipt_age_seconds": round((utc_now() - previous.freshness_at).total_seconds(), 3),
+                    })
             finally:
                 pull.unanswered = unanswered + 1 if outcome in _UNANSWERED else 0
                 pull.finished = time.monotonic()
                 pull.set()
-            if self.metrics_store is not None:
-                self.metrics_store.append("node_heartbeat_pull", {
-                    "node_id": previous.node_id, "job_id": previous.job_id,
-                    "node_epoch": previous.node_epoch, "outcome": outcome,
-                    "receipt_age_seconds": round((utc_now() - previous.freshness_at).total_seconds(), 3),
-                })
         current = self.store.get_heartbeat(previous.job_id, include_inventory=False)
         return current if current is not None and current.node_epoch == previous.node_epoch else None
 

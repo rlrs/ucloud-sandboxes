@@ -135,7 +135,7 @@ class PackageCache:
             self._count("misses")
             try:
                 status = self.fetch(upstream, target)
-            except (OSError, error.URLError) as exc:
+            except (OSError, error.URLError):
                 self._count("errors")
                 if target.exists():  # A stale index beats none.
                     self._count("stale")

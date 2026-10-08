@@ -1,5 +1,5 @@
 """Create N parkable managed-agent sandboxes running a small memory workload."""
-import sys, time
+import sys
 sys.path.insert(0, "/Users/Rasmus/Git/ucloud-sandboxes/ucloud-sandboxes-sdk/src")
 from concurrent.futures import ThreadPoolExecutor
 from ucloud_sandboxes_sdk.client import Image, SandboxClient, SandboxSpec

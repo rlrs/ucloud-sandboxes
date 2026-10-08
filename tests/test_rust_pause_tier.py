@@ -18,7 +18,7 @@ from threading import Event, Thread
 import time
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from tests import test_direct_provisioner as fixtures
 from tests import test_vm_init as vm_init_fixtures

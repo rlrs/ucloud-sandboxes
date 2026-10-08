@@ -2,7 +2,11 @@
 
 usage: relay_e2e.py <gateway-url> <relay-url> <token-dir>
 """
-import asyncio, json, sys, threading, uuid
+import asyncio
+import json
+import sys
+import threading
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -21,8 +25,11 @@ class Upstream(BaseHTTPRequestHandler):
         body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
         out = json.dumps({"echo": json.loads(body or b"{}"), "path": self.path,
                           "auth": self.headers.get("Authorization")}).encode()
-        self.send_response(200); self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(out))); self.end_headers(); self.wfile.write(out)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
 
 
 server = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
@@ -53,8 +60,11 @@ async def main():
                 finally:
                     handle.delete()
             code, out, err = await asyncio.to_thread(in_sandbox)
-            cancel.set(); worker.cancel()
-            print("exit", code); print("stdout", (out.decode() if isinstance(out, bytes) else out)[:400])
-            if code: print("stderr", (err.decode() if isinstance(err, bytes) else err)[-800:])
+            cancel.set()
+            worker.cancel()
+            print("exit", code)
+            print("stdout", (out.decode() if isinstance(out, bytes) else out)[:400])
+            if code:
+                print("stderr", (err.decode() if isinstance(err, bytes) else err)[-800:])
 
 asyncio.run(main())

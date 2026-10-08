@@ -79,8 +79,9 @@ class TransitionLedgerTests(unittest.TestCase):
         import random
         rng, ledger, owners = random.Random(7), TransitionLedger(), [("s", i) for i in range(6)]
         values = (None, 0, 512, 1024, 4096)
-        cost = lambda: TransitionCost(rng.choice(list(TransitionKind)), rng.choice(values),
-                                      ram_backing_bytes=rng.choice(values))
+        def cost():
+            return TransitionCost(rng.choice(list(TransitionKind)), rng.choice(values),
+                                  ram_backing_bytes=rng.choice(values))
         claims, forecasts = [], {}
         for _ in range(400):
             owner, step = rng.choice(owners), rng.random()

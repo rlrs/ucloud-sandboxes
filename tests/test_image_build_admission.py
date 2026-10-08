@@ -91,6 +91,11 @@ class PhaseAdmissionTests(unittest.TestCase):
     def wait(self, manager, row):
         done = manager.wait_for_build(row.build_id, timeout_seconds=5)
         self.assertTrue(done.terminal)
+        # The build's thread still releases its admission row after the record
+        # turns terminal; let it finish before the test removes the store.
+        deadline = time.monotonic() + 5
+        while row.build_id in manager._active_threads and time.monotonic() < deadline:
+            time.sleep(0.01)
         return done
 
     def test_four_solves_overlap_two_finishers_without_accepting_a_seventh(self):

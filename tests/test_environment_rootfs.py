@@ -282,7 +282,7 @@ class IdleImageSweepTests(unittest.TestCase):
 
     def test_device_exhaustion_collects_idle_images_and_retries_once(self):
         store = self.store(devices=2, percent=75, pressure=False)  # An older backend: the mounted view.
-        idle = self.image(store, "a", "1", "2", used=1.0)
+        self.image(store, "a", "1", "2", used=1.0)
         wanted = self.image(store, "b", "3", mount=False, used=None)
         self.assertIsNotNone(store._mount(wanted, self.environments[wanted]))
         self.assertEqual(self.present(store), {wanted})

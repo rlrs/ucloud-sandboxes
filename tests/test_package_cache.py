@@ -105,11 +105,18 @@ class PackageCacheTests(unittest.TestCase):
 
     def test_least_recently_used_packages_are_evicted_past_the_limit(self):
         self.cache.config = PackageCacheConfig(**{**self.cache.config.to_dict(), "max_bytes": 1024 ** 3})
+        def use(name):
+            # The handler marks an object used after sending it: wait for that mark on this clock.
+            url = f"http://archive.ubuntu.com/ubuntu/pool/{name}.deb"
+            self.get(url)
+            deadline = time.monotonic() + 5
+            while self.cache.path(url).stat().st_atime != self.clock[0] and time.monotonic() < deadline:
+                time.sleep(0.01)
         for name in ("a", "b", "c"):
             self.mirror.content[f"/ubuntu/pool/{name}.deb"] = b"x" * 1000
-            self.get(f"http://archive.ubuntu.com/ubuntu/pool/{name}.deb")
+            use(name)
             self.clock[0] += 1
-        self.get("http://archive.ubuntu.com/ubuntu/pool/a.deb")  # a is used again: b is now least recent.
+        use("a")  # a is used again: b is now least recent.
         object.__setattr__(self.cache.config, "max_bytes", 2500)
         self.cache._sweep()
         kept = {name for name in "abc" if self.cache.path(f"http://archive.ubuntu.com/ubuntu/pool/{name}.deb").exists()}

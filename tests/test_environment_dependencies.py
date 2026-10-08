@@ -60,8 +60,9 @@ class EnvironmentDependencyTests(unittest.TestCase):
         with TemporaryDirectory() as temporary:
             store = RegistryUsageStore(Path(temporary) / "usage.sqlite")
             image = "registry.example/source:latest@sha256:" + "1" * 64
-            persist = lambda owner: threading.Thread(target=_persist_registry_image_protection,
-                args=(store, image, owner), kwargs={"touch": True, "persistent": True})
+            def persist(owner):
+                return threading.Thread(target=_persist_registry_image_protection,
+                                        args=(store, image, owner), kwargs={"touch": True, "persistent": True})
             with _registry_lease_coordination("first-owner"):
                 other, same = persist("second-owner"), persist("first-owner")
                 other.start(), same.start()

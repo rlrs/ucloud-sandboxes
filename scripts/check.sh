@@ -8,9 +8,10 @@ trap 'rm -rf "$check_root"' EXIT
 root_project_venv="$check_root/root-project-venv"
 sdk_project_venv="$check_root/sdk-project-venv"
 
-UV_PROJECT_ENVIRONMENT="$root_project_venv" uv sync --locked
+# PostgreSQL modules import psycopg; without a DSN their tests skip.
+UV_PROJECT_ENVIRONMENT="$root_project_venv" uv sync --locked --extra postgres
 UV_PROJECT_ENVIRONMENT="$root_project_venv" \
-  uv run ruff check ucloud_sandboxes tests scripts
+  uv run --extra postgres ruff check ucloud_sandboxes tests scripts
 
 for script in scripts/*.sh; do
   bash -n "$script"
@@ -31,7 +32,7 @@ if command -v eatmydata >/dev/null 2>&1; then
   # kernel, so what they observe through the page cache is unchanged.
   test_runner_flags+=(--no-fsync)
 fi
-UV_PROJECT_ENVIRONMENT="$root_project_venv" uv run python scripts/run_tests.py \
+UV_PROJECT_ENVIRONMENT="$root_project_venv" uv run --extra postgres python scripts/run_tests.py \
   ${test_runner_flags[@]+"${test_runner_flags[@]}"}
 uv build --out-dir "$check_root/root-dist"
 root_wheels=("$check_root"/root-dist/*.whl)

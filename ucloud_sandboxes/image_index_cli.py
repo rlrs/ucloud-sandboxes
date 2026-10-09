@@ -102,8 +102,9 @@ def cmd_show(args):
              f"source       {json.dumps(detail['source'], sort_keys=True)}",
              f"tasks        {detail['tasks']}: {', '.join(detail['task_ids'][:10])}"
              + (" ..." if detail["tasks"] > 10 else "")]
-    if detail.get("error"):
-        lines.append(f"last error   {detail['error']}")
+    if detail.get("error"):  # Its end says what failed; --json has all of it.
+        tail = [line.strip() for line in detail["error"].strip().splitlines() if line.strip()][-4:]
+        lines.append("last error   " + "\n             ".join(tail))
     if detail.get("other_names"):
         lines.append(f"same image   {', '.join(detail['other_names'])}")
     print("\n".join(lines))

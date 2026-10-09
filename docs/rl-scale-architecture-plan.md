@@ -2042,6 +2042,17 @@ Creates, execs, pause and local waits moved into `ucloud-noded` ([rust-node-daem
   - Node-side `manager_create` p50 2.5 s, p95 5.9 s (0.9.49: 2.1, 4.3 s). One of the two workers was about 30% slower single-threaded (98 against 75 ms), the VM spread 0.9.50's CPU check retires above 35 ms of its own loop.
 - **Training gate (M2 with slack, two workers):** readiness all by 36 s against 30 s, exec 1,239-1,306/s per node (met), creates/s not met (about 30/s). No regression since 0.9.49 beyond VM spread.
 
+### 2026-10-09: the image index (0.9.66)
+
+- **Found:** training's image names did not resolve. verifiers sends each task's image by name (as to Prime); the
+  gateway knew only 89 pilot names, so TMax, Terminal-Lego and OpenSWE names went to Docker Hub and failed, and
+  the SWE families' public names pulled from Docker Hub instead of the prepared copies.
+- **Built:** the gateway's image index ([image-index.md](image-index.md)): every training name with something
+  prepared, as a prepared image or a recipe on a prepared base, with its environment, tasks and source; views
+  and `ucloud-sandboxes image-index`; per-environment `task_ids_file` allowlists for the trainer.
+- **Filled:** 66,774 names, 130,241 tasks over nine environments; 12 refused (base gone). All nine families
+  started by name as training creates them.
+
 ## Appendix: evidence index
 
 - Image path:

@@ -92,3 +92,14 @@ tasksets ask for, with what was prepared for each.
 
 Re-running either step is safe. Names prepared later are added by running it again with a
 newer inventory.
+
+## Filled (2026-10-08/09, 0.9.66)
+
+- **Registered:** 66,774 names, 130,241 tasks. Prepared: MultiSWE 60, R2E-Gym 67, ScaleSWE 2,469, SWE-Lego 72,
+  SWE-rebench v2 74, SWE-smith 118 (63,585 tasks). Recipes: TMax 14,600, Terminal-Lego 13,765, OpenSWE 35,549.
+- **Refused:** 12 Terminal-Lego names whose base is no longer in the chunk store (`terminal-lego/refused.jsonl`).
+- **Checked by name, as `verifiers-ucloud` creates (managed, parkable):** a prepared name and a built recipe start
+  in 0.3-0.5 s; never-built Terminal-Lego and OpenSWE names built and started on first use in 127-173 s (a worker
+  boot included). One OpenSWE recipe failed on first use (PyYAML no longer builds): `retrying`, then `failed`
+  and out of the next export.
+

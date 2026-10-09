@@ -10,6 +10,14 @@ Cloud**. Clients use one gateway URL and API token; the backend handles placemen
 routing, image builds, and worker scaling. Despite the name, the sandbox API and
 runtime are shared across both providers.
 
+> **This repository is the server.** Clients never install it. To use sandboxes
+> from verifiers, install
+> [`verifiers-ucloud`](https://github.com/rlrs/verifiers-ucloud) at a tag
+> (`uv add "verifiers-ucloud @ git+https://github.com/rlrs/verifiers-ucloud@v0.2.0"`),
+> which pins the [SDK](https://github.com/rlrs/ucloud-sandboxes-sdk) release it
+> was tested with. `main` is what production runs; releases are tagged
+> (`v0.9.66`).
+
 A central feature is **sharing worker capacity across agents waiting for models**.
 Managed agents stay resident when memory is available, so they can continue
 quickly without checkpoint I/O. Under memory pressure, the service checkpoints

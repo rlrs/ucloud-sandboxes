@@ -13,7 +13,9 @@ mirror of the same tree, as Canonical's archive stalls from UCloud) and keeps:
 
 Concurrent requests for one file share one upstream fetch. Only GET and HEAD;
 no CONNECT, so HTTPS goes direct. It runs on the store node, on the private
-network (``chunk_store.store_node.package_cache``).
+network (``chunk_store.store_node.package_cache``). With ``github_token_file``
+it also serves authenticated git fetches from GitHub under ``/github/``
+(git_proxy.py).
 """
 from __future__ import annotations
 
@@ -47,6 +49,8 @@ class PackageCacheConfig:
     # Allowlisted host -> the upstream origin serving the same paths.
     upstreams: dict = field(default_factory=dict)
     index_seconds: int = 600
+    # A GitHub token (read-only, public repositories) for /github/ git fetches; "" for none.
+    github_token_file: str = ""
 
     @classmethod
     def from_dict(cls, raw):
@@ -62,6 +66,9 @@ class PackageCacheConfig:
             raise ValueError("package_cache.max_bytes must be at least 1 GiB")
         if type(result.index_seconds) is not int or not 0 <= result.index_seconds <= 86400:
             raise ValueError("package_cache.index_seconds must be 0-86400")
+        if not isinstance(result.github_token_file, str) or (
+                result.github_token_file and not Path(result.github_token_file).is_absolute()):
+            raise ValueError("package_cache.github_token_file must be an absolute path or empty")
         if not isinstance(result.upstreams, dict) or not result.upstreams:
             raise ValueError("package_cache.upstreams must allowlist at least one host")
         for host, origin in result.upstreams.items():
@@ -86,6 +93,10 @@ class PackageCache:
         self.metrics = {"hits": 0, "misses": 0, "stale": 0, "errors": 0, "bytes_served": 0, "bytes_fetched": 0,
                         "evicted_bytes": 0}
         self._total = sum(p.stat().st_size for p in (self.root / "objects").glob("*/*"))
+        self.github = None
+        if config.github_token_file:
+            from .git_proxy import GitHubProxy
+            self.github = GitHubProxy(config.github_token_file)
 
     def _count(self, name, value=1):
         with self._guard:
@@ -209,10 +220,23 @@ class _Handler(BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
+    def _github(self):
+        """Whether this is a /github/ request, answered by the git proxy (or refused)."""
+        if not self.path.startswith("/github/"):
+            return False
+        if self.cache.github is None:
+            self._send(HTTPStatus.NOT_FOUND, b"no GitHub token configured\n")
+        else:
+            self.cache.github.handle(self)
+        return True
+
     def _serve(self):
         if self.path == "/healthz":
-            return self._send(HTTPStatus.OK, json.dumps({"ok": True, **self.cache.metrics}).encode(),
+            github = {"github": self.cache.github.metrics} if self.cache.github is not None else {}
+            return self._send(HTTPStatus.OK, json.dumps({"ok": True, **self.cache.metrics, **github}).encode(),
                               "application/json")
+        if self._github():
+            return
         status, path = self.cache.get(self._url())
         if path is None:
             return self._send(int(status), f"{int(status)}\n".encode())
@@ -237,7 +261,11 @@ class _Handler(BaseHTTPRequestHandler):
     def do_CONNECT(self):  # noqa: N802
         self._send(HTTPStatus.METHOD_NOT_ALLOWED, b"no CONNECT: HTTPS goes direct\n")
 
-    do_POST = do_PUT = do_DELETE = do_CONNECT  # noqa: N815
+    def do_POST(self):  # noqa: N802
+        if not self._github():
+            self.do_CONNECT()
+
+    do_PUT = do_DELETE = do_CONNECT  # noqa: N815
 
 
 def serve(config):

@@ -37,6 +37,8 @@ import time
 from urllib import error, parse, request
 import uuid
 
+from .git_proxy import git_insteadof
+
 _LOG = logging.getLogger(__name__)
 SCHEMA = "ucloud-sandbox-build-v1"
 BUILD_DIR = "/var/tmp/.ucloud-build"  # The bundle; removed before the commit.
@@ -238,7 +240,8 @@ class ContextTree:
         return "file" if path in self.files else "dir" if path in self.dirs else None
 
 
-def plan_build(dockerfile, context, base_config, *, apt_proxy=None, build_dir=BUILD_DIR, build_tmp=BUILD_TMP):
+def plan_build(dockerfile, context, base_config, *, apt_proxy=None, git_proxy=None, build_dir=BUILD_DIR,
+               build_tmp=BUILD_TMP):
     """The remainder of a rewritten Dockerfile (``FROM <foundation>`` first) as
     a build script, with the image config it leaves. ``context`` is a
     ContextTree; ``base_config`` the foundation root's image config.
@@ -284,7 +287,7 @@ def plan_build(dockerfile, context, base_config, *, apt_proxy=None, build_dir=BU
                 raise Unsupported(f"RUN {' '.join(item.flags)}")
             argv = _json_list(args)
             argv = argv if argv is not None else [*shell, args]
-            lines.append(_step(number, label, _run(argv, env, config, apt_proxy, paths)))
+            lines.append(_step(number, label, _run(argv, env, config, apt_proxy, paths, git_proxy)))
         elif keyword == "COPY":
             lines.append(_step(number, label, _copy(item, env, config, context, externals, build_dir)))
         elif keyword not in CONFIG_ONLY:
@@ -313,12 +316,16 @@ def _step(number, label, body):
     return f"step {number} {shlex.quote(label)}\n{body}\n"
 
 
-def _run(argv, env, config, apt_proxy, paths):
+def _run(argv, env, config, apt_proxy, paths, git_proxy=None):
     variables = dict(env)
     variables.setdefault("PATH", DEFAULT_PATH)
     variables.setdefault("TMPDIR", paths[1])
     if apt_proxy:
         variables.setdefault("APT_CONFIG", f"{paths[0]}/apt.conf")
+    if git_proxy and "GIT_CONFIG_COUNT" not in env:
+        # GitHub git fetches go through the package cache's authenticated proxy
+        # (git_proxy.py); the step's own environment, not the image's.
+        variables.update(git_insteadof(git_proxy))
     user = config["User"]
     root = user in ("", "root", "0", "0:0", "root:root", "root:0", "0:root")
     if "HOME" not in env:
@@ -683,11 +690,11 @@ class BuildRunner:
     """Runs one spooled job: sandbox, export, filter, stack, with the service's credentials."""
 
     def __init__(self, *, gateway, registry_client, converter, externals, work_root, resources=BuildResources(),
-                 apt_proxy=None, poll=1.0, local_slots=3):
+                 apt_proxy=None, git_proxy=None, poll=1.0, local_slots=3):
         # ``converter()``: a RafsConverter for one job (they keep per-run metrics).
         self.gateway, self.registry_client, self.converter = gateway, registry_client, converter
         self.externals, self.work_root, self.resources = externals, Path(work_root), resources
-        self.apt_proxy, self.poll = apt_proxy, poll
+        self.apt_proxy, self.git_proxy, self.poll = apt_proxy, git_proxy, poll
         # Steps run on the workers; filtering and stacking run here, beside the gateway's API.
         self.local = threading.BoundedSemaphore(local_slots)
 
@@ -712,7 +719,7 @@ class BuildRunner:
         from .environment_prepare import FILTERED_NAME, prepare_commit_in_subprocess
         context = base64.b64decode(job["context_tar"])
         plan = plan_build(job["dockerfile"], ContextTree.of(tarfile.open(fileobj=io.BytesIO(context)).getmembers()),
-                          job["base_config"], apt_proxy=self.apt_proxy)
+                          job["base_config"], apt_proxy=self.apt_proxy, git_proxy=self.git_proxy)
         timer = time.monotonic()
         fetched = [self.externals.files(item.reference, item.sources) for item in plan.externals]
         metrics["externals_s"] = round(time.monotonic() - timer, 3)
@@ -917,7 +924,7 @@ def serve_command(args):
     from .chunk_index import ChunkIndexClient
     from .config import DeploymentConfig
     from .environment_config import environment_registry_from_deployment, load_signing_key, read_token
-    from .gateway.sandbox_builds import apt_proxy, spool_root
+    from .gateway.sandbox_builds import apt_proxy, git_proxy, spool_root
     from .managed_registry import RegistryClient
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     config = DeploymentConfig.from_file(args.config)
@@ -948,7 +955,7 @@ def serve_command(args):
                          externals=ExternalImages(root / "external-images"), work_root=work,
                          resources=BuildResources(settings.cpus, settings.memory_mb, settings.disk_mb,
                                                   settings.timeout_seconds),
-                         apt_proxy=apt_proxy(config), local_slots=settings.stack_slots)
+                         apt_proxy=apt_proxy(config), git_proxy=git_proxy(config), local_slots=settings.stack_slots)
     _LOG.info("sandbox builds: %d slots (%d stacking), spool %s", settings.slots, settings.stack_slots, root)
     serve(Spool(root), runner, slots=settings.slots)
     return 0

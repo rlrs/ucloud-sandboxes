@@ -85,6 +85,16 @@ class PlanTests(unittest.TestCase):
         self.assertIn(" PATH=/opt/bin:/usr/local/bin:/usr/bin:/bin ", plan.script)
         self.assertIn("step 4 'COPY --from=ghcr.io/astral-sh/uv:0.9.5 /uv /uvx /usr/local/bin/'", plan.script)
 
+    def test_steps_fetch_github_through_the_git_proxy(self):
+        plan = plan_build(FROM + "RUN git clone https://github.com/octo/repo /repo\n", tree({}), BASE,
+                          git_proxy="http://cache:3142")
+        self.assertIn("GIT_CONFIG_KEY_0=url.http://cache:3142/github/.insteadOf", plan.script)
+        self.assertIn("GIT_CONFIG_VALUE_0=https://github.com/", plan.script)
+        self.assertNotIn("GIT_CONFIG", plan_build(FROM + "RUN true\n", tree({}), BASE).script)
+        # A recipe's own git configuration is left alone.
+        own = plan_build(FROM + "ENV GIT_CONFIG_COUNT=0\nRUN true\n", tree({}), BASE, git_proxy="http://cache:3142")
+        self.assertNotIn("insteadOf", own.script)
+
     def test_entrypoint_resets_an_inherited_cmd_only(self):
         self.assertEqual(plan_build(FROM + "ENTRYPOINT [\"/e\"]\n", tree({}), BASE).image_config["Cmd"], [])
         config = plan_build(FROM + "CMD run\nENTRYPOINT [\"/e\"]\n", tree({}), BASE).image_config

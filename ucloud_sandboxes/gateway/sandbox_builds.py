@@ -128,6 +128,14 @@ def spool_root(config):
     return config.control_state_file().parent / "sandbox-builds"
 
 
+def git_proxy(config):
+    """The store node's package cache URL when it serves GitHub git fetches, or None."""
+    chunk_store = config.immutable_environments.chunk_store if config.immutable_environments else None
+    node = chunk_store.store_node if chunk_store is not None else None
+    cache = getattr(node, "package_cache", None)
+    return cache.url if cache is not None and cache.github_token_file else None
+
+
 def apt_proxy(config):
     """(url, hosts) of the store node's package cache, or None."""
     chunk_store = config.immutable_environments.chunk_store if config.immutable_environments else None

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.69 - 2026-10-10 (gateway; store node's package cache)
+
+- **Builds fetch GitHub repositories with a token, through the package cache.** GitHub limits anonymous git downloads from UCloud's address ("temporarily limiting some unauthenticated downloads ... authenticate", a 401 partway through a clone, on and off within minutes; 2026-10-10), and every OpenSWE recipe clones from GitHub.
+  - With `chunk_store.store_node.package_cache.github_token_file` set, the package cache serves git's read-only smart HTTP for GitHub under `/github/<owner>/<repo>/` (`info/refs?service=git-upload-pack` and `git-upload-pack` only; no pushes, no other paths), forwarding to `https://github.com` with the token. Renamed repositories' redirects stay on the proxy. The token is read from the file (reread when it changes), never logged and never given to a build.
+  - Sandbox build steps get git's `url.<cache>/github/.insteadOf https://github.com/` (and `http://`) through `GIT_CONFIG_COUNT` (git 2.31 and later; older git fetches anonymously as before), unless a recipe sets its own `GIT_CONFIG_COUNT`. A clone keeps its `https://github.com/` remote; nothing changes in recipes or images.
+  - Checked with a real `git clone` (2.34) through the proxy against `git http-backend`.
+
 ## 0.9.68 - 2026-10-10 (gateway; store node's chunk index; builders)
 
 - **Chunk-store calls outlast Hetzner's outage windows.** Besides single stalls, Hetzner S3 has windows where every request fails for 45-130 s (2026-10-10, even with 1 worker and 8 builders): 0.9.67's attempt-bounded retries ran out inside them and failed the build (31 of the first 90 SWE-smith imports). Every object-store read, HEAD and put (idempotent: content-addressed) now retries transient failures (transport errors, 5xx, 405, 408, 429, and boto3's spent retries) for up to 5 minutes (`STORE_RETRY_SECONDS`), backing off at most 15 s. Builders wait up to 10 minutes for the index's commit, as for registration, so the index's own retries finish first.

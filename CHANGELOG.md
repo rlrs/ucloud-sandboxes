@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.67 - 2026-10-10 (gateway; store node's chunk index; builders)
+
+- **Publishing to the chunk store no longer waits out stalled S3 requests.** About 1 Hetzner S3 request in 100 stalls for 20 s or more, a few for minutes (2026-10-10 probe of 200 metadata reads: p50 0.15 s, p99 124 s). Sandbox builds spent 6 s of a median 86 s running their steps and the rest publishing or waiting for one of the 3 publishing slots held by a stalled build.
+  - Presigned object-store reads abandon a response that has sent nothing for 5 s (`STALL_SECONDS`) and retry at once, up to 6 attempts; the whole-request deadline is unchanged. HEADs use their own client with 5 s connect and 10 s read timeouts; uploads keep 120 s.
+  - Hetzner's occasional 405 on a valid presigned GET, and 408 and 429, are retried like 5xx.
+- **Metadata named by its digest is read once per process.** Bootstraps and chunk maps never change, so each process keeps the recently read and written ones (256 MiB): a sandbox build reads its parent's bootstrap once, not once per task. Existence checks (`size`) always ask the object store.
+- **Registration reads a base's blobs once.** The chunk index keeps each blob's tail table and whether its layout is written, by blob id: a task image on a 12-layer base registered with about 50 S3 requests, now about 8.
+- Object-store calls slower than 2 s are logged (`slow object-store get|stat|put`).
+
 ## 0.9.66 - 2026-10-08 (gateway)
 
 - **The image index ([docs/image-index.md](docs/image-index.md)).** The gateway's index of training image names: every name verifiers asks for, backed by an image or a base already in the chunk store.

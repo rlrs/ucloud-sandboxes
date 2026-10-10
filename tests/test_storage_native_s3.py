@@ -216,3 +216,27 @@ class StorageNativeS3Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Boto3ClientTimeoutTests(unittest.TestCase):
+    def test_heads_use_short_timeouts_and_transfers_keep_long_ones(self):
+        from unittest.mock import MagicMock
+
+        from ucloud_sandboxes.storage_native_s3 import (
+            HEAD_CONNECT_TIMEOUT,
+            HEAD_READ_TIMEOUT,
+            Boto3S3ObjectClient,
+        )
+
+        client = Boto3S3ObjectClient(
+            endpoint="https://hel1.your-objectstorage.com",
+            bucket="chunks",
+            region="hel1",
+            credentials={"access_key_id": "AKIDTEST", "secret_access_key": "secret"},
+        )
+        head = client._head_client.meta.config
+        self.assertEqual((head.connect_timeout, head.read_timeout), (HEAD_CONNECT_TIMEOUT, HEAD_READ_TIMEOUT))
+        self.assertEqual(client._client.meta.config.read_timeout, 120)  # Uploads may wait on S3.
+        client._head_client.head_object = MagicMock(return_value={"ContentLength": 7})
+        client._client.head_object = MagicMock(side_effect=AssertionError("stat used the transfer client"))
+        self.assertEqual(client.stat("k").size, 7)

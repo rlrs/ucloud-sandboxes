@@ -7,10 +7,15 @@ import time
 import unittest
 from urllib.parse import parse_qs, urlsplit
 
+from types import SimpleNamespace
+from unittest.mock import patch
+
 from tests.chunk_store_support import IndexFixture, ObjectServer
+from ucloud_sandboxes import chunk_index
 from ucloud_sandboxes.chunk_index import (BUSY, CHUNK_RESERVE_SECONDS, KNOWN, RESERVED, ChunkIndexClient,
-                                          MissingChunks, S3Presigner, http_range, redact, retried)
-from ucloud_sandboxes.chunk_store import RAW, PackWriter, chunk_map_key, pack_key
+                                          ChunkIndexService, ChunkObjectStore, MissingChunks, S3Presigner,
+                                          http_range, redact, retried)
+from ucloud_sandboxes.chunk_store import RAW, PackWriter, chunk_map_key, encode_tail, pack_key
 from ucloud_sandboxes.managed_registry import RegistryRequestError
 
 TEST_TIER = "contract"
@@ -69,6 +74,102 @@ class RetryTests(unittest.TestCase):
         with self.assertRaises(OSError):
             retried(lambda: (_ for _ in ()).throw(OSError("down")), sleep=waits.append)()
         self.assertEqual(waits[2:], [0.5, 1.0, 2.0])
+
+
+class ObjectStoreReadTests(unittest.TestCase):
+    """Object-store reads against Hetzner's tail: stalls, spurious 405s, and
+    metadata named by its digest, which never needs reading twice."""
+
+    def setUp(self):
+        self.objects = ObjectServer()
+        self.addCleanup(self.objects.close)
+        self.store = ChunkObjectStore(self.objects, self.objects.presigner, "test/chunks")
+
+    def meta(self, suffix, payload):
+        key = f"test/chunks/meta/{hashlib.sha256(payload + suffix.encode()).hexdigest()}{suffix}"
+        self.objects.objects[key] = payload
+        return key
+
+    def test_a_stalled_read_is_abandoned_and_retried_at_once(self):
+        key = self.meta(".tail", b"tail" * 100)
+        stalled = []
+        self.objects.fault = lambda *_: None if stalled else stalled.append(1) or ("stall", 3)
+        started = time.monotonic()
+        with patch.object(chunk_index, "STALL_SECONDS", 0.3):
+            self.assertEqual(self.store.get(key, 1 << 20), b"tail" * 100)
+        self.assertLess(time.monotonic() - started, 2.5)  # 0.3 s stall + 0.5 s backoff, not 3 s.
+        self.assertEqual(len(self.objects.gets(".tail")), 2)
+
+    def test_a_spurious_405_is_retried(self):
+        key = self.meta(".tail", b"x" * 10)
+        answered = []
+        self.objects.fault = lambda *_: None if answered else answered.append(1) or ("status", 405)
+        with patch("time.sleep"):
+            self.assertEqual(self.store.get(key, 100), b"x" * 10)
+
+    def test_bootstraps_and_chunk_maps_are_read_once_and_existence_always_asked(self):
+        boot, other = self.meta(".boot.zst", b"boot" * 50), self.meta(".tail", b"tail" * 50)
+        for _ in range(3):
+            self.assertEqual(self.store.get(boot, 1 << 20), b"boot" * 50)
+            self.store.get(other, 1 << 20)
+        self.assertEqual(len(self.objects.gets(".boot.zst")), 1)
+        self.assertEqual(len(self.objects.gets(".tail")), 3)  # Only digest-named metadata is cached.
+        written = "test/chunks/meta/" + hashlib.sha256(b"map").hexdigest() + ".map"
+        self.assertTrue(self.store.put_bytes(written, b"map"))
+        self.assertEqual(self.store.get(written, 100), b"map")
+        self.assertEqual(self.objects.gets(".map"), [])  # Written here, so never read back.
+        del self.objects.objects[written]
+        self.assertIsNone(self.store.size(written))  # Durability is never answered from the cache.
+
+
+class IndexTailCacheTests(unittest.TestCase):
+    """Registration reads a blob's tail table and checks its layout once:
+    every task image on a base repeats the base's blobs."""
+
+    def test_base_blobs_are_read_once_across_registrations(self):
+        blobs = [hashlib.sha256(name).hexdigest() for name in (b"base-1", b"base-2", b"task")]
+        tables = {blob: encode_tail([(0, 10, hashlib.sha256(blob.encode()).digest(), False)], b"")
+                  for blob in blobs}
+        reads, stats, puts = [], [], []
+
+        class Store:
+            prefix = "test/chunks"
+
+            def get(self, key, limit):
+                return b"boot"
+
+            def size(self, key):
+                stats.append(key.rsplit("/", 1)[-1])
+                blob = key.rsplit("/", 1)[-1].split(".")[0]
+                return len(tables[blob]) if key.endswith(".tail") else None
+
+            def url(self, key):
+                return key
+
+            def reader(self, url, start, length):
+                reads.append(url)
+                return tables[url.rsplit("/", 1)[-1].split(".")[0]][start:start + length]
+
+            def put_bytes(self, key, payload):
+                puts.append(key)
+
+        index = SimpleNamespace(register=lambda *args, **kwargs: {"epoch": 1})
+        service = ChunkIndexService(index, Store(), store_url="http://store")
+        service.chunk_map = lambda *args: SimpleNamespace(ids=[])
+        service.locate = lambda ids, **kwargs: SimpleNamespace(encode=lambda: b"layout")
+        service.locator = lambda component: b"locator"
+        devices = {"first": blobs[:2], "second": blobs}
+        for name, members in devices.items():
+            bootstrap = SimpleNamespace(devices=[(blob,) for blob in members])
+            with patch.object(chunk_index, "zstd_decompress", lambda data, size: b"boot"), \
+                    patch.object(chunk_index, "zstd_content_size", lambda data, limit: 4), \
+                    patch.object(chunk_index, "content_digest", lambda data: "sha256:" + "0" * 64), \
+                    patch.object(chunk_index, "parse_bootstrap", lambda data: bootstrap):
+                service.register({"component": "sha256:" + "1" * 64, "bootstrap": "sha256:" + "0" * 64,
+                                  "chunk_map": {"digest": "sha256:" + "2" * 64, "size": 1}})
+        self.assertEqual(len(reads), 2 * len(blobs))  # Header and table, once per blob.
+        self.assertEqual(len(puts), len(blobs))  # One layout per blob, written once.
+        self.assertEqual(len(stats), 2 * len(blobs))  # A tail's and a layout's existence, once each.
 
 
 class IndexTests(unittest.TestCase):

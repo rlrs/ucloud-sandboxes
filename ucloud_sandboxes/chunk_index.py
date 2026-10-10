@@ -37,6 +37,20 @@ RESERVED, KNOWN, BUSY = 0, 1, 2  # reserve() states, one byte per id on the wire
 MAX_TAIL_BYTES = 256 * 1024 ** 2  # A blob's tail object (chunk_store.encode_tail).
 REGISTER_TIMEOUT = 600.0
 _MAX_JSON = 1024 ** 2
+# About 1 Hetzner S3 request in 100 stalls for 20 s or more, a few for minutes
+# (2026-10-10). Object-store reads abandon a response that has sent nothing for
+# STALL_SECONDS and retry at once: a stall costs seconds, not the 30 s deadline.
+STALL_SECONDS = 5.0
+STORE_READ_ATTEMPTS = 6
+SLOW_S3_SECONDS = 2.0  # Object-store calls slower than this are logged.
+# Retried besides 5xx: Hetzner occasionally answers a valid presigned GET 405.
+RETRYABLE_STATUSES = frozenset({405, 408, 429})
+# Bootstraps and chunk maps are named by their digest, so they never change:
+# each process keeps the recently read and written ones (parents of sandbox
+# builds are read for every build on them).
+META_CACHE_BYTES = 256 * 1024 ** 2
+# The index keeps blobs' tail tables (chunk ids, 32 bytes each) the same way.
+TAIL_CACHE_IDS = 2_000_000
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS chunks (id BLOB PRIMARY KEY, pack INTEGER, off INTEGER, clen INTEGER,
     ulen INTEGER, flags INTEGER, condemned INTEGER DEFAULT 0) WITHOUT ROWID;
@@ -110,17 +124,20 @@ def _pool():
         return _POOL
 
 
-def http_request(method, url, *, headers=None, body=None, timeout=30.0, max_bytes):
+def http_request(method, url, *, headers=None, body=None, timeout=30.0, max_bytes, stall=None):
     """(status, headers, body) of one bounded request; HTTP errors raise.
 
+    ``timeout`` bounds the whole request; ``stall``, when given, bounds each
+    wait for the next bytes (the response's start included).
     Errors are RegistryRequestError (status) or OSError (transport), the
     classes VerifiedEnvironmentCache already retries or refuses.
     """
     import urllib3
     deadline = time.monotonic() + timeout
+    read = timeout if stall is None else min(timeout, stall)
     try:
         response = _pool().request(method, url, headers=headers or {}, body=body, preload_content=False,
-                                   timeout=urllib3.Timeout(connect=min(timeout, 10.0), read=timeout))
+                                   timeout=urllib3.Timeout(connect=min(timeout, 10.0), read=read))
         chunks, size, complete = [], 0, False
         try:
             while size <= max_bytes:
@@ -145,13 +162,13 @@ def http_request(method, url, *, headers=None, body=None, timeout=30.0, max_byte
     return response.status, response.headers, payload
 
 
-def http_range(url, start, length, *, timeout=30.0, headers=None):
+def http_range(url, start, length, *, timeout=30.0, headers=None, stall=None):
     """Exactly ``length`` bytes at ``start``, or the last ``length`` with ``start=None``."""
     if length <= 0 or (start is not None and start < 0):
         raise ValueError("invalid chunk store range")
     spec = f"bytes=-{length}" if start is None else f"bytes={start}-{start + length - 1}"
     status, headers, payload = http_request("GET", url, headers={**(headers or {}), "Range": spec}, timeout=timeout,
-                                            max_bytes=length)
+                                            max_bytes=length, stall=stall)
     content_range = str(headers.get("Content-Range") or "")
     if start is None:
         if status not in (200, 206):  # 200 or "bytes 0-": the whole, smaller object.
@@ -163,19 +180,64 @@ def http_range(url, start, length, *, timeout=30.0, headers=None):
 
 
 def retried(read, attempts=4, delay=0.5, sleep=time.sleep):
-    """``read`` again after a transport error or an object-store 5xx, backing
-    off 0.5, 1, 2 s: boto3 retries the index's other S3 calls, but presigned
-    reads did not, and one S3 read timeout failed a whole conversion's commit
-    (M1 gate run 4)."""
+    """``read`` again after a transport error, an object-store 5xx or a
+    RETRYABLE_STATUSES answer, backing off 0.5, 1, 2 s: boto3 retries the
+    index's other S3 calls, but presigned reads did not, and one S3 read
+    timeout failed a whole conversion's commit (M1 gate run 4)."""
     def call(*args, **kwargs):
         for attempt in range(attempts):
             try:
                 return read(*args, **kwargs)
             except (OSError, RegistryRequestError) as exc:
-                if attempt == attempts - 1 or (isinstance(exc, RegistryRequestError) and exc.status_code < 500):
+                final = isinstance(exc, RegistryRequestError) and not (
+                    exc.status_code >= 500 or exc.status_code in RETRYABLE_STATUSES)
+                if attempt == attempts - 1 or final:
                     raise
                 sleep(delay * 2 ** attempt)
     return call
+
+
+class _ByteCache:
+    """A thread-safe LRU of immutable values, bounded by their total weight
+    (a payload's length unless given)."""
+
+    def __init__(self, limit):
+        self.limit, self.size, self._items, self._lock = limit, 0, OrderedDict(), threading.Lock()
+
+    def get(self, key):
+        with self._lock:
+            found = self._items.get(key)
+            if found is None:
+                return None
+            self._items.move_to_end(key)
+            return found[0]
+
+    def put(self, key, value, weight=None):
+        weight = len(value) if weight is None else weight
+        if weight > self.limit:
+            return
+        with self._lock:
+            if key in self._items:
+                self._items.move_to_end(key)
+                return
+            self._items[key] = (value, weight)
+            self.size += weight
+            while self.size > self.limit:
+                _, (_, evicted) = self._items.popitem(last=False)
+                self.size -= evicted
+
+
+_META_CACHE = _ByteCache(META_CACHE_BYTES)
+
+
+def _timed(operation, key, call):
+    started = time.monotonic()
+    try:
+        return call()
+    finally:
+        elapsed = time.monotonic() - started
+        if elapsed > SLOW_S3_SECONDS:
+            _LOG.warning("slow object-store %s %s: %.1f s", operation, key.rsplit("/", 1)[-1], elapsed)
 
 
 # --- Object store: S3 writes with credentials, reads through presigned URLs ---
@@ -183,16 +245,24 @@ def retried(read, attempts=4, delay=0.5, sleep=time.sleep):
 class ChunkObjectStore:
     """Packs and metadata under ``prefix``; ``client`` is a Boto3S3ObjectClient."""
 
-    def __init__(self, client, presigner, prefix, *, url_seconds=86400, reader=http_range, getter=None):
+    def __init__(self, client, presigner, prefix, *, url_seconds=86400, reader=None, getter=None):
         self.client, self.presigner, self.prefix = client, presigner, prefix.strip("/")
-        self.url_seconds, self.reader = url_seconds, retried(reader)
-        self.getter = retried(getter or (lambda url, limit: http_request("GET", url, max_bytes=limit)[2]))
+        self.url_seconds = url_seconds
+        reader = reader or (lambda url, start, length: http_range(url, start, length, stall=STALL_SECONDS))
+        self.reader = retried(reader, attempts=STORE_READ_ATTEMPTS)
+        self.getter = retried(getter or (lambda url, limit: http_request(
+            "GET", url, max_bytes=limit, stall=STALL_SECONDS)[2]), attempts=STORE_READ_ATTEMPTS)
 
     def url(self, key):
         return self.presigner.url(key, expires=self.url_seconds)
 
+    def _immutable(self, key):
+        """A bootstrap or chunk map: named by its digest, never rewritten."""
+        return key.startswith(self.prefix + "/meta/") and key.endswith((".boot.zst", ".map"))
+
     def size(self, key):
-        found = self.client.stat(key)
+        # Always the object store's answer: callers rely on it for durability.
+        found = _timed("stat", key, lambda: self.client.stat(key))
         return None if found is None else found.size
 
     def put_file(self, key, path, size):
@@ -204,12 +274,23 @@ class ChunkObjectStore:
 
     def put_bytes(self, key, payload):
         if self.size(key) == len(payload):
-            return False
-        self.client.put_bytes(key, payload, sha256=key.rsplit("/", 1)[-1].split(".", 1)[0])
-        return True
+            written = False
+        else:
+            _timed("put", key, lambda: self.client.put_bytes(
+                key, payload, sha256=key.rsplit("/", 1)[-1].split(".", 1)[0]))
+            written = True
+        if self._immutable(key):
+            _META_CACHE.put(key, bytes(payload))
+        return written
 
     def get(self, key, max_bytes):
-        return self.getter(self.url(key), max_bytes)
+        immutable = self._immutable(key)
+        if immutable and (cached := _META_CACHE.get(key)) is not None and len(cached) <= max_bytes:
+            return cached
+        payload = _timed("get", key, lambda: self.getter(self.url(key), max_bytes))
+        if immutable:
+            _META_CACHE.put(key, payload)
+        return payload
 
     def pack_entries(self, digest, size):
         """Footer of a durable pack: one suffix GET, two for large footers."""
@@ -446,6 +527,11 @@ class ChunkIndexService:
         self.index, self.store, self.store_url = index, store, store_url and store_url.rstrip("/")
         self._maps, self._locators, self._guard = OrderedDict(), OrderedDict(), threading.Lock()
         self._locator_cache = locator_cache
+        # By blob id, which names a blob's content: a tail table never changes,
+        # and a written layout stays written. Every task image on a base
+        # repeats the base's blobs, so registration reads only its own.
+        self._tails = _ByteCache(TAIL_CACHE_IDS * 32)
+        self._layouts = _ByteCache(1 << 16)
 
     def _cached(self, cache, key, value=None):
         with self._guard:
@@ -496,9 +582,12 @@ class ChunkIndexService:
             # Runtime reads never query the index (gate run 3: 20 cold attaches
             # computing locators at once took 44 s and stalled every worker).
             for blob_id, ids in tails:
+                if self._layouts.get(blob_id) is not None:
+                    continue
                 key = blob_layout_key(self.store.prefix, blob_id)
                 if self.store.size(key) is None:
                     self.store.put_bytes(key, self.locate(ids, url=self._worker_url).encode())
+                self._layouts.put(blob_id, True, weight=1)
             self.locator(request["component"])
         return result
 
@@ -515,6 +604,10 @@ class ChunkIndexService:
             raise ValueError("bootstrap identity mismatch")
         tails = []
         for device in parse_bootstrap(bootstrap).devices:
+            ids = self._tails.get(device[0])
+            if ids is not None:
+                tails.append((device[0], ids))
+                continue
             key = tail_key(self.store.prefix, device[0])
             size = self.store.size(key)
             if size is not None:  # The table plus nydus's own blob metadata.
@@ -525,7 +618,9 @@ class ChunkIndexService:
                 url = self.store.url(key)
                 count = TAIL_HEADER.unpack(self.store.reader(url, 0, min(size, TAIL_HEADER.size)))[1]
                 table = self.store.reader(url, 0, min(size, TAIL_HEADER.size + count * TAIL_ENTRY.size))
-                tails.append((device[0], [entry[2] for entry in decode_tail_table(table)[0]]))
+                ids = [entry[2] for entry in decode_tail_table(table)[0]]
+                self._tails.put(device[0], ids, weight=32 * max(1, len(ids)))
+                tails.append((device[0], ids))
         return tails
 
     def _worker_url(self, key):

@@ -75,6 +75,10 @@ class S3ObjectClient(Protocol):
     def list_objects(self, prefix: str) -> tuple[tuple[str, S3ObjectStat], ...]: ...
 
 
+HEAD_CONNECT_TIMEOUT = 5
+HEAD_READ_TIMEOUT = 10
+
+
 class Boto3S3ObjectClient:
     """Small boto3 adapter with server-side multipart copy and bounded retries."""
 
@@ -107,43 +111,54 @@ class Boto3S3ObjectClient:
             max_concurrency=4,
             use_threads=True,
         )
-        self._client = boto3.client(
-            "s3",
-            endpoint_url=endpoint,
-            region_name=region,
-            aws_access_key_id=resolved_credentials["access_key_id"],
-            aws_secret_access_key=resolved_credentials["secret_access_key"],
-            aws_session_token=resolved_credentials.get("security_token") or None,
-            config=Config(
-                retries={"max_attempts": 8, "mode": "adaptive"},
-                connect_timeout=10,
-                read_timeout=120,
-                max_pool_connections=32,
-                signature_version="s3v4",
-                # Hetzner's documented boto3 configuration uses virtual-host
-                # addressing and unsigned payloads. SigV4 still authenticates
-                # every request; optional modern SDK checksums are only sent
-                # when the operation requires them.
-                request_checksum_calculation="when_required",
-                response_checksum_validation="when_required",
-                s3={
-                    "addressing_style": "path" if force_path_style else "virtual",
-                    "payload_signing_enabled": False,
-                },
-            ),
+        def client(*, connect_timeout, read_timeout):
+            made = boto3.client(
+                "s3",
+                endpoint_url=endpoint,
+                region_name=region,
+                aws_access_key_id=resolved_credentials["access_key_id"],
+                aws_secret_access_key=resolved_credentials["secret_access_key"],
+                aws_session_token=resolved_credentials.get("security_token") or None,
+                config=Config(
+                    retries={"max_attempts": 8, "mode": "adaptive"},
+                    connect_timeout=connect_timeout,
+                    read_timeout=read_timeout,
+                    max_pool_connections=32,
+                    signature_version="s3v4",
+                    # Hetzner's documented boto3 configuration uses virtual-host
+                    # addressing and unsigned payloads. SigV4 still authenticates
+                    # every request; optional modern SDK checksums are only sent
+                    # when the operation requires them.
+                    request_checksum_calculation="when_required",
+                    response_checksum_validation="when_required",
+                    s3={
+                        "addressing_style": "path" if force_path_style else "virtual",
+                        "payload_signing_enabled": False,
+                    },
+                ),
+            )
+            if endpoint.endswith(".your-objectstorage.com"):
+                # New Hetzner buckets/keys can briefly be inconsistent across S3
+                # gateway instances. Botocore does not normally retry these 4xx
+                # responses, so make a bounded Hetzner-only exception.
+                made.meta.events.register_first(
+                    "needs-retry.s3", _retry_transient_hetzner_gateway
+                )
+                # Some Hetzner gateways reject boto3's 100-continue request path.
+                # Expect is not a signed header, so removal preserves SigV4.
+                made.meta.events.register_first(
+                    "before-send.s3.*", _strip_expect_header
+                )
+            return made
+
+        self._client = client(connect_timeout=10, read_timeout=120)
+        # A HEAD has no body: one whose response has not started within
+        # HEAD_READ_TIMEOUT is stalled and is retried at once rather than
+        # waited on (about 1 in 100 Hetzner requests stalls for 20 s or more,
+        # 2026-10-10).
+        self._head_client = client(
+            connect_timeout=HEAD_CONNECT_TIMEOUT, read_timeout=HEAD_READ_TIMEOUT
         )
-        if endpoint.endswith(".your-objectstorage.com"):
-            # New Hetzner buckets/keys can briefly be inconsistent across S3
-            # gateway instances. Botocore does not normally retry these 4xx
-            # responses, so make a bounded Hetzner-only exception.
-            self._client.meta.events.register_first(
-                "needs-retry.s3", _retry_transient_hetzner_gateway
-            )
-            # Some Hetzner gateways reject boto3's 100-continue request path.
-            # Expect is not a signed header, so removal preserves SigV4.
-            self._client.meta.events.register_first(
-                "before-send.s3.*", _strip_expect_header
-            )
 
     def create_multipart_upload(self, key: str) -> str:
         response = self._client.create_multipart_upload(
@@ -192,7 +207,7 @@ class Boto3S3ObjectClient:
 
     def stat(self, key: str) -> S3ObjectStat | None:
         try:
-            response = self._client.head_object(Bucket=self.bucket, Key=key)
+            response = self._head_client.head_object(Bucket=self.bucket, Key=key)
         except self._client_error as exc:
             status = int(
                 exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0)

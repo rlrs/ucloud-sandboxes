@@ -95,6 +95,21 @@ class ConverterTests(unittest.TestCase):
         again = store.converter.extend(parent, tar, diff_id, image_config=config, repository="ucloud-managed/x")
         self.assertEqual(again["root"], result["root"])
 
+    def test_a_layer_without_file_data_extends_a_root(self):
+        # Directories and deletions only: no blob, so nydus-image merge writes its
+        # 1 MiB default chunk size; the root keeps the parent's 256 KiB.
+        store = self.store()
+        parent = store.converter.convert(REPOSITORY, "a")["root"]
+        path = Path(store.root) / "metadata-only.tar"
+        blob, diff_id = layer([("opt", "dir"), ("opt/app", "dir"), ("etc/.wh.hosts", b"")], compress=False)
+        path.write_bytes(blob)
+        config = {"Entrypoint": [], "Cmd": ["bash"], "Env": [], "WorkingDir": "/", "User": ""}
+        result = store.converter.extend(parent, path, diff_id, image_config=config, repository="ucloud-managed/x")
+        component = store.registry.load(load_environment(store.registry, result["root"]).environment.base)
+        bootstrap = self.bootstrap(store, component)
+        self.assertEqual(chunk_store.bootstrap_chunk_size(bootstrap), chunk_store.CHUNK_BYTES)
+        self.assertEqual(component.source_layers[-1], diff_id)
+
     def test_only_whole_image_chunk_store_roots_are_extended(self):
         store = ChunkStoreFixture(self, signer=self.signer, layout="layer")
         sample_images(store.client)

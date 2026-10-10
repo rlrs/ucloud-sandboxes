@@ -169,6 +169,26 @@ def parse_bootstrap(data):
     return RafsBootstrap(len(data), tuple(devices), tuple(chunks))
 
 
+_EROFS_SB_CHKSUM = 0x1  # feature_compat: the superblock carries a crc32c
+
+
+def bootstrap_chunk_size(data):
+    """The chunk size a RAFS v6 superblock names."""
+    if len(data) < 1024 + 128 + 40:
+        raise ValueError("invalid RAFS bootstrap size")
+    return struct.unpack_from("<I", data, 1024 + 128 + 20)[0]
+
+
+def with_chunk_size(data, chunk_size):
+    """``data`` with its superblock naming ``chunk_size`` (no checksum to keep)."""
+    magic, = struct.unpack_from("<I", data, 1024) if len(data) >= 1024 + 128 + 40 else (0,)
+    if magic != 0xE0F5E1E2 or struct.unpack_from("<I", data, 1024 + 8)[0] & _EROFS_SB_CHKSUM:
+        raise ValueError("cannot rewrite this RAFS superblock")
+    out = bytearray(data)
+    struct.pack_into("<I", out, 1024 + 128 + 20, chunk_size)
+    return bytes(out)
+
+
 def _bootstrap_tables(data):
     size = len(data)
     if not 1024 + 128 + 40 <= size <= MAX_BOOTSTRAP_BYTES or size % BLOCK:

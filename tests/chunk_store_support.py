@@ -344,7 +344,13 @@ def _merge(arguments):
         devices.append((blob_id, blocks, mapped))
         cursor = mapped + blocks
         chunks += [(chunk[0], position, *chunk[2:]) for chunk in layer_chunks]
-    Path(options["-B"]).write_bytes(write_bootstrap(devices, chunks))
+    merged = write_bootstrap(devices, chunks)
+    if not any(source.devices for source in sources):
+        # As nydus-image v2.4.5: with no blob among the sources, merge writes its
+        # 1 MiB default chunk size (measured on the gateway, 2026-10-10).
+        merged = bytearray(merged)
+        struct.pack_into("<I", merged, 1024 + 128 + 20, 0x100000)
+    Path(options["-B"]).write_bytes(bytes(merged))
     Path(options["-J"]).write_text(json.dumps({"blobs": [blob_id for blob_id, _, _ in layers]}))
 
 

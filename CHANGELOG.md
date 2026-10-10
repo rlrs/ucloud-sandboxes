@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.68 - 2026-10-10 (gateway; store node's chunk index; builders)
+
+- **Chunk-store calls outlast Hetzner's outage windows.** Besides single stalls, Hetzner S3 has windows where every request fails for 45-130 s (2026-10-10, even with 1 worker and 8 builders): 0.9.67's attempt-bounded retries ran out inside them and failed the build (31 of the first 90 SWE-smith imports). Every object-store read, HEAD and put (idempotent: content-addressed) now retries transient failures (transport errors, 5xx, 405, 408, 429, and boto3's spent retries) for up to 5 minutes (`STORE_RETRY_SECONDS`), backing off at most 15 s. Builders wait up to 10 minutes for the index's commit, as for registration, so the index's own retries finish first.
+- **A sandbox build whose layer has no file data no longer fails.** nydus-image v2.4.5's merge writes its 1 MiB default chunk size when no merged layer has a blob, a bootstrap nydus's own `check` refuses ("unsupported RAFS v6 bootstrap" here). The stacked bootstrap gets its parent's chunk size back, which every chunk in it has. Five TBLite eval images (directories and modes only) failed this way.
+
 ## 0.9.67 - 2026-10-10 (gateway; store node's chunk index; builders)
 
 - **Publishing to the chunk store no longer waits out stalled S3 requests.** About 1 Hetzner S3 request in 100 stalls for 20 s or more, a few for minutes (2026-10-10 probe of 200 metadata reads: p50 0.15 s, p99 124 s). Sandbox builds spent 6 s of a median 86 s running their steps and the rest publishing or waiting for one of the 3 publishing slots held by a stalled build.

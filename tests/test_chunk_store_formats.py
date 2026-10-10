@@ -1,6 +1,7 @@
 """Chunk store formats: round trips, bounds and tamper detection (no I/O)."""
 from dataclasses import replace
 import hashlib
+import struct
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -233,3 +234,20 @@ class ChunkStoreConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SuperblockTests(unittest.TestCase):
+    def test_the_chunk_size_is_read_and_rewritten_only_without_a_checksum(self):
+        from tests.chunk_store_support import write_bootstrap
+        from ucloud_sandboxes.chunk_store import CHUNK_BYTES, bootstrap_chunk_size, parse_bootstrap, with_chunk_size
+
+        bootstrap = bytearray(write_bootstrap([], []))
+        struct.pack_into("<I", bootstrap, 1024 + 128 + 20, 0x100000)
+        with self.assertRaises(ValueError):
+            parse_bootstrap(bytes(bootstrap))  # nydus refuses this header too
+        fixed = with_chunk_size(bytes(bootstrap), CHUNK_BYTES)
+        self.assertEqual(bootstrap_chunk_size(fixed), CHUNK_BYTES)
+        parse_bootstrap(fixed)
+        struct.pack_into("<I", bootstrap, 1024 + 8, 1)  # EROFS_FEATURE_COMPAT_SB_CHKSUM
+        with self.assertRaises(ValueError):
+            with_chunk_size(bytes(bootstrap), CHUNK_BYTES)

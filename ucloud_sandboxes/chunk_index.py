@@ -41,7 +41,12 @@ _MAX_JSON = 1024 ** 2
 # (2026-10-10). Object-store reads abandon a response that has sent nothing for
 # STALL_SECONDS and retry at once: a stall costs seconds, not the 30 s deadline.
 STALL_SECONDS = 5.0
-STORE_READ_ATTEMPTS = 6
+# Hetzner also has outage windows where every request fails for 45-130 s
+# (2026-10-10): object-store calls retry transient failures for this long, so
+# a build or registration outlasts a window instead of failing in it. Each
+# call is idempotent (reads, HEADs, content-addressed puts).
+STORE_RETRY_SECONDS = 300.0
+MAX_BACKOFF_SECONDS = 15.0
 SLOW_S3_SECONDS = 2.0  # Object-store calls slower than this are logged.
 # Retried besides 5xx: Hetzner occasionally answers a valid presigned GET 405.
 RETRYABLE_STATUSES = frozenset({405, 408, 429})
@@ -179,21 +184,39 @@ def http_range(url, start, length, *, timeout=30.0, headers=None, stall=None):
     return payload
 
 
-def retried(read, attempts=4, delay=0.5, sleep=time.sleep):
-    """``read`` again after a transport error, an object-store 5xx or a
-    RETRYABLE_STATUSES answer, backing off 0.5, 1, 2 s: boto3 retries the
-    index's other S3 calls, but presigned reads did not, and one S3 read
-    timeout failed a whole conversion's commit (M1 gate run 4)."""
+def transient(exc):
+    """A transport failure, an object-store 5xx or a RETRYABLE_STATUSES answer,
+    from presigned requests or boto3 (whose own retries are spent by then)."""
+    if isinstance(exc, RegistryRequestError):
+        return exc.status_code >= 500 or exc.status_code in RETRYABLE_STATUSES
+    if isinstance(exc, OSError):
+        return True
+    if type(exc).__module__.split(".")[0] in ("botocore", "urllib3"):
+        response = getattr(exc, "response", None)
+        status = response.get("ResponseMetadata", {}).get("HTTPStatusCode") if isinstance(response, dict) else None
+        return status is None or status >= 500 or status in RETRYABLE_STATUSES
+    return False
+
+
+def retried(read, attempts=4, delay=0.5, sleep=time.sleep, *, deadline=None, clock=time.monotonic):
+    """``read`` again after a ``transient`` failure, backing off 0.5, 1, 2 s ...
+    (at most MAX_BACKOFF_SECONDS): ``attempts`` times, or with ``deadline``
+    for as long as the next try starts within that many seconds. Presigned
+    reads once failed a whole conversion's commit on one S3 read timeout (M1
+    gate run 4)."""
     def call(*args, **kwargs):
-        for attempt in range(attempts):
+        started, attempt = clock(), 0
+        while True:
             try:
                 return read(*args, **kwargs)
-            except (OSError, RegistryRequestError) as exc:
-                final = isinstance(exc, RegistryRequestError) and not (
-                    exc.status_code >= 500 or exc.status_code in RETRYABLE_STATUSES)
-                if attempt == attempts - 1 or final:
+            except Exception as exc:
+                if not transient(exc):
                     raise
-                sleep(delay * 2 ** attempt)
+                wait = min(delay * 2 ** attempt, MAX_BACKOFF_SECONDS)
+                attempt += 1
+                if attempt >= attempts if deadline is None else clock() - started + wait > deadline:
+                    raise
+                sleep(wait)
     return call
 
 
@@ -249,9 +272,9 @@ class ChunkObjectStore:
         self.client, self.presigner, self.prefix = client, presigner, prefix.strip("/")
         self.url_seconds = url_seconds
         reader = reader or (lambda url, start, length: http_range(url, start, length, stall=STALL_SECONDS))
-        self.reader = retried(reader, attempts=STORE_READ_ATTEMPTS)
+        self.reader = retried(reader, deadline=STORE_RETRY_SECONDS)
         self.getter = retried(getter or (lambda url, limit: http_request(
-            "GET", url, max_bytes=limit, stall=STALL_SECONDS)[2]), attempts=STORE_READ_ATTEMPTS)
+            "GET", url, max_bytes=limit, stall=STALL_SECONDS)[2]), deadline=STORE_RETRY_SECONDS)
 
     def url(self, key):
         return self.presigner.url(key, expires=self.url_seconds)
@@ -262,22 +285,23 @@ class ChunkObjectStore:
 
     def size(self, key):
         # Always the object store's answer: callers rely on it for durability.
-        found = _timed("stat", key, lambda: self.client.stat(key))
+        found = _timed("stat", key, retried(lambda: self.client.stat(key), deadline=STORE_RETRY_SECONDS))
         return None if found is None else found.size
 
     def put_file(self, key, path, size):
         """Idempotent: content-addressed keys are never overwritten."""
         if self.size(key) == size:
             return False
-        self.client.put_file(key, path, sha256=key.rsplit("/", 1)[-1].split(".", 1)[0])
+        _timed("put", key, retried(lambda: self.client.put_file(
+            key, path, sha256=key.rsplit("/", 1)[-1].split(".", 1)[0]), deadline=STORE_RETRY_SECONDS))
         return True
 
     def put_bytes(self, key, payload):
         if self.size(key) == len(payload):
             written = False
         else:
-            _timed("put", key, lambda: self.client.put_bytes(
-                key, payload, sha256=key.rsplit("/", 1)[-1].split(".", 1)[0]))
+            _timed("put", key, retried(lambda: self.client.put_bytes(
+                key, payload, sha256=key.rsplit("/", 1)[-1].split(".", 1)[0]), deadline=STORE_RETRY_SECONDS))
             written = True
         if self._immutable(key):
             _META_CACHE.put(key, bytes(payload))
@@ -813,7 +837,9 @@ class ChunkIndexClient:
         body = {"packs": packs, "layer": layer}
         if supersede:  # Only when needed: an older index refuses the field.
             body["supersede"] = sorted(chunk_id.hex() for chunk_id in supersede)
-        return json.loads(self._call("POST", "/v1/chunks/commit", body))
+        # The index reads the packs' footers from the object store, retrying through
+        # an outage window (STORE_RETRY_SECONDS): wait for it as registration does.
+        return json.loads(self._call("POST", "/v1/chunks/commit", body, timeout=REGISTER_TIMEOUT))
 
     def register(self, component, bootstrap, chunk_map):
         # The index reads each blob's tail table and writes layouts and the

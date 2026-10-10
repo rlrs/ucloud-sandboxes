@@ -30,7 +30,7 @@ from tempfile import TemporaryDirectory
 import time
 
 from .chunk_index import BUSY, KNOWN, RESERVED
-from .chunk_store import (BLOCK, MAX_BOOTSTRAP_BYTES, Locator, PackWriter, bootstrap_key, chunk_map_from_bootstrap,
+from .chunk_store import (bootstrap_chunk_size, with_chunk_size, BLOCK, MAX_BOOTSTRAP_BYTES, Locator, PackWriter, bootstrap_key, chunk_map_from_bootstrap,
                           blob_layout, chunk_map_key, decode_chunk, encode_tail, pack_key, parse_bootstrap,
                           RAW, ZSTD, store_encoding, tail_key, zstd_compress, zstd_content_size, zstd_decompress)
 from .environment_artifact import (EMPTY_LAYER_DIFF_ID, ENVIRONMENT_ANNOTATION, OCI_IMAGE, RAFS_CONVERTER,
@@ -523,7 +523,13 @@ class RafsConverter:
         subprocess.run([self.nydus_image, "merge", "--parent-bootstrap", str(scratch / "parent.boot"),
                         "--original-blob-ids", result.blob_id, "-B", str(output), "-J", str(scratch / "stacked.json"),
                         str(scratch / "layer.boot")], check=True, capture_output=True, timeout=600)
-        return output.read_bytes()
+        merged = output.read_bytes()
+        if not result.blob_id:
+            # A layer without file data (directories, modes, deletions): nydus-image
+            # merge (v2.4.5) then writes its 1 MiB default chunk size, which nydus
+            # itself refuses. Every chunk is the parent's, so its size is the parent's.
+            merged = with_chunk_size(merged, bootstrap_chunk_size(parent))
+        return merged
 
     def _merge(self, results, scratch):
         paths = []

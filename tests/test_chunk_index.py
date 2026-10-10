@@ -76,6 +76,60 @@ class RetryTests(unittest.TestCase):
         self.assertEqual(waits[2:], [0.5, 1.0, 2.0])
 
 
+class DeadlineRetryTests(unittest.TestCase):
+    """Hetzner's outage windows (every request failing for 45-130 s) are outlasted;
+    an answer that is not a fault is never retried."""
+
+    def test_transient_failures_retry_until_the_deadline(self):
+        now, waits = [0.0], []
+
+        def sleep(seconds):
+            waits.append(seconds)
+            now[0] += seconds
+
+        calls = []
+
+        def flaky():
+            calls.append(now[0])
+            if now[0] < 100:
+                raise OSError("read timeout")
+            return "ok"
+        self.assertEqual(retried(flaky, sleep=sleep, deadline=300, clock=lambda: now[0])(), "ok")
+        self.assertLessEqual(max(waits), chunk_index.MAX_BACKOFF_SECONDS)
+        with self.assertRaises(OSError):
+            retried(lambda: (_ for _ in ()).throw(OSError("down")), sleep=sleep, deadline=60,
+                    clock=lambda: now[0])()
+        before = len(waits)
+        with self.assertRaises(RegistryRequestError):
+            retried(lambda: (_ for _ in ()).throw(RegistryRequestError(403, "GET", "u", "")), sleep=sleep,
+                    deadline=300, clock=lambda: now[0])()
+        self.assertEqual(len(waits), before)
+
+    def test_boto_failures_are_classified_by_their_status(self):
+        def boto_error(name, status=None):
+            error = type(name, (Exception,), {"__module__": "botocore.exceptions"})()
+            if status is not None:
+                error.response = {"ResponseMetadata": {"HTTPStatusCode": status}}
+            return error
+        self.assertTrue(chunk_index.transient(boto_error("ReadTimeoutError")))
+        self.assertTrue(chunk_index.transient(boto_error("ClientError", 503)))
+        self.assertTrue(chunk_index.transient(boto_error("ClientError", 429)))
+        self.assertFalse(chunk_index.transient(boto_error("ClientError", 403)))
+        self.assertFalse(chunk_index.transient(ValueError("bad")))
+
+    def test_object_store_heads_retry_through_a_window(self):
+        failures = [OSError("stalled"), OSError("stalled")]
+
+        class Client:
+            def stat(self, key):
+                if failures:
+                    raise failures.pop()
+                return SimpleNamespace(size=5)
+        store = ChunkObjectStore(Client(), None, "p")
+        with patch("time.sleep"):
+            self.assertEqual(store.size("p/meta/x.tail"), 5)
+
+
 class ObjectStoreReadTests(unittest.TestCase):
     """Object-store reads against Hetzner's tail: stalls, spurious 405s, and
     metadata named by its digest, which never needs reading twice."""

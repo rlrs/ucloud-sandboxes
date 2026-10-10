@@ -57,7 +57,10 @@ ucloud-sandboxes image-index export-task-ids allowlists/  # every environment's 
 
 The same views are gateway endpoints, readable with the SDK key: `GET /v1/image-index`,
 `/v1/image-index/names?environment=&state=&after=&limit=`, `/v1/image-index/name?name=` and
-`/v1/image-index/task-ids?environment=`.
+`/v1/image-index/task-ids?environment=`. Clients read them without this package: SDK 0.4.38's
+`image_index_summary`, `image_index_names`, `image_index_name` and `image_index_task_ids`, and
+from verifiers-ucloud 0.3.1 `verifiers-ucloud task-ids DIR` (the same files as
+`export-task-ids`) and `verifiers-ucloud summary`.
 
 ## The trainer's allowlist
 
@@ -72,7 +75,9 @@ names its tasks by on `feat/lumi-ucloud-envs-20260930`:
 | swe-smith | `<language>:<instance_id>` (`py:...`) |
 | the others | `instance_id` |
 
-On that branch, ScaleSWE, R2E-Gym and SWE-Lego do not take a `task_ids_file` yet.
+Every one of the nine tasksets takes a `task_ids_file` since 99262da5 on that branch
+(2026-10-10), which added it to ScaleSWE, R2E-Gym and SWE-Lego; before it, those three
+sampled tasks with no registered name.
 
 Re-export after builds fail for good, so the trainer stops sampling them; a failed name stays
 visible in `list --state failed` with its error.

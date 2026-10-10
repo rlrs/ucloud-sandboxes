@@ -13,7 +13,7 @@ runtime are shared across both providers.
 > **This repository is the server.** Clients never install it. To use sandboxes
 > from verifiers, install
 > [`verifiers-ucloud`](https://github.com/rlrs/verifiers-ucloud) at a tag
-> (`uv add "verifiers-ucloud @ git+https://github.com/rlrs/verifiers-ucloud@v0.3.0"`),
+> (`uv add "verifiers-ucloud @ git+https://github.com/rlrs/verifiers-ucloud@v0.3.1"`),
 > which pins the [SDK](https://github.com/rlrs/ucloud-sandboxes-sdk) release it
 > was tested with. `main` is what production runs; releases are tagged
 > (`v0.9.66`).

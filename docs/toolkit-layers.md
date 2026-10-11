@@ -227,3 +227,14 @@ and gsm8k's verifier prebuilt; `uv_toolkit = "vf-harness"`) and without it:
   took 2 s per rollout until it went into the toolkit. Training's environments will
   have their own; `build.sh` takes them as paths in the verifiers checkout.
 - **Not reached:** the setup p50 under 1 s gate holds at 8 rollouts, not at 512.
+
+## Toolkits in use
+
+- **`vf-agents`** (`runtime/toolkits/vf-agents/build.sh`): the ACP harnesses' assets
+  (Node, Pi, OpenCode) as verifiers installs them under `/var/tmp`, built from the
+  offline harness bundles. verifiers-ucloud's `harness_toolkit` links them into each
+  sandbox instead of unpacking a bundle there (0.5-0.7 GB per sandbox, which outran
+  disk growth on a busy node on 2026-10-11). Published on production 2026-10-11 as
+  `vf-agents:latest` (root `sha256:70688a5e…`); `publish-environment` needs an
+  overlay2 Docker daemon, so on the gateway (containerd image store) it ran through
+  a temporary one.

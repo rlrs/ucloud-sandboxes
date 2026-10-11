@@ -404,6 +404,7 @@ def build_parser() -> argparse.ArgumentParser:
     direct_node_agent.add_argument(
         "--rust-admission", action="store_true",
         help="node admission moves to runtime/noded; for now, say hello on its internal socket "
+             "and read its resident samples instead of sampling "
              "(needs --rust-creates, --rust-execs, --rust-pause-tier)",
     )
     direct_node_agent.add_argument("--job-id")

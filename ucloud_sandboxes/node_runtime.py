@@ -352,11 +352,14 @@ class DirectNodeRuntime:
         *,
         rust_execs: bool = False,
         rust_pause_tier: bool = False,
+        rust_admission: bool = False,
     ) -> None:
         self.service = service
         warden_config = getattr(getattr(service, "warden", None), "config", None)
         if rust_pause_tier and not (rust_execs and getattr(warden_config, "pause_tier", False)):
             raise ValueError("the Rust pause tier needs Rust execs and the pause tier")
+        if rust_admission and not rust_pause_tier:
+            raise ValueError("Rust admission needs the Rust pause tier")
         # --rust-execs: noded runs execs; transitions fence them through
         # flock files and their activity clock (ucloud_sandboxes/exec_fence.py).
         self.exec_fence = None
@@ -373,6 +376,13 @@ class DirectNodeRuntime:
             from .pause_handoff import AGENT_DEMAND_FILE, STATUS_FILE, DemandPublisher, NodedStatus, noded_directory
             self._demand_publisher = DemandPublisher(service, noded_directory(service) / AGENT_DEMAND_FILE)
             self._noded_status = NodedStatus(noded_directory(service) / STATUS_FILE)
+        # --rust-admission, phase 3b so far (docs/admission-port-3c.md, step
+        # 3c.0(a)): noded samples managed sandboxes; every resident reader here
+        # and the growth forecasts read its resident.json instead.
+        self.rust_admission = bool(rust_admission)
+        if rust_admission:
+            from .pause_handoff import RESIDENT_FILE, noded_directory
+            service.use_published_resident_memory(noded_directory(service) / RESIDENT_FILE)
         memory_backing_root = getattr(warden_config, "application_memory_root", None)
         # C1.1: disposable pause scheduling metadata; Warden markers are the
         # truth. With the flag on it replaces WarmParkPolicy's park role.
@@ -609,7 +619,8 @@ class DirectNodeRuntime:
     def _relay_parking_loop(self) -> None:
         next_sample = 0.0
         while not self._background_stop.wait(0.25):
-            if time.monotonic() >= next_sample:
+            # --rust-admission: noded samples; each tick looks for its next pass.
+            if self.rust_admission or time.monotonic() >= next_sample:
                 try:
                     sampler = getattr(self.service, "refresh_resident_memory", None)
                     if sampler is not None:
@@ -665,7 +676,7 @@ class DirectNodeRuntime:
         if not decision.reclaim or not waits or (
                 forecast_only and now - self._paused_forecast_since < 1.0):
             return
-        for key, wait in waits:  # Sampled each second by refresh_resident_memory.
+        for key, wait in waits:  # Sampled each second (refresh_resident_memory or noded).
             sample = self.service.resident_memory_sample(*key)
             wait.resident_bytes = None if sample is None else sample.current_bytes
             wait.swapped_bytes = 0 if sample is None else sample.swap_bytes

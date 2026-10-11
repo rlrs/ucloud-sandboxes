@@ -114,15 +114,18 @@ pub struct PauseInputs {
     pub cgroup_root: PathBuf,
     /// The agent's `pause` block.
     pub settings: serde_json::Map<String, Value>,
+    /// Phase 3b: sample managed sandboxes and publish `resident.json`.
+    pub resident_sampling: bool,
 }
 
 impl PauseRuntime {
     /// Start inside the tokio runtime. Local waits fail closed: without them
     /// the policy still runs and nothing pauses on model calls.
     pub fn start(inputs: PauseInputs) -> PauseRuntime {
-        let PauseInputs { agent, tier, registry, state_root, warden_locks_dir, cgroup_root, settings } = inputs;
+        let PauseInputs { agent, tier, registry, state_root, warden_locks_dir, cgroup_root, settings, resident_sampling } = inputs;
         let idle = settings.get("idle_park_seconds").and_then(Value::as_f64).unwrap_or(0.0);
-        let config = PolicyConfig::new(state_root.clone(), agent.session().to_string(), idle, tier.config());
+        let mut config = PolicyConfig::new(state_root.clone(), agent.session().to_string(), idle, tier.config());
+        config.resident_sampling = resident_sampling;
         let policy = Arc::new(PausePolicy::start(
             config,
             tier.clone(),
@@ -167,7 +170,7 @@ impl PauseRuntime {
                 waits.upgrade().is_some_and(|waits| waits.answered(sandbox_id, generation))
             }));
         }
-        eprintln!("ucloud-noded: pause tier running (local waits {})", if waits.is_some() { "on" } else { "off" });
+        eprintln!("ucloud-noded: pause tier running (local waits {}, managed resident sampling {})", if waits.is_some() { "on" } else { "off" }, if resident_sampling { "on" } else { "off" });
         PauseRuntime { policy: Mutex::new(Some(policy)), waits: Mutex::new(waits) }
     }
 

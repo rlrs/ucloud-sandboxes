@@ -5,7 +5,8 @@
 //!
 //! Two loops:
 //! - **Reclaim** (every 250 ms): re-derive the paused table from the markers
-//!   (markers are the truth), sample paused sandboxes once a second, decide
+//!   (markers are the truth), sample paused sandboxes once a second (and
+//!   managed ones, published to `resident.json`, with `resident_sampling`), decide
 //!   from measured pressure and the agent's demand whether paused waits must
 //!   give memory back, and start reclaims (at most 2, at one node-wide rate)
 //!   and escalations (at most 2) by `relief_plan`. Then write `status.json`.
@@ -34,7 +35,7 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde_json::{Map, Value};
 use tokio::sync::watch;
@@ -61,13 +62,14 @@ pub trait Clock: Send + Sync {
     fn wall(&self) -> f64;
 }
 
-pub struct SystemClock {
-    origin: Instant,
-}
+/// CLOCK_MONOTONIC itself, not an offset from this process's start: the
+/// agent compares `resident.json`'s `sampled_at` with its own
+/// `time.monotonic()`, which is the same clock on Linux.
+pub struct SystemClock;
 
 impl SystemClock {
     pub fn new() -> Self {
-        SystemClock { origin: Instant::now() }
+        SystemClock
     }
 }
 
@@ -79,7 +81,10 @@ impl Default for SystemClock {
 
 impl Clock for SystemClock {
     fn monotonic(&self) -> f64 {
-        self.origin.elapsed().as_secs_f64()
+        let mut now = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+        // SAFETY: a valid clock id and a timespec this call owns.
+        unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut now) };
+        now.tv_sec as f64 + now.tv_nsec as f64 / 1e9
     }
 
     fn wall(&self) -> f64 {
@@ -241,6 +246,10 @@ pub struct PolicyConfig {
     pub memory_backing_root: Option<PathBuf>,
     /// The reclaim tick's period (250 ms).
     pub tick: Duration,
+    /// Phase 3b (`--rust-admission` and the agent's say-so): the 1 Hz sampler
+    /// pass also measures owned, parkable, managed sandboxes, running or
+    /// paused, and publishes every sample to `resident.json` for the agent.
+    pub resident_sampling: bool,
 }
 
 impl PolicyConfig {
@@ -254,6 +263,7 @@ impl PolicyConfig {
             cgroup_root: pause.cgroup_root.clone(),
             memory_backing_root: pause.warden.application_memory_root.clone(),
             tick: Duration::from_millis(250),
+            resident_sampling: false,
         }
     }
 

@@ -274,13 +274,17 @@ impl Fixture {
 
     /// A new engine over the same fakes: a daemon restart.
     fn restart(&self) -> Arc<Engine> {
+        self.restart_with(test_config(&self.dir.0))
+    }
+
+    fn restart_with(&self, config: PolicyConfig) -> Arc<Engine> {
         let (reclaims, results) = (self.reclaims.clone(), self.results.clone());
         let reclaim: PausedReclaim = Arc::new(move |key, target| {
             reclaims.lock().unwrap().push((key.clone(), target));
             let mut results = results.lock().unwrap();
             if results.len() > 1 { results.remove(0) } else { results[0].clone() }
         });
-        Arc::new(Engine::new(test_config(&self.dir.0), Deps {
+        Arc::new(Engine::new(config, Deps {
             mechanism: self.tier.clone(),
             fence: PauseFence::new(self.dir.0.join("locks")),
             inventory: self.registry.clone(),
@@ -345,6 +349,7 @@ fn test_config(root: &Path) -> PolicyConfig {
         cgroup_root: root.join("cgroup"),
         memory_backing_root: None,
         tick: Duration::from_millis(10),
+        resident_sampling: false,
     }
 }
 
@@ -711,7 +716,7 @@ fn the_sampler_pass_measures_paused_owned_incarnations_only() {
     fixture.registry.records.lock().unwrap()[0].sandbox.bundle = bundle;
     fixture.journal("agent");
     let engine = &fixture.engine;
-    engine.sample_paused();
+    engine.sample_residents();
     assert!(engine.sampler.get(&key("agent")).is_none()); // Not paused: not sampled here.
     fixture.tier.mark(key("agent"));
     engine.sample_if_due();
@@ -727,6 +732,86 @@ fn the_sampler_pass_measures_paused_owned_incarnations_only() {
     fixture.clock.advance(1.0);
     engine.sample_if_due();
     assert!(engine.sampler.get(&key("agent")).is_none());
+}
+
+impl Fixture {
+    /// A running incarnation of `id` in its own cgroup, its sentry `pid`
+    /// started at tick 777 and its bundle naming the cgroup.
+    fn measured(&self, id: &str, pid: u32, current: u64) {
+        let container = format!("c-{id}");
+        let cgroup = self.dir.0.join("cgroup/ucloud-sandboxes").join(&container);
+        std::fs::create_dir_all(&cgroup).unwrap();
+        std::fs::write(cgroup.join("memory.current"), current.to_string()).unwrap();
+        std::fs::write(cgroup.join("memory.peak"), (current + 1).to_string()).unwrap();
+        std::fs::write(cgroup.join("memory.stat"), "shmem 64\nanon 100\nfile 800\nfile_dirty 1\nfile_writeback 2\nworkingset_refault_file 3\n").unwrap();
+        let process = self.dir.0.join(format!("proc/{pid}"));
+        std::fs::create_dir_all(&process).unwrap();
+        std::fs::write(process.join("stat"), format!("{pid} (runsc-sandbox) S {}777 0", "0 ".repeat(18))).unwrap();
+        std::fs::write(process.join("cgroup"), format!("0::/ucloud-sandboxes/{container}\n")).unwrap();
+        let bundle = self.dir.0.join(format!("bundle-{id}"));
+        std::fs::create_dir_all(&bundle).unwrap();
+        std::fs::write(bundle.join("config.json"), format!(r#"{{"linux": {{"cgroupsPath": "/ucloud-sandboxes/{container}"}}}}"#)).unwrap();
+        for record in self.registry.records.lock().unwrap().iter_mut().filter(|record| record.sandbox.sandbox_id == id) {
+            record.sandbox.bundle = bundle.clone();
+        }
+        let record = json!({"state": "running", "authority": "live", "sentry_pid": pid, "sentry_start_time_ticks": 777});
+        self.tier.journals.lock().unwrap().insert(key(id), record.as_object().unwrap().clone());
+    }
+}
+
+#[test]
+fn resident_sampling_measures_managed_incarnations_too_and_publishes_every_sample() {
+    let fixture = Fixture::new();
+    fixture.registry.records.lock().unwrap().push(candidate("managed", true));
+    fixture.measured("agent", 4242, 3000);
+    fixture.measured("managed", 4343, 5000);
+    let published = fixture.dir.0.join("state/noded/resident.json");
+    // Phase 3a: managed sandboxes are the agent's, and nothing is published.
+    fixture.engine.sample_residents();
+    assert!(fixture.engine.sampler.get(&key("managed")).is_none());
+    assert!(!published.exists());
+
+    let mut config = test_config(&fixture.dir.0);
+    config.resident_sampling = true;
+    let engine = fixture.restart_with(config);
+    let read = || serde_json::from_slice::<Value>(&std::fs::read(&published).unwrap()).unwrap();
+    engine.sample_residents();
+    // Running and managed: sampled. Running and not managed: not.
+    assert!(engine.sampler.get(&key("agent")).is_none());
+    let sample = engine.sampler.get(&key("managed")).unwrap();
+    let document = read();
+    assert_eq!((&document["seq"], &document["session"]), (&json!(1), &json!("session-test")));
+    let cgroup = std::fs::metadata(fixture.dir.0.join("cgroup/ucloud-sandboxes/c-managed")).unwrap();
+    assert_eq!(document["samples"], json!([{
+        "sandbox_id": "managed", "generation": 1, "current_bytes": 5000, "anonymous_bytes": 100,
+        "file_bytes": 800, "dirty_bytes": 1, "writeback_bytes": 2, "refault_file_pages": 3,
+        "cgroup_path": "/ucloud-sandboxes/c-managed",
+        "cgroup_device": std::os::unix::fs::MetadataExt::dev(&cgroup),
+        "cgroup_inode": std::os::unix::fs::MetadataExt::ino(&cgroup),
+        "sentry_pid": 4343, "sentry_start_time_ticks": 777, "sampled_at": 100.0,
+        "shared_memory_bytes": 64, "peak_bytes": 5001, "swap_bytes": 0,
+    }]));
+    assert_eq!(sample.sampled_at, 100.0);
+    assert_eq!(std::fs::metadata(&published).unwrap().permissions().mode() & 0o777, 0o600);
+
+    // A paused one joins (ordered by key); a later pass is a new seq.
+    fixture.tier.mark(key("agent"));
+    fixture.clock.advance(1.0);
+    engine.sample_if_due();
+    let document = read();
+    let ids: Vec<&str> = document["samples"].as_array().unwrap().iter().map(|sample| sample["sandbox_id"].as_str().unwrap()).collect();
+    assert_eq!((&document["seq"], ids), (&json!(2), vec!["agent", "managed"]));
+    assert_eq!(document["samples"][1]["sampled_at"], json!(101.0));
+
+    // A sentry that changed, or a sandbox no longer parkable, is unknown: absent.
+    fixture.tier.journals.lock().unwrap().get_mut(&key("managed")).unwrap().insert("sentry_start_time_ticks".into(), json!(778));
+    fixture.registry.records.lock().unwrap()[0].parkable = false;
+    fixture.clock.advance(1.0);
+    engine.sample_if_due();
+    assert_eq!(read()["samples"], json!([]));
+    assert!(engine.sampler.get(&key("managed")).is_none());
+    let leftovers = std::fs::read_dir(fixture.dir.0.join("state/noded")).unwrap().filter_map(|entry| entry.ok()).filter(|entry| entry.file_name().to_string_lossy().starts_with('.')).count();
+    assert_eq!(leftovers, 0);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

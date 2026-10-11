@@ -29,6 +29,7 @@ from ucloud_sandboxes.direct_registry import DirectSandboxRegistry
 from ucloud_sandboxes.direct_service import DirectSandboxService
 from ucloud_sandboxes.http_server import UnixSocketServerMixin
 from ucloud_sandboxes.models import ResourceQuantity
+from ucloud_sandboxes.resident_memory import PublishedResidentMemory, ResidentMemorySampler
 from ucloud_sandboxes.noded_client import (
     NodedClient, NodedLink, NodedLost, NodedProtocolError, NodedRefused, NodedUnavailable,
 )
@@ -322,6 +323,9 @@ class RustAdmissionAgentTests(unittest.TestCase):
         link = server.RequestHandlerClass.noded_link
         self.assertEqual(link.client.socket_path, str(self.root / "noded" / "noded.sock"))
         self.assertEqual(link.wait_hello(5)["noded_session"], "session-1")
+        # Phase 3b: the agent reads noded's resident samples instead of sampling.
+        self.assertIsInstance(self.service._resident_memory, PublishedResidentMemory)
+        self.assertEqual(self.service._resident_memory.path, self.root / "noded" / "resident.json")
 
         def call(session):
             connection = _UnixConnection(self.socket)
@@ -347,6 +351,7 @@ class RustAdmissionAgentTests(unittest.TestCase):
         server = self.build(rust_creates=True, rust_execs=True, rust_pause_tier=True)
         self.addCleanup(server.server_close)
         self.assertIsNone(server.RequestHandlerClass.noded_link)
+        self.assertIsInstance(self.service._resident_memory, ResidentMemorySampler)
         self.assertFalse((self.root / "noded" / "noded.sock").exists())
 
 

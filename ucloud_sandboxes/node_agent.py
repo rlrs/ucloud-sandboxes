@@ -2215,8 +2215,9 @@ def build_direct_node_agent_server(
     ``rust_pause_tier``: noded owns the pause tier and local waits; this
     agent runs neither (pause_handoff).
     ``rust_admission``: node admission moves to noded
-    (docs/admission-port-3c.md). Step 3c.0 only says hello on noded's
-    internal socket (noded_client); admission itself is unchanged.
+    (docs/admission-port-3c.md). So far this agent says hello on noded's
+    internal socket (noded_client, 3c.0(b)) and reads noded's resident
+    samples instead of sampling (3b); admission itself is unchanged.
     """
     if rust_creates and (unix_socket is None or service.provisioner.registry.is_owner):
         raise ValueError("Rust creates need the agent on its Unix socket and a foreign registry")
@@ -2247,7 +2248,8 @@ def build_direct_node_agent_server(
             runtime_metrics_provider=host_runtime_metrics,
         )
     service.start()
-    manager = DirectNodeRuntime(service, rust_execs=rust_execs, rust_pause_tier=rust_pause_tier)
+    manager = DirectNodeRuntime(service, rust_execs=rust_execs, rust_pause_tier=rust_pause_tier,
+                                rust_admission=rust_admission)
     manager.start()
     exec_manager = ExecSessionManager(manager, telemetry=resolved_telemetry)
     from .environment_manifest import HOST_EROFS_ABI

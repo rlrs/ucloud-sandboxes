@@ -317,7 +317,8 @@ class SandboxPoolConfig:
     # phase 3a). Requires the pause tier and Rust execs.
     direct_node_rust_pause: bool = False
     # Node admission moves to noded (docs/admission-port-3c.md); step 3c.0
-    # only adds noded's internal socket and the agent's hello on it. Requires
+    # adds noded's internal socket and the agent's hello on it, and noded's
+    # resident sampling of managed sandboxes for the agent (3b). Requires
     # the front door, Rust creates, Rust execs and the Rust pause tier.
     direct_node_rust_admission: bool = False
     # Split workspaces start with an XFS filesystem this large and grow online

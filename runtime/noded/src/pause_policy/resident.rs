@@ -1,7 +1,13 @@
 //! `resident_memory`: cached, incarnation-fenced cgroup memory observations
 //! (`ResidentMemorySampler`) and the windowed `memory.reclaim` writer
 //! (`ResidentMemoryReclaimer`). In phase 3a the daemon samples paused
-//! sandboxes only; the agent keeps sampling managed ones.
+//! sandboxes only and the agent samples managed ones; with phase 3b
+//! (`--rust-admission`) the daemon samples both and publishes them
+//! (`files::ResidentFile`), and the agent samples only for its own reclaims.
+//!
+//! Every field equals Python's on the same cgroup, except `sampled_at` (the
+//! instant of the read, CLOCK_MONOTONIC seconds in both processes);
+//! `tests/resident_python_parity.rs` checks this against the Python sampler.
 //!
 //! A sample proves its cgroup belongs to this incarnation: the sentry's start
 //! ticks before and after, its unique unified cgroup (the OCI config's path,
@@ -114,6 +120,13 @@ impl ResidentSampler {
         state.contained.remove(key);
     }
 
+    /// Every cached sample, whatever its age, ordered by key (`resident.json`).
+    pub fn samples(&self) -> Vec<(Key, ResidentSample)> {
+        let mut samples: Vec<(Key, ResidentSample)> = self.state().samples.iter().map(|(key, sample)| (key.clone(), sample.clone())).collect();
+        samples.sort_by(|left, right| left.0.cmp(&right.0));
+        samples
+    }
+
     #[cfg(test)]
     pub(crate) fn insert_for_tests(&self, key: &Key, current: u64, swap: u64, sampled_at: f64) {
         let sample = ResidentSample {
@@ -205,7 +218,8 @@ impl ResidentSampler {
         if (identity.dev(), identity.ino()) != (after.dev(), after.ino()) {
             return None; // Replaced while sampling.
         }
-        let peak = u64::try_from(peak.max(0)).unwrap_or(0);
+        // Python: `max(peak, current) if peak else 0` (current is non-negative).
+        let peak = if peak != 0 { u64::try_from(peak).unwrap_or(0).max(current) } else { 0 };
         let sample = ResidentSample {
             current_bytes: current,
             anonymous_bytes: values[0],
@@ -220,7 +234,7 @@ impl ResidentSampler {
             sentry_start_time_ticks: ticks,
             sampled_at: self.clock.monotonic(),
             shared_memory_bytes: shmem,
-            peak_bytes: if peak != 0 { peak.max(current) } else { 0 },
+            peak_bytes: peak,
             swap_bytes: u64::try_from(swap.max(0)).unwrap_or(0),
         };
         Some((sample, (raw.to_string(), identity.dev(), identity.ino())))

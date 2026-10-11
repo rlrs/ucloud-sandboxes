@@ -1,7 +1,7 @@
 //! The policy's state and its synchronous steps: the paused table re-derived
 //! from markers, the reclaim tick (`node_runtime._reclaim_paused_tick`), the
 //! paused reclaim (`direct_service.reclaim_paused`, `_reclaim_paused`), the
-//! escalation decision (`_escalate_paused`), the paused sampler pass and the
+//! escalation decision (`_escalate_paused`), the sampler pass and the
 //! idle pause (`_idle_parking_loop`, `_idle_pause`). `mod.rs` drives them.
 
 use std::collections::{HashMap, HashSet};
@@ -13,7 +13,7 @@ use serde_json::{Map, Value};
 use super::budget::ReclaimBudget;
 use super::decision::{Decision, MemoryDemand, decide_resident_wait, swap_room_bytes};
 use super::fence::PauseFence;
-use super::files::{DemandSource, Status, StatusFile};
+use super::files::{DemandSource, ResidentFile, Status, StatusFile};
 use super::plan::{ESCALATION_CONCURRENCY, Key, PausedWait, RECLAIM_WINDOW_BYTES, note_reclaim, reclaim_stalled, relief_plan};
 use super::pressure::PressureSource;
 use super::resident::{ReclaimRequest, ReclaimResult, Reclaimer, ResidentSampler, bundle_cgroup_path, kernel_write};
@@ -130,6 +130,7 @@ pub struct Engine {
     table: Mutex<Table>,
     idle: Mutex<IdleState>,
     status_file: Mutex<StatusFile>,
+    resident_file: Mutex<ResidentFile>,
     pub(crate) answered: RwLock<Option<Answered>>,
     pub(crate) stopped: AtomicBool,
     logs: RateLimited,
@@ -163,6 +164,7 @@ impl Engine {
     pub(crate) fn new(config: PolicyConfig, deps: Deps) -> Engine {
         let sampler = ResidentSampler::new(config.cgroup_root.clone(), config.proc_root.clone(), deps.clock.clone());
         let status_file = StatusFile::open(&config.state_root, &config.session);
+        let resident_file = ResidentFile::open(&config.state_root, &config.session);
         Engine {
             mechanism: deps.mechanism,
             fence: deps.fence,
@@ -178,6 +180,7 @@ impl Engine {
             table: Mutex::new(Table::default()),
             idle: Mutex::new(IdleState::default()),
             status_file: Mutex::new(status_file),
+            resident_file: Mutex::new(resident_file),
             answered: RwLock::new(None),
             stopped: AtomicBool::new(false),
             logs: RateLimited { last: Mutex::new(HashMap::new()) },
@@ -340,9 +343,13 @@ impl Engine {
         self.sampler.sample(key, u32::try_from(pid).ok()?, ticks, &sandbox.container_id, path.as_deref())
     }
 
-    /// The paused half of `refresh_resident_memory`: sample every owned,
-    /// parkable incarnation with a marker; forget every other.
-    pub fn sample_paused(&self) {
+    /// The sampling half of `refresh_resident_memory`: sample every owned,
+    /// parkable incarnation with a marker and, with `resident_sampling`
+    /// (phase 3b), every owned, parkable, managed one, running or paused;
+    /// forget every other. With `resident_sampling` the pass then publishes
+    /// its samples to `resident.json`; a pass that cannot list its candidates
+    /// publishes nothing, so the agent's samples age out (whole bounds).
+    pub fn sample_residents(&self) {
         let markers: HashSet<Key> = match self.mechanism.paused_keys() {
             Ok(keys) => keys.into_iter().collect(),
             Err(error) => return self.log("markers", error),
@@ -351,12 +358,31 @@ impl Engine {
             Ok(owned) => owned,
             Err(error) => return self.log("registry", error),
         };
-        let candidates: Vec<Candidate> = owned.into_iter().filter(|candidate| candidate.parkable && markers.contains(&key_of(&candidate.sandbox))).collect();
+        let managed = self.config.resident_sampling;
+        let candidates: Vec<Candidate> = owned
+            .into_iter()
+            .filter(|candidate| candidate.parkable && ((managed && candidate.managed) || markers.contains(&key_of(&candidate.sandbox))))
+            .collect();
         let keys: HashSet<Key> = candidates.iter().map(|candidate| key_of(&candidate.sandbox)).collect();
         self.sampler.retain(&keys);
         lock(&self.cgroup_paths).retain(|key, _| keys.contains(key));
         for candidate in candidates {
             self.sample_one(&key_of(&candidate.sandbox), &candidate.sandbox);
+        }
+        if managed {
+            self.write_resident();
+        }
+    }
+
+    /// Publish every cached sample to `resident.json`.
+    pub fn write_resident(&self) -> Option<Value> {
+        let samples = self.sampler.samples();
+        match lock(&self.resident_file).write(&samples) {
+            Ok(document) => Some(document),
+            Err(error) => {
+                self.log("resident", error);
+                None
+            }
         }
     }
 
@@ -370,7 +396,7 @@ impl Engine {
             }
             table.next_sample = now + SAMPLE_INTERVAL_SECONDS;
         }
-        self.sample_paused();
+        self.sample_residents();
     }
 
     // Paused reclaim.

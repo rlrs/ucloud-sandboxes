@@ -9,7 +9,6 @@ from ucloud_sandboxes.models import (
     utc_now,
 )
 from ucloud_sandboxes.resource_admission import (
-    dynamic_cpu_pressure_retryable,
     dynamic_pressure_error,
     dynamic_request_fits,
     node_accepts_dynamic_request,
@@ -174,34 +173,6 @@ class DynamicResourceAdmissionTests(unittest.TestCase):
                         self.assertIsNone(observed)
                     else:
                         self.assertIn(error, observed or "")
-
-    def test_only_known_cpu_pressure_without_memory_failure_can_wait(self) -> None:
-        request = ResourceQuantity(vcpu=4, memory_mb=8192)
-        for overrides, expected in (
-            ({"cpu_percent": 95.0}, True),
-            ({"cpu_percent": 80.0, "load_average_1m": 64.0}, True),
-            ({"cpu_percent": 79.9, "load_average_1m": 64.0}, False),
-            ({"cpu_percent": None, "load_average_1m": 64.0}, False),
-            ({"cpu_percent": 95.0, "memory_psi_full_avg10": 10.0}, False),
-            (
-                {
-                    "cpu_percent": 95.0,
-                    "memory_available_mb": 2047,
-                    "swap_total_mb": 100_000,
-                    "swap_free_mb": 100_000,
-                },
-                False,
-            ),
-            ({"cpu_percent": 95.0, "memory_available_mb": 8191}, False),
-        ):
-            with self.subTest(overrides=overrides):
-                self.assertEqual(
-                    dynamic_cpu_pressure_retryable(
-                        self.heartbeat(**overrides).runtime_metrics, request
-                    ),
-                    expected,
-                )
-        self.assertFalse(dynamic_cpu_pressure_retryable(None, request))
 
     def test_swap_can_still_absorb_cold_pages_above_physical_floor(self) -> None:
         request = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=1024)

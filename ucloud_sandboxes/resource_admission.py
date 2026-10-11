@@ -107,24 +107,6 @@ def dynamic_pressure_error(
     ) or _memory_pressure_error(metrics, requested, check_psi=check_memory_pressure)
 
 
-def dynamic_cpu_pressure_retryable(
-    metrics: NodeRuntimeMetrics | None,
-    requested: ResourceQuantity,
-) -> bool:
-    """Allow a bounded resample only for known CPU pressure with memory headroom.
-
-    In particular, a CPU rejection must not hide a simultaneous memory failure,
-    and the load fallback with an unknown CPU measurement remains fail-closed.
-    """
-
-    return bool(
-        metrics is not None
-        and metrics.cpu_percent is not None
-        and _cpu_pressure_error(metrics) is not None
-        and _memory_pressure_error(metrics, requested) is None
-    )
-
-
 def _cpu_pressure_error(metrics: NodeRuntimeMetrics) -> str | None:
     if metrics.cpu_percent is not None and metrics.cpu_percent >= 90.0:
         return "direct node CPU pressure blocks active admission"

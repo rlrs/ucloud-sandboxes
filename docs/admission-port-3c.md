@@ -571,9 +571,8 @@ no existing Python source changed.
   - A guard called without a deadline (only exec, which carries no cost and so
     never waits) now has a deadline of "now" instead of now + 1 s. Without a
     wait, that deadline was never read.
-  - The gateway's `resource_admission.py` is unchanged. `check_cpu` and
-    `dynamic_cpu_pressure_retryable` stay there, though the second no longer
-    has a production caller.
+  - `dynamic_cpu_pressure_retryable` had no caller left and is deleted from
+    `resource_admission.py`; the gateway's `check_cpu` stays.
 - The goldens' `decide` traces now come from `gate` and `decide` through
   `goldens.py`'s `drive_decide`, the same loop `tests.rs` replays.
   - Every case also runs the guard and asserts the same outcome.

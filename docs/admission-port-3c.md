@@ -547,8 +547,38 @@ no existing Python source changed.
   - `refresh_wait_cost` (requote) and the aged-forecast refresh also belong to
     the driver, applied before `decide`.
 
-**Remaining for 3c.1:** extract a pure `decide()` from
-`DirectSandboxService._active_admission_guard` in Python and delete the CPU
-branch there (decision G). Then point the decide goldens at it instead of the
-guard; the traces should not change. Until then, the goldens drive the guard
-itself with `check_cpu=False`.
+**3c.1, Python half (2026-10-11).** 3c.1 is complete.
+
+- `ucloud_sandboxes/admission_decision.py` holds the pure decision, split as in
+  `decide.rs`:
+  - `gate(request)` is the pre-sample lock section;
+  - `decide(metrics, ledger, request) -> Grant | Wait | Refuse` is the
+    post-sample one;
+  - `fences(request)` is the drain and shape check that both start with.
+  - `AdmissionRequest` carries the same node and retry state as the Rust
+    `Request`. `Refuse.error()` gives the exception the guard raises.
+- `_active_admission_guard` is now a thin driver around them. It keeps:
+  - the locking and sampling outside the lock;
+  - owner validation and the requote (`transition_cost_provider`, then
+    `refresh_wait_cost`);
+  - the aged-forecast refresh and the "metrics provider changed" refusal;
+  - the waits on `_admission_changed`.
+- Decision G is applied. Removed: the `check_cpu` parameter, the CPU-retry
+  loop, the `dynamic_cpu_pressure_retryable` call, and both
+  `_CPU_ADMISSION_RETRY_SECONDS` and `_CPU_ADMISSION_DEADLINE_SECONDS`.
+  - `_file_exec`'s retry now uses `admission_decision.RETRY_SECONDS` (0.21 s,
+    unchanged).
+  - A guard called without a deadline (only exec, which carries no cost and so
+    never waits) now has a deadline of "now" instead of now + 1 s. Without a
+    wait, that deadline was never read.
+  - The gateway's `resource_admission.py` is unchanged. `check_cpu` and
+    `dynamic_cpu_pressure_retryable` stay there, though the second no longer
+    has a production caller.
+- The goldens' `decide` traces now come from `gate` and `decide` through
+  `goldens.py`'s `drive_decide`, the same loop `tests.rs` replays.
+  - Every case also runs the guard and asserts the same outcome.
+  - The regenerated `python_goldens.json` is byte-identical; no field changed,
+    because the old traces already ran with `check_cpu=False`.
+  - The Rust replay test is now `admission_decisions_replay_python_decide`.
+- `tests/test_admission_decision.py` holds focused unit tests of the pure
+  functions.

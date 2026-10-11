@@ -2,7 +2,7 @@
 //! - [`ledger`]: `TransitionLedger`, the in-flight transition accounting;
 //! - [`fair`]: `FairCapacity`, the weighted FIFO slot pools on tokio;
 //! - [`growth`]: managed growth costs, intents, provisional claims and turns;
-//! - [`decide`]: the pure admission decision of `_active_admission_guard`.
+//! - [`decide`]: the pure admission decision (`admission_decision.py`).
 //!
 //! Step 3c.1: pure ports checked against Python goldens
 //! (`testdata/goldens.py`); nothing calls them yet.

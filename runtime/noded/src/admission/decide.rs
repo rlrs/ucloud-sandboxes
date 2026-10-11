@@ -1,7 +1,7 @@
-//! The node admission decision: `DirectSandboxService._active_admission_guard`
-//! (direct_service.py) as a pure function, without its CPU branches
-//! (docs/admission-port-3c.md §0.9 and decision G: every caller passes
-//! `check_cpu=False`, so they were dead for node admission).
+//! The node admission decision: a port of `ucloud_sandboxes/admission_decision.py`
+//! (`gate` and `decide`), which `DirectSandboxService._active_admission_guard`
+//! drives. Neither has CPU checks (docs/admission-port-3c.md §0.9 and
+//! decision G).
 //!
 //! One guard pass is two lock sections around a metrics sample:
 //! 1. [`gate`] before sampling: the drain fence, the node shape, and a retry
@@ -29,8 +29,8 @@ use crate::pause_policy::MemoryBackingCapacity;
 /// `PHYSICAL_MEMORY_FLOOR_MB`: resident headroom kept for the node agent,
 /// sentries and a new operation. Free swap never satisfies it.
 pub const PHYSICAL_MEMORY_FLOOR_MB: u64 = 2048;
-/// `_CPU_ADMISSION_RETRY_SECONDS`: a short spike must expire from the
-/// sampler's 200 ms cache before resampling.
+/// `admission_decision.RETRY_SECONDS`: a memory wait resamples once the
+/// sampler's 200 ms cache expired.
 pub const RETRY_SECONDS: f64 = 0.21;
 /// `memory_psi_full_avg10` at or above this blocks admission.
 pub const MEMORY_PSI_FULL_LIMIT: f64 = 10.0;

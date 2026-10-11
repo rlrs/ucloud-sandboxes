@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Node
+
+- **Node admission's decision is a pure function** ([docs/admission-port-3c.md](docs/admission-port-3c.md), step 3c.1). This changes no behavior.
+  - `ucloud_sandboxes/admission_decision.py` holds `gate` and `decide(metrics, ledger, request) -> Grant | Wait | Refuse`, the same split as noded's `admission/decide.rs`.
+  - `DirectSandboxService._active_admission_guard` now drives them. It keeps the locking, sampling, owner validation, requotes and waits.
+  - The Rust port's goldens are recorded from `decide` and are byte-identical to before. The generator also checks every case against the guard.
+- **CPU is gone from node admission (decision G).** Every caller already passed `check_cpu=False`, so this removes dead code:
+  - the guard's `check_cpu` parameter and its CPU-retry loop;
+  - `_CPU_ADMISSION_RETRY_SECONDS` and `_CPU_ADMISSION_DEADLINE_SECONDS`.
+  - The 0.21 s memory-wait interval is unchanged and is now `admission_decision.RETRY_SECONDS`.
+  - The gateway's CPU checks in `resource_admission.py` are unchanged.
+
 ## 0.9.72 - 2026-10-11 (gateway; workers)
 
 ### Node

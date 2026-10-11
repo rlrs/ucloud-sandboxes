@@ -37,6 +37,9 @@ from ucloud_sandboxes.transition_admission import (
     TransitionLedger,
 )
 
+# The noded half starts ucloud-noded (tests/noded_admission.py).
+TEST_TIER = "contract"
+
 
 class TransitionLedgerTests(unittest.TestCase):
     def test_reclaim_prices_next_owner_not_the_configured_slot_wave(self):

@@ -218,6 +218,11 @@ impl Registry {
         Ok(self.store.fresh_index()?.rows.get(sandbox_id).map(|row| row.record.clone()))
     }
 
+    /// `snapshot`, from an index proved against the file now (`get_fresh`).
+    pub fn snapshot_fresh(&self) -> Result<Arc<Snapshot>> {
+        self.store.fresh_index()?.snapshot()
+    }
+
     /// Records, indexes and revision from one durable read.
     pub fn snapshot(&self) -> Result<Arc<Snapshot>> {
         self.store.view_index()?.snapshot()

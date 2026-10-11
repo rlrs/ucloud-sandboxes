@@ -2,7 +2,7 @@
 //! metrics, resident samples and memory placement, the agent's socket; and
 //! what it feeds: the pause policy's demand and local waits' growth events.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -18,7 +18,7 @@ use crate::local_wait::{GrowthAction as WaitAction, GrowthEvent};
 use crate::memory_backing::{ActiveMode, MemoryBackingStore};
 use crate::pause_policy::resident::{ResidentSample, ResidentSampler};
 use crate::pause_policy::{DemandSource, MemoryBackingCapacity, MemoryDemand, Pressure, PressureSource};
-use crate::registry::{Phase, Registry};
+use crate::registry::{Phase, Registration, Registry};
 
 const MIB: u64 = 1024 * 1024;
 /// `runtime_metrics.py`'s single-flight cache.
@@ -28,17 +28,26 @@ pub const METRICS_CACHE: Duration = Duration::from_millis(200);
 pub const GROWTH_BATCH_INTERVAL: Duration = Duration::from_millis(50);
 pub const GROWTH_BATCH_ITEMS: usize = 4096;
 
+fn owner_record(record: &Registration) -> OwnerRecord {
+    OwnerRecord {
+        generation: record.sandbox_generation as u64,
+        owned: record.phase == Phase::Owned,
+        managed: record.spec.managed_process(),
+        memory_mb: record.spec.memory_mb().unwrap_or(0).max(0) as u64,
+    }
+}
+
 impl Owners for Registry {
     /// A fresh read: the agent commits creates and deletes in its own
     /// process, and asks for their admission right after.
     fn owner(&self, sandbox_id: &str) -> Result<Option<OwnerRecord>, String> {
         let record = self.get_fresh(sandbox_id).map_err(|error| error.to_string())?;
-        Ok(record.map(|record| OwnerRecord {
-            generation: record.sandbox_generation as u64,
-            owned: record.phase == Phase::Owned,
-            managed: record.spec.managed_process(),
-            memory_mb: record.spec.memory_mb().unwrap_or(0).max(0) as u64,
-        }))
+        Ok(record.as_deref().map(owner_record))
+    }
+
+    fn owners(&self, sandbox_ids: &[String]) -> Result<HashMap<String, Option<OwnerRecord>>, String> {
+        let snapshot = self.snapshot_fresh().map_err(|error| error.to_string())?;
+        Ok(sandbox_ids.iter().map(|id| (id.clone(), snapshot.get(id).map(|record| owner_record(record)))).collect())
     }
 
     fn keys(&self) -> Result<HashSet<Owner>, String> {

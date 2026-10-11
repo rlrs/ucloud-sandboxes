@@ -169,6 +169,10 @@ pub struct OwnerRecord {
 /// The registry reads admission needs (`Registry`; fakes in tests). Blocking.
 pub trait Owners: Send + Sync {
     fn owner(&self, sandbox_id: &str) -> Result<Option<OwnerRecord>, String>;
+    /// `owner` for several IDs from one read (a growth event batch).
+    fn owners(&self, sandbox_ids: &[String]) -> Result<HashMap<String, Option<OwnerRecord>>, String> {
+        sandbox_ids.iter().map(|id| Ok((id.clone(), self.owner(id)?))).collect()
+    }
     /// Every registration's key, whatever its phase (stale intents are pruned).
     fn keys(&self) -> Result<HashSet<Owner>, String>;
 }
@@ -1168,17 +1172,13 @@ impl AdmissionService {
     }
 
     async fn apply_events(&self, events: Vec<Event>) -> Vec<EventResult> {
-        let ids: Vec<String> = events.iter().filter(|event| event.action != EventAction::Forget).map(|event| event.owner.0.clone()).collect();
+        let mut ids: Vec<String> = events.iter().filter(|event| event.action != EventAction::Forget).map(|event| event.owner.0.clone()).collect();
+        ids.sort();
+        ids.dedup();
         let owners = self.owners.clone();
-        let records: HashMap<String, Result<Option<OwnerRecord>, String>> = match blocking(move || {
-            let mut records = HashMap::new();
-            for id in ids {
-                if let std::collections::hash_map::Entry::Vacant(entry) = records.entry(id) {
-                    let record = owners.owner(entry.key());
-                    entry.insert(record);
-                }
-            }
-            records
+        let records: HashMap<String, Result<Option<OwnerRecord>, String>> = match blocking(move || match owners.owners(&ids) {
+            Ok(records) => records.into_iter().map(|(id, record)| (id, Ok(record))).collect(),
+            Err(message) => ids.into_iter().map(|id| (id, Err(message.clone()))).collect(),
         })
         .await
         {

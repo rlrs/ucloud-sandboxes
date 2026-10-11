@@ -24,6 +24,7 @@ import unittest
 from tests.harness import LocalFleet
 from tests.harness.assembly import fixed_metrics
 
+TEST_TIER = "contract"
 SPEC = {"image": "harness/base:1", "cpus": 1, "memory_mb": 256, "disk_mb": 1024, "network": "none"}
 WAIT = 1.5
 

@@ -2224,9 +2224,10 @@ def build_direct_node_agent_server(
     ``rust_pause_tier``: noded owns the pause tier and local waits; this
     agent runs neither (pause_handoff).
     ``rust_admission``: node admission moves to noded
-    (docs/admission-port-3c.md). So far this agent says hello on noded's
-    internal socket (noded_client, 3c.0(b)) and reads noded's resident
-    samples instead of sampling (3b); admission itself is unchanged.
+    (docs/admission-port-3c.md): this agent admits through noded's internal
+    socket (admission_backend.NodedAdmission, step 3c.3), says hello there
+    with the claims it holds, and reads noded's resident samples instead of
+    sampling (3b).
     """
     if rust_creates and (unix_socket is None or service.provisioner.registry.is_owner):
         raise ValueError("Rust creates need the agent on its Unix socket and a foreign registry")

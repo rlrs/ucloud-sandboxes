@@ -508,6 +508,125 @@ The rule is to take the simpler option wherever the choice is ours.
 
 ## Progress
 
+**3c.3 and 3c.4: one ledger with the flag on (2026-10-11).** With
+`sandbox.direct_node_rust_admission` on, the agent admits through noded and
+noded admits its own creates in process; with it off, nothing changes (the
+agent's code paths are the ones it always ran). Not deployable until the
+3c.5 gates.
+
+- **`ucloud_sandboxes/admission_backend.py`.** `DirectSandboxService.admission`
+  is `LocalAdmission` (the agent's ledger) or `NodedAdmission` (noded's,
+  installed by `build_direct_node_agent_server` before `service.start()` when
+  `--rust-admission`). Every call site of §1.4 goes through it:
+  | Call site | Flag on |
+  |---|---|
+  | `create_admission` (Python creates, the handoff's hold) | `admission/startup`, with the request lock after it; noded's phases go into `phase_timings` |
+  | `_restore_admission` (`wake`, `ensure_running_with_timings`) | Python still quotes the cost, prepares memory and revalidates owner and checkpoint after the grant (decision E); `admission/restore` runs inside `_unlocked_for_admission` |
+  | park's capture | `admission/observe` (a failure leaves the capture unobserved, never blocks it) |
+  | `_start_storage_publication` | `admission/publication`, released when the thread ends |
+  | `delete` / `try_delete` | `admission/cancel` and a `forget` event (logged on failure) |
+  | `close_admission` / `open_admission` | `admission/close` / `open`, synchronous, inside `_drain_guard` before `save_drain` (`configure_drain` fails if noded does not answer); the agent's own gate follows for its execs |
+  | `admit_managed_continuation` | the `_try_lock`/`prepare_restore_memory` probe, then `growth/continuation` |
+  | `_admit_managed_launch` (the agent's `start_managed_process`, and its `managed/launch` route) | `growth/launch` |
+  | park observations, relay wait, restore activate, terminal, bind, local-wait batches | `growth/events` (`park`, `wait`, `activate`, `terminal`, `bind`) |
+  | parked records at `service.start()` | `park` events, kept and sent after the next hello if noded is not up |
+  | `activity_snapshot`, `transition_admission_snapshot`, `resident_demand_snapshot`, `warm_park_demand`, `reclaim_demand` | `admission/snapshot` |
+  - Refusals raise the exception the local code raises, with noded's
+    message, so client answers are unchanged (I25): closed is
+    `SandboxAdmissionClosedError`; a create's deferral
+    `SandboxCapacityUnavailableError` (or `SandboxStartupBusyError` for the
+    slot deadline); `node_restore_busy` and `node_startup_busy` the busy
+    errors; `generation_mismatch` re-runs the caller's owner check first, so a
+    deleted sandbox fails exactly as before; growth events' codes map to
+    `DirectWardenError`, `DirectRegistryConflictError` or
+    `ManagedPrimaryOwnedError`.
+  - A request that got no answer (`NodedLost`), could not be sent, or met a
+    recovering noded becomes the safe retry: `SandboxStartupBusyError`, or
+    `SandboxRestoreBusyError` for a restore (I10). `agent_hello_required` and
+    `admission_recovering` are retried once after a hello.
+  - Every claim the agent holds is remembered with its owner, kind, cost
+    and shape; `NodedLink` reasserts them in every hello (§3.5), including
+    the one `hello_now` says synchronously. After a hello the agent aligns
+    noded's gate with its own (it writes the drain row), sends kept growth
+    events, and reads noded's revision.
+  - With the flag on the agent's growth intents, forecasts and provisional
+    claims are cleared and never touched again, the resident pass only
+    loads samples (noded refreshes its own forecasts), `DemandPublisher` is
+    not started, and the agent runs no local waits or growth executor (the
+    Rust pause tier already ran them).
+- **Heartbeat (§3.6).** `activity_snapshot` reads noded's snapshot, then the
+  agent's exec leases; `_heartbeat_snapshot_locked` then reads the inventory
+  and pings noded: a changed noded session aborts the sample
+  (`NodedSnapshotUnavailable`), as does a noded that is down or recovering
+  (the sender's retry path; never zero reservations). The transient revision
+  is the agent's epoch plus noded's; `advance_lifecycle_activity_revision`
+  adds the largest noded revision seen (read once if none was), so lifecycle
+  answers and heartbeats compose the same addends.
+- **3c.4.** Where the node runs admission, `CreateFront` takes the startup
+  slot and capacity in process (`Holder::Noded`, the header's wait), sends
+  `"admitted": {"token"}` to the agent's `creates/admit`, and releases the
+  claim when the create's handling ends: after finish returns (I18), or
+  before a forward. The shape is the raw spec's `cpus`, `memory_mb` and
+  `managed_process`; a value Python would parse differently leaves the
+  create to the agent's own admission. Refusals are the agent's bodies byte
+  for byte (`node_admission_closed`; `node_active_admission_deferred` with
+  `Retry-After: 1` and `X-UCloud-Sandbox-Retryable: true`). The agent then
+  holds only `_request_lock` and the layout (`create_admission(...,
+  admitted_by_noded=True)`), and honours `admitted` only when its own
+  backend is noded's.
+- **noded.** `POST growth/launch` (`launch_for`, any holder, the caller's
+  budget), the `bind` event (`job_id`, `launch_sha256`), `slots` in the
+  snapshot (`{capacity, available, waiting}` per pool), `Registry::get_fresh`
+  for owner validation, and `--observations-file` for `--admission-only`
+  (samples, placement, a default mode; a new `seq` is a sampler pass, read
+  before each request and every 20 ms).
+- **Gate.** `TransitionServiceTests`, `StartupAdmissionTests`,
+  `test_managed_growth.py`, `test_managed_start_retry.py`,
+  `test_hybrid_memory_admission.py`, `test_local_fleet_drain.py`,
+  `test_rust_create_handoff.py` (`CreateHandoffTests`) and
+  `test_managed_growth_routes.py` each have a `Noded…` subclass running every
+  test name against a real `ucloud-noded --admission-only`, built from the
+  worktree with cargo (`tests/noded_admission.py`; skipped with a message
+  only without cargo). The harness writes the test's metrics provider,
+  Warden placement and sampler into noded's files before each call and while
+  a call waits, and restarts noded (the hello reasserting) when the
+  admission configuration changes. Assertions read the snapshots and durable
+  rows (`tests/admission_backends.py`) instead of `_transitions`.
+  `LocalFleet(rust_admission=True)` gives each node a noded that owns its
+  registry, so the drain-during-create test runs against a real noded.
+  `tests/test_noded_admission_backend.py` covers reassert across a noded
+  restart, the heartbeat's composition, skipped samples, a recovering noded,
+  lost answers, and growth events kept for a noded that starts later. Rust:
+  `tests/create_admission.rs`, and the launch route, bind event and slots in
+  `tests/admission_service.rs`.
+- **Deviations:**
+  - `LocalAdmission` holds the moved call-site code; the ledger, pools,
+    guard and growth helpers stay on `DirectSandboxService` (exec admission
+    still uses the guard, and 3c.6 deletes them in place).
+  - `growth/launch` and the `bind` event exist after all (§3.3's table, not
+    3c.2's reading of decision J): noded still forwards some starts to the
+    agent (a supervisor exchange it cannot run, an undecodable body, a
+    legacy mount), and the gate's suites drive the agent's start. The
+    agent's `managed/{launch,bind,terminal}` routes stay; with the flag on
+    they answer from noded's ledger.
+  - Owner validation reads the registry fresh: the agent commits creates and
+    deletes as a foreign writer and asks for admission right after, inside
+    the owner index's 1 s recheck.
+  - A restore's demand is registered by its RPC, after the lifecycle lock is
+    released, not before (the slot wait was already in that window).
+  - With the flag on, a create noded admits waits for admission before the
+    agent validates its spec: an invalid spec on a busy or draining node can
+    get its 503 before its 400. Bodies are unchanged.
+  - `active_sandbox_creates` counts noded's reservations as listed (§3.6);
+    the local count dedupes a duplicate owner.
+  - Some tests instrument code only the local ledger has (a patched registry
+    write, `_growth_turn`, `_admit_managed_growth`); their noded variants
+    produce the same race through noded (SQLite's write lock held over the
+    commit, a launch replaced while it waits for memory) or assert the same
+    outcome, under the same test name.
+- **Not done:** 3c.5 (canary, pressure trial, density, warm rollouts) and
+  3c.6 (deletions); no performance measurement.
+
 **3c.2, the noded admission service, dead behind the flag (2026-10-11).**
 Nothing changes with the flag off. With it on, the agent does not call the
 service yet (3c.3), so it is not deployable on its own.

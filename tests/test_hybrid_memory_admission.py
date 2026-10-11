@@ -15,6 +15,9 @@ from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_no
 from ucloud_sandboxes.resource_evidence import MemoryBackingCapacity
 from ucloud_sandboxes.sandbox import SandboxSpec
 
+# The noded half starts ucloud-noded (tests/noded_admission.py).
+TEST_TIER = "contract"
+
 
 class HybridMemoryAdmissionTests(AdmissionBackendCase, unittest.TestCase):
     def setUp(self):

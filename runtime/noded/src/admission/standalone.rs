@@ -196,16 +196,20 @@ impl Observations for FileObservations {
 struct StandaloneNode {
     service: Arc<AdmissionService>,
     observations: Option<Arc<FileObservations>>,
+    /// One pass at a time: a request that finds the poller applying the
+    /// file's pass waits for it.
+    syncing: Mutex<()>,
 }
 
 impl StandaloneNode {
     /// A new pass in the observations file reaches the service before the
     /// request that follows it is served.
     fn sync(&self) {
-        if let Some(observations) = &self.observations
-            && observations.take_pass()
-        {
-            self.service.after_resident_pass();
+        if let Some(observations) = &self.observations {
+            let _one = self.syncing.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            if observations.take_pass() {
+                self.service.after_resident_pass();
+            }
         }
     }
 }
@@ -257,7 +261,7 @@ pub async fn serve(options: Options, session: &str, shutdown: impl Future<Output
     let sources = Sources { store: registry.clone(), owners: registry.clone(), metrics, observations, clock };
     let service = AdmissionService::open(config, drain.admission_open, sources)?;
     service.start_recovery(None);
-    let node = Arc::new(StandaloneNode { service: service.clone(), observations: file_observations });
+    let node = Arc::new(StandaloneNode { service: service.clone(), observations: file_observations, syncing: Mutex::new(()) });
     if node.observations.is_some() {
         let poller = Arc::downgrade(&node);
         tokio::spawn(async move {

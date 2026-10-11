@@ -22,6 +22,9 @@ from ucloud_sandboxes.node_runtime import DirectNodeRuntime
 from ucloud_sandboxes.resident_memory import ResidentMemorySample
 from ucloud_sandboxes.sandbox import SandboxAdmissionClosedError, SandboxStartupBusyError
 
+# The noded half starts ucloud-noded (tests/noded_admission.py).
+TEST_TIER = "contract"
+
 
 class ManagedGrowthTests(AdmissionBackendCase, unittest.TestCase):
     def setUp(self):

@@ -4,7 +4,9 @@
 Image references are stored with the registry authority workers pull from
 (`<gateway_private_host>:<registry_port>/ucloud-managed/...`): prepared
 sources and foundations, image records, the image-roots journal, group specs
-and parked sandboxes' storage snapshots. Registry content itself is addressed by
+and parked sandboxes' storage snapshots; the sandbox build service's queued jobs
+(JSON files under `sandbox-builds/`); and queued gateway commands' bodies
+(PostgreSQL `bytea`). Registry content itself is addressed by
 repository and digest, so a restored registry serves the same references under
 the new authority once state names it.
 
@@ -21,12 +23,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sqlite3
 import subprocess
 
 SERVICES = ("ucloud-sandbox-gateway", "ucloud-sandbox-placement", "ucloud-sandbox-autoscaler",
-            "ucloud-sandbox-relay", "ucloud-sandbox-registry-prune")
+            "ucloud-sandbox-relay", "ucloud-sandbox-registry-prune", "ucloud-sandbox-builds")
 TEXT_TYPES = {"text", "json", "jsonb", "character varying"}
 
 
@@ -57,9 +60,20 @@ def postgres_rewrite(dsn: str, schemas: list[str], old: str, new: str, execute: 
             "SELECT table_schema, table_name, column_name, data_type FROM information_schema.columns "
             "WHERE table_schema = ANY(%s) ORDER BY 1, 2, 3", (schemas,)).fetchall()
         for schema, table, column, kind in columns:
-            if kind not in TEXT_TYPES:
+            if kind not in TEXT_TYPES and kind != "bytea":
                 continue
             target, field = sql.Identifier(schema, table), sql.Identifier(column)
+            if kind == "bytea":  # Request and result bodies (UTF-8 JSON) of queued commands.
+                where = sql.SQL("position(%s in {}) > 0").format(field)
+                count = db.execute(sql.SQL("SELECT count(*) FROM {} WHERE ").format(target) + where,
+                                   (old.encode(),)).fetchone()[0]
+                if count:
+                    counts[f"{schema}.{table}.{column}"] = count
+                    if execute:
+                        db.execute(sql.SQL("UPDATE {} SET {} = convert_to(replace(convert_from({}, 'UTF8'), %s, %s), "
+                                           "'UTF8') WHERE ").format(target, field, field) + where,
+                                   (old, new, old.encode()))
+                continue
             where = sql.SQL("strpos({}::text, %s) > 0").format(field)
             count = db.execute(sql.SQL("SELECT count(*) FROM {} WHERE ").format(target) + where, (old,)).fetchone()[0]
             if count:
@@ -69,6 +83,26 @@ def postgres_rewrite(dsn: str, schemas: list[str], old: str, new: str, execute: 
                     db.execute(sql.SQL("UPDATE {} SET {} = replace({}::text, %s, %s)").format(target, field, field)
                                + cast + sql.SQL(" WHERE ") + where, (old, new, old))
     return counts
+
+
+def json_rewrite(root: Path, old: str, new: str, execute: bool) -> dict[str, int]:
+    """Queued sandbox build jobs: JSON files that name their foundations' references."""
+    counts: dict[str, int] = {}
+    for path in sorted(root.rglob("*.json")) if root.is_dir() else ():
+        text = path.read_text(encoding="utf-8")
+        if old not in text:
+            continue
+        counts[str(path.relative_to(root.parent))] = text.count(old)
+        if execute:
+            rewritten = text.replace(old, new)
+            json.loads(rewritten)
+            temporary = path.with_name(path.name + ".rehome")
+            temporary.write_text(rewritten, encoding="utf-8")
+            info = path.stat()
+            os.chown(temporary, info.st_uid, info.st_gid)
+            os.chmod(temporary, info.st_mode & 0o7777)
+            os.replace(temporary, path)
+    return {"files": len(counts), "references": sum(counts.values())} if counts else {}
 
 
 def main() -> int:
@@ -102,6 +136,9 @@ def main() -> int:
         counts = sqlite_rewrite(path, old, new, args.execute)
         if counts:
             report[path.name] = counts
+    jobs = json_rewrite(root / "sandbox-builds", old, new, args.execute)
+    if jobs:
+        report["sandbox-builds"] = jobs
     if config.relay_postgres is not None:
         dsn = Path(config.relay_postgres.dsn_file).read_text(encoding="utf-8").strip()
         import psycopg

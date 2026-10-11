@@ -1,16 +1,19 @@
 """Primary growth admission is retryable only before supervisor dispatch."""
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 import json
 from pathlib import Path
 from threading import Thread
+import time
 from unittest import TestCase
 from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from tests import test_direct_provisioner as node_fixtures
+from tests.admission_backends import AdmissionBackendCase
 from tests import test_managed_growth as growth_fixtures
 from tests.support import requires_sdk
 from ucloud_sandboxes.direct_registry import ManagedPrimaryOwnedError
@@ -23,9 +26,10 @@ from ucloud_sandboxes.sandbox import (
 TEST_TIER = "contract"
 
 
-class ManagedStartRetryTests(TestCase):
+class ManagedStartRetryTests(AdmissionBackendCase, TestCase):
     def setUp(self):
         self.fixture = growth_fixtures.ManagedGrowthTests()
+        self.fixture.noded = self.noded
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
         self.service = self.fixture.service
@@ -42,7 +46,7 @@ class ManagedStartRetryTests(TestCase):
         queued = self.fixture.registry.growth_intents()[1]
         self.assertEqual(queued.phase, "queued")
         self.assertEqual(self.fixture.control.call_count, 1)
-        self.assertFalse(self.service._transitions.foreground_waiting)
+        self.assertFalse(self.foreground_waiting(self.service))
         self.service.observe_managed_wait("one", 7, "first-wait")
         self.assertEqual(
             self.service.start_managed_process("two", self.fixture.spec).job_id,
@@ -85,8 +89,29 @@ class ManagedStartRetryTests(TestCase):
         self.assertEqual(caught.exception.job_id, "fresh")
         self.assertEqual(self.dispatched(), ["primary", "fresh"])
 
+    def queue_for_memory(self, start):
+        """Run ``start`` while the node has no headroom; return once it waits."""
+        self.service.admission_wait_seconds = 3
+        self.fixture.available = 2048
+        return self.pool.submit(start)
+
     def test_replacement_before_activation_fences_the_old_dispatch(self):
         registry = self.fixture.registry
+        if self.noded:
+            # noded admits and commits the activation in its own process: the
+            # newer start commits its launch while this one waits for memory.
+            with ThreadPoolExecutor(max_workers=1) as self.pool:
+                pending = self.queue_for_memory(lambda: self.service.start_managed_process("one", self.fixture.spec))
+                self.wait_for_foreground(self.service)
+                registry.growth_intent("one", 7, action="launch", job_id="fresh", launch_sha256="f" * 64)
+                self.fixture.available = 6144
+                with self.assertRaises(ManagedPrimaryOwnedError) as caught:
+                    pending.result(5)
+            self.assertEqual(caught.exception.job_id, "fresh")
+            self.assertEqual(self.dispatched(), [])
+            self.assertEqual(registry.growth_intents()[0].phase, "queued")
+            self.assertEqual(self.service.warm_park_demand().physical_bytes, 0)
+            return
         original = registry.growth_intent
         replaced = False
 
@@ -111,6 +136,26 @@ class ManagedStartRetryTests(TestCase):
 
     def test_replacement_dispatched_first_fences_the_old_dispatch(self):
         fresh = replace(self.fixture.spec, job_id="fresh")
+        if self.noded:
+            # In noded the newer start replaces the queued launch, and both
+            # wait for memory; whichever activation commits first, the old
+            # start finds the newer identity and never dispatches.
+            with ThreadPoolExecutor(max_workers=2) as self.pool:
+                old = self.queue_for_memory(lambda: self.service.start_managed_process("one", self.fixture.spec))
+                self.wait_for_foreground(self.service)
+                newer = self.pool.submit(self.service.start_managed_process, "one", fresh)
+                deadline = time.monotonic() + 2
+                while self.fixture.registry.growth_intents()[0].job_id != "fresh" and time.monotonic() < deadline:
+                    time.sleep(0.005)
+                self.fixture.available = 10240  # Room for both, in either order.
+                with self.assertRaises(ManagedPrimaryOwnedError) as caught:
+                    old.result(5)
+                raced = [newer.result(5)]
+            self.assertEqual(raced[0].job_id, "fresh")
+            self.assertEqual(caught.exception.job_id, "fresh")
+            self.assertEqual(self.dispatched(), ["fresh"])
+            self.assertEqual(self.fixture.registry.growth_intents()[0].phase, "active")
+            return
         original = self.service._admit_managed_growth
         raced = []
 
@@ -239,3 +284,9 @@ class ManagedStartRetryTests(TestCase):
         self.assertEqual(self.fixture.control.call_count, 1)
         self.assertEqual(len(responses), 1)
         self.assertNotIn("retryable", responses[0])
+
+
+class NodedManagedStartRetryTests(ManagedStartRetryTests):
+    """The same tests with runtime/noded's admission service (NodedAdmission)."""
+
+    noded = True

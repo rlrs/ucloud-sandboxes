@@ -9,6 +9,11 @@ never waits.
 
 Not covered: drain during an image pull or a memory wait, and the
 empty-inventory stop proof, which belong to the autoscaler (S9).
+
+``NodedDrainAdmissionTests`` runs every scenario again with each node's
+admission in a real noded (docs/admission-port-3c.md, steps 3c.3 and 3c.4):
+the drain waits out a create noded admitted, and the heartbeat reads noded's
+claims before the registry.
 """
 
 from dataclasses import replace
@@ -28,12 +33,17 @@ def pressured(available_mb: int = 100):
 
 
 class DrainAdmissionTests(unittest.TestCase):
+    noded = False
+
+    def fleet(self, **options) -> LocalFleet:
+        return LocalFleet(rust_admission=self.noded, **options)
+
     def assert_retryable(self, response, error_code: str) -> None:
         self.assertEqual(response.status, 503, response.body)
         self.assertEqual((response.json()["error_code"], response.json()["retryable"]), (error_code, True))
 
     def test_drain_fences_new_work_and_reopens_with_its_token(self):
-        with LocalFleet() as fleet:
+        with self.fleet() as fleet:
             node = fleet.nodes[0]
             fleet.create("alpha")
             fleet.create("resting", parkable=True)
@@ -72,7 +82,7 @@ class DrainAdmissionTests(unittest.TestCase):
             self.assertEqual(fleet.create("beta")["state"], "running")
 
     def test_drain_waits_out_a_create_admitted_before_it(self):
-        with LocalFleet() as fleet:
+        with self.fleet() as fleet:
             node = fleet.nodes[0]
             # Blocked mounting its rootfs: admitted, quota prepared but committed
             # only with the rootfs (C5.2), not yet active.
@@ -102,9 +112,13 @@ class DrainAdmissionTests(unittest.TestCase):
             self.assertEqual((after["draining"], after["active_sandbox_creates"], after["active_sandboxes"]),
                              (True, 0, 1))
             self.assertIsNone(node.registration("beta"))
+            if self.noded:
+                # The create's claim was noded's, and noded released it.
+                snapshot = node.service.admission.snapshot()
+                self.assertEqual((snapshot["active_reservations"], snapshot["admission_open"]), (0, False))
 
     def test_live_admission_reads_the_host_sample(self):
-        with LocalFleet(admission_wait_seconds=WAIT) as fleet:
+        with self.fleet(admission_wait_seconds=WAIT) as fleet:
             node = fleet.nodes[0]
             fleet.create("alpha")
 
@@ -164,6 +178,12 @@ class DrainAdmissionTests(unittest.TestCase):
             for refused in ("late", "unknown"):
                 self.assertIsNone(fleet.route(refused))
                 self.assertIsNone(node.registration(refused))
+
+
+class NodedDrainAdmissionTests(DrainAdmissionTests):
+    """The same scenarios with each node's admission in a real noded."""
+
+    noded = True
 
 
 if __name__ == "__main__":

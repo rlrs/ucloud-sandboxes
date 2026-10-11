@@ -372,10 +372,12 @@ class DirectNodeRuntime:
         # escalations noded asks for and publishes the demand reclaim bills.
         self.rust_pause_tier = service.rust_pause_tier = bool(rust_pause_tier)
         self._demand_publisher = self._noded_status = None
+        # --rust-admission (step 3c.3): noded holds the node's ledger.
+        noded_admission = getattr(getattr(service, "admission", None), "remote", False)
         if rust_pause_tier:
             from .pause_handoff import AGENT_DEMAND_FILE, STATUS_FILE, DemandPublisher, NodedStatus, noded_directory
-            if not rust_admission:
-                # With --rust-admission noded's own ledger is the reclaim demand.
+            if not noded_admission:
+                # Otherwise noded's own ledger is the reclaim demand.
                 self._demand_publisher = DemandPublisher(service, noded_directory(service) / AGENT_DEMAND_FILE)
             self._noded_status = NodedStatus(noded_directory(service) / STATUS_FILE)
         # --rust-admission, phase 3b so far (docs/admission-port-3c.md, step
@@ -407,14 +409,13 @@ class DirectNodeRuntime:
         self._drain_guard = RLock()
         self._registry = service.provisioner.registry
         self._drain = self._registry.load_drain()
-        admission = service.admission
-        if admission.remote:
+        if noded_admission:
             # noded reads the drain row itself; a noded that is not up yet
             # follows this agent's gate at its hello.
             if self._drain.draining:
-                admission.close(self._drain.token, strict=False)
+                service.admission.close(self._drain.token, strict=False)
             else:
-                admission.open(self._drain.token or None, strict=False)
+                service.admission.open(self._drain.token or None, strict=False)
         elif self._drain.draining:
             self.service.close_admission()
         else:
@@ -1457,10 +1458,11 @@ class DirectNodeRuntime:
         # miss a create transitioning from pre-registry work into the registry.
         transient = self.service.activity_snapshot()
         inventory = self.service.inventory_snapshot()
-        if transient.noded_session is not None:
+        noded_session = getattr(transient, "noded_session", None)
+        if noded_session is not None:
             # The transient half is noded's (§3.6): a noded restarted between
             # it and the inventory took its claims along. Skip this sample.
-            self.service.admission.confirm_session(transient.noded_session)
+            self.service.admission.confirm_session(noded_session)
         records = inventory.records
         registered_keys = {(record.spec.id, record.generation) for record in records}
         direct_sandboxes = tuple(

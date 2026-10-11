@@ -1,6 +1,6 @@
 """Assembled managed admission keeps future heap growth visible until a safe wait."""
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import replace
 from pathlib import Path
 import sqlite3
@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from tests import test_direct_provisioner as fixtures
+from tests.admission_backends import AdmissionBackendCase
 from ucloud_sandboxes import pause_tier
 from ucloud_sandboxes.direct_registry import DirectSandboxRegistry, DirectRegistryConflictError
 from ucloud_sandboxes.direct_service import DirectSandboxService
@@ -22,14 +23,14 @@ from ucloud_sandboxes.resident_memory import ResidentMemorySample
 from ucloud_sandboxes.sandbox import SandboxAdmissionClosedError, SandboxStartupBusyError
 
 
-class ManagedGrowthTests(unittest.TestCase):
+class ManagedGrowthTests(AdmissionBackendCase, unittest.TestCase):
     def setUp(self):
         self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.fixture = fixtures.DirectProvisionerTests()
         self.provisioner, self.registry, *_ = self.fixture.make(Path(self.tmp.name).resolve())
         self.provisioner.oci = replace(self.provisioner.oci, managed_init_binary=Path('/bin/sh').resolve())
-        self.service = DirectSandboxService(self.provisioner)
+        self.service = self.admitted(DirectSandboxService(self.provisioner))
         self.service.admission_wait_seconds = 3
         for sid in ('one', 'two'):
             self.fixture.create(self.service, replace(self.fixture.spec(), id=sid, memory_mb=4096,
@@ -51,37 +52,25 @@ class ManagedGrowthTests(unittest.TestCase):
                                     'state': 'running', 'pid': 10, 'sequence': 1}}
 
     def wait_for_demand(self, service=None):
-        service = service or self.service
-        deadline = time.monotonic() + 1
-        while not service._transitions.foreground_waiting and time.monotonic() < deadline:
-            time.sleep(.005)
-        self.assertTrue(service._transitions.foreground_waiting)
+        self.wait_for_foreground(service or self.service)
 
     def test_resident_continuation_does_not_require_a_restore_slot(self):
         self.service.start_managed_process('one', self.spec)
         self.service.observe_managed_wait('one', 7, 'request-one')
         with ThreadPoolExecutor(max_workers=1) as pool:
-            with ExitStack() as held:
-                for index in range(self.service._restore_slots.capacity):
-                    held.enter_context(self.service._restore_slot(owner=(f'restore-{index}', 1)))
+            with self.held_slots(self.service, 'restore'):
                 wake = pool.submit(self.service.admit_managed_continuation,
                                    'one', 7, 'request-one')
                 wake.result(1)
-                self.assertEqual(self.service._restore_slots.waiting, 0)
+                self.assertEqual(self.queued(self.service, 'restore'), 0)
                 self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-one'))
                 self.assertEqual(self.service.get('one').state, 'running')
 
     def test_launch_does_not_queue_behind_cold_creates_for_startup_slots(self):
-        slots = self.service._startup_slots  # A create burst holds every startup slot.
-        for index in range(slots.capacity):
-            self.assertTrue(slots.acquire(timeout=1, owner=(f'create-{index}', 1)))
-        try:
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                self.assertEqual(pool.submit(self.service.start_managed_process, 'one', self.spec)
-                                 .result(1).state, 'running')
-        finally:
-            for _ in range(slots.capacity):
-                slots.release()
+        # A create burst holds every startup slot.
+        with self.held_slots(self.service, 'startup'), ThreadPoolExecutor(max_workers=1) as pool:
+            self.assertEqual(pool.submit(self.service.start_managed_process, 'one', self.spec)
+                             .result(1).state, 'running')
 
     def test_local_wait_suspends_growth_and_its_resume_forecasts_a_continuation(self):
         self.service.start_managed_process('one', self.spec)
@@ -89,7 +78,7 @@ class ManagedGrowthTests(unittest.TestCase):
         self.service.observe_managed_wait('one', 7, 'local-wait-a')
         self.assertEqual(self.service.warm_park_demand().physical_bytes, 0)
         self.service.resume_managed_continuation('one', 7, 'local-wait-a')
-        intent = self.service._growth_intents[('one', 7)]
+        intent = self.intents(self.service)[('one', 7)]
         self.assertEqual((intent.phase, intent.request_id), ('active', 'local-wait-a'))
 
     def test_managed_create_is_not_charged_the_bound_its_launch_carries(self):
@@ -110,7 +99,7 @@ class ManagedGrowthTests(unittest.TestCase):
             ('observe_managed_wait', ('gone', 7), 'c')])
         self.assertEqual([type(error).__name__ for error in errors],
                          ['NoneType', 'NoneType', 'NoneType', 'DirectRegistryConflictError', 'DirectWardenError'])
-        phases = {key[0]: (item.phase, item.request_id) for key, item in self.service._growth_intents.items()}
+        phases = {key[0]: (item.phase, item.request_id) for key, item in self.intents(self.service).items()}
         self.assertEqual(phases, {'one': ('active', 'a'), 'two': ('safe', 'b')})
         self.assertEqual({(item.sandbox_id, item.phase) for item in self.registry.growth_intents()},
                          {('one', 'active'), ('two', 'safe')})
@@ -128,10 +117,9 @@ class ManagedGrowthTests(unittest.TestCase):
                 self.assertFalse(wake.done())
                 self.assertFalse(self.registry.relay_wake_fence('one', 7, 'request-one'))
                 # Every I/O permit remains usable while growth waits for RAM.
-                with ExitStack() as held:
-                    for index in range(self.service._restore_slots.capacity):
-                        held.enter_context(self.service._restore_slot(
-                            owner=(f'restore-{index}', 1), deadline=time.monotonic() + .5))
+                self.assertEqual(self.slots_available(self.service, 'restore'), self.slots_capacity(self.service, 'restore'))
+                with self.held_slots(self.service, 'restore'):
+                    self.assertFalse(wake.done())
             finally:
                 self.service.observe_managed_wait('two', 7, 'request-two')
             wake.result(2)
@@ -146,11 +134,25 @@ class ManagedGrowthTests(unittest.TestCase):
             for wake in wakes:
                 wake.result(2)
         self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
-        self.assertFalse(self.service._transitions.foreground_waiting)
+        self.assertFalse(self.foreground_waiting(self.service))
         self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-one'))
 
     def test_growth_commits_do_not_hold_node_capacity_guard(self):
         """Every exec/upload admission shares the guard; fsyncs must not."""
+        if self.noded:
+            # noded commits growth in its own process, in detached tasks outside
+            # its ledger lock (runtime/noded/tests/admission_service.rs): the
+            # agent's guard is never involved. The same sequence lands the same rows.
+            self.service.start_managed_process('one', self.spec)
+            self.assertEqual(self.intents(self.service)[('one', 7)].phase, 'active')
+            self.service.observe_managed_wait('one', 7, 'request-one')
+            self.assertEqual(self.intents(self.service)[('one', 7)].phase, 'safe')
+            self.service.admit_managed_continuation('one', 7, 'request-one')
+            self.assertEqual(self.intents(self.service)[('one', 7)].phase, 'active')
+            self.assertFalse(self.service._capacity_guard.locked())
+            self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-one'))
+            self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+            return
         observed = []
         original = self.registry.growth_intent
 
@@ -173,6 +175,9 @@ class ManagedGrowthTests(unittest.TestCase):
         self.service.observe_managed_wait('one', 7, 'request-one')
         self.service.start_managed_process('two', self.spec)
         self.service.observe_managed_wait('two', 7, 'request-two')
+        if self.noded:
+            self._admitted_growth_stays_charged_in_noded()
+            return
         committing, release = Event(), Event()
         original = self.registry.growth_intent
 
@@ -201,8 +206,46 @@ class ManagedGrowthTests(unittest.TestCase):
         self.assertEqual(self.service._provisional_growth, {})
         self.assertEqual(self.service._growth_turns, {})
 
+    def _admitted_growth_stays_charged_in_noded(self):
+        """noded commits in its own process: SQLite's write lock, held here,
+        makes the activation's commit wait as a slow fsync would."""
+        with closing(sqlite3.connect(self.registry.path, timeout=30, isolation_level=None)) as blocker, \
+                ThreadPoolExecutor(max_workers=2) as pool:
+            blocker.execute('BEGIN IMMEDIATE')
+            try:
+                first = pool.submit(self.service.admit_managed_continuation, 'one', 7, 'request-one')
+                # Admitted and charged while its commit waits: only one 4 GiB
+                # continuation fits in 6 GiB available.
+                deadline = time.monotonic() + 2
+                while (self.service.warm_park_demand().physical_bytes != 4 << 30
+                       and time.monotonic() < deadline):
+                    time.sleep(.005)
+                self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+                self.assertFalse(first.done())
+                self.assertFalse(self.registry.relay_wake_fence('one', 7, 'request-one'))
+                second = pool.submit(self.service.admit_managed_continuation, 'two', 7, 'request-two')
+                self.wait_for_demand()
+                self.assertFalse(second.done())
+            finally:
+                blocker.execute('ROLLBACK')
+            first.result(2)
+            self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-one'))
+            self.assertFalse(second.done())
+            self.service.observe_managed_wait('one', 7, 'request-one-next')
+            second.result(2)
+        self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+
     def test_wait_winning_before_covered_check_requires_growth_admission(self):
         self.service.start_managed_process('one', self.spec)
+        if self.noded:
+            # The wait takes the sandbox's turn in noded before this wake's
+            # covered check: the wake is not covered and is admitted.
+            self.service.observe_managed_wait('one', 7, 'request-race')
+            self.service.admit_managed_continuation('one', 7, 'request-race')
+            self.assertEqual(self.intents(self.service)[('one', 7)].phase, 'active')
+            self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
+            self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-race'))
+            return
         original = self.service._growth_turn
         intercepted = False
 
@@ -220,7 +263,7 @@ class ManagedGrowthTests(unittest.TestCase):
         with patch.object(self.service, '_growth_turn', side_effect=wait_first):
             self.service.admit_managed_continuation('one', 7, 'request-race')
         self.assertTrue(intercepted)
-        self.assertEqual(self.service._growth_intents[('one', 7)].phase, 'active')
+        self.assertEqual(self.intents(self.service)[('one', 7)].phase, 'active')
         self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
         self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-race'))
 
@@ -284,7 +327,7 @@ class ManagedGrowthTests(unittest.TestCase):
         self.control.side_effect = TimeoutError('ambiguous control RPC')
         with self.assertRaises(TimeoutError):
             self.service.start_managed_process('one', self.spec)
-        restarted = DirectSandboxService(self.provisioner)
+        restarted = self.admitted(DirectSandboxService(self.provisioner))
         self.configure(restarted)
         self.assertEqual(restarted.warm_park_demand().physical_bytes, 4 << 30)
         with self.assertRaises(DirectRegistryConflictError):
@@ -331,9 +374,7 @@ class ManagedGrowthTests(unittest.TestCase):
 
     def observe(self, key, sample):
         """What a sampler pass publishes: the sample, then refreshed forecasts."""
-        self.service._resident_memory._samples[key] = sample
-        with self.service._capacity_guard:
-            self.service._refresh_growth_forecasts_locked()
+        self.observe_sample(self.service, key, sample)
 
     def sample(self, *, current, peak=0, shared=None, age=0.0, swap=0):
         return ResidentMemorySample(current_bytes=current, anonymous_bytes=0, file_bytes=current,
@@ -450,7 +491,7 @@ class ManagedGrowthTests(unittest.TestCase):
                 pending.result(2)
         self.assertEqual(self.control.call_count, 1)
         self.assertEqual([item.phase for item in self.registry.growth_intents()], ['active', 'queued'])
-        self.assertFalse(self.service._transitions.foreground_waiting)
+        self.assertFalse(self.foreground_waiting(self.service))
 
     def test_forced_capture_releases_growth_and_restore_reestablishes_it(self):
         self.service.start_managed_process('one', self.spec)
@@ -572,7 +613,7 @@ class ManagedGrowthTests(unittest.TestCase):
             self.assertTrue(self.registry.relay_wake_fence('one', 7, 'request-one'))
             finish_capture.set()
             self.assertTrue(forecast_retired.wait(1))
-            with self.service._reserve_active_capacity('peer', 1, ResourceQuantity(memory_mb=4096)):
+            with self.service.admission.startup(('peer', 1), ResourceQuantity(memory_mb=4096), managed=False):
                 return_capture.set()
                 self.assertEqual(park.result(1).state, 'parked')
                 self.wait_for_demand()
@@ -623,7 +664,7 @@ class ManagedGrowthTests(unittest.TestCase):
         registration = self.registry.get('one')
         moving = self.registry.begin_move_out('one', expected_revision=registration.revision,
                                               migration_id='migration:owned', migration_sha256='e'*64)
-        restarted = DirectSandboxService(self.provisioner)
+        restarted = self.admitted(DirectSandboxService(self.provisioner))
         try:
             records = restarted.start()
             self.assertEqual(next(item.state for item in records if item.spec.id == 'one'), 'moving_out')
@@ -648,3 +689,9 @@ class ManagedGrowthTests(unittest.TestCase):
         reopened = DirectSandboxRegistry(path)
         self.assertEqual(reopened.get('sandbox'), record)
         self.assertEqual(reopened.growth_intents(), ())
+
+
+class NodedManagedGrowthTests(ManagedGrowthTests):
+    """The same tests with runtime/noded's admission service (NodedAdmission)."""
+
+    noded = True

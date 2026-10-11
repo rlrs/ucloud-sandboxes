@@ -17,6 +17,9 @@ these boundaries:
 - Host metrics are a sample the test sets (``FleetNode.sample_metrics``),
   and heartbeats are relayed on demand by ``LocalFleet.heartbeat()``, as the
   production heartbeat timer would.
+- With ``rust_admission=True`` each node's admission runs in a real
+  ``ucloud-noded --admission-only`` (tests/noded_admission.py) that owns the
+  node's registry and outlives agent restarts, as noded does on a worker.
 
 The gateway uses distinct real tokens and, when ``UCLOUD_TEST_POSTGRES_DSN``
 is set and requested, PostgreSQL routing through the production descriptor.
@@ -269,6 +272,8 @@ class FleetNode:
         self.storage_host: FakeStorageHost | None = None
         # Closed connections drop out once the server releases them.
         self._connections: weakref.WeakSet[socket.socket] = weakref.WeakSet()
+        # LocalFleet(rust_admission=True): this node's noded, across agent restarts.
+        self.noded = None
 
     # -- in-process observation and knobs ------------------------------------
     # A node-agent process has none of these; touching one there is an error,
@@ -395,6 +400,7 @@ class FleetNode:
             heartbeat_url=self.fleet.gateway_url + "/v1/nodes/heartbeat",
             heartbeat_token=self.fleet.tokens.heartbeat,
             heartbeat_interval_seconds=HEARTBEAT_INTERVAL_SECONDS,
+            rust_admission=self.fleet.rust_admission,
         )
 
     @property
@@ -414,6 +420,12 @@ class FleetNode:
             fencer=None if native_pidfd_available() else SyscallPidfdFencer(proc_root=self.proc_root),
             sample_metrics=lambda: self._sample_metrics(),
         )
+        if self.fleet.rust_admission:
+            from tests.noded_admission import NodedHarness
+
+            if self.noded is None:
+                self.noded = NodedHarness(self.state_root / "direct-registry.sqlite")
+            self.noded.attach(self.service)
         self._bound(server.server_address[1])
         node = self
 
@@ -544,6 +556,9 @@ class FleetNode:
                 self.storage_host.release_holds()
             self.stop()
         finally:
+            if self.noded is not None:
+                self.noded.close()
+                self.noded = None
             self.reap_containers()
             if self._storage_server is not None:
                 self._stop_storage()
@@ -732,14 +747,20 @@ class LocalFleet:
     gateway processes do (nodes heartbeat to the first); ``create_placement``
     is the deployment switch; ``gateway_options`` pass further ``build_server``
     arguments (a managed registry, an environment registry).
+    ``rust_admission`` runs each node's admission in a real noded
+    (``NodedAdmission``; in-process nodes only).
     """
 
     def __init__(self, *, nodes: int = 1, postgres: bool = False, heartbeat_ttl_seconds: int = 120,
                  node_processes: bool = False, admission_wait_seconds: float = 30.0,
                  max_concurrent_sandbox_creates: int | None = None, gateways: int = 1,
-                 create_placement: str = "ranked", gateway_options: dict | None = None) -> None:
+                 create_placement: str = "ranked", gateway_options: dict | None = None,
+                 rust_admission: bool = False) -> None:
         if nodes < 1:
             raise ValueError("a fleet needs at least one node")
+        if rust_admission and node_processes:
+            raise ValueError("noded's admission harness runs with in-process node agents")
+        self.rust_admission = rust_admission
         if postgres and not POSTGRES_DSN:
             raise unittest.SkipTest("requires real PostgreSQL (UCLOUD_TEST_POSTGRES_DSN)")
         self.node_count = nodes

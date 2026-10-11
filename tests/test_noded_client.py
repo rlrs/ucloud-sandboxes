@@ -23,6 +23,7 @@ from tests import test_vm_init as vm_init_fixtures
 from tests.test_pause_tier import _PausingWarden
 from tests.test_rust_create_handoff import _UnixConnection
 from ucloud_sandboxes import noded_client
+from ucloud_sandboxes.admission_backend import LocalAdmission, NodedAdmission
 from ucloud_sandboxes.cli import build_parser, vm_init_options_to_dict
 from ucloud_sandboxes.config import DeploymentConfig
 from ucloud_sandboxes.direct_registry import DirectSandboxRegistry
@@ -322,6 +323,10 @@ class RustAdmissionAgentTests(unittest.TestCase):
         self.addCleanup(server.shutdown)
         link = server.RequestHandlerClass.noded_link
         self.assertEqual(link.client.socket_path, str(self.root / "noded" / "noded.sock"))
+        # Step 3c.3: one ledger, noded's. The agent publishes no reclaim demand.
+        self.assertIsInstance(self.service.admission, NodedAdmission)
+        self.assertIs(self.service.admission.link, link)
+        self.assertIsNone(server.RequestHandlerClass.manager._demand_publisher)
         self.assertEqual(link.wait_hello(5)["noded_session"], "session-1")
         # Phase 3b: the agent reads noded's resident samples instead of sampling.
         self.assertIsInstance(self.service._resident_memory, PublishedResidentMemory)
@@ -351,6 +356,8 @@ class RustAdmissionAgentTests(unittest.TestCase):
         server = self.build(rust_creates=True, rust_execs=True, rust_pause_tier=True)
         self.addCleanup(server.server_close)
         self.assertIsNone(server.RequestHandlerClass.noded_link)
+        self.assertIsInstance(self.service.admission, LocalAdmission)
+        self.assertIsNotNone(server.RequestHandlerClass.manager._demand_publisher)
         self.assertIsInstance(self.service._resident_memory, ResidentMemorySampler)
         self.assertFalse((self.root / "noded" / "noded.sock").exists())
 

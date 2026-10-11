@@ -2,17 +2,20 @@
 from ucloud_sandboxes.transition_admission import MemoryDemand
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack, contextmanager
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event
 from types import SimpleNamespace
+import time
 import unittest
 from unittest.mock import patch
 
 from tests import test_direct_provisioner as fixtures
+from tests.admission_backends import AdmissionBackendCase
 from tests.test_startup_admission import wait_queued
-from ucloud_sandboxes.admission import FairCapacity
+from ucloud_sandboxes.admission import CREATE_ADMISSION_WAIT, FairCapacity
 from ucloud_sandboxes.background_io import Pressure
 from ucloud_sandboxes.checkpoint_components import MemoryBackingRef, WorkspaceCaptureRef
 from ucloud_sandboxes.direct_service import (
@@ -145,18 +148,39 @@ class TransitionLedgerTests(unittest.TestCase):
         capacity.release(weight=4)
 
 
-class TransitionServiceTests(unittest.TestCase):
+class TransitionServiceTests(AdmissionBackendCase, unittest.TestCase):
+    """Restore, create, capture and publication admission, through
+    ``service.admission`` (the agent's ledger here, noded's below)."""
+
     def setUp(self):
         self.directory = TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.fixture = fixtures.DirectProvisionerTests()
         self.provisioner, *_ = self.fixture.make(Path(self.directory.name).resolve())
-        self.service = DirectSandboxService(self.provisioner, max_concurrent_restores=1)
+        self.service = self.admitted(DirectSandboxService(self.provisioner, max_concurrent_restores=1))
         self.service.admission_wait_seconds = 3
 
     def parked(self):
         self.fixture.create(self.service, self.fixture.spec())
         self.service.park("sandbox", operation_id="park:test")
+
+    def owned(self, sandbox_id):
+        """A running sandbox at generation 7: noded validates a restore's owner."""
+        self.fixture.create(self.service, replace(self.fixture.spec(), id=sandbox_id))
+        return (sandbox_id, 7)
+
+    @contextmanager
+    def startup(self, owner, requested):
+        """A create's demand, startup slot and capacity, held."""
+        with self.service.admission.startup(owner, requested, managed=False):
+            yield
+
+    @contextmanager
+    def restore(self, owner, requested, cost, *, deadline=None):
+        """A wake's demand, restore slot and capacity, held."""
+        deadline = time.monotonic() + self.service.admission_wait_seconds if deadline is None else deadline
+        with self.service.admission.restore(owner, requested, cost, deadline=deadline, validate_owner=lambda: None):
+            yield
 
     def configure_memory(self):
         self.service.configure_active_capacity(
@@ -205,46 +229,66 @@ class TransitionServiceTests(unittest.TestCase):
 
     def test_startup_cannot_steal_contended_restore_headroom(self):
         self.configure_memory()  # 6 GiB usable above the unchanged 2 GiB floor.
-        entered = Event()
+        wake_owner = self.owned("wake")
+        entered, restored, finish = Event(), Event(), Event()
         request = ResourceQuantity(memory_mb=4096)
+        cost = TransitionCost(TransitionKind.RESTORE, 4 << 30)
 
         def start():
-            with self.service._reserve_active_capacity("new", 1, request):
+            with self.startup(("new", 1), request):
                 entered.set()
 
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            with self.service._transition_demand(
-                ("wake", 1), TransitionCost(TransitionKind.RESTORE, 4 << 30)
-            ):
+        def wake():
+            with self.restore(wake_owner, request, cost):
+                restored.set()
+                self.assertTrue(finish.wait(3))
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            with self.held_slots(self.service, "restore"):
+                # The wake queues for the restore slot; its demand is visible.
+                waking = pool.submit(wake)
+                self.wait_queued(self.service, "restore", 1)
                 future = pool.submit(start)
                 self.assertFalse(entered.wait(.3))
                 self.assertEqual(self.service.warm_park_demand().physical_bytes, 4 << 30)
-                # Restore itself can spend its protected headroom immediately.
-                with self.service._reserve_active_capacity(
-                    "wake", 1, request,
-                    cost=TransitionCost(TransitionKind.RESTORE, 4 << 30),
-                ):
-                    self.assertFalse(entered.is_set())
+            # Restore itself can spend its protected headroom immediately.
+            self.assertTrue(restored.wait(2))
+            self.assertFalse(entered.is_set())
+            finish.set()
+            waking.result(2)
             future.result(2)  # Cancellation/completion removes the protection.
         self.assertTrue(entered.is_set())
         self.assert_clean()
 
     def test_restore_protection_does_not_serialize_work_that_fits(self):
         self.configure_memory()
-        with self.service._transition_demand(
-            ("wake", 1), TransitionCost(TransitionKind.RESTORE, 2 << 30)
-        ):
-            with self.service._reserve_active_capacity(
-                "new", 1, ResourceQuantity(memory_mb=2048),
-            ):
-                with self.service._reserve_active_capacity(
-                    "wake", 1, ResourceQuantity(memory_mb=2048),
-                    cost=TransitionCost(TransitionKind.RESTORE, 2 << 30),
-                ):
-                    self.assertEqual(self.service._transitions.known_memory_bytes, 4 << 30)
+        wake_owner = self.owned("wake")
+        restored, finish = Event(), Event()
+        request = ResourceQuantity(memory_mb=2048)
+        cost = TransitionCost(TransitionKind.RESTORE, 2 << 30)
+
+        def wake():
+            with self.restore(wake_owner, request, cost):
+                restored.set()
+                self.assertTrue(finish.wait(3))
+
+        with ThreadPoolExecutor(max_workers=1) as pool, ExitStack() as held:
+            held.enter_context(self.held_slots(self.service, "restore"))
+            # The wake queues for the restore slot; its demand is visible.
+            waking = pool.submit(wake)
+            self.wait_queued(self.service, "restore", 1)
+            # A create that fits beside the queued wake is not held back,
+            with self.startup(("new", 1), request):
+                held.close()
+                # and the wake then spends the same owner reservation it waited with.
+                self.assertTrue(restored.wait(2))
+                self.assertEqual(self.known_memory_bytes(self.service), 4 << 30)
+                finish.set()
+            waking.result(2)
         self.assert_clean()
 
     def test_file_restore_reserves_physical_bound_without_spending_tmpfs(self):
+        owner = self.owned("file")
         self.service.configure_active_capacity(
             ResourceQuantity(vcpu=4, memory_mb=16384),
             runtime_metrics_provider=lambda: NodeRuntimeMetrics(
@@ -254,11 +298,9 @@ class TransitionServiceTests(unittest.TestCase):
             ),
         )
         with patch.object(self.service.warden, 'application_memory_mode', return_value='file'):
-            cost = self.service._transition_memory_cost(TransitionKind.RESTORE, ('file', 1), 4 << 30)
+            cost = self.service._transition_memory_cost(TransitionKind.RESTORE, owner, 4 << 30)
             self.assertEqual(cost.ram_backing_bytes, 0)
-            with self.service._reserve_active_capacity(
-                'file', 1, ResourceQuantity(memory_mb=4096), cost=cost,
-            ):
+            with self.restore(owner, ResourceQuantity(memory_mb=4096), cost):
                 demand = self.service.warm_park_demand()
                 self.assertEqual(demand.physical_bytes, 4 << 30)
                 self.assertEqual(demand.ram_backing_bytes, 0)
@@ -330,7 +372,7 @@ class TransitionServiceTests(unittest.TestCase):
             self.assertTrue(sampled.wait(1))
             self.assertFalse(Event().wait(0.3))
             self.assertFalse(future.done())
-            self.assertEqual(self.service._transitions.known_memory_bytes, 0)
+            self.assertEqual(self.known_memory_bytes(self.service), 0)
             self.assertEqual(self.service.warm_park_demand().physical_bytes, 4096 * 1024**2)
             available[0] = 6144
             self.assertEqual(future.result(2).state, "running")
@@ -355,9 +397,8 @@ class TransitionServiceTests(unittest.TestCase):
                 )
 
                 def start():
-                    with self.service._startup_demand("queued", 1, ResourceQuantity(memory_mb=2048)):
-                        with self.service._reserve_active_capacity("queued", 1, ResourceQuantity(memory_mb=2048)):
-                            entered.set()
+                    with self.startup(("queued", 1), ResourceQuantity(memory_mb=2048)):
+                        entered.set()
 
                 with ThreadPoolExecutor(max_workers=1) as pool:
                     future = pool.submit(start)
@@ -381,12 +422,13 @@ class TransitionServiceTests(unittest.TestCase):
                     ),
                 )
                 with patch.object(self.service.warden.config, "application_memory_root", Path('/ram'), create=True):
-                    with self.assertRaises(SandboxCapacityUnavailableError):
-                        with self.service._reserve_active_capacity(
-                            "unknown", 1, ResourceQuantity(memory_mb=1024),
-                            deadline=__import__('time').monotonic() + 0.25,
-                        ):
-                            self.fail("unknown physical capacity admitted a growth transition")
+                    wait = CREATE_ADMISSION_WAIT.set(0.25)
+                    try:
+                        with self.assertRaises(SandboxCapacityUnavailableError):
+                            with self.startup(("unknown", 1), ResourceQuantity(memory_mb=1024)):
+                                self.fail("unknown physical capacity admitted a growth transition")
+                    finally:
+                        CREATE_ADMISSION_WAIT.reset(wait)
                 self.assert_clean()
 
     def test_concurrent_starts_cannot_spend_same_memory_headroom(self):
@@ -395,16 +437,14 @@ class TransitionServiceTests(unittest.TestCase):
         request = ResourceQuantity(vcpu=1, memory_mb=4096)
 
         def second():
-            with self.service._reserve_active_capacity("second", 1, request):
+            with self.startup(("second", 1), request):
                 entered.set()
 
         with ThreadPoolExecutor(max_workers=1) as pool:
-            with self.service._reserve_active_capacity("first", 1, request):
+            with self.startup(("first", 1), request):
                 future = pool.submit(second)
                 self.assertFalse(entered.wait(0.1))
-                self.assertEqual(
-                    self.service._transitions.known_memory_bytes, 4096 * 1024**2
-                )
+                self.assertEqual(self.known_memory_bytes(self.service), 4096 * 1024**2)
             future.result(2)
             self.assertTrue(entered.is_set())
         self.assert_clean()
@@ -415,10 +455,10 @@ class TransitionServiceTests(unittest.TestCase):
                 if action == "drain":
                     self.setUp()
                 self.parked()
-                self.service._restore_slots.acquire()
                 with (
                     ThreadPoolExecutor(max_workers=1) as pool,
                     patch.object(self.service.warden, "resume") as resume,
+                    self.held_slots(self.service, "restore"),
                 ):
                     future = pool.submit(
                         self.service.wake,
@@ -426,17 +466,14 @@ class TransitionServiceTests(unittest.TestCase):
                         generation=7,
                         operation_id="wake:queued",
                     )
-                    try:
-                        wait_queued(self.service._restore_slots, 1)
-                        if action == "delete":
-                            self.service.delete("sandbox", generation=7)
-                        else:
-                            self.service.close_admission()
-                        with self.assertRaises(SandboxRestoreBusyError):
-                            future.result(1)
-                        resume.assert_not_called()
-                    finally:
-                        self.service._restore_slots.release()
+                    self.wait_queued(self.service, "restore", 1)
+                    if action == "delete":
+                        self.service.delete("sandbox", generation=7)
+                    else:
+                        self.service.close_admission()
+                    with self.assertRaises(SandboxRestoreBusyError):
+                        future.result(1)
+                    resume.assert_not_called()
                 self.assert_clean()
                 if action == "drain":
                     self.service.delete("sandbox", generation=7)
@@ -451,9 +488,7 @@ class TransitionServiceTests(unittest.TestCase):
             sampled.set()
             return original()
 
-        with self.service._reserve_active_capacity(
-            "busy-start", 1, ResourceQuantity(vcpu=1, memory_mb=6144)
-        ):
+        with self.startup(("busy-start", 1), ResourceQuantity(vcpu=1, memory_mb=6144)):
             self.service._runtime_metrics_provider = metrics
             with (
                 ThreadPoolExecutor(max_workers=1) as pool,
@@ -466,6 +501,7 @@ class TransitionServiceTests(unittest.TestCase):
                     operation_id="wake:memory",
                 )
                 self.assertTrue(sampled.wait(1))
+                self.wait_for_foreground(self.service)
                 self.service.delete("sandbox", generation=7)
                 with self.assertRaises(DirectWardenError):
                     future.result(1)
@@ -489,6 +525,7 @@ class TransitionServiceTests(unittest.TestCase):
             future = pool.submit(self.service.wake, "sandbox", generation=7,
                                  operation_id="wake:physical-memory")
             self.assertTrue(sampled.wait(1))
+            self.wait_for_foreground(self.service)
             self.service.delete("sandbox", generation=7)
             with self.assertRaises(DirectWardenError):
                 future.result(1)
@@ -497,22 +534,21 @@ class TransitionServiceTests(unittest.TestCase):
 
     def test_two_queued_wakes_restore_checkpoint_once(self):
         self.parked()
-        self.service._restore_slots.acquire()
         with (
             ThreadPoolExecutor(max_workers=2) as pool,
             patch.object(
                 self.service.warden, "resume", wraps=self.service.warden.resume
             ) as resume,
         ):
-            first = pool.submit(
-                self.service.wake, "sandbox", generation=7, operation_id="wake:first"
-            )
-            wait_queued(self.service._restore_slots, 1)
-            second = pool.submit(
-                self.service.wake, "sandbox", generation=7, operation_id="wake:second"
-            )
-            wait_queued(self.service._restore_slots, 2)
-            self.service._restore_slots.release()
+            with self.held_slots(self.service, "restore"):
+                first = pool.submit(
+                    self.service.wake, "sandbox", generation=7, operation_id="wake:first"
+                )
+                self.wait_queued(self.service, "restore", 1)
+                second = pool.submit(
+                    self.service.wake, "sandbox", generation=7, operation_id="wake:second"
+                )
+                self.wait_queued(self.service, "restore", 2)
             self.assertEqual(first.result(2).state, "running")
             self.assertEqual(second.result(2).state, "running")
             self.assertEqual(resume.call_count, 1)
@@ -663,23 +699,20 @@ class TransitionServiceTests(unittest.TestCase):
 
     def test_changed_checkpoint_is_requoted_before_restore(self):
         self.parked()
-        self.service._restore_slots.acquire()
         with (
             ThreadPoolExecutor(max_workers=1) as pool,
             patch.object(self.service.warden, "resume") as resume,
         ):
-            future = pool.submit(
-                self.service.wake, "sandbox", generation=7, operation_id="wake:old-cost"
-            )
-            try:
-                wait_queued(self.service._restore_slots, 1)
+            with self.held_slots(self.service, "restore"):
+                future = pool.submit(
+                    self.service.wake, "sandbox", generation=7, operation_id="wake:old-cost"
+                )
+                self.wait_queued(self.service, "restore", 1)
                 with self.service._lock("sandbox", 7):
                     old = self.service.warden.records[("sandbox", 7)]
                     self.service.warden.records[("sandbox", 7)] = SimpleNamespace(
                         state=old.state, hibernation_generation=2
                     )
-            finally:
-                self.service._restore_slots.release()
             with self.assertRaisesRegex(SandboxRestoreBusyError, "checkpoint changed"):
                 future.result(1)
             resume.assert_not_called()
@@ -696,6 +729,10 @@ class TransitionServiceTests(unittest.TestCase):
             if not release.wait(2):
                 raise TimeoutError("test publisher gate")
 
+        def queued_create():
+            with self.startup(("queued", 1), ResourceQuantity(memory_mb=1024)):
+                pass
+
         with (
             patch.object(
                 self.service.warden,
@@ -704,10 +741,12 @@ class TransitionServiceTests(unittest.TestCase):
                 create=True,
             ),
             patch.object(self.service, "describe_storage_native_snapshot"),
+            ThreadPoolExecutor(max_workers=1) as pool,
         ):
-            with self.service._startup_demand(
-                "queued", 1, ResourceQuantity(memory_mb=1024)
-            ):
+            # A create queued behind full startup slots is a foreground wait.
+            with self.held_slots(self.service, "startup"):
+                queued = pool.submit(queued_create)
+                self.wait_queued(self.service, "startup", 1)
                 self.service.request_storage_publication("sandbox", generation=7)
                 self.assertTrue(entered.wait(1))
                 self.service.request_storage_publication("second", generation=7)
@@ -719,4 +758,11 @@ class TransitionServiceTests(unittest.TestCase):
                 self.service._publication_threads[("sandbox", 7)].join(2)
                 self.service.request_storage_publication("second", generation=7)
                 self.service._publication_threads[("second", 7)].join(2)
+            queued.result(2)
         self.assert_clean()
+
+
+class NodedTransitionServiceTests(TransitionServiceTests):
+    """The same tests with runtime/noded's admission service (NodedAdmission)."""
+
+    noded = True

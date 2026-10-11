@@ -15,9 +15,12 @@ import unittest
 from unittest.mock import patch
 
 from tests import test_direct_provisioner as fixtures
+from tests.admission_backends import AdmissionBackendCase
 from tests.test_rust_exec_fence import TOKEN, _UnixConnection
+from ucloud_sandboxes.admission_decision import PROJECTED
 from ucloud_sandboxes.direct_service import DirectSandboxService
 from ucloud_sandboxes.managed_process import ManagedProcessStart, control_request_bytes
+from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
 from ucloud_sandboxes.sandbox import SandboxCapacityUnavailableError
 
 TEST_TIER = "contract"
@@ -25,14 +28,14 @@ DIGEST = "a" * 64
 OTHER = "b" * 64
 
 
-class ManagedGrowthRouteTests(unittest.TestCase):
+class ManagedGrowthRouteTests(AdmissionBackendCase, unittest.TestCase):
     def setUp(self) -> None:
         directory = TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name).resolve()
         provisioner, self.registry, *_ = fixtures.DirectProvisionerTests().make(self.root)
         provisioner.oci = replace(provisioner.oci, managed_init_binary=Path("/bin/sh").resolve())
-        self.service = DirectSandboxService(provisioner, process_runner=fixtures.FakeProcessRunner())
+        self.service = self.admitted(DirectSandboxService(provisioner, process_runner=fixtures.FakeProcessRunner()))
         self.service.admission_wait_seconds = 1
         self.spec = replace(fixtures.DirectProvisionerTests.spec(), parkable=True, managed_process=True)
         self.record = fixtures.DirectProvisionerTests.create(self.service, self.spec)
@@ -79,6 +82,23 @@ class ManagedGrowthRouteTests(unittest.TestCase):
             self.assertEqual((status, body["error_code"], body["job_id"]), (409, "primary_owned", "primary"))
 
     def test_launch_queued_for_memory_is_busy_and_retryable(self) -> None:
+        if self.noded:
+            # noded queues the launch for memory itself: none above the floor.
+            available = [2048]
+            self.service.configure_active_capacity(
+                ResourceQuantity(vcpu=4, memory_mb=8192),
+                runtime_metrics_provider=lambda: NodeRuntimeMetrics(
+                    collected_at=utc_now(), cpu_count=4, cpu_percent=0,
+                    memory_total_mb=8192, memory_available_mb=available[0]))
+            self.service.admission_wait_seconds = 0.3
+            status, body = self.call("launch", self.body())
+            self.assertEqual((status, body), (503, {
+                "error": PROJECTED, "error_code": "startup_busy", "retryable": True}))
+            self.assertEqual(self.intent().phase, "queued")
+            available[0] = 8192
+            self.assertEqual(self.call("launch", self.body()), (200, {"job_id": "primary"}))
+            self.assertEqual(self.intent().phase, "active")
+            return
         with patch.object(self.service, "_admit_managed_growth",
                           side_effect=SandboxCapacityUnavailableError("no memory headroom")):
             status, body = self.call("launch", self.body())
@@ -152,6 +172,17 @@ class ManagedGrowthRouteTests(unittest.TestCase):
         self.assertEqual(self.call("launch", self.body(launch_sha256=digest)), (200, {"job_id": "primary"}))
         status, body = self.call("launch", self.body())
         self.assertEqual((status, body["error_code"]), (409, "primary_owned"))
+
+
+class NodedManagedGrowthRouteTests(ManagedGrowthRouteTests):
+    """The same routes with runtime/noded's admission service behind them.
+
+    noded no longer calls them once its node runs admission (it launches,
+    binds and observes terminals in process); they answer from noded's
+    ledger then, never from a second one.
+    """
+
+    noded = True
 
 
 if __name__ == "__main__":

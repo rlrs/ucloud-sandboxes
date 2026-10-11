@@ -707,6 +707,10 @@ impl Pipeline for NodePipeline {
     fn supports(&self, spec: &Map<String, Value>) -> bool {
         spec_supported(spec)
     }
+
+    fn admission(&self) -> Option<Arc<AdmissionService>> {
+        self.admission.clone()
+    }
 }
 
 #[cfg(test)]

@@ -776,6 +776,16 @@ impl Store {
         lock(&self.pool).clear();
     }
 
+    /// `view_index`, with the owner's index proved against the file now
+    /// (`_cached_index(fresh=True)`): another process's commit that finished
+    /// before this call is in it.
+    pub(crate) fn fresh_index(&self) -> Result<Arc<Index>> {
+        if self.is_owner() {
+            self.write_view().checked_at = None;
+        }
+        self.view_index()
+    }
+
     /// The registrations: the owner's index, or every row read and validated.
     pub(crate) fn view_index(&self) -> Result<Arc<Index>> {
         if let Some(index) = self.owned_index()? {

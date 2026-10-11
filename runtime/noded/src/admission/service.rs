@@ -295,6 +295,9 @@ pub enum EventAction {
     Wait,
     Activate,
     Terminal,
+    /// An imported primary's identity after the agent dispatched it
+    /// (`_bind_managed_launch`): needs `job_id` and `launch_sha256`.
+    Bind,
     /// Delete: retire the key's intent and provisional claim (no durable step).
     Forget,
 }
@@ -306,6 +309,7 @@ impl EventAction {
             "wait" => EventAction::Wait,
             "activate" => EventAction::Activate,
             "terminal" => EventAction::Terminal,
+            "bind" => EventAction::Bind,
             "forget" => EventAction::Forget,
             _ => return None,
         })
@@ -318,6 +322,8 @@ pub struct Event {
     pub owner: Owner,
     pub request_id: String,
     pub job_id: String,
+    /// `bind` only.
+    pub launch_sha256: String,
 }
 
 pub type EventResult = Result<Option<GrowthIntent>, Refusal>;
@@ -542,6 +548,11 @@ impl AdmissionService {
     /// Free slots per pool: (startup, restore, publication).
     pub fn available(&self) -> (usize, usize, usize) {
         (self.startup.available(), self.restore.available(), self.publication.available())
+    }
+
+    /// The pools: (startup, restore, publication).
+    pub fn pools(&self) -> (&FairCapacity<Owner>, &FairCapacity<Owner>, &FairCapacity<Owner>) {
+        (&self.startup, &self.restore, &self.publication)
     }
 
     /// The in-memory intent for `owner` (tests and status).
@@ -1096,15 +1107,28 @@ impl AdmissionService {
     /// committed intent's job ID (empty for an imported primary, which the
     /// caller binds after the dispatch).
     pub async fn launch(self: &Arc<Self>, owner: &Owner, job_id: &str, launch_sha256: &str) -> Result<String, Refusal> {
-        let holder = Holder::Noded;
-        Self::current(&self.lock(), &holder, true)?;
+        let budget = self.config.admission_wait_seconds;
+        self.launch_for(&Holder::Noded, owner, job_id, launch_sha256, budget).await
+    }
+
+    /// `launch` for any holder, with its wait budget: the agent's own
+    /// `start_managed_process` (`POST growth/launch`) as well as noded's.
+    pub async fn launch_for(
+        self: &Arc<Self>,
+        holder: &Holder,
+        owner: &Owner,
+        job_id: &str,
+        launch_sha256: &str,
+        budget_seconds: f64,
+    ) -> Result<String, Refusal> {
+        Self::current(&self.lock(), holder, true)?;
         let record = self.managed_generation(owner).await?;
         let intent = self.transition(Step::new(owner, GrowthAction::Launch).job(job_id, launch_sha256)).await?;
         let Some(intent) = intent else { return Err(Refusal::Unavailable("the launch committed no intent".into())) };
         if intent.phase == "queued" {
-            let deadline = self.now() + self.config.admission_wait_seconds;
+            let deadline = self.now() + budget_seconds.max(0.0);
             let launch = (job_id.to_string(), launch_sha256.to_string());
-            let admitted = match self.admit_growth(&holder, owner, &record, "", true, launch, deadline).await {
+            let admitted = match self.admit_growth(holder, owner, &record, "", true, launch, deadline).await {
                 // Not dispatched: the bounded safe-retry contract.
                 Err(Refusal::Capacity(message)) => return Err(Refusal::Busy(message)),
                 other => other?,
@@ -1174,12 +1198,14 @@ impl AdmissionService {
                 EventAction::Wait => GrowthAction::Wait,
                 EventAction::Activate => GrowthAction::Activate,
                 EventAction::Terminal => GrowthAction::Terminal,
+                EventAction::Bind => GrowthAction::Bind,
             };
             match records.get(&event.owner.0) {
                 Some(Ok(Some(record))) if record.owned => {
                     if record.managed {
                         let mut step = Step::new(&event.owner, action).request(&event.request_id);
                         step.job_id = event.job_id.clone();
+                        step.launch_sha256 = event.launch_sha256.clone();
                         steps.push((index, step));
                     }
                 }

@@ -92,6 +92,7 @@ from .managed_process import (
 )
 from .models import NodeHeartbeat, NodeRuntimeMetrics, ResidentWaitMetrics, ResourceQuantity, SandboxInventoryEntry, SandboxMemoryObservation, utc_now
 from .node_commit import CommitExports
+from .admission_backend import NodedAdmission
 from .noded_client import NodedClient, NodedLink, noded_socket_path
 from .pause_handoff import MANAGED_GROWTH_CALLS, parse_escalation, parse_growth_events, parse_managed_growth_call
 from .node_runtime import BuilderNodeRuntime, DirectNodeRuntime, NodeStateStore
@@ -777,8 +778,16 @@ class NodeAgentHandler(BuildContextHttpHandler):
 
     def _admit_create(self, handoff: CreateHandoff, raw: dict[str, Any]) -> dict[str, Any]:
         if not {"sandbox_id", "generation", "operation_id", "spec", "spec_hash"} <= set(raw) <= {
-                "sandbox_id", "generation", "operation_id", "spec", "spec_hash", "admission_wait_seconds"}:
+                "sandbox_id", "generation", "operation_id", "spec", "spec_hash", "admission_wait_seconds",
+                "admitted"}:
             raise ValueError("create admission payload has an invalid schema")
+        # noded's own claim (step 3c.4): {"token": <32 hex digits>}.
+        admitted = raw.get("admitted")
+        if admitted is not None:
+            token = admitted.get("token") if isinstance(admitted, dict) and set(admitted) == {"token"} else None
+            if not isinstance(token, str) or len(token) != 32 or token.strip("0123456789abcdef"):
+                raise ValueError("admitted must be {\"token\": <noded claim>}")
+            admitted = token
         operation = SandboxOperation.from_dict({"generation": raw["generation"], "kind": "create",
                                                 "operation_id": raw["operation_id"], "spec_hash": raw["spec_hash"]})
         if not isinstance(raw["spec"], dict):
@@ -790,10 +799,10 @@ class NodeAgentHandler(BuildContextHttpHandler):
         if wait is not None and (isinstance(wait, bool) or not isinstance(wait, (int, float))
                                  or not math.isfinite(wait) or wait < 0):
             raise ValueError("admission_wait_seconds must be a non-negative number or null")
-        admitted = handoff.admit(spec, operation, wait=None if wait is None else float(wait),
-                                 session=self.headers.get(NODED_SESSION_HEADER))
+        held = handoff.admit(spec, operation, wait=None if wait is None else float(wait),
+                             session=self.headers.get(NODED_SESSION_HEADER), admitted=admitted)
         # The daemon compares it with the configuration it loaded.
-        return dict(admitted, config_sha256=self._create_config()["config_sha256"])
+        return dict(held, config_sha256=self._create_config()["config_sha256"])
 
     def _finish_create(self, handoff: CreateHandoff, token: str, raw: dict[str, Any]) -> None:
         outcome = raw.get("outcome")
@@ -2247,6 +2256,10 @@ def build_direct_node_agent_server(
             configured_resources,
             runtime_metrics_provider=host_runtime_metrics,
         )
+    link = NodedLink(NodedClient(noded_socket_path(service), node_control_bearer_token)) if rust_admission else None
+    if link is not None:
+        # Before start(): its parked managed records are noded's to observe.
+        service.use_noded_admission(NodedAdmission(service, link))
     service.start()
     manager = DirectNodeRuntime(service, rust_execs=rust_execs, rust_pause_tier=rust_pause_tier,
                                 rust_admission=rust_admission)
@@ -2467,8 +2480,7 @@ def build_direct_node_agent_server(
     # Only noded reaches the socket; it must not forward /internal/ itself.
     DirectBoundHandler.internal_routes_enabled = unix_socket is not None
     handoff = DirectBoundHandler.create_handoff = CreateHandoff(service) if rust_creates else None
-    link = DirectBoundHandler.noded_link = (
-        NodedLink(NodedClient(noded_socket_path(service), node_control_bearer_token)) if rust_admission else None)
+    DirectBoundHandler.noded_link = link
 
     class DirectServiceHTTPServer(NodeAgentHTTPServer):
         def server_close(self) -> None:

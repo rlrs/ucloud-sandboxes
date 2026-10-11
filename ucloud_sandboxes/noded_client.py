@@ -17,9 +17,9 @@ Errors say what the caller may conclude:
 - ``NodedRefused``: noded answered with an error (``error_code``, ``retryable``);
 - ``NodedProtocolError``: an answer outside the contract.
 
-Step 3c.0 serves only the handshake (``hello``, ``ping``); ``NodedLink`` says
-hello at agent start and again whenever a new noded session appears.
-Admission itself moves over in later steps.
+``NodedLink`` says hello at agent start and again whenever a new noded
+session appears; each hello reasserts the claims this agent holds (§3.5).
+``admission_backend.NodedAdmission`` makes the admission calls over it.
 """
 
 from __future__ import annotations
@@ -235,13 +235,16 @@ class NodedClient:
             raise NodedProtocolError(f"noded answered {method} {path} with {response.status}")
         return answer
 
-    def hello(self, *, timeout: float | None = None) -> dict[str, Any]:
+    def hello(self, *, timeout: float | None = None, reassert: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         """``{noded_session, admission_open, config_sha256}``. From step 3c.2
-        noded then drops whatever an earlier agent session held.
-        ``admission_open`` and ``config_sha256`` are None until noded has
-        loaded the node."""
-        answer = self.call("POST", "/internal/v1/admission/hello", {"agent_session": self.agent_session},
-                           timeout=timeout)
+        noded then drops whatever an earlier agent session held, and holds
+        the ``reassert`` claims ``[{owner, kind, cost, requested,
+        agent_token}]`` under this session. ``admission_open`` and
+        ``config_sha256`` are None until noded has loaded the node."""
+        body: dict[str, Any] = {"agent_session": self.agent_session}
+        if reassert:
+            body["reassert"] = reassert
+        answer = self.call("POST", "/internal/v1/admission/hello", body, timeout=timeout)
         session, admission_open, digest = (answer.get("noded_session"), answer.get("admission_open"),
                                            answer.get("config_sha256"))
         if (set(answer) != {"noded_session", "admission_open", "config_sha256"}
@@ -262,13 +265,20 @@ class NodedLink:
     A background thread retries while noded is unreachable (it restarts on its
     own, and the agent must start without it). ``observe_session`` takes
     sessions seen elsewhere, such as on noded's requests to this agent.
+    ``hello_now`` says hello at once, for a caller noded refused for want of
+    one. Every hello reasserts ``reassert()``'s claims, and ``on_hello`` runs
+    after each one that succeeds (admission_backend.NodedAdmission).
     """
 
     def __init__(self, client: NodedClient, *, retry_seconds: tuple[float, float] = HELLO_RETRY_SECONDS) -> None:
         self.client = client
         self.retry_seconds = retry_seconds
         client.on_session = self.observe_session
+        self.reassert: Callable[[], list[dict[str, Any]]] = list
+        self.on_hello: Callable[[dict[str, Any]], None] | None = None
         self._guard = threading.Condition()
+        # One hello at a time, from the thread or from hello_now.
+        self._saying = threading.Lock()
         self._hello: dict[str, Any] | None = None
         self._seen: str | None = None
         self._wanted = True
@@ -302,6 +312,23 @@ class NodedLink:
                 self._guard.wait(remaining)
             return self._hello
 
+    def hello_now(self, *, timeout: float | None = None) -> dict[str, Any]:
+        """Say hello now, reasserting the held claims; a NodedError if noded refuses or is down."""
+        with self._saying:
+            hello = self.client.hello(timeout=timeout, reassert=self.reassert())
+            with self._guard:
+                self._hello = hello
+                if self._seen in (None, hello["noded_session"]):
+                    self._wanted = False  # This hello already met the session that asked for it.
+                self._seen = None
+                self._guard.notify_all()
+            if self.on_hello is not None:
+                try:
+                    self.on_hello(hello)
+                except Exception:  # noqa: BLE001 - the hello itself succeeded.
+                    _LOG.exception("work after the noded hello failed")
+        return hello
+
     def start(self) -> None:
         if self._thread is not None:
             return
@@ -326,7 +353,7 @@ class NodedLink:
                     return
                 self._wanted = False
             try:
-                hello = self.client.hello()
+                hello = self.hello_now()
             except NodedError as exc:
                 now = time.monotonic()
                 if now - logged >= 60.0:
@@ -340,9 +367,3 @@ class NodedLink:
             delay = self.retry_seconds[0]
             _LOG.info("noded session %s: admission_open=%s config_sha256=%s", hello["noded_session"],
                       hello["admission_open"], hello["config_sha256"])
-            with self._guard:
-                self._hello = hello
-                if self._seen in (None, hello["noded_session"]):
-                    self._wanted = False  # This hello already met the session that asked for it.
-                self._seen = None
-                self._guard.notify_all()

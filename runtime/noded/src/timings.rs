@@ -15,8 +15,12 @@ impl Timings {
     }
 
     pub fn add(&mut self, name: &str, started: Instant) {
-        let elapsed = started.elapsed().as_millis() as u64;
-        *self.phases.entry(format!("{name}_ms")).or_insert(0) += elapsed;
+        self.add_ms(name, started.elapsed().as_millis() as u64);
+    }
+
+    /// A phase timed elsewhere (in-process admission).
+    pub fn add_ms(&mut self, name: &str, milliseconds: u64) {
+        *self.phases.entry(format!("{name}_ms")).or_insert(0) += milliseconds;
     }
 
     pub fn phases(&self) -> &BTreeMap<String, u64> {

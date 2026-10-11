@@ -28,6 +28,14 @@ def recording() -> Iterator[dict[str, int]]:
         _ACTIVE.reset(token)
 
 
+def add(name: str, milliseconds: float) -> None:
+    """Record a phase timed elsewhere (noded's admission phases)."""
+    phases = _ACTIVE.get()
+    if phases is not None:
+        key = f"{name}_ms"
+        phases[key] = phases.get(key, 0) + max(0, int(milliseconds))
+
+
 @contextmanager
 def phase(name: str) -> Iterator[None]:
     phases = _ACTIVE.get()

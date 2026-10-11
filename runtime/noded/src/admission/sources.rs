@@ -29,8 +29,10 @@ pub const GROWTH_BATCH_INTERVAL: Duration = Duration::from_millis(50);
 pub const GROWTH_BATCH_ITEMS: usize = 4096;
 
 impl Owners for Registry {
+    /// A fresh read: the agent commits creates and deletes in its own
+    /// process, and asks for their admission right after.
     fn owner(&self, sandbox_id: &str) -> Result<Option<OwnerRecord>, String> {
-        let record = self.get(sandbox_id).map_err(|error| error.to_string())?;
+        let record = self.get_fresh(sandbox_id).map_err(|error| error.to_string())?;
         Ok(record.map(|record| OwnerRecord {
             generation: record.sandbox_generation as u64,
             owned: record.phase == Phase::Owned,
@@ -222,6 +224,7 @@ pub async fn apply_local_growth(service: Arc<AdmissionService>, mut events: mpsc
                 owner: (event.sandbox_id.clone(), event.generation),
                 request_id: event.request_id.clone(),
                 job_id: String::new(),
+                launch_sha256: String::new(),
             })
             .collect();
         match service.growth_events(items).await {

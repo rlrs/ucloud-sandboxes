@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased (gateway)
+
+- **Job reads can wait at the gateway without holding a thread** ([docs/managed-process-reads.md](docs/managed-process-reads.md)). On 2026-10-11 verifiers-ucloud's job polling, about 3 reads/s per sandbox, kept the node agents busy; reads that wait for a change replace it.
+  - `wait_ms`, `after`, `offset` and `limit` reach the worker unchanged. The gateway allows a read with `wait_ms` the wait (at most 25 s) plus the usual 60 s.
+  - Waiting reads go through the asynchronous response owner, as exec event polls do, on their own connection lane (1,024 per worker), so about 1,000 held reads hold no handler thread. Qualified with two handler threads, 64 held reads and a health request served meanwhile.
+- **Log reads keep the gateway's job cache fresh.** The record a worker adds to a log response is cached like a status record, fenced on generation and sequence. Within a sequence the cached byte counts no longer shrink when an older read finishes last.
+- **A parked sandbox answers waiting job reads from the cache.** A status read with `wait_ms` returns the cached record with `Retry-After: 1`. A logs read with `wait_ms` at or past the cached byte count for its stream returns no data, the cached record and `Retry-After: 1` without waking the sandbox; a read below it still wakes it. The same holds while the worker reports a lifecycle transition. Records served from the cache carry the worker's `cursor`.
+
 ## 0.9.71 - 2026-10-11 (gateway)
 
 - **A build that failed in our machinery retries in seconds, not 10 minutes.** A sandbox build that fails with `sandbox build infrastructure:` (the chunk store, S3, the registry: not the recipe) is retried after 30 s, doubling up to 10 minutes, at most 6 times in all; recipe failures keep 3 attempts 10 minutes apart. On 2026-10-11 a TMax image's first build failed so, and its rollouts timed out (`nginx 504`, stream timeouts) during the 10-minute backoff before the second attempt built it in 95 s.

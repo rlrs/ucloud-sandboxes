@@ -448,3 +448,42 @@ long-poll reads. Attached exec sessions intentionally block parking because
 their host-side transport cannot be reattached after gVisor restore. Launch a
 parking-aware long-lived agent through the managed job API instead; the SDK
 exposes this as `start_agent()`. See [routing-gateway.md](routing-gateway.md).
+
+## Managed jobs
+
+A managed-process sandbox runs one parking-aware primary process, its job
+([managed-process-reads.md](managed-process-reads.md)). All routes take the
+sandbox API key.
+
+| Route | Parameters | Wakes a parked sandbox |
+|---|---|---|
+| `POST /v1/sandboxes/<id>/jobs` | JSON start spec | yes |
+| `GET /v1/sandboxes/<id>/jobs/<job>` | `wait_ms`, `after` | no; served from the gateway's cache |
+| `GET /v1/sandboxes/<id>/jobs/<job>/logs/<stdout\|stderr>` | `offset`, `limit` (1 to 1 MiB), `wait_ms` | yes, except as below |
+| `POST /v1/sandboxes/<id>/jobs/<job>/signal` | `{"signal": 15}` | yes |
+
+- **Status** returns `{"job": <record>}`. The record carries
+  `"cursor": "<sequence>.<stdout_bytes>.<stderr_bytes>"`.
+- **Logs** return `stream`, `offset`, `next_offset`, base64 `data` and `eof`
+  (`next_offset` reached the stream's size). Capable workers add
+  `"job": <record>`.
+- **Waiting reads.** With `wait_ms` (clamped to 0..25000), the worker answers
+  when the record's cursor differs from `after` (status), when the stream has
+  bytes past `offset` (logs), when the job is terminal, or when the wait ends.
+  Workers that predate this ignore `wait_ms` and answer at once.
+  - The gateway forwards the query string unchanged and allows the worker
+    `wait_ms` plus its usual 60 s budget.
+  - A waiting read holds no gateway handler thread
+    ([gateway-async-responses.md](gateway-async-responses.md)).
+- **The gateway's cache.** Every successful status or logs response's record
+  is cached, fenced by sandbox generation and sequence. Within one sequence the
+  cached byte counts never shrink.
+- **Parked or transitioning sandboxes** are answered from the cache, with
+  `Retry-After: 1` when the read waits:
+  - A status read returns the cached record; a parked sandbox with none
+    answers `404`.
+  - A waiting logs read whose `offset` is at or past the cached byte count for
+    its stream does not wake the sandbox. It returns
+    `{"stream", "offset", "next_offset": offset, "data": "", "eof": true, "job"}`.
+  - A logs read below the cached count, one that does not wait, or one with no
+    cached record wakes the sandbox, since those bytes exist only in it.

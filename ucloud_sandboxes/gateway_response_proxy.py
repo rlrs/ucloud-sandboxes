@@ -50,8 +50,14 @@ class AsyncGatewayResponses:
         event_poll=True,
         release=None,
         response_provider=None,
+        timeout=None,
+        held_read=False,
+        project=None,
     ):
         # Takes ownership even when submission fails; the caller must not close.
+        # A held read (a job read with wait_ms) has its own worker deadline and
+        # connection lane; project, if given, is the gateway's blocking ledger
+        # projection of the answer, run off the I/O loop before the reply.
         owned = client_socket
         completion = Future()
         # This is a cleanup receipt, not a cancellable work future. Only actual
@@ -80,6 +86,9 @@ class AsyncGatewayResponses:
                     body=body,
                     event_poll=event_poll,
                     response_provider=response_provider,
+                    timeout=timeout,
+                    held_read=held_read,
+                    project=project,
                 )
             )
             return completion
@@ -131,6 +140,9 @@ class AsyncGatewayResponses:
         body,
         event_poll,
         response_provider,
+        timeout=None,
+        held_read=False,
+        project=None,
     ):
         try:
             operation = (
@@ -138,6 +150,8 @@ class AsyncGatewayResponses:
                 if event_poll
                 else "gateway.file_upload.response"
             )
+            if held_read:
+                operation = "gateway.job_read.response"
             if response_provider is not None:
                 operation = "gateway.placement.response"
             with telemetry.span(
@@ -154,14 +168,17 @@ class AsyncGatewayResponses:
                             url,
                             headers=headers,
                             body=body,
-                            timeout=self.timeout,
+                            timeout=timeout or self.timeout,
                             connect_timeout=self.connect_timeout,
                             response_limit=self.response_limit,
                             event_poll=event_poll,
+                            held_read=held_read,
                         )
                         result = self.response_policy(response, None)
                 except URLError as exc:
                     result = self.response_policy(None, exc.reason)
+                if project is not None:
+                    result = await asyncio.to_thread(project, *result)
                 status, response_headers, body = result
                 if int(status) >= 500:
                     span.status = "error"

@@ -985,6 +985,16 @@ class RoutingStore:
                 if existing.sandbox_generation == record.sandbox_generation and (
                     existing.sequence > record.sequence
                     or (existing.terminal and not record.terminal)
+                    # Logs only grow within a sequence. Held reads finish out
+                    # of order, so an older read must not shrink the counts a
+                    # parked sandbox's log reads are answered from.
+                    or (
+                        existing.sequence == record.sequence
+                        and (
+                            existing.stdout_bytes > record.stdout_bytes
+                            or existing.stderr_bytes > record.stderr_bytes
+                        )
+                    )
                 ):
                     return existing
             conn.execute(

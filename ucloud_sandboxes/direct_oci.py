@@ -523,7 +523,9 @@ class DirectOciConfigBuilder:
         """Install network files with openat/rename; never follow image symlinks.
 
         Relay names map to stable virtual addresses. Resolution and destination
-        updates happen on the host, so no guest DNS traffic is necessary.
+        updates happen on the host, so no guest DNS traffic is necessary. Direct
+        egress keeps public resolvers; with relay names, its ``/etc/hosts`` is
+        replaced too (as Docker replaces it), naming loopback and the relays.
         """
         if spec.network == "none":
             return
@@ -548,6 +550,11 @@ class DirectOciConfigBuilder:
                 )
                 + "options timeout:2 attempts:2\n"
             }
+            if relay_hosts:
+                contents["hosts"] = "127.0.0.1 localhost\n::1 localhost\n" + "".join(
+                    f"{ipaddress.IPv4Address(ip)} {host}\n"
+                    for host, ip in sorted(relay_hosts.items())
+                )
         if not rootfs.is_absolute() or not rootfs.is_dir() or rootfs.is_symlink():
             raise DirectOciConfigError(
                 "direct-runtime network rootfs must be an absolute directory"

@@ -274,7 +274,12 @@ def apply_nft(script: str) -> None:
 def relay_hosts(
     relays: Mapping[str, NetworkRelay], policy: SandboxNetworkPolicy
 ) -> dict[str, str]:
+    """A sandbox's ``/etc/hosts`` names for relays: its own relay for relay
+    egress; every relay named by DNS for direct egress, whose public resolvers
+    do not know private names (relay_bridge_rules translates their virtual
+    addresses). A literal relay needs no name."""
     if policy.egress != "relay":
-        return {}
+        return {relay.host: relay.virtual_ip for _, relay in sorted(relays.items())
+                if relay.virtual_ip != relay.host}
     relay = relays[policy.relay]
     return {relay.host: relay.virtual_ip}

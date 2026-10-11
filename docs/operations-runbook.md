@@ -19,8 +19,10 @@ the VMs: on 2026-10-11 at 04:24 UTC both restarted, the gateway moved from
 10.36.101.16 to 10.36.102.75 and the store node from 10.36.78.225 to
 10.36.76.210, and every literal address in the configuration stopped working
 (0.9.70 replaced them). Services bind `0.0.0.0`; the VMs' only other
-interfaces are loopback and Docker's. Sandboxes reach the relay at its virtual
-address 198.19.38.106 ([network-policy.md](network-policy.md)).
+interfaces are loopback and Docker's. Sandboxes reach the relay and the
+package cache by these names too: they are `sandbox.network_relays` (`default`,
+`packages`), which sandboxes' `/etc/hosts` map to stable virtual addresses that
+workers translate ([network-policy.md](network-policy.md)).
 
 The gateway's and store node's local disks end with their jobs. Everything on
 them is backed up to the project drive. The S3 bucket is the permanent copy of
@@ -136,8 +138,8 @@ gateway: the index restore took 33 s and the store init 22 s.
 4. Run `scripts/install_ucloud_gateway.sh`. Put the chunk-index tokens in `/var/lib/ucloud-chunk-index/`.
 5. Keep the hostname `sandbox-gateway-gateway-1`: then nothing else changes. With another hostname:
    - run `scripts/rehome_registry_host.py --from <old>:5000 --to <new>:5000 --execute`;
-   - update `gateway_private_host`, `buildx_cache_ref`, `direct_network_allow_tcp`, `network_relays` and `telemetry.endpoint` in `deployment.json`;
-   - the relay's virtual address follows its name (`default`), not its host, so clients keep theirs.
+   - update `gateway_private_host`, `buildx_cache_ref`, `network_relays` and `telemetry.endpoint` in `deployment.json`;
+   - clients' `guest_relay_url` names the relay's host, so it changes too.
 6. `python -m ucloud_sandboxes.systemd gateway-reconcile`.
 7. Then `install_ucloud_ops.sh` and the observability stack.
 

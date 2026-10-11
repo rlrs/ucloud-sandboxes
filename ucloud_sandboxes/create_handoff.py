@@ -24,6 +24,7 @@ import time
 from typing import Any, Callable
 
 from . import phase_timings
+from .network_policy import SandboxNetworkPolicy
 from .admission import CREATE_ADMISSION_WAIT
 from .sandbox import SandboxCapacityUnavailableError, SandboxConflictError, SandboxOperation, SandboxSpec
 
@@ -263,6 +264,9 @@ def create_config(service: Any, *, node_epoch: str, rust_creates_enabled: bool,
                                      for item in allowed if not item.is_dynamic],
         "dns_named_egress": any(item.is_dynamic for item in allowed),
         "relays_configured": bool(network is not None and network.relays),
+        # Direct egress's /etc/hosts: relay names at their virtual addresses.
+        "relay_hosts": (network.hosts_for_policy(SandboxNetworkPolicy())
+                        if network is not None else {}),
         "split_memory_backing": backing is not None,
         "memory_backing_hard_capacity_bytes": backing.hard_capacity_bytes if backing is not None else 0,
         "application_memory_root": path(getattr(config, "application_memory_root", None)),

@@ -6,6 +6,7 @@
 //! Every walk below the rootfs uses `openat` with `O_NOFOLLOW`: the image
 //! controls those names and must never redirect a host write.
 
+use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::fs::File;
 use std::io::{self, Write};
@@ -14,7 +15,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 
-use crate::oci::{OciError, SandboxSpec, parse_ipv4, validate_guest_path, validate_init_binary, validate_init_metadata};
+use crate::oci::{OciError, SandboxSpec, parse_ipv4, py_repr, validate_guest_path, validate_init_binary, validate_init_metadata};
 
 pub const INIT_NAME: &str = ".ucloud-init";
 pub const MANAGED_INIT_NAME: &str = ".ucloud-job-init";
@@ -183,18 +184,39 @@ pub fn direct_resolv_conf(spec: &SandboxSpec) -> Result<String, OciError> {
     Ok(content)
 }
 
-/// `prepare_network_files` for direct egress: `/etc/resolv.conf` replaced by
-/// `openat` + `renameat` (`/etc/hosts` untouched). Nothing for `network=none`.
-/// Relay egress (its `/etc/hosts` needs the relay map) stays in Python and is
-/// `OciError::Unsupported`.
-pub fn prepare_network_files(rootfs: &Path, spec: &SandboxSpec) -> Result<(), OciError> {
+/// The direct-egress `/etc/hosts` naming loopback and `relay_hosts` (name ->
+/// virtual address), as Python writes it; `None` without relay names.
+pub fn direct_hosts(relay_hosts: &BTreeMap<String, String>) -> Result<Option<String>, OciError> {
+    if relay_hosts.is_empty() {
+        return Ok(None);
+    }
+    let mut content = String::from("127.0.0.1 localhost\n::1 localhost\n");
+    for (host, address) in relay_hosts {
+        let valid = !host.is_empty() && host.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-');
+        if !valid {
+            return Err(OciError::Config(format!("relay host {} is not a DNS name", py_repr(host))));
+        }
+        content.push_str(&format!("{} {host}\n", parse_ipv4(address)?));
+    }
+    Ok(Some(content))
+}
+
+/// `prepare_network_files` for direct egress: `/etc/resolv.conf`, and with
+/// relay names `/etc/hosts` (as Docker replaces it), replaced by `openat` +
+/// `renameat`; without relay names the image's `/etc/hosts` stays. Nothing for
+/// `network=none`. Relay egress (its `/etc/hosts` names only its own relay)
+/// stays in Python and is `OciError::Unsupported`.
+pub fn prepare_network_files(rootfs: &Path, spec: &SandboxSpec, relay_hosts: &BTreeMap<String, String>) -> Result<(), OciError> {
     if spec.network == "none" {
         return Ok(());
     }
     if spec.network_policy.egress == "relay" {
         return Err(OciError::Unsupported("relay egress network files are prepared by the Python agent".into()));
     }
-    let contents = [("resolv.conf", direct_resolv_conf(spec)?)];
+    let mut contents = vec![("resolv.conf", direct_resolv_conf(spec)?)];
+    if let Some(hosts) = direct_hosts(relay_hosts)? {
+        contents.push(("hosts", hosts));
+    }
     if !is_rootfs_directory(rootfs) {
         return Err(failed("direct-runtime network rootfs must be an absolute directory"));
     }
@@ -363,7 +385,7 @@ mod tests {
         assert!(prepare_working_directory(&rootfs, "/srv/app").is_err());
         assert!(!outside.join("app").exists());
         std::os::unix::fs::symlink(&outside, rootfs.join("etc")).unwrap();
-        assert!(prepare_network_files(&rootfs, &spec(json!({}))).is_err());
+        assert!(prepare_network_files(&rootfs, &spec(json!({})), &BTreeMap::new()).is_err());
         assert!(!outside.join("resolv.conf").exists());
         // The rootfs itself must be a real directory.
         let link = root.join("link");
@@ -391,14 +413,15 @@ mod tests {
     fn direct_network_files_replace_resolv_conf_only() {
         let root = scratch("network");
         let rootfs = root.join("rootfs");
-        prepare_network_files(&rootfs, &spec(json!({}))).unwrap();
+        let none = BTreeMap::new();
+        prepare_network_files(&rootfs, &spec(json!({})), &none).unwrap();
         assert_eq!(
             std::fs::read_to_string(rootfs.join("etc/resolv.conf")).unwrap(),
             "nameserver 1.1.1.1\nnameserver 8.8.8.8\noptions timeout:2 attempts:2\n"
         );
         assert!(!rootfs.join("etc/hosts").exists());
         std::fs::write(rootfs.join("etc/hosts"), "image hosts\n").unwrap();
-        prepare_network_files(&rootfs, &spec(json!({"dns_servers": ["9.9.9.9"]}))).unwrap();
+        prepare_network_files(&rootfs, &spec(json!({"dns_servers": ["9.9.9.9"]})), &none).unwrap();
         assert_eq!(
             std::fs::read_to_string(rootfs.join("etc/resolv.conf")).unwrap(),
             "nameserver 9.9.9.9\noptions timeout:2 attempts:2\n"
@@ -408,12 +431,36 @@ mod tests {
         assert_eq!(names.len(), 2, "no temporary files remain: {names:?}");
         // network=none writes nothing; relay egress belongs to Python.
         let other = scratch("network-none");
-        prepare_network_files(&other.join("rootfs"), &spec(json!({"network": "none"}))).unwrap();
+        prepare_network_files(&other.join("rootfs"), &spec(json!({"network": "none"})), &none).unwrap();
         assert!(!other.join("rootfs/etc").exists());
         let relay = spec(json!({"network_policy": {"egress": "relay", "relay": "default"}}));
-        assert!(matches!(prepare_network_files(&other.join("rootfs"), &relay), Err(OciError::Unsupported(_))));
+        assert!(matches!(prepare_network_files(&other.join("rootfs"), &relay, &none), Err(OciError::Unsupported(_))));
         std::fs::remove_dir_all(&root).unwrap();
         std::fs::remove_dir_all(&other).unwrap();
+    }
+
+    #[test]
+    fn direct_network_files_name_relays_as_python_does() {
+        let root = scratch("network-hosts");
+        let rootfs = root.join("rootfs");
+        std::fs::create_dir_all(rootfs.join("etc")).unwrap();
+        std::fs::write(rootfs.join("etc/hosts"), "10.0.0.9 baked\n").unwrap();
+        let names = BTreeMap::from([
+            ("sandboxes-store-1".to_string(), "198.18.95.3".to_string()),
+            ("sandbox-gateway-gateway-1".to_string(), "198.19.38.106".to_string()),
+        ]);
+        prepare_network_files(&rootfs, &spec(json!({})), &names).unwrap();
+        // Sorted by name, like Python's sorted(relay_hosts.items()).
+        assert_eq!(
+            std::fs::read_to_string(rootfs.join("etc/hosts")).unwrap(),
+            "127.0.0.1 localhost\n::1 localhost\n198.19.38.106 sandbox-gateway-gateway-1\n198.18.95.3 sandboxes-store-1\n"
+        );
+        assert!(std::fs::read_to_string(rootfs.join("etc/resolv.conf")).unwrap().starts_with("nameserver 1.1.1.1\n"));
+        for (host, address) in [("bad host", "198.18.0.1"), ("name\n", "198.18.0.1"), ("name", "not-an-ip")] {
+            let bad = BTreeMap::from([(host.to_string(), address.to_string())]);
+            assert!(prepare_network_files(&rootfs, &spec(json!({})), &bad).is_err());
+        }
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

@@ -5,6 +5,7 @@
 //! (`GET /internal/v1/creates/config`) rather than duplicating flag plumbing.
 //! Until that answer arrives every create goes to the agent.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -53,6 +54,11 @@ pub struct CreateConfig {
     pub direct_network_allow_tcp: Vec<AllowTcp>,
     pub dns_named_egress: bool,
     pub relays_configured: bool,
+    /// Direct egress's `/etc/hosts`: relay names at their virtual addresses
+    /// (Python `relay_hosts`). Absent from agents older than 0.9.70, which
+    /// leave the image's file.
+    #[serde(default)]
+    pub relay_hosts: BTreeMap<String, String>,
     pub split_memory_backing: bool,
     pub memory_backing_hard_capacity_bytes: u64,
     pub application_memory_root: Option<PathBuf>,

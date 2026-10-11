@@ -224,6 +224,26 @@ class RelayNetworkLifecycleTests(unittest.TestCase):
         self.manager.refresh_tcp_egress()
         self.assertNotIn("dnat ip to", self.nft.call_args.args[0])
 
+    def test_direct_egress_names_every_named_relay_and_loopback(self):
+        relay = self.manager.relays["default"]
+        self.assertEqual(self.manager.hosts_for_policy(SandboxNetworkPolicy()),
+                         {"relay.example": relay.virtual_ip})
+        self.assertEqual(self.manager.hosts_for_policy(RELAY), {"relay.example": relay.virtual_ip})
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            (root / "etc").mkdir()
+            (root / "etc/hosts").write_text("10.0.0.9 baked\n")
+            builder = object.__new__(DirectOciConfigBuilder)
+            spec = SandboxSpec(id="test", image="image")
+            builder.prepare_network_files(root, spec=spec, relay_hosts=self.manager.hosts_for_policy(spec.network_policy))
+            self.assertEqual((root / "etc/hosts").read_text(),
+                             f"127.0.0.1 localhost\n::1 localhost\n{relay.virtual_ip} relay.example\n")
+            self.assertIn("nameserver 1.1.1.1", (root / "etc/resolv.conf").read_text())
+            # Without relay names the image's own file stays, as before.
+            (root / "etc/hosts").write_text("10.0.0.9 baked\n")
+            builder.prepare_network_files(root, spec=spec, relay_hosts={})
+            self.assertEqual((root / "etc/hosts").read_text(), "10.0.0.9 baked\n")
+
     def test_a_literal_relay_needs_no_bridge(self):
         manager = DirectNetworkManager(
             self.root / "literal.json",
@@ -234,6 +254,7 @@ class RelayNetworkLifecycleTests(unittest.TestCase):
         )
         manager._refresh_relay_policies(force=True)
         self.assertNotIn("add rule inet ucloud_relay bridge", self.nft.call_args.args[0])
+        self.assertEqual(manager.hosts_for_policy(SandboxNetworkPolicy()), {})
 
     def test_restart_restores_guards_before_legacy_accepts(self):
         self.create()

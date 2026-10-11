@@ -522,6 +522,7 @@ impl NodePipeline {
                 }
                 let started = timings.start();
                 let (guest_spec, guest_root, bundle) = (spec.clone(), rootfs.clone(), sandbox.bundle.clone());
+                let relay_hosts = self.config.relay_hosts.clone();
                 blocking(move || {
                     guest::prepare_workspace(&guest_root, &guest_spec)?;
                     let config: Value = serde_json::from_slice(&std::fs::read(bundle.join("config.json")).map_err(|e| unavailable(e.to_string()))?)
@@ -530,7 +531,7 @@ impl NodePipeline {
                         guest::prepare_working_directory(&guest_root, cwd)?;
                     }
                     if guest_spec.network_mode() != NetworkMode::None {
-                        guest::prepare_network_files(&guest_root, &guest_spec)?;
+                        guest::prepare_network_files(&guest_root, &guest_spec, &relay_hosts)?;
                     }
                     Ok(())
                 })

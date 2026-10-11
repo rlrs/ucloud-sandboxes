@@ -19,10 +19,10 @@ on top of the request itself, and 38 ms from answer to agent.
 
 **With node-local waits:**
 - The agent calls the relay over **plaintext HTTP/1.1 on the private network**:
-  `OPENAI_BASE_URL=http://198.19.38.106:8092/rollouts/<id>/v1`, the virtual
-  address of the `sandbox.network_relays` entry `default`
-  (`sandbox-gateway-gateway-1:8092`; docs/network-policy.md), which the worker
-  translates to the relay's private address.
+  `OPENAI_BASE_URL=http://sandbox-gateway-gateway-1:8092/rollouts/<id>/v1`,
+  the `sandbox.network_relays` entry `default`: the sandbox's `/etc/hosts`
+  names its virtual address, which the worker translates to the relay's
+  private address (docs/network-policy.md).
 - **The node watches only TCP headers.** nftables logs both directions of
   every private-relay flow to one NFLOG group (`local_wait.py`). It never
   reads payloads.
@@ -73,7 +73,9 @@ sandbox cannot observe another sandbox's traffic.
   and names whose addresses are all private, resolved when the node agent
   starts (flows are matched after translation, at those addresses). Sandboxes
   must be owned, parkable, managed-process sandboxes with a network lease. A
-  name with a public address is a TLS ingress, and the node ignores it. A node
+  name with a public address is a TLS ingress, and the node ignores it. Every
+  private relay counts, including the package cache (`packages`): an agent
+  waiting on it with an idle cgroup pauses the same way. A node
   that outlives a change of the relay's address keeps routing to it but stops
   pausing on its waits until the node agent restarts.
 

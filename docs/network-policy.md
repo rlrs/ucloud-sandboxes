@@ -62,20 +62,29 @@ the policy. Migration preserves the policy in the existing sandbox manifest.
 
 A relay named by DNS has a **virtual address** in 198.18.0.0/15, derived from
 its name (`NetworkRelay.virtual_ip`; `default` is 198.19.38.106). Every
-sandbox reaches the relay there, whatever its egress, and the worker
-translates it to the name's current address, re-resolved every 2 s:
+sandbox reaches the relay by its hostname, whatever its egress, and the worker
+translates the virtual address to the name's current address, re-resolved
+every 2 s. Sandboxes never resolve private names themselves:
 
-- A **relay-only** sandbox's `/etc/hosts` maps the relay's hostname to the
-  virtual address; it has no DNS, so it dials the hostname or the address.
-- A **direct-egress** sandbox resolves names with public DNS, which does not
-  know private names, so it dials the virtual address. The worker's shared
-  `bridge_nat` chain translates it, and `bridge_forward` lets exactly those
-  flows past the private-destination denies.
+- A **relay-only** sandbox's `/etc/hosts` maps its relay's hostname to the
+  virtual address; it has no DNS.
+- A **direct-egress** sandbox keeps public DNS, which does not know private
+  names, and its `/etc/hosts` maps every relay's hostname to its virtual
+  address (it is replaced, as Docker replaces it, naming loopback and the
+  relays). The worker's shared `bridge_nat` chain translates the address, and
+  `bridge_forward` lets exactly those flows past the private-destination
+  denies.
 
-Point guests at `http://<virtual address>:<port>` (verifiers-ucloud:
+Point guests at `http://<relay hostname>:<port>` (verifiers-ucloud:
 `guest_relay_url`). It survives the relay host's address changes, such as a
 UCloud VM restart. A relay given as an IPv4 literal is its own virtual address
-and gets no translation.
+and gets no name or translation.
+
+Any private service sandboxes reach by name is configured as a relay this way,
+not as a `direct_network_allow_tcp` name (those need resolution on the worker,
+which the Rust create path leaves to the agent): production names the gateway's
+relay `default` and the store node's build package cache `packages`
+(`sandboxes-store-1:3142`, which sandbox builds use as their proxy).
 
 ## Use the SDK
 

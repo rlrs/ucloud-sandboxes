@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 import base64
 import binascii
@@ -398,3 +398,166 @@ def parse_control_response(payload: bytes) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ManagedProcessError("managed process returned a non-object response")
     return raw
+
+
+# Host-side readers of the bound state (docs/managed-process-reads.md).
+MAX_STATE_BYTES = 64 * 1024
+# The parked incarnation's exact record, beside the bundle's config.json.
+PARKED_RECORD_NAME = ".ucloud-managed-process.json"
+_NOFOLLOW_READ = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
+_NOFOLLOW_DIRECTORY = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
+
+
+def _regular_file(directory_fd: int, name: str, *, limit: int | None) -> tuple[int, bytes | None]:
+    """(size, payload or None) of a regular file below ``directory_fd``.
+
+    Never follows a symlink and never blocks on a FIFO; ``limit`` None only
+    sizes the file. Raises FileNotFoundError when absent, ValueError when the
+    entry is not a bounded regular file.
+    """
+    descriptor = os.open(name, _NOFOLLOW_READ, dir_fd=directory_fd)
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError(f"managed-process {name} is not a regular file")
+        if limit is None:
+            return info.st_size, None
+        if info.st_size > limit:
+            raise ValueError(f"managed-process {name} exceeds {limit} bytes")
+        with os.fdopen(os.dup(descriptor), "rb") as handle:
+            payload = handle.read(limit + 1)
+        if len(payload) > limit:
+            raise ValueError(f"managed-process {name} exceeds {limit} bytes")
+        return info.st_size, payload
+    finally:
+        os.close(descriptor)
+
+
+def read_managed_state(
+    rootfs: Path, *, sandbox_id: str, sandbox_generation: int
+) -> ManagedProcessRecord | None:
+    """The job record derived from the bound state, as noded serves it.
+
+    ``state.json`` is parsed strictly (version 1, at most 64 KiB). While the
+    job runs its byte counts are the log files' sizes; once terminal they are
+    the persisted values. None when no job ever started. Raises OSError or
+    ValueError for state the guest made unreadable (a symlink, a FIFO).
+    """
+    rootfs_fd = os.open(rootfs, _NOFOLLOW_DIRECTORY)
+    try:
+        try:
+            state_fd = os.open(MANAGED_STATE_NAME, _NOFOLLOW_DIRECTORY, dir_fd=rootfs_fd)
+        except FileNotFoundError:
+            return None
+    finally:
+        os.close(rootfs_fd)
+    try:
+        try:
+            _, payload = _regular_file(state_fd, "state.json", limit=MAX_STATE_BYTES)
+        except FileNotFoundError:
+            return None
+        raw = json.loads(payload)
+        if not isinstance(raw, dict) or raw.get("version") != MANAGED_PROCESS_PROTOCOL_VERSION:
+            raise ValueError("managed-process state.json has an unsupported version")
+        record = ManagedProcessRecord.from_control_response(
+            {"ok": True, "job": raw},
+            sandbox_id=sandbox_id,
+            sandbox_generation=sandbox_generation,
+        )
+        if not record.terminal:
+            sizes = []
+            for name in ("stdout.log", "stderr.log"):
+                try:
+                    sizes.append(_regular_file(state_fd, name, limit=None)[0])
+                except FileNotFoundError:
+                    sizes.append(0)
+            record = replace(record, stdout_bytes=sizes[0], stderr_bytes=sizes[1])
+        return record
+    except ManagedProcessError as exc:
+        raise ValueError(str(exc)) from exc
+    finally:
+        os.close(state_fd)
+
+
+def managed_record_payload(record: ManagedProcessRecord) -> dict[str, Any]:
+    """The record as the node serves it, with its wait cursor."""
+    return dict(
+        record.to_dict(),
+        cursor=f"{record.sequence}.{record.stdout_bytes}.{record.stderr_bytes}",
+    )
+
+
+def _bound_config(bundle: Path) -> bool:
+    payload = (bundle / "config.json").read_bytes()
+    if len(payload) > 1024 * 1024:
+        raise ValueError("OCI config is too large")
+    config = json.loads(payload)
+    annotations = config.get("annotations") if isinstance(config, dict) else None
+    return (
+        isinstance(annotations, dict)
+        and annotations.get("dev.ucloud-sandboxes.managed-process") == "v1"
+        and configured_managed_state_mount(config, bundle)
+    )
+
+
+def record_parked_managed_state(
+    bundle: Path, *, sandbox_id: str, sandbox_generation: int
+) -> dict[str, Any] | None:
+    """Make the parked incarnation's job record exact, from its stopped guest.
+
+    Called while the guest cannot change its files (after the checkpoint, or
+    on an import's shipped upper) and while ``<bundle>/rootfs`` is mounted.
+    Writes the record beside the bundle's config.json, where it survives an
+    agent restart, or removes a stale one when there is none: a legacy
+    sandbox (no state mount) or one whose job never started. Raises OSError
+    or ValueError, having removed any stale record first.
+    """
+    target = bundle / PARKED_RECORD_NAME
+    try:
+        os.unlink(target)
+    except FileNotFoundError:
+        pass
+    if not _bound_config(bundle):
+        return None
+    derived = read_managed_state(
+        bundle / "rootfs", sandbox_id=sandbox_id, sandbox_generation=sandbox_generation
+    )
+    if derived is None:
+        return None
+    record = managed_record_payload(derived)
+    payload = json.dumps(record, sort_keys=True, separators=(",", ":")).encode("ascii") + b"\n"
+    temporary = bundle / f".{PARKED_RECORD_NAME}.tmp"
+    descriptor = os.open(
+        temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600
+    )
+    try:
+        os.write(descriptor, payload)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    os.replace(temporary, target)
+    directory = os.open(bundle, _NOFOLLOW_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+    return record
+
+
+def load_parked_managed_state(bundle: Path) -> dict[str, Any] | None:
+    """The record ``record_parked_managed_state`` kept, or None.
+
+    Raises OSError or ValueError when the kept file is unreadable or invalid.
+    """
+    directory = os.open(bundle, _NOFOLLOW_DIRECTORY)
+    try:
+        _, payload = _regular_file(directory, PARKED_RECORD_NAME, limit=MAX_STATE_BYTES)
+    except FileNotFoundError:
+        return None
+    finally:
+        os.close(directory)
+    raw = json.loads(payload)
+    record = managed_record_payload(ManagedProcessRecord.from_dict(raw))
+    if raw != record:
+        raise ValueError("parked managed-process record is not canonical")
+    return record

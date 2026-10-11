@@ -1163,6 +1163,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
             storage_snapshot=(snapshot.to_dict() if snapshot else {}),
             storage_dependency=storage_dependency,
             memory_observation=observation,
+            managed_process=getattr(record, "managed_process", None),
         )
 
     def _wake_sandbox(self, path: str) -> None:
@@ -1192,6 +1193,8 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 **relay_args,
             )
         except (SandboxRestoreBusyError, SandboxStartupBusyError) as exc:
+            # No live inspection here: it could block behind the very work
+            # that made the node busy.
             self._write_exception(exc)
             return
         except SandboxSnapshotPublicationPendingError as exc:
@@ -1218,12 +1221,15 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 current = self.manager.get(sandbox_id)
                 if current is not None:
                     payload["lifecycle_state"] = current.state
+                    if current.state == "parked":
+                        # With the exact job record kept at park, if any.
+                        payload["sandbox"] = current.to_dict()
             except (RuntimeError, ValueError):
                 pass
             if isinstance(exc, SandboxCapacityUnavailableError) and payload.get("lifecycle_state") == "parked":
                 # Wake failed before the caller's upload/exec was dispatched.
                 # Only a positively parked lifecycle makes this safe to replay.
-                self._write_exception(SandboxRestoreBusyError(str(exc)))
+                self._write_exception(SandboxRestoreBusyError(str(exc)), sandbox=payload.get("sandbox"))
             else:
                 self._write_json(payload, status=HTTPStatus.SERVICE_UNAVAILABLE)
             return
@@ -1936,7 +1942,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
         )
         return False
 
-    def _write_exception(self, exc: RuntimeError | ValueError) -> None:
+    def _write_exception(self, exc: RuntimeError | ValueError, *, sandbox: dict[str, Any] | None = None) -> None:
         if isinstance(exc, SandboxArchiveUnsupportedError):
             # Not retryable as is: the SDK uploads the files one by one.
             self._write_json({"error": str(exc), "error_code": "archive_upload_unsupported", "retryable": False},
@@ -1992,6 +1998,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
                     "error_code": "node_restore_busy",
                     "retryable": True,
                     "lifecycle_state": "parked",
+                    **({"sandbox": sandbox} if sandbox is not None else {}),
                 },
                 status=HTTPStatus.SERVICE_UNAVAILABLE,
                 headers={

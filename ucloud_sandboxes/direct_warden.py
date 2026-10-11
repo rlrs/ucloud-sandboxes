@@ -52,7 +52,11 @@ from .storage_native_daemon import (
     StorageVolumeState,
     storage_operation_id,
 )
-from .managed_process import configured_managed_state_mount, prepare_managed_state_directory
+from .managed_process import (
+    configured_managed_state_mount,
+    prepare_managed_state_directory,
+    record_parked_managed_state,
+)
 from .telemetry import Telemetry
 from . import pause_tier
 from .runtime_process import RuntimeProcessIdentityError, owned_runtime_process_ticks
@@ -890,6 +894,7 @@ class DirectRunscWarden:
                         expected_revision=hibernating.revision,
                     )
                     self._delete_runtime(sandbox)
+                    self._record_parked_managed_state(sandbox)
                 # runsc delete removes its filestore from the merged rootfs.
                 # Do this before detaching the overlay so that the sealed
                 # layer contains the final, cleaned-up filesystem state.
@@ -1221,6 +1226,7 @@ class DirectRunscWarden:
                     expected_revision=record.revision,
                 )
                 self._delete_runtime(sandbox)
+                self._record_parked_managed_state(sandbox)
                 parked = journal.commit_parked(
                     manifest,
                     operation_id=record.operation_id,
@@ -1938,6 +1944,22 @@ class DirectRunscWarden:
             raise DirectWardenError(
                 f"managed-process state mount is unavailable: {exc}"
             ) from exc
+
+    @staticmethod
+    def _record_parked_managed_state(sandbox: DirectSandbox) -> None:
+        """Keep the parked job record exact (docs/managed-process-reads.md).
+
+        The guest is stopped and its rootfs still mounted. Best effort: a
+        guest that broke its own state files loses only the exact record.
+        """
+        try:
+            record_parked_managed_state(
+                sandbox.bundle,
+                sandbox_id=sandbox.sandbox_id,
+                sandbox_generation=sandbox.sandbox_generation,
+            )
+        except (OSError, ValueError) as exc:
+            _LOG.warning("no parked managed-process record for %s: %s", sandbox.sandbox_id, exc)
 
     @classmethod
     def _managed_process_ledger_digest(cls, sandbox: DirectSandbox) -> str:

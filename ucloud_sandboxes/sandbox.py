@@ -780,6 +780,9 @@ class SandboxRecord:
     generation: int
     operation_id: str
     spec_hash: str
+    # A parked managed-process sandbox's exact job record at park
+    # (docs/managed-process-reads.md); None otherwise.
+    managed_process: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload = {
@@ -805,6 +808,8 @@ class SandboxRecord:
                     f"{self.spec.ssh.user}@{self.spec.ssh.host}"
                 ),
             }
+        if self.managed_process is not None:
+            payload["managed_process"] = dict(self.managed_process)
         return payload
 
     def is_expired(self, now: datetime | None = None) -> bool:

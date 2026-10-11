@@ -15,7 +15,7 @@ import signal
 import subprocess
 import threading
 import time
-from typing import BinaryIO, Callable, Iterator, Sequence
+from typing import Any, BinaryIO, Callable, Iterator, Sequence
 from uuid import uuid4
 
 from .admission import CREATE_ADMISSION_WAIT, FairCapacity
@@ -37,6 +37,7 @@ from .managed_process import (
     ManagedProcessRecord,
     ManagedProcessStart,
     control_request_bytes,
+    load_parked_managed_state,
     parse_control_response,
 )
 from .direct_registry import DirectSandboxRegistration, DirectRegistryCapacityUnavailable, ManagedPrimaryOwnedError
@@ -99,6 +100,22 @@ _FETCH = object()  # _growth_sample: look the owner's sample up
 _DELETE_DRAIN_DEADLINE_SECONDS = 10.0
 _DELETE_DRAIN_JOIN_SECONDS = 1.0
 _DELETE_DRAIN_RETRY_SECONDS = 0.1
+
+
+def _parked_managed_record(registration: DirectSandboxRegistration) -> dict[str, Any] | None:
+    """The exact job record kept at park, which the gateway caches."""
+    if not registration.bundle:
+        return None
+    try:
+        record = load_parked_managed_state(Path(registration.bundle))
+    except (OSError, ValueError) as exc:
+        _LOG.warning("parked managed-process record of %s is unreadable: %s", registration.sandbox_id, exc)
+        return None
+    if record is not None and (
+            record["sandbox_id"], record["sandbox_generation"]
+    ) != (registration.sandbox_id, registration.sandbox_generation):
+        return None
+    return record
 
 
 class DirectExecTimeoutError(DirectWardenError):
@@ -3299,4 +3316,9 @@ class DirectSandboxService:
             generation=registration.sandbox_generation,
             operation_id=registration.operation_id,
             spec_hash=registration.spec_sha256,
+            managed_process=(
+                _parked_managed_record(registration)
+                if state == HibernationState.PARKED.value and registration.spec.managed_process
+                else None
+            ),
         )

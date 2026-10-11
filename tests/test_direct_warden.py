@@ -29,7 +29,7 @@ from ucloud_sandboxes.hibernation import (
     LocalHibernationArtifactFile,
     classify_hibernation_recovery,
 )
-from ucloud_sandboxes.managed_process import managed_state_mount
+from ucloud_sandboxes.managed_process import load_parked_managed_state, managed_state_mount
 from ucloud_sandboxes.storage_native_daemon import (
     StorageNativeConflictError,
     StorageVolumeOwner,
@@ -973,6 +973,8 @@ class DirectRunscWardenTests(unittest.TestCase):
         self.warden.create(self.sandbox, operation_id="create:legacy")
         self.assertFalse((self.bundle / "rootfs" / ".ucloud-managed").exists())
         self.warden.park(self.sandbox, operation_id="park:legacy")
+        # Nothing exact to report: the guest's ledger is not host-visible.
+        self.assertIsNone(load_parked_managed_state(self.bundle))
         manifest = self.warden.load_parked_manifest(self.sandbox)
         self.assertEqual(
             manifest.managed_process_sha256,
@@ -1012,6 +1014,43 @@ class DirectRunscWardenTests(unittest.TestCase):
             HibernationState.RUNNING,
         )
         self.assertEqual(stat.S_IMODE(managed.lstat().st_mode), 0o700)
+
+    def test_park_keeps_the_exact_job_record_of_its_stopped_guest(self) -> None:
+        self.managed_config(bound=True)
+        self.warden.create(self.sandbox, operation_id="create:exact")
+        managed = self.bundle / "rootfs" / ".ucloud-managed"
+        self.assertIsNone(load_parked_managed_state(self.bundle))
+        ledger = {"version": 1, "job_id": "rollout-1", "spec_sha256": DIGEST_A, "state": "running",
+                  "pid": 9, "stdout_bytes": 0, "stderr_bytes": 0, "sequence": 2}
+        (managed / "state.json").write_text(json.dumps(ledger))
+        # Written after the last read: a running record counts the files.
+        (managed / "stdout.log").write_bytes(b"x" * 1000)
+        (managed / "stderr.log").write_bytes(b"warn\n")
+        self.warden.park(self.sandbox, operation_id="park:exact-1")
+        record = load_parked_managed_state(self.bundle)
+        self.assertEqual(
+            {key: record[key] for key in ("sandbox_id", "sandbox_generation", "job_id", "state",
+                                         "stdout_bytes", "stderr_bytes", "sequence", "cursor")},
+            {"sandbox_id": "sandbox-1", "sandbox_generation": 1, "job_id": "rollout-1",
+             "state": "running", "stdout_bytes": 1000, "stderr_bytes": 5, "sequence": 2,
+             "cursor": "2.1000.5"})
+        # A terminal record counts what the supervisor persisted.
+        self.warden.resume(self.sandbox, operation_id="wake:exact")
+        (managed / "state.json").write_text(json.dumps(dict(
+            ledger, state="exited", exit_code=0, pid=0, stdout_bytes=900, stderr_bytes=5,
+            stdout_truncated=True, sequence=4, completed_at="2026-10-11T00:00:00Z")))
+        self.warden.park(self.sandbox, operation_id="park:exact-2")
+        record = load_parked_managed_state(self.bundle)
+        self.assertEqual((record["state"], record["exit_code"], record["stdout_bytes"],
+                          record["stdout_truncated"], record["cursor"]), ("exited", 0, 900, True, "4.900.5"))
+        # A guest that broke its own logs loses only the exact record.
+        self.warden.resume(self.sandbox, operation_id="wake:exact-2")
+        (managed / "state.json").write_text(json.dumps(ledger))
+        (managed / "stdout.log").unlink()
+        (managed / "stdout.log").symlink_to(self.root / "elsewhere.log")
+        self.warden.park(self.sandbox, operation_id="park:exact-3")
+        self.assertIsNone(load_parked_managed_state(self.bundle))
+        self.assertEqual(self.warden.inspect(self.sandbox).state, HibernationState.PARKED)
 
     def test_moved_bound_ledger_has_the_same_digest_and_needs_its_own_bundle(self) -> None:
         self.managed_config(bound=True)

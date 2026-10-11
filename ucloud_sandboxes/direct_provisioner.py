@@ -32,6 +32,7 @@ from .direct_registry import (
 from .direct_warden import DirectRunscWarden, DirectWardenError
 from .hibernation import HibernationState
 from .image_rootfs import OverlayRootfsManager
+from .managed_process import record_parked_managed_state
 from .sandbox import SandboxSpec
 from .storage_native_daemon import (
     StorageNativeConflictError,
@@ -421,6 +422,16 @@ class DirectSandboxProvisioner:
                         sandbox_generation=registration.sandbox_generation,
                         hibernation_generation=portable.hibernation_generation,
                     )
+                # The shipped upper is mounted here and its guest was stopped
+                # at the source's park: derive the same exact parked record.
+                try:
+                    record_parked_managed_state(
+                        sandbox.bundle,
+                        sandbox_id=sandbox.sandbox_id,
+                        sandbox_generation=sandbox.sandbox_generation,
+                    )
+                except (OSError, ValueError) as exc:
+                    _LOG.warning("no parked managed-process record for %s: %s", sandbox.sandbox_id, exc)
                 record = self.warden.adopt_parked(sandbox, local_manifest)
             if record.state != HibernationState.PARKED:
                 raise DirectRegistryError(

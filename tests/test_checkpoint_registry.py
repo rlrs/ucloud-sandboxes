@@ -2,6 +2,7 @@ from dataclasses import replace
 from contextlib import nullcontext
 from io import BytesIO
 import json
+import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Lock
@@ -29,6 +30,7 @@ from ucloud_sandboxes.direct_service import DirectSandboxService
 from ucloud_sandboxes.direct_provisioner import DirectSandboxProvisioner
 from ucloud_sandboxes.direct_registry import DirectSandboxRegistry
 from ucloud_sandboxes.direct_oci import DirectOciConfigBuilder
+from ucloud_sandboxes.managed_process import load_parked_managed_state
 from ucloud_sandboxes.memory_backing import MemoryBackingStore
 from ucloud_sandboxes.storage_native_daemon import StorageVolumeState
 from ucloud_sandboxes.direct_warden import DirectWardenError
@@ -476,10 +478,23 @@ class ManagedStateImportTests(unittest.TestCase):
                 # The source node created it host-side, in the upper it ships.
                 managed = Path(record.mount_path) / "upper" / ".ucloud-managed"
                 managed.mkdir(mode=0o700)
-                (managed / "state.json").write_text('{"version": 1}\n')
+                (managed / "state.json").write_text(json.dumps({
+                    "version": 1, "job_id": "agent", "spec_sha256": "e" * 64,
+                    "state": "running", "pid": 4, "sequence": 3}))
+                (managed / "stdout.log").write_bytes(b"x" * 321)
             return record
 
         storage.prepare_import = shipped_upper
+        prepare_rootfs = provisioner.overlays.prepare
+
+        def merged_upper(**kwargs):
+            # FakeOverlays' rootfs is a plain directory: show the upper in it,
+            # as the destination's overlay mount does.
+            lease = prepare_rootfs(**kwargs)
+            shutil.copytree(lease.upper, lease.merged, dirs_exist_ok=True)
+            return lease
+
+        provisioner.overlays.prepare = merged_upper
         registration, _ = provisioner.stage_storage_native_import(
             snapshot, migration_id="import:1"
         )
@@ -497,6 +512,14 @@ class ManagedStateImportTests(unittest.TestCase):
             "type": "bind",
         }])
         self.assertEqual(config["mounts"][-1], mounts[0])
+        # The parked record is exact at the destination too: it is derived
+        # from the same stopped guest's shipped files.
+        record = load_parked_managed_state(bundle)
+        self.assertEqual(
+            {key: record[key] for key in ("sandbox_id", "sandbox_generation", "job_id",
+                                         "stdout_bytes", "stderr_bytes", "cursor")},
+            {"sandbox_id": "sandbox", "sandbox_generation": 7, "job_id": "agent",
+             "stdout_bytes": 321, "stderr_bytes": 0, "cursor": "3.321.0"})
 
     def test_sandbox_parked_before_the_mount_stays_legacy_after_a_move(self):
         config, _bundle = self.imported_config(bound=False)
@@ -506,3 +529,4 @@ class ManagedStateImportTests(unittest.TestCase):
         self.assertNotIn(
             "/.ucloud-managed", [m["destination"] for m in config["mounts"]]
         )
+        self.assertIsNone(load_parked_managed_state(_bundle))

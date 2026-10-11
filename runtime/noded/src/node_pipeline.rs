@@ -10,8 +10,11 @@ use std::time::Duration;
 use hyper::{Method, StatusCode};
 use serde_json::{Map, Value, json};
 
+use crate::admission::service::{AdmissionService, ServiceConfig, Sources};
+use crate::admission::sources::{AgentSocketProbe, CachedMetrics, NodeObservations};
 use crate::agent_rpc::AgentClient;
 use crate::create::{Admitted, CreateError, Pipeline};
+use crate::pause_policy::PressureSampler;
 use crate::guest;
 use crate::image::{EnvironmentBackendClient, ImageError, ImageLease, ImageStore, MountProbe};
 use crate::memory_backing::{ActiveMode, MemoryBackingConfig, MemoryBackingError, MemoryBackingRef, MemoryBackingStore, XfsMemoryQuota};
@@ -116,6 +119,8 @@ pub struct NodePipeline {
     pause: Option<Arc<PauseTier>>,
     /// The pause policy and local waits, while the daemon owns the pause tier.
     pause_runtime: Option<crate::pause_runtime::PauseRuntime>,
+    /// The node's own admission (`--rust-admission`, step 3c.2).
+    admission: Option<Arc<AdmissionService>>,
     config: CreateConfig,
     agent: Arc<AgentClient>,
     registry: Arc<Registry>,
@@ -220,6 +225,33 @@ impl NodePipeline {
         });
         let warden = Warden::new(warden_config);
         let registry = Arc::new(registry);
+        // Step 3c.2: with --rust-admission and the agent's say-so, the node's
+        // own admission service (the agent does not call it until 3c.3).
+        let admission = match config.admission.as_ref().filter(|block| block.rust_admission_enabled) {
+            None => None,
+            Some(block) => match ServiceConfig::from_block(block, config.application_memory_root.is_some()) {
+                Err(error) => {
+                    eprintln!("ucloud-noded: node admission is off: {error}");
+                    None
+                }
+                Ok(service_config) => {
+                    let ram_configured = config.application_memory_root.is_some();
+                    let observations = Arc::new(NodeObservations::new(memory.clone(), ram_configured));
+                    let clock: Arc<dyn crate::pause_policy::Clock> = Arc::new(crate::pause_policy::SystemClock::new());
+                    let pressure =
+                        PressureSampler::new(PathBuf::from("/proc"), config.application_memory_root.clone(), clock.clone());
+                    let drain = registry.load_drain().map_err(|error| format!("registry drain: {error}"))?;
+                    let sources = Sources {
+                        store: registry.clone(),
+                        owners: registry.clone(),
+                        metrics: Arc::new(CachedMetrics::new(Arc::new(pressure))),
+                        observations: observations.clone(),
+                        clock,
+                    };
+                    Some((AdmissionService::open(service_config, drain.admission_open, sources)?, observations))
+                }
+            },
+        };
         let pause_runtime = pause.as_ref().map(|tier| {
             let settings = config.pause.as_ref().map(|block| block.settings.clone()).unwrap_or_default();
             // Phase 3b: with --rust-admission and the agent's say-so (the
@@ -227,6 +259,7 @@ impl NodePipeline {
             let resident_sampling = config.admission.as_ref().is_some_and(|block| block.rust_admission_enabled);
             crate::pause_runtime::PauseRuntime::start(crate::pause_runtime::PauseInputs {
                 resident_sampling,
+                admission: admission.as_ref().map(|(service, _)| service.clone()),
                 agent: agent.clone(),
                 tier: tier.clone(),
                 registry: registry.clone(),
@@ -235,6 +268,13 @@ impl NodePipeline {
                 cgroup_root: tier.config().cgroup_root.clone(),
                 settings,
             })
+        });
+        let admission = admission.map(|(service, observations)| {
+            if let Some(sampler) = pause_runtime.as_ref().and_then(|runtime| runtime.sampler()) {
+                observations.set_sampler(sampler);
+            }
+            service.start_recovery(Some(Arc::new(AgentSocketProbe(agent.socket().to_path_buf()))));
+            service
         });
         // Last, once nothing can fail: a failed open is retried, and a pool
         // left running would hold the ownership flock against the next one.
@@ -247,6 +287,7 @@ impl NodePipeline {
             materializing: Default::default(),
             pause,
             pause_runtime,
+            admission,
             storage: StorageClient::new(&config.storage_native_socket),
             config,
             agent,
@@ -285,6 +326,11 @@ impl NodePipeline {
     /// The pause tier, when the daemon owns it (phase 3a).
     pub fn pause_tier(&self) -> Option<&Arc<PauseTier>> {
         self.pause.as_ref()
+    }
+
+    /// The node's own admission, when it runs one (step 3c.2).
+    pub fn admission(&self) -> Option<&Arc<AdmissionService>> {
+        self.admission.as_ref()
     }
 
     /// S2.2: a warm lease from the store's receipts, else the agent mounts

@@ -1,6 +1,8 @@
 //! ucloud-noded --listen ADDR --upstream-unix PATH [--max-connections N]
 //!               [--rust-create] [--rust-exec] [--rust-pause] [--node-control-token-file PATH]
 //!               [--rust-admission --internal-unix PATH]
+//! ucloud-noded --admission-only --internal-unix PATH --registry PATH --node-control-token-file PATH
+//!               [--admission-config PATH] [--metrics-file PATH]
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -14,9 +16,52 @@ fn usage(message: &str) -> ExitCode {
     eprintln!(
         "usage: ucloud-noded --listen ADDR --upstream-unix PATH [--max-connections N] \
          [--rust-create] [--rust-exec] [--rust-pause] [--node-control-token-file PATH] \
-         [--rust-admission --internal-unix PATH]"
+         [--rust-admission --internal-unix PATH]\n       \
+         ucloud-noded --admission-only --internal-unix PATH --registry PATH --node-control-token-file PATH \
+         [--admission-config PATH] [--metrics-file PATH]"
     );
     ExitCode::from(2)
+}
+
+fn runtime() -> Option<tokio::runtime::Runtime> {
+    match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+        Ok(runtime) => Some(runtime),
+        Err(error) => {
+            eprintln!("ucloud-noded: cannot start the runtime: {error}");
+            None
+        }
+    }
+}
+
+/// `--admission-only` (step 3c.2): the admission routes alone, for tests.
+fn admission_only(options: ucloud_noded::admission::standalone::Options) -> ExitCode {
+    let Some(runtime) = runtime() else { return ExitCode::FAILURE };
+    runtime.block_on(async move {
+        let (Ok(mut terminate), Ok(mut interrupt)) = (signal(SignalKind::terminate()), signal(SignalKind::interrupt())) else {
+            eprintln!("ucloud-noded: cannot install signal handlers");
+            return ExitCode::FAILURE;
+        };
+        let shutdown = async move {
+            tokio::select! {
+                _ = terminate.recv() => {}
+                _ = interrupt.recv() => {}
+            }
+        };
+        let session = match ucloud_noded::session_nonce() {
+            Ok(session) => session,
+            Err(error) => {
+                eprintln!("ucloud-noded: {error}");
+                return ExitCode::FAILURE;
+            }
+        };
+        match ucloud_noded::admission::standalone::serve(options, &session, shutdown).await {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("ucloud-noded: {error}");
+                ExitCode::FAILURE
+            }
+        }
+    })
 }
 
 fn main() -> ExitCode {
@@ -27,8 +72,12 @@ fn main() -> ExitCode {
     let mut rust_exec = false;
     let mut rust_pause = false;
     let mut rust_admission = false;
+    let mut admission_only = false;
     let mut internal_unix: Option<PathBuf> = None;
     let mut token_file: Option<PathBuf> = None;
+    let mut registry: Option<PathBuf> = None;
+    let mut admission_config: Option<PathBuf> = None;
+    let mut metrics_file: Option<PathBuf> = None;
     let mut args = std::env::args().skip(1);
     while let Some(flag) = args.next() {
         match flag.as_str() {
@@ -36,9 +85,10 @@ fn main() -> ExitCode {
             "--rust-exec" => rust_exec = true,
             "--rust-pause" => rust_pause = true,
             "--rust-admission" => rust_admission = true,
+            "--admission-only" => admission_only = true,
             _ => {}
         }
-        if matches!(flag.as_str(), "--rust-create" | "--rust-exec" | "--rust-pause" | "--rust-admission") {
+        if matches!(flag.as_str(), "--rust-create" | "--rust-exec" | "--rust-pause" | "--rust-admission" | "--admission-only") {
             continue;
         }
         let Some(value) = args.next() else { return usage(&format!("{flag} needs a value")) };
@@ -50,12 +100,45 @@ fn main() -> ExitCode {
             "--upstream-unix" => upstream = Some(PathBuf::from(value)),
             "--node-control-token-file" => token_file = Some(PathBuf::from(value)),
             "--internal-unix" => internal_unix = Some(PathBuf::from(value)),
+            "--registry" => registry = Some(PathBuf::from(value)),
+            "--admission-config" => admission_config = Some(PathBuf::from(value)),
+            "--metrics-file" => metrics_file = Some(PathBuf::from(value)),
             "--max-connections" => match value.parse() {
                 Ok(count) if count > 0 => max_connections = Some(count),
                 _ => return usage(&format!("invalid --max-connections {value}")),
             },
             _ => return usage(&format!("unknown argument {flag}")),
         }
+    }
+    let read_token = |path: Option<PathBuf>| -> Result<String, String> {
+        let path = path.ok_or("--node-control-token-file is required")?;
+        match std::fs::read_to_string(&path) {
+            Ok(token) if !token.trim().is_empty() => Ok(token.trim().to_string()),
+            Ok(_) => Err("the node control token file is empty".into()),
+            Err(error) => Err(format!("cannot read {}: {error}", path.display())),
+        }
+    };
+    if admission_only {
+        if listen.is_some() || upstream.is_some() || rust_create || rust_exec || rust_pause || rust_admission {
+            return usage("--admission-only serves the internal socket alone");
+        }
+        let (Some(socket), Some(registry)) = (internal_unix, registry) else {
+            return usage("--admission-only needs --internal-unix and --registry");
+        };
+        let token = match read_token(token_file) {
+            Ok(token) => token,
+            Err(error) => return usage(&error),
+        };
+        return self::admission_only(ucloud_noded::admission::standalone::Options {
+            socket,
+            registry,
+            token,
+            config: admission_config,
+            metrics: metrics_file,
+        });
+    }
+    if registry.is_some() || admission_config.is_some() || metrics_file.is_some() {
+        return usage("--registry, --admission-config and --metrics-file go with --admission-only");
     }
     let (Some(listen), Some(upstream)) = (listen, upstream) else {
         return usage("--listen and --upstream-unix are required");
@@ -71,23 +154,16 @@ fn main() -> ExitCode {
     let token = match (rust_create || rust_exec || rust_pause, token_file) {
         (false, _) => None,
         (true, None) => return usage("--rust-create and --rust-exec need --node-control-token-file"),
-        (true, Some(path)) => match std::fs::read_to_string(&path) {
-            Ok(token) if !token.trim().is_empty() => Some(token.trim().to_string()),
-            Ok(_) => return usage("the node control token file is empty"),
-            Err(error) => return usage(&format!("cannot read {}: {error}", path.display())),
+        (true, path) => match read_token(path) {
+            Ok(token) => Some(token),
+            Err(error) => return usage(&error),
         },
     };
     let mut config = ucloud_noded::Config::new(upstream);
     if let Some(count) = max_connections {
         config.max_connections = count;
     }
-    let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            eprintln!("ucloud-noded: cannot start the runtime: {error}");
-            return ExitCode::FAILURE;
-        }
-    };
+    let Some(runtime) = runtime() else { return ExitCode::FAILURE };
     runtime.block_on(async move {
         let listener = match TcpListener::bind(listen).await {
             Ok(listener) => listener,

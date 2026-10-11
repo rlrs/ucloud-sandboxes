@@ -1086,6 +1086,26 @@ impl MemoryBackingStore {
         lock(&self.active_modes).get(&(sandbox_id.to_string(), generation)).copied()
     }
 
+    /// Python `observe_allocation`: remember the placement another process
+    /// gave this allocation (the agent's RAM-to-file switch), from the
+    /// journal. Admission calls it before quoting a cost, outside its lock.
+    pub fn observe_allocation(&self, sandbox_id: &str, generation: u64) -> Result<()> {
+        let Ok(stored) = i64::try_from(generation) else { return Ok(()) };
+        let mode = {
+            let conn = lock(&self.reader);
+            conn.query_row(
+                "SELECT active_mode FROM allocations WHERE sandbox_id=? AND generation=? AND state!='deleted'",
+                params![sandbox_id, stored],
+                |row| row.get::<_, SqlValue>(0),
+            )
+            .optional()?
+        };
+        if let Some(mode) = mode {
+            self.remember_mode(sandbox_id, generation, text(mode).as_deref())?;
+        }
+        Ok(())
+    }
+
     fn check_journal_identity(&self) -> Result<()> {
         let meta = fs::metadata(&self.journal)?;
         if (meta.dev(), meta.ino()) != self.journal_identity {

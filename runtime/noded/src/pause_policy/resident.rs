@@ -107,6 +107,12 @@ impl ResidentSampler {
         (self.clock.monotonic() - sample.sampled_at <= SAMPLE_MAX_AGE_SECONDS).then_some(sample)
     }
 
+    /// The last sample whatever its age (`historical`): growth credit applies
+    /// its own age fence.
+    pub fn historical(&self, key: &Key) -> Option<ResidentSample> {
+        self.state().samples.get(key).cloned()
+    }
+
     /// Drop every incarnation but these.
     pub fn retain(&self, keys: &std::collections::HashSet<Key>) {
         let mut state = self.state();

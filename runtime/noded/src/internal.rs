@@ -8,19 +8,24 @@
 //! per agent start) and every answer carries `X-UCloud-Noded-Session`, so
 //! each side notices the other's restart.
 //!
-//! Step 3c.0 serves only the handshake: `POST /internal/v1/admission/hello`
-//! and `GET /internal/v1/admission/ping`. Anything else under
-//! `/internal/v1/admission/` is a 404 until later steps add its route.
+//! Step 3c.0 serves the handshake: `POST /internal/v1/admission/hello` and
+//! `GET /internal/v1/admission/ping`. Step 3c.2 adds the admission routes
+//! (`crate::admission::routes`) once the node runs its own admission
+//! ([`AdmissionAccess::Ready`]); until the node loads they answer `503
+//! admission_recovering`, and without node admission anything else under
+//! `/internal/v1/admission/` stays a 404.
 
 use std::future::Future;
 use std::os::unix::fs::{DirBuilderExt, FileTypeExt, PermissionsExt};
 use std::path::Path;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full, Limited};
-use hyper::body::Incoming;
+use hyper::body::{Frame, Incoming, SizeHint};
 use hyper::header::{self, HeaderValue};
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::{TokioIo, TokioTimer};
@@ -29,13 +34,16 @@ use serde_json::{Value, json};
 use tokio::net::UnixListener;
 
 use crate::Body;
+use crate::admission::routes::{self, Answer, Grant};
+use crate::admission::service::AdmissionService;
 use crate::agent_rpc::SESSION_HEADER;
 use crate::node_pipeline::NodePipeline;
 
-/// One agent start. From step 3c.2 a hello under a new one drops whatever an
-/// earlier agent session held; in 3c.0 it is only recorded.
+/// One agent start. A hello under a new one drops whatever an earlier agent
+/// session held (step 3c.2).
 pub const AGENT_SESSION_HEADER: &str = "x-ucloud-agent-session";
 const ADMISSION_PREFIX: &str = "/internal/v1/admission/";
+const GROWTH_PREFIX: &str = "/internal/v1/growth/";
 /// Handshake bodies are tiny; later routes stay far below this too.
 const MAX_BODY_BYTES: usize = 1024 * 1024;
 const MAX_SESSION_BYTES: usize = 128;
@@ -47,6 +55,21 @@ pub trait NodeView: Send + Sync {
     fn admission_open(&self) -> Option<bool>;
     /// The digest of the create configuration the node was loaded from.
     fn config_sha256(&self) -> Option<String>;
+    /// Whether the node runs its own admission.
+    fn admission(&self) -> AdmissionAccess {
+        AdmissionAccess::Unserved
+    }
+}
+
+/// The admission routes' state.
+#[derive(Clone)]
+pub enum AdmissionAccess {
+    /// Not this node's (the agent keeps admission): only the handshake.
+    Unserved,
+    /// The node has not loaded yet: retryable refusals, hello included, so
+    /// the agent's reasserted claims reach the service.
+    Loading,
+    Ready(Arc<AdmissionService>),
 }
 
 /// The view of the node `start_fronts` loads once the agent reports its
@@ -61,6 +84,47 @@ impl NodeView for LoadedNode {
 
     fn config_sha256(&self) -> Option<String> {
         self.0.get().map(|node| node.config().config_sha256.clone()).filter(|digest| !digest.is_empty())
+    }
+
+    fn admission(&self) -> AdmissionAccess {
+        match self.0.get() {
+            None => AdmissionAccess::Loading,
+            Some(node) => node.admission().cloned().map_or(AdmissionAccess::Unserved, AdmissionAccess::Ready),
+        }
+    }
+}
+
+/// A response body that carries an admission grant: handing the bytes to the
+/// connection delivers it; dropping the body first (the client went away)
+/// releases the claim and its slot.
+struct GrantBody {
+    data: Option<Bytes>,
+    grant: Option<Grant>,
+}
+
+impl hyper::body::Body for GrantBody {
+    type Data = Bytes;
+    type Error = hyper::Error;
+
+    fn poll_frame(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<Result<Frame<Bytes>, hyper::Error>>> {
+        let this = self.get_mut();
+        match this.data.take() {
+            Some(data) => {
+                if let Some(grant) = this.grant.as_mut() {
+                    grant.delivered();
+                }
+                Poll::Ready(Some(Ok(Frame::data(data))))
+            }
+            None => Poll::Ready(None),
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.data.is_none()
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        SizeHint::with_exact(self.data.as_ref().map_or(0, |data| data.len() as u64))
     }
 }
 
@@ -111,7 +175,18 @@ impl Internal {
     }
 
     fn respond(&self, status: StatusCode, body: Value) -> Response<Body> {
-        let mut response = Response::new(full(Bytes::from(body.to_string())));
+        self.respond_with(status, body, None)
+    }
+
+    /// A JSON answer whose body may carry a grant (released if never sent).
+    fn respond_with(&self, status: StatusCode, body: Value, grant: Option<Grant>) -> Response<Body> {
+        let retryable = status == StatusCode::SERVICE_UNAVAILABLE && body.get("retryable").and_then(Value::as_bool) == Some(true);
+        let bytes = Bytes::from(body.to_string());
+        let body = match grant {
+            Some(grant) => GrantBody { data: Some(bytes), grant: Some(grant) }.boxed(),
+            None => full(bytes),
+        };
+        let mut response = Response::new(body);
         *response.status_mut() = status;
         let headers = response.headers_mut();
         headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
@@ -119,11 +194,18 @@ impl Internal {
         if status == StatusCode::UNAUTHORIZED {
             headers.insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
         }
+        if retryable {
+            headers.insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
+        }
         response
     }
 
     fn error(&self, status: StatusCode, code: &str, message: &str, retryable: bool) -> Response<Body> {
         self.respond(status, json!({"error": message, "error_code": code, "retryable": retryable}))
+    }
+
+    fn answer(&self, answer: Answer) -> Response<Body> {
+        self.respond_with(answer.status, answer.body, answer.grant)
     }
 
     pub async fn handle(self: &Arc<Self>, request: Request<Incoming>) -> Response<Body> {
@@ -133,8 +215,11 @@ impl Internal {
             return self.error(StatusCode::UNAUTHORIZED, "unauthorized", "unauthorized", false);
         }
         let path = parts.uri.path();
-        let Some(route) = path.strip_prefix(ADMISSION_PREFIX) else {
-            return self.error(StatusCode::NOT_FOUND, "not_found", "not found", false);
+        let (route, growth) = match (path.strip_prefix(ADMISSION_PREFIX), path.strip_prefix(GROWTH_PREFIX)) {
+            (Some(route), _) => (route, false),
+            // The growth routes exist only where the node runs admission.
+            (None, Some(route)) if !matches!(self.node.admission(), AdmissionAccess::Unserved) => (route, true),
+            _ => return self.error(StatusCode::NOT_FOUND, "not_found", "not found", false),
         };
         let agent_session = parts.headers.get(AGENT_SESSION_HEADER).and_then(|v| v.to_str().ok()).filter(|v| valid_session(v));
         let Some(agent_session) = agent_session.map(str::to_string) else {
@@ -144,35 +229,67 @@ impl Internal {
             Ok(collected) => collected.to_bytes(),
             Err(_) => return self.error(StatusCode::BAD_REQUEST, "invalid_request", "the request body is unreadable or too large", false),
         };
-        match (route, &parts.method) {
-            ("hello", &Method::POST) => self.hello(&agent_session, &bytes).await,
-            ("ping", &Method::GET) => {
+        match (route, &parts.method, growth) {
+            ("hello", &Method::POST, false) => self.hello(&agent_session, &bytes).await,
+            ("ping", &Method::GET, false) => {
                 let current = self.agent_session().as_deref() == Some(agent_session.as_str());
                 self.respond(StatusCode::OK, json!({"noded_session": self.session(), "hello": current}))
             }
-            ("hello" | "ping", _) => self.error(StatusCode::METHOD_NOT_ALLOWED, "method_not_allowed", "method not allowed", false),
-            _ => self.error(StatusCode::NOT_FOUND, "admission_route_unknown", &format!("no admission route {path}"), false),
+            ("hello" | "ping", _, false) => self.error(StatusCode::METHOD_NOT_ALLOWED, "method_not_allowed", "method not allowed", false),
+            _ => match self.node.admission() {
+                AdmissionAccess::Unserved => {
+                    self.error(StatusCode::NOT_FOUND, "admission_route_unknown", &format!("no admission route {path}"), false)
+                }
+                AdmissionAccess::Loading => self.loading(),
+                AdmissionAccess::Ready(service) => {
+                    let answer = routes::handle(&service, self.session(), &agent_session, growth, route, &parts.method, &bytes).await;
+                    self.answer(answer)
+                }
+            },
         }
     }
 
-    /// `{agent_session}` -> `{noded_session, admission_open, config_sha256}`.
-    /// The body names the header's session, so a proxy cannot mix them up.
+    fn loading(&self) -> Response<Body> {
+        self.error(StatusCode::SERVICE_UNAVAILABLE, "admission_recovering", "noded has not loaded the node's admission yet", true)
+    }
+
+    /// `{agent_session, reassert?}` -> `{noded_session, admission_open,
+    /// config_sha256}`. The body names the header's session, so a proxy
+    /// cannot mix them up. With node admission, the hello also drops every
+    /// claim of other agent sessions, accepts the reasserted ones (§3.5) and
+    /// ends recovery.
     async fn hello(self: &Arc<Self>, agent_session: &str, bytes: &[u8]) -> Response<Body> {
-        let named = serde_json::from_slice::<Value>(bytes).ok().and_then(|raw| {
-            let object = raw.as_object()?;
-            (object.len() == 1).then(|| object.get("agent_session")?.as_str().map(str::to_string))?
-        });
-        if named.as_deref() != Some(agent_session) {
+        let raw = serde_json::from_slice::<Value>(bytes).ok();
+        let object = raw.as_ref().and_then(Value::as_object);
+        let named = object
+            .filter(|object| object.keys().all(|key| key == "agent_session" || key == "reassert"))
+            .and_then(|object| object.get("agent_session")?.as_str());
+        if named != Some(agent_session) {
             return self.error(StatusCode::BAD_REQUEST, "invalid_request", "hello must be {\"agent_session\"} naming the header's session", false);
+        }
+        let reassert = match routes::parse_reassert(object.and_then(|object| object.get("reassert"))) {
+            Ok(reassert) => reassert,
+            Err(message) => return self.error(StatusCode::BAD_REQUEST, "invalid_request", &message, false),
+        };
+        let access = self.node.admission();
+        if matches!(access, AdmissionAccess::Loading) {
+            return self.loading();
         }
         let previous = self.agent_session.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).replace(agent_session.to_string());
         if previous.as_deref() != Some(agent_session) {
             eprintln!("ucloud-noded: agent session {agent_session} said hello");
         }
         let node = self.node.clone();
-        let (admission_open, config_sha256) = tokio::task::spawn_blocking(move || (node.admission_open(), node.config_sha256()))
+        let (mut admission_open, config_sha256) = tokio::task::spawn_blocking(move || (node.admission_open(), node.config_sha256()))
             .await
             .unwrap_or((None, None));
+        if let AdmissionAccess::Ready(service) = access {
+            let (dropped, _) = service.hello(agent_session, reassert);
+            if dropped > 0 {
+                eprintln!("ucloud-noded: released {dropped} admission claims of earlier agent sessions");
+            }
+            admission_open = Some(service.admission_open());
+        }
         self.respond(StatusCode::OK, json!({
             "noded_session": self.session(), "admission_open": admission_open, "config_sha256": config_sha256,
         }))

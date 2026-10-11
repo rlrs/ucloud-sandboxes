@@ -81,6 +81,11 @@ impl AgentClient {
         self.session.to_str().unwrap_or_default()
     }
 
+    /// The agent's Unix socket.
+    pub fn socket(&self) -> &std::path::Path {
+        &self.socket
+    }
+
     async fn sender(&self) -> Result<Sender, RpcError> {
         loop {
             let pooled = self.idle.lock().expect("pool lock").pop();

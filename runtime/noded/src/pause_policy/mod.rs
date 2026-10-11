@@ -230,6 +230,9 @@ pub trait Escalator: Send + Sync + 'static {
 /// is never hibernated.
 pub type Answered = Arc<dyn Fn(&str, u64) -> bool + Send + Sync>;
 
+/// Called after each sampler pass over managed sandboxes (blocking context).
+pub type ResidentPass = Arc<dyn Fn() + Send + Sync>;
+
 #[derive(Clone, Debug)]
 pub struct PolicyConfig {
     /// `status.json` and `agent-demand.json` live in `<state_root>/noded/`.
@@ -279,20 +282,25 @@ impl PausePolicy {
     /// Start both loops on the current tokio runtime. `fence` names the
     /// Warden's lock directory (`<runtime_root>/warden-locks`, the exec
     /// fence's); `registry` is the node registry (the daemon owns it).
+    /// `demand` replaces the agent's `agent-demand.json` (step 3c.2: noded's
+    /// own admission ledger, with `--rust-admission`).
     pub fn start(
         config: PolicyConfig,
         pause_tier: Arc<dyn PauseMechanism>,
         fence: PauseFence,
         registry: Arc<dyn Inventory>,
         escalator: Arc<dyn Escalator>,
+        demand: Option<Arc<dyn DemandSource>>,
     ) -> PausePolicyHandle {
         let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
         let pressure = Arc::new(PressureSampler::new(config.proc_root.clone(), config.memory_backing_root.clone(), clock.clone()));
         let inventory = registry.clone();
-        let demand = Arc::new(files::AgentDemandSource {
-            file: files::DemandFile::new(&config.state_root, clock.clone()),
-            // An unreadable drain row bills nothing: only measured pressure acts.
-            admission_open: Box::new(move || inventory.admission_open().unwrap_or(false)),
+        let demand = demand.unwrap_or_else(|| {
+            Arc::new(files::AgentDemandSource {
+                file: files::DemandFile::new(&config.state_root, clock.clone()),
+                // An unreadable drain row bills nothing: only measured pressure acts.
+                admission_open: Box::new(move || inventory.admission_open().unwrap_or(false)),
+            }) as Arc<dyn DemandSource>
         });
         let deps = engine::Deps {
             mechanism: pause_tier,
@@ -390,6 +398,11 @@ impl PausePolicyHandle {
     /// Local waits: never escalate a wait whose call was answered.
     pub fn set_answered(&self, answered: Answered) {
         *self.engine.answered.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(answered);
+    }
+
+    /// Node admission: run `hook` after each managed sampler pass.
+    pub fn set_resident_pass(&self, hook: ResidentPass) {
+        *self.engine.resident_pass.write().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(hook);
     }
 
     /// Stop both loops; in-flight reclaims stop at their next window (and are

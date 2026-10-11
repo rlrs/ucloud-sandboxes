@@ -7,8 +7,8 @@
 //! ([`GrowthStore`], implemented by [`Registry`]); this module holds what the
 //! agent keeps in memory beside them. Callers own the ordering: take the key's
 //! [`Turns`] turn, commit through the store, then apply the result here under
-//! the admission lock ([`Growth::record`]). Nothing here is wired yet
-//! (docs/admission-port-3c.md, step 3c.1).
+//! the admission lock ([`Growth::record`]). The admission service
+//! ([`super::service`]) drives it.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -125,6 +125,11 @@ pub fn startup_cost(mode: MemoryMode, requested_memory_mb: u64, managed: bool) -
 pub trait Observations {
     fn historical(&self, key: &Owner) -> Option<ResidentSample>;
     fn memory_mode(&self, key: &Owner) -> MemoryMode;
+    /// Park and restore forget an incarnation's samples.
+    fn forget(&self, _key: &Owner) {}
+    /// Re-read this key's placement before quoting it (another process may
+    /// have moved it from RAM to file). Blocking.
+    fn reload_mode(&self, _key: &Owner) {}
 }
 
 pub fn intent_key(intent: &GrowthIntent) -> Owner {
@@ -321,23 +326,47 @@ impl Turns {
     }
 }
 
+/// One durable growth transition: `growth_intent`'s arguments.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Step {
+    pub key: Owner,
+    pub action: GrowthAction,
+    pub job_id: String,
+    pub launch_sha256: String,
+    pub request_id: String,
+}
+
+impl Step {
+    pub fn new(key: &Owner, action: GrowthAction) -> Step {
+        Step { key: key.clone(), action, job_id: String::new(), launch_sha256: String::new(), request_id: String::new() }
+    }
+
+    pub fn job(mut self, job_id: &str, launch_sha256: &str) -> Step {
+        self.job_id = job_id.to_string();
+        self.launch_sha256 = launch_sha256.to_string();
+        self
+    }
+
+    pub fn request(mut self, request_id: &str) -> Step {
+        self.request_id = request_id.to_string();
+        self
+    }
+}
+
 /// The durable `managed_growth` writer: `Registry::growth_intent*`. Kept a
 /// trait so the admission service can be tested without SQLite.
 pub trait GrowthStore: Send + Sync {
-    fn growth_intent(
-        &self,
-        key: &Owner,
-        action: GrowthAction,
-        job_id: &str,
-        launch_sha256: &str,
-        request_id: &str,
-    ) -> registry::Result<Option<GrowthIntent>>;
+    /// Every durable row (`growth_intents()`, read at start).
+    fn growth_intents(&self) -> registry::Result<Vec<GrowthIntent>>;
 
-    /// `(key, action, request ID)` steps as one commit; each item fails alone.
-    fn growth_intent_batch(
-        &self,
-        operations: &[(Owner, GrowthAction, String)],
-    ) -> registry::Result<Vec<registry::Result<Option<GrowthIntent>>>>;
+    fn growth_intent(&self, step: &Step) -> registry::Result<Option<GrowthIntent>>;
+
+    /// Steps in order as one commit; each item fails alone.
+    fn growth_steps(&self, steps: &[Step]) -> registry::Result<Vec<registry::Result<Option<GrowthIntent>>>>;
+
+    /// `relay_wake_fence(record=True)`: a covered continuation revokes the
+    /// park of its request in the same durable order.
+    fn relay_wake_fence(&self, key: &Owner, request_id: &str) -> registry::Result<bool>;
 }
 
 fn generation(key: &Owner) -> registry::Result<i64> {
@@ -345,25 +374,32 @@ fn generation(key: &Owner) -> registry::Result<i64> {
 }
 
 impl GrowthStore for Registry {
-    fn growth_intent(
-        &self,
-        key: &Owner,
-        action: GrowthAction,
-        job_id: &str,
-        launch_sha256: &str,
-        request_id: &str,
-    ) -> registry::Result<Option<GrowthIntent>> {
-        Registry::growth_intent(self, &key.0, generation(key)?, action, job_id, launch_sha256, request_id)
+    fn growth_intents(&self) -> registry::Result<Vec<GrowthIntent>> {
+        Registry::growth_intents(self)
     }
 
-    fn growth_intent_batch(
-        &self,
-        operations: &[(Owner, GrowthAction, String)],
-    ) -> registry::Result<Vec<registry::Result<Option<GrowthIntent>>>> {
-        let operations = operations
+    fn growth_intent(&self, step: &Step) -> registry::Result<Option<GrowthIntent>> {
+        Registry::growth_intent(self, &step.key.0, generation(&step.key)?, step.action, &step.job_id, &step.launch_sha256, &step.request_id)
+    }
+
+    fn growth_steps(&self, steps: &[Step]) -> registry::Result<Vec<registry::Result<Option<GrowthIntent>>>> {
+        let steps = steps
             .iter()
-            .map(|(key, action, request_id)| Ok(((key.0.clone(), generation(key)?), *action, request_id.clone())))
+            .map(|step| {
+                Ok(registry::GrowthStep {
+                    sandbox_id: step.key.0.clone(),
+                    generation: generation(&step.key)?,
+                    action: step.action,
+                    job_id: step.job_id.clone(),
+                    launch_sha256: step.launch_sha256.clone(),
+                    request_id: step.request_id.clone(),
+                })
+            })
             .collect::<registry::Result<Vec<_>>>()?;
-        Registry::growth_intent_batch(self, &operations)
+        Registry::growth_intent_steps(self, &steps)
+    }
+
+    fn relay_wake_fence(&self, key: &Owner, request_id: &str) -> registry::Result<bool> {
+        Registry::relay_wake_fence(self, &key.0, generation(key)?, request_id, true)
     }
 }

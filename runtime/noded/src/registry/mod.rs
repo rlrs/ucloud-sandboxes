@@ -33,6 +33,7 @@ pub use record::{
 };
 pub use schema::{APPLICATION_ID, SCHEMA, SCHEMA_VERSION};
 pub use spec::SandboxSpec;
+pub(crate) use spec::is_sandbox_id;
 pub use store::ClaimsMb;
 
 use spec::is_digest;
@@ -87,6 +88,17 @@ pub enum GrowthAction {
     Wait,
     Park,
     Terminal,
+}
+
+/// One step of [`Registry::growth_intent_steps`]: `growth_intent`'s arguments.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GrowthStep {
+    pub sandbox_id: String,
+    pub generation: i64,
+    pub action: GrowthAction,
+    pub job_id: String,
+    pub launch_sha256: String,
+    pub request_id: String,
 }
 
 impl GrowthAction {
@@ -1010,11 +1022,29 @@ impl Registry {
         &self,
         operations: &[((String, i64), GrowthAction, String)],
     ) -> Result<Vec<Result<Option<GrowthIntent>>>> {
+        let steps: Vec<GrowthStep> = operations
+            .iter()
+            .map(|((sandbox_id, generation), action, request_id)| GrowthStep {
+                sandbox_id: sandbox_id.clone(),
+                generation: *generation,
+                action: *action,
+                job_id: String::new(),
+                launch_sha256: String::new(),
+                request_id: request_id.clone(),
+            })
+            .collect();
+        self.growth_intent_steps(&steps)
+    }
+
+    /// `growth_intent_batch` with each step's job identity (terminal, launch,
+    /// bind): in order, as one commit, each item failing alone.
+    pub fn growth_intent_steps(&self, steps: &[GrowthStep]) -> Result<Vec<Result<Option<GrowthIntent>>>> {
         self.store.write(true, |tx| {
-            let mut results = Vec::with_capacity(operations.len());
-            for ((sandbox_id, generation), action, request_id) in operations {
+            let mut results = Vec::with_capacity(steps.len());
+            for step in steps {
                 tx.connection.execute_batch("SAVEPOINT growth")?;
-                match growth_intent_step(tx, sandbox_id, *generation, *action, "", "", request_id) {
+                let GrowthStep { sandbox_id, generation, action, job_id, launch_sha256, request_id } = step;
+                match growth_intent_step(tx, sandbox_id, *generation, *action, job_id, launch_sha256, request_id) {
                     Ok(intent) => results.push(Ok(intent)),
                     Err(error @ RegistryError::Unreadable { .. }) => return Err(error),
                     Err(error) => {

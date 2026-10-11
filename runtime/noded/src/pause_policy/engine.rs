@@ -17,7 +17,7 @@ use super::files::{DemandSource, ResidentFile, Status, StatusFile};
 use super::plan::{ESCALATION_CONCURRENCY, Key, PausedWait, RECLAIM_WINDOW_BYTES, note_reclaim, reclaim_stalled, relief_plan};
 use super::pressure::PressureSource;
 use super::resident::{ReclaimRequest, ReclaimResult, Reclaimer, ResidentSampler, bundle_cgroup_path, kernel_write};
-use super::{Answered, Candidate, Clock, Escalator, Inventory, PauseMechanism, PolicyConfig};
+use super::{Answered, Candidate, Clock, Escalator, Inventory, PauseMechanism, PolicyConfig, ResidentPass};
 use crate::pause::Counter;
 use crate::warden::Sandbox;
 
@@ -124,7 +124,8 @@ pub struct Engine {
     demand: Arc<dyn DemandSource>,
     pub(crate) budget: ReclaimBudget,
     paused_reclaim: Option<PausedReclaim>,
-    pub(crate) sampler: ResidentSampler,
+    /// Shared with node admission, whose growth forecasts credit its samples.
+    pub(crate) sampler: Arc<ResidentSampler>,
     /// `linux.cgroupsPath` of each sampled incarnation's bundle.
     cgroup_paths: Mutex<HashMap<Key, Option<String>>>,
     table: Mutex<Table>,
@@ -132,6 +133,9 @@ pub struct Engine {
     status_file: Mutex<StatusFile>,
     resident_file: Mutex<ResidentFile>,
     pub(crate) answered: RwLock<Option<Answered>>,
+    /// Runs after each pass that sampled managed sandboxes (step 3c.2: node
+    /// admission refreshes its forecasts, as `refresh_resident_memory` does).
+    pub(crate) resident_pass: RwLock<Option<ResidentPass>>,
     pub(crate) stopped: AtomicBool,
     logs: RateLimited,
 }
@@ -162,7 +166,7 @@ pub fn running_and_alive(record: &Map<String, Value>, proc_root: &std::path::Pat
 
 impl Engine {
     pub(crate) fn new(config: PolicyConfig, deps: Deps) -> Engine {
-        let sampler = ResidentSampler::new(config.cgroup_root.clone(), config.proc_root.clone(), deps.clock.clone());
+        let sampler = Arc::new(ResidentSampler::new(config.cgroup_root.clone(), config.proc_root.clone(), deps.clock.clone()));
         let status_file = StatusFile::open(&config.state_root, &config.session);
         let resident_file = ResidentFile::open(&config.state_root, &config.session);
         Engine {
@@ -182,6 +186,7 @@ impl Engine {
             status_file: Mutex::new(status_file),
             resident_file: Mutex::new(resident_file),
             answered: RwLock::new(None),
+            resident_pass: RwLock::new(None),
             stopped: AtomicBool::new(false),
             logs: RateLimited { last: Mutex::new(HashMap::new()) },
             config,
@@ -371,7 +376,16 @@ impl Engine {
         }
         if managed {
             self.write_resident();
+            let hook = self.resident_pass.read().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+            if let Some(hook) = hook {
+                hook();
+            }
         }
+    }
+
+    /// The samples this engine keeps (paused, and managed with `resident_sampling`).
+    pub fn sampler(&self) -> &Arc<ResidentSampler> {
+        &self.sampler
     }
 
     /// Publish every cached sample to `resident.json`.

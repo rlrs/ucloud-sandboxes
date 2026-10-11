@@ -245,6 +245,16 @@ fn an_interrupted_prepare_resumes_with_its_claim() {
     assert_eq!(counter(&node), 600001);
     assert_eq!(mode(&node.ram_root().join("sb-1.sandbox-1")), 0o700);
     assert_eq!(reopened.active_mode("sb-1", 1), Some(ActiveMode::Ram));
+
+    // Another process moves the allocation to file; admission re-reads it
+    // before quoting (Python's `observe_allocation`).
+    node.sql().execute("UPDATE allocations SET active_mode='file'", []).unwrap();
+    assert_eq!(reopened.active_mode("sb-1", 1), Some(ActiveMode::Ram), "the cache is not I/O");
+    reopened.observe_allocation("sb-1", 1).unwrap();
+    assert_eq!(reopened.active_mode("sb-1", 1), Some(ActiveMode::File));
+    // Unknown incarnations stay unknown.
+    reopened.observe_allocation("sb-1", 2).unwrap();
+    assert_eq!(reopened.active_mode("sb-1", 2), None);
 }
 
 #[test]

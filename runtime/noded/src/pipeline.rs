@@ -250,6 +250,10 @@ impl Pipeline for LazyPipeline {
         !self.stale.load(Ordering::Relaxed) && self.inner.get().is_some_and(|(pipeline, _)| pipeline.supports(spec))
     }
 
+    fn admission(&self) -> Option<Arc<crate::admission::service::AdmissionService>> {
+        self.inner.get().and_then(|(pipeline, _)| pipeline.admission())
+    }
+
     fn accepts_config(&self, config_sha256: &str) -> bool {
         let Some((_, loaded)) = self.inner.get() else { return false };
         if loaded == config_sha256 {

@@ -1,7 +1,14 @@
-//! `POST /v1/sandboxes` in the daemon (phase 1). The Python agent keeps
-//! admission: the daemon asks it to admit (startup slot, capacity, the
-//! lifecycle lock, spec validation) and to finish (release, activity, the
-//! response record and epochs), and runs everything in between itself.
+//! `POST /v1/sandboxes` in the daemon (phase 1). The daemon asks the Python
+//! agent to admit (startup slot, capacity, the lifecycle lock, spec
+//! validation) and to finish (release, activity, the response record and
+//! epochs), and runs everything in between itself.
+//!
+//! Where the node runs its own admission (`--rust-admission`, step 3c.4 of
+//! docs/admission-port-3c.md), the daemon takes the startup slot and the
+//! capacity claim in process first and hands the agent its token
+//! (`"admitted"`): the agent then holds only the lifecycle lock and the
+//! layout. The claim is released after finish returns, so the heartbeat sees
+//! the create's registry row before its in-flight claim goes (I18).
 //!
 //! The daemon creates only what it fully supports. Any other request goes to
 //! the agent unchanged, so every edge of the contract (framing errors, invalid
@@ -18,6 +25,8 @@ use serde_json::{Map, Value, json};
 use serde_json::value::RawValue;
 
 use crate::Body;
+use crate::admission::ledger::Shape;
+use crate::admission::service::{AdmissionService, Holder, Refusal};
 use crate::agent_rpc::{AgentClient, Reply, RpcError};
 use crate::timings::Timings;
 
@@ -96,6 +105,60 @@ pub trait Pipeline: Send + Sync + 'static {
     fn accepts_config(&self, _config_sha256: &str) -> bool {
         true
     }
+
+    /// The node's own admission, where it runs one (`--rust-admission`).
+    fn admission(&self) -> Option<Arc<AdmissionService>> {
+        None
+    }
+}
+
+/// noded's own startup claim for one create, released when dropped: after
+/// finish returns, or on any way out before it.
+struct NodedClaim {
+    service: Arc<AdmissionService>,
+    token: String,
+}
+
+impl Drop for NodedClaim {
+    fn drop(&mut self) {
+        self.service.release(&self.token, &Holder::Noded);
+    }
+}
+
+/// What in-process admission charges a spec: `requested_resources()`'s vcpu
+/// and memory, and `managed_process`. `None` for any value Python would parse
+/// differently or refuse: the agent then admits the create itself.
+fn admission_shape(spec: &Map<String, Value>) -> Option<(Shape, bool)> {
+    let vcpu = match spec.get("cpus") {
+        None | Some(Value::Null) => 0.0,
+        Some(value) => value.as_f64().filter(|vcpu| vcpu.is_finite() && *vcpu >= 0.0)?,
+    };
+    let memory_mb = match spec.get("memory_mb") {
+        None | Some(Value::Null) => 0,
+        Some(value) => value.as_u64()?,
+    };
+    let managed = match spec.get("managed_process") {
+        None | Some(Value::Null) => false,
+        Some(value) => value.as_bool()?,
+    };
+    Some((Shape { vcpu, memory_mb, disk_mb: 0 }, managed))
+}
+
+/// The agent's `_write_create_error` for an admission refusal, byte for byte:
+/// a closed node is `node_admission_closed`; anything else that granted
+/// nothing (a slot or capacity wait, a recovering ledger) is the retryable
+/// `node_active_admission_deferred`.
+fn refused(refusal: Refusal) -> Response<Body> {
+    let message = refusal.message();
+    if let Refusal::Closed(_) = refusal {
+        let body = json!({"error": message, "error_code": "node_admission_closed", "retryable": true});
+        return json_response(StatusCode::SERVICE_UNAVAILABLE, Bytes::from(body.to_string()), &HeaderMap::new());
+    }
+    let body = json!({"error": message, "error_code": "node_active_admission_deferred", "retryable": true});
+    let mut headers = HeaderMap::new();
+    headers.insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
+    headers.insert("x-ucloud-sandbox-retryable", HeaderValue::from_static("true"));
+    json_response(StatusCode::SERVICE_UNAVAILABLE, Bytes::from(body.to_string()), &headers)
 }
 
 pub enum Outcome {
@@ -219,6 +282,7 @@ impl CreateFront {
         }
         let sandbox_id = raw.get("id").and_then(Value::as_str).unwrap_or_default().to_string();
         let wait = parts.headers.get(ADMISSION_WAIT_HEADER).and_then(|v| v.to_str().ok()).and_then(parse_admission_wait);
+        let shape = admission_shape(&raw);
         let parse_spec_ms = parse_started.elapsed().as_millis() as u64;
 
         let admit = json!({
@@ -229,7 +293,7 @@ impl CreateFront {
         // away must not abandon a half-built incarnation and its admission.
         let front = self.clone();
         let ids = (sandbox_id, generation, operation_id, spec_hash);
-        let task = tokio::spawn(async move { front.admitted(admit, ids, read_request_ms, parse_spec_ms, started).await });
+        let task = tokio::spawn(async move { front.admitted(admit, ids, (shape, wait), read_request_ms, parse_spec_ms, started).await });
         match task.await {
             Ok(Some(response)) => Outcome::Response(response),
             Ok(None) => Outcome::Forward(Request::from_parts(parts, full(bytes))),
@@ -238,16 +302,33 @@ impl CreateFront {
     }
 
     /// Admit, run and finish; `None` hands the request to the agent.
+    #[allow(clippy::too_many_arguments)]
     async fn admitted(
         &self,
-        admit: Value,
+        mut admit: Value,
         (sandbox_id, generation, operation_id, spec_hash): (String, u64, String, String),
+        (shape, wait): (Option<(Shape, bool)>, Option<f64>),
         read_request_ms: u64,
         parse_spec_ms: u64,
         started: Instant,
     ) -> Option<Response<Body>> {
         let manager_started = Instant::now();
         let mut timings = Timings::default();
+        // In-process admission first; the agent then skips demand, slot and
+        // capacity. Held to the end of this function: after finish.
+        let mut _claim: Option<NodedClaim> = None;
+        if let (Some(service), Some((requested, managed))) = (self.pipeline.admission(), shape) {
+            let owner = (sandbox_id.clone(), generation);
+            match service.startup(&Holder::Noded, &owner, requested, managed, wait).await {
+                Ok(grant) => {
+                    timings.add_ms("startup_admission", grant.startup_admission_ms as u64);
+                    timings.add_ms("active_capacity", grant.active_capacity_ms as u64);
+                    admit["admitted"] = json!({"token": grant.token});
+                    _claim = Some(NodedClaim { service, token: grant.token });
+                }
+                Err(refusal) => return Some(refused(refusal)),
+            }
+        }
         // The agent's two requests, whole: its own phases (slot, capacity,
         // lock) are inside admit; the rest is the RPC and the agent's GIL.
         let admit_started = timings.start();

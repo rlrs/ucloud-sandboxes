@@ -647,6 +647,88 @@ async fn growth_events_and_continuations_follow_the_durable_rows() {
 }
 
 #[tokio::test]
+async fn the_agents_own_launches_and_binds_use_the_same_ledger() {
+    let node = Node::new();
+    node.owned("m1", 1, true);
+    node.owned("m2", 1, true);
+    node.owned("plain", 1, false);
+    let service = node.service();
+    let served = serve(&node, &service, "launch");
+    let mut agent = client(&served, AGENT).await;
+    agent.hello(None).await;
+    let digest = "1".repeat(64);
+    let launch = |id: &str, job: &str, digest: &str, deadline_ms: u64| {
+        json!({"owner": owner(id, 1), "job_id": job, "launch_sha256": digest, "deadline_ms": deadline_ms})
+    };
+    // Queued, admitted against memory, active; a replay is idempotent.
+    let (status, body) = agent.post("growth/launch", launch("m1", "job-1", &digest, 1000)).await;
+    assert_eq!((status, body), (StatusCode::OK, json!({"job_id": "job-1"})));
+    assert_eq!(service.intent(&("m1".into(), 1)).unwrap().phase, "active");
+    assert_eq!(service.forecast(&("m1".into(), 1)).unwrap().memory_bytes, Some(1024 * MIB));
+    assert_eq!(agent.post("growth/launch", launch("m1", "job-1", &digest, 0)).await.1, json!({"job_id": "job-1"}));
+    // Another launch identity is refused with the owner's job.
+    let (status, body) = agent.post("growth/launch", launch("m1", "job-2", &"2".repeat(64), 0)).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!((body["error_code"].as_str(), body["job_id"].as_str()), (Some("primary_already_owned"), Some("job-1")));
+    // Without headroom a queued launch is a safe retry and stays queued.
+    node.metrics.set(headroom(0));
+    let (status, body) = agent.post("growth/launch", launch("m2", "job-1", &digest, 300)).await;
+    assert_eq!((status, body["error_code"].as_str()), (StatusCode::SERVICE_UNAVAILABLE, Some("node_startup_busy")));
+    assert_eq!(service.intent(&("m2".into(), 1)).unwrap().phase, "queued");
+    assert_eq!(service.forecast(&("m2".into(), 1)), None, "no provisional charge is left behind");
+    // Closed admission refuses it as closed; not managed and lost incarnations conflict.
+    agent.post("admission/close", json!({"drain_token": "drain:1"})).await;
+    let (status, body) = agent.post("growth/launch", launch("m2", "job-1", &digest, 300)).await;
+    assert_eq!((status, body["error_code"].as_str()), (StatusCode::SERVICE_UNAVAILABLE, Some("node_admission_closed")));
+    agent.post("admission/open", json!({"drain_token": "drain:1"})).await;
+    assert_eq!(agent.post("growth/launch", launch("plain", "job-1", &digest, 0)).await.1["error_code"], "not_managed_process");
+    let (status, body) = agent.post("growth/launch", json!({"owner": owner("m1", 2), "job_id": "job-1", "launch_sha256": digest, "deadline_ms": 0})).await;
+    assert_eq!((status, body["error_code"].as_str()), (StatusCode::CONFLICT, Some("generation_mismatch")));
+    assert_eq!(agent.post("growth/launch", launch("m1", "-bad", &digest, 0)).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(agent.post("growth/launch", launch("m1", "job-1", "ABC", 0)).await.0, StatusCode::BAD_REQUEST);
+
+    // An imported primary (active, no identity) launches as itself; the
+    // agent binds the supervisor's answer with a bind event.
+    node.metrics.set(roomy());
+    node.owned("imported", 1, true);
+    agent.post("growth/continuation", json!({"owner": owner("imported", 1), "request_id": "req-1", "deadline_ms": 1000})).await;
+    assert_eq!(agent.post("growth/launch", launch("imported", "job-9", &digest, 0)).await.1, json!({"job_id": ""}));
+    let bind = |job: &str, digest: &str| json!({"items": [{"action": "bind", "owner": owner("imported", 1), "job_id": job, "launch_sha256": digest}]});
+    let (_, body) = agent.post("growth/events", bind("job-9", &digest)).await;
+    assert_eq!((body["results"][0]["intent"]["job_id"].as_str(), body["results"][0]["intent"]["phase"].as_str()), (Some("job-9"), Some("active")));
+    let (_, body) = agent.post("growth/events", bind("job-8", &"8".repeat(64))).await;
+    assert_eq!(body["results"][0]["error_code"], "primary_already_owned");
+    let missing = json!({"items": [{"action": "bind", "owner": owner("imported", 1), "job_id": "job-9"}]});
+    assert_eq!(agent.post("growth/events", missing).await.0, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn the_snapshot_reports_each_pools_slots_and_waiters() {
+    let node = Node::new();
+    let service = node.service();
+    let served = serve(&node, &service, "slots");
+    let mut agent = client(&served, AGENT).await;
+    agent.hello(None).await;
+    let (_, snapshot) = agent.snapshot().await;
+    assert_eq!(snapshot["slots"], json!({
+        "startup": {"capacity": 2, "available": 2, "waiting": 0},
+        "restore": {"capacity": 1, "available": 1, "waiting": 0},
+        "publication": {"capacity": 2, "available": 2, "waiting": 0},
+    }));
+    agent.post("admission/startup", startup("s1")).await;
+    agent.post("admission/startup", startup("s2")).await;
+    let mut queued = client(&served, AGENT).await;
+    let waiter = tokio::spawn(async move { queued.post("admission/startup", startup("s3")).await });
+    settle().await;
+    let (_, snapshot) = agent.snapshot().await;
+    assert_eq!(snapshot["slots"]["startup"], json!({"capacity": 2, "available": 0, "waiting": 1}));
+    agent.post("admission/cancel", json!({"owner": owner("s3", 1)})).await;
+    assert_eq!(waiter.await.unwrap().1["error_code"], "node_active_admission_deferred");
+    let (_, snapshot) = agent.snapshot().await;
+    assert_eq!(snapshot["slots"]["startup"]["waiting"], 0);
+}
+
+#[tokio::test]
 async fn local_waits_and_the_reclaim_demand_read_the_same_ledger() {
     let node = Node::new();
     node.owned("m1", 1, true);

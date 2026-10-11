@@ -23,11 +23,17 @@
 //!   transient_revision, resource_reservations: [{owner, vcpu, memory_mb}],
 //!   active_reservations, transitions: {kind: {active, waiting, memory_bytes,
 //!   read_bytes, write_bytes}}, resident_demand: {…}}`.
-//! - `POST growth/events` `{items: [{action, owner, request_id?, job_id?}]}`
-//!   → `200 {results: [{intent} | {error, error_code}]}`.
+//! - `POST growth/events` `{items: [{action, owner, request_id?, job_id?,
+//!   launch_sha256?}]}` → `200 {results: [{intent} | {error, error_code}]}`.
 //! - `POST growth/continuation` `{owner, request_id, deadline_ms}` →
 //!   `200 {intent}`; `503 node_startup_busy`; `503 node_admission_closed`;
 //!   `409 generation_mismatch`.
+//! - `POST growth/launch` `{owner, job_id, launch_sha256, deadline_ms}` →
+//!   `200 {job_id}` (empty for an imported primary, which the agent binds
+//!   with a `bind` event after its dispatch); `503 node_startup_busy`;
+//!   `503 node_admission_closed`; `409 primary_already_owned {job_id}`;
+//!   `409 generation_mismatch`. The agent's own `start_managed_process`
+//!   (the requests noded forwards to it).
 //!
 //! Every grant-making route answers `503 admission_recovering` while the
 //! service recovers, and `503 agent_hello_required` to a session that has
@@ -44,6 +50,7 @@ use serde_json::{Map, Value, json};
 use super::Owner;
 use super::ledger::{Cost, Kind, Shape};
 use super::service::{AdmissionService, Event, EventAction, Holder, Reassert, Refusal};
+use super::fair::FairCapacity;
 use crate::registry::{GrowthIntent, is_operation_id, is_sandbox_id};
 
 /// Items one events request may carry (the sender's batch bound).
@@ -223,6 +230,10 @@ fn parse_budget(value: Option<&Value>) -> Result<f64, String> {
         .ok_or_else(|| "deadline_ms must be a non-negative number".to_string())
 }
 
+fn is_digest(text: &str) -> bool {
+    text.len() == 64 && text.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
 fn is_token(text: &str) -> bool {
     text.len() == 32 && text.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
@@ -261,7 +272,7 @@ fn parse_events(value: &Value) -> Result<Vec<Event>, String> {
     items
         .iter()
         .map(|item| {
-            let object = fields(item, &["action", "owner"], &["request_id", "job_id"], "a growth event")?;
+            let object = fields(item, &["action", "owner"], &["request_id", "job_id", "launch_sha256"], "a growth event")?;
             let action = object["action"].as_str().and_then(EventAction::parse).ok_or("a growth event's action is invalid")?;
             let text = |key: &str| -> Result<String, String> {
                 match object.get(key) {
@@ -274,13 +285,20 @@ fn parse_events(value: &Value) -> Result<Vec<Event>, String> {
                 }
             };
             let (request_id, job_id) = (text("request_id")?, text("job_id")?);
+            let launch_sha256 = match object.get("launch_sha256") {
+                None => String::new(),
+                Some(value) => value.as_str().filter(|digest| is_digest(digest)).ok_or("a growth event's launch_sha256 is invalid")?.to_string(),
+            };
             if action == EventAction::Wait && request_id.is_empty() {
                 return Err("a wait needs its request_id".into());
             }
             if action == EventAction::Terminal && job_id.is_empty() {
                 return Err("a terminal needs its job_id".into());
             }
-            Ok(Event { action, owner: parse_owner(object.get("owner"))?, request_id, job_id })
+            if action == EventAction::Bind && (job_id.is_empty() || launch_sha256.is_empty()) {
+                return Err("a bind needs its job_id and launch_sha256".into());
+            }
+            Ok(Event { action, owner: parse_owner(object.get("owner"))?, request_id, job_id, launch_sha256 })
         })
         .collect()
 }
@@ -312,7 +330,7 @@ pub async fn handle(
 ) -> Answer {
     let holder = Holder::Agent(agent_session.to_string());
     let known = if growth {
-        matches!(route, "events" | "continuation")
+        matches!(route, "events" | "continuation" | "launch")
     } else {
         matches!(route, "startup" | "restore" | "observe" | "publication" | "cancel" | "close" | "open" | "snapshot")
             || route.strip_suffix("/release").is_some_and(|token| !token.is_empty() && !token.contains('/'))
@@ -329,6 +347,7 @@ pub async fn handle(
     if growth {
         return match route {
             "events" => events(service, &value).await,
+            "launch" => launch(service, &holder, &value).await,
             _ => continuation(service, &holder, &value).await,
         };
     }
@@ -426,6 +445,7 @@ fn snapshot(service: &Arc<AdmissionService>, noded_session: &str) -> Answer {
         .iter()
         .map(|(kind, row)| (kind.as_str().to_string(), serde_json::to_value(row).expect("snapshot rows encode")))
         .collect();
+    let (startup, restore, publication) = service.pools();
     answer(StatusCode::OK, json!({
         "noded_session": noded_session,
         "admission_open": snapshot.admission_open,
@@ -434,7 +454,13 @@ fn snapshot(service: &Arc<AdmissionService>, noded_session: &str) -> Answer {
         "resource_reservations": reservations,
         "transitions": transitions,
         "resident_demand": serde_json::to_value(&snapshot.resident_demand).expect("demand encodes"),
+        "slots": {"startup": pool_json(startup), "restore": pool_json(restore), "publication": pool_json(publication)},
     }))
+}
+
+/// A pool's `{capacity, available, waiting}`: its slots and queued waiters.
+fn pool_json(pool: &FairCapacity<super::Owner>) -> Value {
+    json!({"capacity": pool.capacity(), "available": pool.available(), "waiting": pool.waiting()})
 }
 
 async fn events(service: &Arc<AdmissionService>, value: &Value) -> Answer {
@@ -451,6 +477,22 @@ async fn events(service: &Arc<AdmissionService>, value: &Value) -> Answer {
         })
         .collect();
     answer(StatusCode::OK, json!({"results": results}))
+}
+
+async fn launch(service: &Arc<AdmissionService>, holder: &Holder, value: &Value) -> Answer {
+    let object = parsed!(fields(value, &["owner", "job_id", "launch_sha256", "deadline_ms"], &[], "the body"));
+    let owner = parsed!(parse_owner(object.get("owner")));
+    let Some(job_id) = object["job_id"].as_str().filter(|id| is_operation_id(id)) else {
+        return invalid("job_id is invalid");
+    };
+    let Some(launch_sha256) = object["launch_sha256"].as_str().filter(|digest| is_digest(digest)) else {
+        return invalid("launch_sha256 must be 64 lowercase hex digits");
+    };
+    let budget = parsed!(parse_budget(object.get("deadline_ms")));
+    match service.launch_for(holder, &owner, job_id, launch_sha256, budget).await {
+        Ok(job_id) => answer(StatusCode::OK, json!({"job_id": job_id})),
+        Err(refusal) => refused(Context::Continuation, refusal),
+    }
 }
 
 async fn continuation(service: &Arc<AdmissionService>, holder: &Holder, value: &Value) -> Answer {

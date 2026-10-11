@@ -211,6 +211,18 @@ impl Registry {
         Ok(self.store.view_index()?.rows.get(sandbox_id).map(|row| row.record.clone()))
     }
 
+    /// `get(fresh=True)`: the owner's index is first proved against the file,
+    /// so another process's finished commit is seen (the owner's index is
+    /// otherwise revalidated at most once a second).
+    pub fn get_fresh(&self, sandbox_id: &str) -> Result<Option<Arc<Registration>>> {
+        Ok(self.store.fresh_index()?.rows.get(sandbox_id).map(|row| row.record.clone()))
+    }
+
+    /// `snapshot`, from an index proved against the file now (`get_fresh`).
+    pub fn snapshot_fresh(&self) -> Result<Arc<Snapshot>> {
+        self.store.fresh_index()?.snapshot()
+    }
+
     /// Records, indexes and revision from one durable read.
     pub fn snapshot(&self) -> Result<Arc<Snapshot>> {
         self.store.view_index()?.snapshot()

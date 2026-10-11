@@ -11,6 +11,11 @@ the thread-bound parts of today's create (the startup slot's reentrancy flag
 and the lifecycle lock's holder list) stay on one thread. A token is released
 unfinished when it expires, or when a request names a new daemon session: a
 restarted daemon finishes nothing its predecessor admitted.
+
+With ``--rust-admission`` noded admits its creates in process (step 3c.4 of
+docs/admission-port-3c.md) and names its claim in ``admitted``: the hold is
+then the lifecycle lock and the layout alone, and noded releases its claim
+after finish returns.
 """
 
 from __future__ import annotations
@@ -53,6 +58,8 @@ class _Held:
     done: threading.Event = field(default_factory=threading.Event)
     result: Any = None
     error: BaseException | None = None
+    # noded's own claim for this create (step 3c.4): its admission is noded's.
+    admitted_by_noded: bool = False
 
 
 class CreateHandoff:
@@ -79,9 +86,10 @@ class CreateHandoff:
             self._deliver(held, None)
 
     def admit(self, spec: SandboxSpec, operation: SandboxOperation, *, wait: float | None,
-              session: str | None) -> dict[str, Any]:
+              session: str | None, admitted: str | None = None) -> dict[str, Any]:
         """Hold a create's admission; return its token and what the daemon
-        creates from: Python's canonical spec and its layout decisions."""
+        creates from: Python's canonical spec and its layout decisions.
+        ``admitted``: noded's claim, when noded admitted the create itself."""
         operation.validate_spec(spec)
         provisioner = self.service.provisioner
         with phase_timings.recording() as phases:
@@ -92,7 +100,8 @@ class CreateHandoff:
             split, initial_claim = provisioner.create_layout(spec)
             existing = self.service.get_snapshot(spec.id)
             held = _Held(token=secrets.token_hex(16), spec=spec, operation=operation, session=session or None,
-                         existing=existing, deadline=time.monotonic() + self.expiry_seconds, phases=phases)
+                         existing=existing, deadline=time.monotonic() + self.expiry_seconds, phases=phases,
+                         admitted_by_noded=self._admitted_by_noded(admitted))
             # The holder records its admission phases into this same dict.
             threading.Thread(target=copy_context().run, args=(self._hold, held, wait), daemon=True,
                              name=f"ucloud-create-admission-{spec.id}").start()
@@ -115,6 +124,17 @@ class CreateHandoff:
                 "workspace_mb": initial_claim.workspace_mb, "memory_mb": initial_claim.memory_mb},
             "split": split,
         }
+
+    def _admitted_by_noded(self, admitted: str | None) -> bool:
+        """noded's claim counts only where noded holds the node's ledger;
+        otherwise this agent admits the create too (two ledgers, but never
+        none)."""
+        if admitted is None:
+            return False
+        if getattr(self.service.admission, "remote", False):
+            return True
+        _LOG.warning("noded admitted a create, but this agent keeps its own admission")
+        return False
 
     def finish_created(self, token: str, *, runtime_started: bool = True) -> tuple[Any, bool, dict[str, int]]:
         """Record the daemon's committed create; return (record, idempotent,
@@ -189,7 +209,8 @@ class CreateHandoff:
     def _hold(self, held: _Held, wait: float | None) -> None:
         reset = CREATE_ADMISSION_WAIT.set(wait)
         try:
-            with self.service.create_admission(held.spec, operation=held.operation):
+            with self.service.create_admission(held.spec, operation=held.operation,
+                                               admitted_by_noded=held.admitted_by_noded):
                 held.admitted.set()
                 while not held.delivered.wait(max(0.05, held.deadline - time.monotonic())):
                     with self._guard:

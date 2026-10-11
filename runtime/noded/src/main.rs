@@ -2,7 +2,7 @@
 //!               [--rust-create] [--rust-exec] [--rust-pause] [--node-control-token-file PATH]
 //!               [--rust-admission --internal-unix PATH]
 //! ucloud-noded --admission-only --internal-unix PATH --registry PATH --node-control-token-file PATH
-//!               [--admission-config PATH] [--metrics-file PATH]
+//!               [--admission-config PATH] [--metrics-file PATH] [--observations-file PATH]
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -18,7 +18,7 @@ fn usage(message: &str) -> ExitCode {
          [--rust-create] [--rust-exec] [--rust-pause] [--node-control-token-file PATH] \
          [--rust-admission --internal-unix PATH]\n       \
          ucloud-noded --admission-only --internal-unix PATH --registry PATH --node-control-token-file PATH \
-         [--admission-config PATH] [--metrics-file PATH]"
+         [--admission-config PATH] [--metrics-file PATH] [--observations-file PATH]"
     );
     ExitCode::from(2)
 }
@@ -78,6 +78,7 @@ fn main() -> ExitCode {
     let mut registry: Option<PathBuf> = None;
     let mut admission_config: Option<PathBuf> = None;
     let mut metrics_file: Option<PathBuf> = None;
+    let mut observations_file: Option<PathBuf> = None;
     let mut args = std::env::args().skip(1);
     while let Some(flag) = args.next() {
         match flag.as_str() {
@@ -103,6 +104,7 @@ fn main() -> ExitCode {
             "--registry" => registry = Some(PathBuf::from(value)),
             "--admission-config" => admission_config = Some(PathBuf::from(value)),
             "--metrics-file" => metrics_file = Some(PathBuf::from(value)),
+            "--observations-file" => observations_file = Some(PathBuf::from(value)),
             "--max-connections" => match value.parse() {
                 Ok(count) if count > 0 => max_connections = Some(count),
                 _ => return usage(&format!("invalid --max-connections {value}")),
@@ -135,10 +137,11 @@ fn main() -> ExitCode {
             token,
             config: admission_config,
             metrics: metrics_file,
+            observations: observations_file,
         });
     }
-    if registry.is_some() || admission_config.is_some() || metrics_file.is_some() {
-        return usage("--registry, --admission-config and --metrics-file go with --admission-only");
+    if registry.is_some() || admission_config.is_some() || metrics_file.is_some() || observations_file.is_some() {
+        return usage("--registry, --admission-config, --metrics-file and --observations-file go with --admission-only");
     }
     let (Some(listen), Some(upstream)) = (listen, upstream) else {
         return usage("--listen and --upstream-unix are required");

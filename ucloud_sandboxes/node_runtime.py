@@ -372,9 +372,13 @@ class DirectNodeRuntime:
         # escalations noded asks for and publishes the demand reclaim bills.
         self.rust_pause_tier = service.rust_pause_tier = bool(rust_pause_tier)
         self._demand_publisher = self._noded_status = None
+        # --rust-admission (step 3c.3): noded holds the node's ledger.
+        noded_admission = getattr(getattr(service, "admission", None), "remote", False)
         if rust_pause_tier:
             from .pause_handoff import AGENT_DEMAND_FILE, STATUS_FILE, DemandPublisher, NodedStatus, noded_directory
-            self._demand_publisher = DemandPublisher(service, noded_directory(service) / AGENT_DEMAND_FILE)
+            if not noded_admission:
+                # Otherwise noded's own ledger is the reclaim demand.
+                self._demand_publisher = DemandPublisher(service, noded_directory(service) / AGENT_DEMAND_FILE)
             self._noded_status = NodedStatus(noded_directory(service) / STATUS_FILE)
         # --rust-admission, phase 3b so far (docs/admission-port-3c.md, step
         # 3c.0(a)): noded samples managed sandboxes; every resident reader here
@@ -405,7 +409,14 @@ class DirectNodeRuntime:
         self._drain_guard = RLock()
         self._registry = service.provisioner.registry
         self._drain = self._registry.load_drain()
-        if self._drain.draining:
+        if noded_admission:
+            # noded reads the drain row itself; a noded that is not up yet
+            # follows this agent's gate at its hello.
+            if self._drain.draining:
+                service.admission.close(self._drain.token, strict=False)
+            else:
+                service.admission.open(self._drain.token or None, strict=False)
+        elif self._drain.draining:
             self.service.close_admission()
         else:
             self.service.open_admission()
@@ -427,7 +438,7 @@ class DirectNodeRuntime:
         self._background_stop.clear()
         if self._demand_publisher is not None:
             self._demand_publisher.start()
-        else:  # One NFLOG binder per group: noded's, with the Rust pause tier.
+        if not self.rust_pause_tier:  # One NFLOG binder per group: noded's, with the Rust pause tier.
             self._start_local_waits()
         if self._relay_parking_thread is None or not self._relay_parking_thread.is_alive():
             self._relay_parking_thread = Thread(
@@ -1386,7 +1397,9 @@ class DirectNodeRuntime:
                 if current.draining and current.token != token:
                     raise SandboxConflictError("node is draining with another token")
                 if not current.draining:
-                    self.service.close_admission()
+                    # Synchronous, before the drain row: noded's admitted
+                    # creates are in its snapshot once this returns (I18).
+                    self.service.close_admission(token)
                     self._drain = NodeDrainState(
                         draining=True,
                         token=token,
@@ -1400,7 +1413,7 @@ class DirectNodeRuntime:
                 if not current.draining and current.token != token:
                     raise SandboxConflictError("node is not draining with this token")
                 if current.draining:
-                    self.service.open_admission()
+                    self.service.open_admission(token)
                     self._drain = NodeDrainState(
                         draining=False,
                         token=token,
@@ -1445,6 +1458,11 @@ class DirectNodeRuntime:
         # miss a create transitioning from pre-registry work into the registry.
         transient = self.service.activity_snapshot()
         inventory = self.service.inventory_snapshot()
+        noded_session = getattr(transient, "noded_session", None)
+        if noded_session is not None:
+            # The transient half is noded's (§3.6): a noded restarted between
+            # it and the inventory took its claims along. Skip this sample.
+            self.service.admission.confirm_session(noded_session)
         records = inventory.records
         registered_keys = {(record.spec.id, record.generation) for record in records}
         direct_sandboxes = tuple(

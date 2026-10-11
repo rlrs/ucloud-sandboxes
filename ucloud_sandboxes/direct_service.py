@@ -19,6 +19,7 @@ from typing import Any, BinaryIO, Callable, Iterator, Sequence
 from uuid import uuid4
 
 from .admission import CREATE_ADMISSION_WAIT, FairCapacity
+from .admission_backend import LocalAdmission
 from .admission_decision import (
     RETRY_SECONDS as _ADMISSION_RETRY_SECONDS,
     AdmissionNode,
@@ -182,6 +183,8 @@ class DirectServiceActivitySnapshot:
     active_sandbox_creates: int
     active_exec_operations: int
     activity_revision: int
+    # The noded session the transient half came from (--rust-admission).
+    noded_session: str | None = None
 
     @property
     def active_operations(self) -> int:
@@ -409,6 +412,19 @@ class DirectSandboxService:
         self._growth_credit_expires = float("-inf")
         self._growth_turns: dict[tuple[str, int], list] = {}
         self._growth_turns_guard = threading.Lock()
+        # Node admission: this ledger (LocalAdmission), or noded's
+        # (admission_backend.NodedAdmission, --rust-admission).
+        self.admission = LocalAdmission(self)
+
+    def use_noded_admission(self, backend) -> None:
+        """--rust-admission (docs/admission-port-3c.md, step 3c.3): noded holds
+        the node's one ledger. This agent's growth intents, forecasts and
+        provisional claims are then never read or written."""
+        self.admission = backend
+        with self._capacity_guard:
+            self._growth_intents.clear()
+            self._provisional_growth.clear()
+            self._transitions.set_growth_forecasts({})
 
     def configure_active_capacity(
         self,
@@ -434,7 +450,7 @@ class DirectSandboxService:
         # Reconcile only from the canonical Warden result, never heartbeat age.
         for registration, record in zip(results, records):
             if record.state == "parked":
-                self._observe_managed_park(registration)
+                self._observe_managed_park(registration, at_start=True)
         self._stop_event.clear()
         self._next_image_reconcile = (
             time.monotonic() + self._image_reconcile_interval_seconds
@@ -725,27 +741,18 @@ class DirectSandboxService:
             return self.created_record(registration)
 
     @contextmanager
-    def create_admission(self, spec: SandboxSpec, *, operation: SandboxOperation) -> Iterator[None]:
+    def create_admission(self, spec: SandboxSpec, *, operation: SandboxOperation,
+                         admitted_by_noded: bool = False) -> Iterator[None]:
         """Everything a create holds while it provisions; runtime/noded's
-        creates hold it through the agent's create handoff."""
+        creates hold it through the agent's create handoff. A create noded
+        admitted in process (``admitted_by_noded``, step 3c.4) holds only the
+        lifecycle lock here: its demand, slot and capacity are noded's."""
         operation.validate_spec(spec)
         with ExitStack() as admitted:
-            # Same nesting order as one compound with-statement; each entry is
-            # timed because slot, pressure and lock waits are distinct causes.
-            admitted.enter_context(self._startup_demand(
-                spec.id, operation.generation, spec.requested_resources(), managed=spec.managed_process))
-            startup_cost = self._startup_cost((spec.id, operation.generation), spec.requested_resources(),
-                                              managed=spec.managed_process)
-            with phase_timings.phase("startup_admission"):
-                admitted.enter_context(
-                    self.startup_admission(owner=(spec.id, operation.generation))
-                )
-            with phase_timings.phase("active_capacity"):
-                admitted.enter_context(
-                    self._reserve_active_capacity(
-                        spec.id, operation.generation, spec.requested_resources(), cost=startup_cost,
-                    )
-                )
+            if not admitted_by_noded:
+                # Demand, the startup slot and capacity, each phase timed.
+                admitted.enter_context(self.admission.startup(
+                    (spec.id, operation.generation), spec.requested_resources(), managed=spec.managed_process))
             with phase_timings.phase("request_lock"):
                 admitted.enter_context(self._request_lock(spec.id, operation.generation))
             yield
@@ -825,9 +832,7 @@ class DirectSandboxService:
                 self.provisioner.delete(sandbox_id, generation=generation)
                 deleted = True
         assert deleted
-        self._restore_slots.cancel_waiters(key)
-        self._startup_slots.cancel_waiters(key)
-        self._forget_growth(key)
+        self.admission.cancel(key)
         with self._activity_guard:
             self._last_activity.pop(key, None)
         self._forget_published_snapshot(*key)
@@ -876,9 +881,7 @@ class DirectSandboxService:
                 publisher.join(min(remaining, _DELETE_DRAIN_JOIN_SECONDS))
             time.sleep(max(0.0, min(_DELETE_DRAIN_RETRY_SECONDS,
                                     deadline - time.monotonic())))
-        self._restore_slots.cancel_waiters(key)
-        self._startup_slots.cancel_waiters(key)
-        self._forget_growth(key)
+        self.admission.cancel(key)
         with self._activity_guard:
             self._last_activity.pop(key, None)
         self._forget_published_snapshot(*key)
@@ -1091,7 +1094,7 @@ class DirectSandboxService:
                 # Capture releases resident memory. Observe its bounded native
                 # work without charging the same guest memory a second time or
                 # queueing reclamation behind the work waiting for that memory.
-                with self._observe_transition(
+                with self.admission.observe(
                     (sandbox_id, registration.sandbox_generation),
                     TransitionCost(TransitionKind.CAPTURE, None, provenance="native-bounded-capture"),
                 ):
@@ -1160,17 +1163,10 @@ class DirectSandboxService:
             existing = self._publication_threads.get(key)
             if existing is not None and existing.is_alive():
                 return
-            with self._capacity_guard:
-                # Keep one maintenance operation progressing through foreground
-                # bursts, but don't launch a whole upload wave ahead of wakes.
-                if (self._transitions.foreground_waiting
-                        and self._transitions.active_count(TransitionKind.PUBLICATION)):
-                    return
-            if not self._publication_slots.acquire(blocking=False):
+            # One lane and its claim, unless a foreground burst holds it back.
+            release_publication = self.admission.publication(key)
+            if release_publication is None:
                 return
-            with self._capacity_guard:
-                publication_claim = self._transitions.claim(key, TransitionCost(
-                    TransitionKind.PUBLICATION, None, provenance="bounded-storage-backend-stream"))
             self._publication_errors.pop(key, None)
             trace_context = self.telemetry.current_trace_headers()
 
@@ -1194,10 +1190,7 @@ class DirectSandboxService:
                             self._publication_errors[key] = exc
                         span.set_error(exc)
                     finally:
-                        with self._capacity_guard:
-                            self._transitions.release(publication_claim)
-                            self._admission_changed.notify_all()
-                        self._publication_slots.release()
+                        release_publication()
 
             thread = threading.Thread(
                 target=publish,
@@ -1212,10 +1205,7 @@ class DirectSandboxService:
                 thread.start()
             except BaseException:
                 self._publication_threads.pop(key, None)
-                with self._capacity_guard:
-                    self._transitions.release(publication_claim)
-                    self._admission_changed.notify_all()
-                self._publication_slots.release()
+                release_publication()
                 raise
 
     def wake(
@@ -1749,6 +1739,10 @@ class DirectSandboxService:
         answer afterwards. Raises SandboxStartupBusyError while queued for
         memory, ManagedPrimaryOwnedError when another launch owns the primary.
         """
+        return self.admission.launch(registration, job_id, launch_sha256)
+
+    def _admit_local_managed_launch(self, registration, job_id: str, launch_sha256: str):
+        """LocalAdmission's launch, against this agent's ledger."""
         # Match the supervisor's one-primary-per-generation invariant before
         # reserving future growth. Commit active BEFORE the ambiguous RPC.
         intent = self._record_growth_intent(
@@ -1773,7 +1767,7 @@ class DirectSandboxService:
         return intent
 
     def _bind_managed_launch(self, registration, job_id: str, launch_sha256: str):
-        return self._record_growth_intent(
+        return self.admission.growth(
             (registration.sandbox_id, registration.sandbox_generation), action="bind",
             job_id=job_id, launch_sha256=launch_sha256)
 
@@ -1801,7 +1795,7 @@ class DirectSandboxService:
     def observe_managed_terminal(self, sandbox_id: str, generation: int, job_id: str):
         """noded's first observation of a terminal record for this primary."""
         self._require_managed_generation(sandbox_id, generation)
-        return self._record_growth_intent((sandbox_id, generation), action="terminal", job_id=job_id)
+        return self.admission.growth((sandbox_id, generation), action="terminal", job_id=job_id)
 
     def _growth_sample(self, owner, sample=_FETCH):
         # Park and restore forget samples, so any sample is this runtime's.
@@ -1951,18 +1945,22 @@ class DirectSandboxService:
             self._update_growth_forecast_locked(key)
             self._admission_changed.notify_all()
 
-    def _observe_managed_park(self, registration):
+    def _observe_managed_park(self, registration, *, at_start=False):
         if not registration.spec.managed_process:
             return
         key = (registration.sandbox_id, registration.sandbox_generation)
         self._resident_memory.forget(key)
-        self._record_growth_intent(key, action="park")
+        if at_start and self.admission.remote:
+            # noded may start after this agent: re-observed once it answers.
+            self.admission.observe_parked(key)
+            return
+        self.admission.growth(key, action="park")
 
     def observe_managed_wait(self, sandbox_id, generation, request_id):
         registration = self._require_registration(sandbox_id)
         if not registration.spec.managed_process:
             return
-        self._record_growth_intent(
+        self.admission.growth(
             (sandbox_id, generation), action="wait", request_id=request_id)
 
     def resume_managed_continuation(self, sandbox_id, generation, request_id):
@@ -1974,14 +1972,18 @@ class DirectSandboxService:
         """
         registration = self._require_registration(sandbox_id)
         if registration.spec.managed_process and registration.sandbox_generation == generation:
-            self._record_growth_intent((sandbox_id, generation), action="activate", request_id=request_id)
+            self.admission.growth((sandbox_id, generation), action="activate", request_id=request_id)
 
     def record_local_wait_growth(self, items):
         """Node-local waits and resumes, ``(method, key, request_id)`` in order, as one commit.
 
-        Returns each item's error or None. Turns are taken in key order, never
-        under the capacity guard, as _record_growth_intent takes one.
+        Returns each item's error or None.
         """
+        return self.admission.growth_batch(items)
+
+    def _record_local_wait_growth(self, items):
+        """LocalAdmission's batch. Turns are taken in key order, never under
+        the capacity guard, as _record_growth_intent takes one."""
         actions = {"observe_managed_wait": "wait", "resume_managed_continuation": "activate"}
         operations, errors = [], [None] * len(items)
         for index, (method, key, request_id) in enumerate(items):
@@ -2007,7 +2009,7 @@ class DirectSandboxService:
     def _observe_managed_terminal(self, record):
         if not record.terminal:
             return
-        self._record_growth_intent(
+        self.admission.growth(
             (record.sandbox_id, record.sandbox_generation),
             action="terminal", job_id=record.job_id)
 
@@ -2034,13 +2036,9 @@ class DirectSandboxService:
                     lifecycle = self.warden.inspect(sandbox)
                     if lifecycle is not None and lifecycle.state == HibernationState.PARKED:
                         self.warden.prepare_restore_memory(sandbox)
-            try:
-                self._admit_managed_growth(registration, request_id=request_id, startup=False)
-            except SandboxCapacityUnavailableError as exc:
-                # No continuation has been acknowledged or runtime restored.
-                # Use the existing activation retry contract without asserting
-                # that this still-resident safe wait is physically parked.
-                raise SandboxStartupBusyError(str(exc)) from exc
+            # A capacity refusal is a SandboxStartupBusyError: nothing has been
+            # acknowledged or restored yet.
+            self.admission.continuation(registration, request_id)
 
     def _admit_managed_growth(self, registration, *, request_id, startup, launch=("", "")):
         """Charge the next growth exposure; return the committed intent."""
@@ -2320,6 +2318,8 @@ class DirectSandboxService:
             (item.sandbox_id, item.sandbox_generation): item
             for item in self.provisioner.registry.snapshot().records
         }
+        if self.admission.remote:
+            return registrations  # noded prunes its own intents.
         with self._capacity_guard:
             for stale in self._growth_intents.keys() - registrations.keys():
                 self._growth_intents.pop(stale, None)
@@ -2339,6 +2339,8 @@ class DirectSandboxService:
         registrations = self._prune_growth_intents()
         self._resident_memory.retain(
             key for key, item in registrations.items() if item.phase == "owned")
+        if self.admission.remote:
+            return True  # noded credits its own pass.
         with self._capacity_guard:
             self._refresh_growth_forecasts_locked()  # Credit this pass's samples.
         return True
@@ -2629,18 +2631,13 @@ class DirectSandboxService:
                 if time.monotonic() >= deadline:
                     raise
 
-    def close_admission(self) -> None:
+    def close_admission(self, drain_token: str | None = None) -> None:
         # Once this returns, every admitted create is present in the transient
         # reservation snapshot or has already finished.
-        with self._capacity_guard:
-            self._admission_open = False
-            self._admission_changed.notify_all()
-        self._startup_slots.cancel_waiters()
-        self._restore_slots.cancel_waiters()
+        self.admission.close(drain_token)
 
-    def open_admission(self) -> None:
-        with self._capacity_guard:
-            self._admission_open = True
+    def open_admission(self, drain_token: str | None = None) -> None:
+        self.admission.open(drain_token)
 
     @property
     def admission_open(self) -> bool:
@@ -2711,8 +2708,7 @@ class DirectSandboxService:
                               provenance="authenticated-checkpoint-allocation")
 
     def transition_admission_snapshot(self):
-        with self._capacity_guard:
-            return self._transitions.snapshot()
+        return self.admission.transition_snapshot()
 
     @contextmanager
     def startup_admission(self, *, owner=None):
@@ -2759,8 +2755,6 @@ class DirectSandboxService:
 
     @contextmanager
     def _restore_admission(self, sandbox_id: str, generation: int, requested: ResourceQuantity):
-        # Publish demand before releasing lifecycle ownership. Deletion/drain
-        # can now cancel a queued wake; no parked guest has been activated yet.
         key = (sandbox_id, generation)
         registration = self._require_registration(sandbox_id)
         if registration.sandbox_generation != generation:
@@ -2774,15 +2768,9 @@ class DirectSandboxService:
             if current.sandbox_generation != generation:
                 raise DirectWardenError("queued restore generation lost incarnation ownership")
 
-        with self._transition_demand(key, cost), ExitStack() as stack:
-            try:
-                with self._unlocked_for_admission(key):
-                    stack.enter_context(self._restore_slot(owner=key, deadline=deadline))
-                    stack.enter_context(self._reserve_active_capacity(sandbox_id, generation, requested,
-                                                                     cost=cost, deadline=deadline,
-                                                                     validate_owner=validate_owner))
-            except SandboxCapacityUnavailableError as exc:
-                raise SandboxRestoreBusyError(str(exc)) from exc
+        # Demand, then (with the lifecycle lock released) the restore slot and
+        # capacity; a capacity refusal is a SandboxRestoreBusyError.
+        with self.admission.restore(key, requested, cost, deadline=deadline, validate_owner=validate_owner):
             # A peer may delete, park again or replace ownership while queued.
             validate_owner()
             current = self.warden.inspect(self._require_registration(sandbox_id).to_direct_sandbox())
@@ -2791,6 +2779,9 @@ class DirectSandboxService:
             yield
 
     def warm_park_demand(self) -> MemoryDemand:
+        return self.admission.warm_park_demand()
+
+    def _local_warm_park_demand(self) -> MemoryDemand:
         """Memory for admitted work and the next eligible foreground owner.
 
         The rest of a FIFO queue cannot allocate yet. Charging every request's
@@ -2804,6 +2795,9 @@ class DirectSandboxService:
             return self._next_memory_demand_locked()
 
     def reclaim_demand(self) -> tuple[bool, MemoryDemand]:
+        return self.admission.reclaim_demand()
+
+    def _local_reclaim_demand(self) -> tuple[bool, MemoryDemand]:
         """(admission open, what paused reclaim bills), read atomically.
 
         Closed admission (drain) bills nothing: paused waits are never swapped
@@ -2827,6 +2821,9 @@ class DirectSandboxService:
 
     def resident_demand_snapshot(self):
         """Observed ledger costs, never another resource reservation."""
+        return self.admission.resident_demand()
+
+    def _local_resident_demand_snapshot(self):
         with self._capacity_guard:
             self._current_growth_forecasts_locked()
             return self._transitions.demand_snapshot({
@@ -2883,7 +2880,7 @@ class DirectSandboxService:
                     raise
                 if registration.spec.managed_process:
                     key = (registration.sandbox_id, registration.sandbox_generation)
-                    self._record_growth_intent(key, action="activate")
+                    self.admission.growth(key, action="activate")
                 return restored
 
     def running_timings(self, sandbox) -> dict[str, float] | None:
@@ -3118,9 +3115,12 @@ class DirectSandboxService:
         Create and wake reservations carry resources. Exec leases deliberately
         do not: they keep drain fencing conservative, but are not sandbox
         creation work and must not consume the gateway's create-concurrency
-        budget.
+        budget. With noded's admission, its claims and revision are read
+        first, then this agent's exec leases (§3.6).
         """
+        return self.admission.activity_snapshot()
 
+    def _local_activity_snapshot(self) -> DirectServiceActivitySnapshot:
         with self._capacity_guard:
             return DirectServiceActivitySnapshot(
                 resource_reservations=self._transitions.resource_reservations(),
@@ -3135,6 +3135,9 @@ class DirectSandboxService:
         with self._capacity_guard:
             self._activity_epoch += 1
             transient_revision = self._activity_epoch
+        if self.admission.remote:
+            # The heartbeat's transient addend is the agent's and noded's.
+            transient_revision += self.admission.noded_revision()
         durable_revision = self.provisioner.registry.activity_revision()
         return compose_activity_revision(
             durable_revision=durable_revision,

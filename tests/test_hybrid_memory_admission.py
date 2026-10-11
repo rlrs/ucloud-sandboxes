@@ -2,11 +2,11 @@
 from dataclasses import replace
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
-import time
 import unittest
 from unittest.mock import patch
 
 from tests import test_split_memory_lifecycle as fixtures
+from tests.admission_backends import AdmissionBackendCase
 from ucloud_sandboxes.direct_registry import DirectSandboxRegistry
 from ucloud_sandboxes.direct_service import DirectSandboxService
 from ucloud_sandboxes.hibernation import HibernationState
@@ -15,8 +15,11 @@ from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_no
 from ucloud_sandboxes.resource_evidence import MemoryBackingCapacity
 from ucloud_sandboxes.sandbox import SandboxSpec
 
+# The noded half starts ucloud-noded (tests/noded_admission.py).
+TEST_TIER = "contract"
 
-class HybridMemoryAdmissionTests(unittest.TestCase):
+
+class HybridMemoryAdmissionTests(AdmissionBackendCase, unittest.TestCase):
     def setUp(self):
         f = self.fixture = fixtures.SplitLifecycleTests()
         f.setUp()
@@ -58,7 +61,7 @@ class HybridMemoryAdmissionTests(unittest.TestCase):
         self.capture_initial_checkpoint()
         self.assertEqual(f.warden.application_memory_mode(spec.id, 1), "ram")
         f.warden.config = replace(f.warden.config, reflink_memory_restore=True)
-        self.service = DirectSandboxService(SimpleNamespace(warden=f.warden, registry=registry))
+        self.service = self.admitted(DirectSandboxService(SimpleNamespace(warden=f.warden, registry=registry)))
         self.service.admission_wait_seconds = .05
         self.service.configure_active_capacity(ResourceQuantity(vcpu=8, memory_mb=16 << 10),
             runtime_metrics_provider=lambda: NodeRuntimeMetrics(collected_at=utc_now(),
@@ -93,7 +96,7 @@ class HybridMemoryAdmissionTests(unittest.TestCase):
                          4 << 30)
 
     def test_recovered_completed_capture_unblocks_already_queued_continuation(self):
-        item = HybridMemoryAdmissionTests()
+        item = type(self)()
         self.addCleanup(item.doCleanups)
 
         def interrupted_capture():
@@ -112,10 +115,7 @@ class HybridMemoryAdmissionTests(unittest.TestCase):
         with ThreadPoolExecutor(max_workers=1) as pool:
             with service._lock(*key):
                 pending = pool.submit(service.admit_managed_continuation, *key, "queued-model")
-                deadline = time.monotonic() + 1
-                while not service._transitions.foreground_waiting and time.monotonic() < deadline:
-                    time.sleep(.002)
-                self.assertTrue(service._transitions.foreground_waiting)
+                self.wait_for_foreground(service)
                 self.assertFalse(pending.done())
                 self.assertEqual(f.warden.application_memory_mode(*key), "ram")
                 recovered = f.warden.reconcile(f.sandbox)
@@ -153,3 +153,9 @@ class HybridMemoryAdmissionTests(unittest.TestCase):
         self.assertEqual(f.warden.application_memory_mode(f.sandbox.sandbox_id, 1), "ram")
         self.assertEqual(f.warden.reconcile(f.sandbox).state, HibernationState.PARKED)
         self.assertEqual(f.warden.application_memory_mode(f.sandbox.sandbox_id, 1), "file")
+
+
+class NodedHybridMemoryAdmissionTests(HybridMemoryAdmissionTests):
+    """The same tests with runtime/noded's admission service (NodedAdmission)."""
+
+    noded = True

@@ -1,6 +1,7 @@
 """Bulk work queues fairly without starving wakes or control requests."""
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from dataclasses import replace
 from http.client import HTTPConnection
 from pathlib import Path
@@ -12,6 +13,7 @@ from unittest.mock import patch
 
 from tests import test_control_plane as gateway_fixtures
 from tests import test_direct_provisioner as direct_fixtures
+from tests.admission_backends import AdmissionBackendCase
 from ucloud_sandboxes.transition_admission import TransitionCost, TransitionKind
 from ucloud_sandboxes.admission import FairCapacity
 from ucloud_sandboxes.direct_service import DirectSandboxService
@@ -27,7 +29,7 @@ def wait_queued(limiter, count):
         time.sleep(0.005)
 
 
-class StartupAdmissionTests(unittest.TestCase):
+class StartupAdmissionTests(AdmissionBackendCase, unittest.TestCase):
     def test_weighted_fifo_timeout_and_no_barging(self):
         limiter = FairCapacity(10)
         limiter.acquire(weight=6)
@@ -66,11 +68,11 @@ class StartupAdmissionTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             fixture = direct_fixtures.DirectProvisionerTests()
             provisioner, *_ = fixture.make(Path(directory).resolve())
-            service = DirectSandboxService(
+            service = self.admitted(DirectSandboxService(
                 provisioner,
                 max_concurrent_startups=1,
                 process_runner=direct_fixtures.FakeProcessRunner(),
-            )
+            ))
             fixture.create(service, fixture.spec())
             service.park("sandbox", operation_id="park:test")
             entered, release = Event(), Event()
@@ -106,7 +108,7 @@ class StartupAdmissionTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             fixture = direct_fixtures.DirectProvisionerTests()
             provisioner, *_ = fixture.make(Path(directory).resolve())
-            service = DirectSandboxService(provisioner, max_concurrent_startups=1)
+            service = self.admitted(DirectSandboxService(provisioner, max_concurrent_startups=1))
             service.configure_active_capacity(
                 ResourceQuantity(vcpu=4, memory_mb=8192),
                 runtime_metrics_provider=lambda: NodeRuntimeMetrics(
@@ -132,7 +134,7 @@ class StartupAdmissionTests(unittest.TestCase):
                 try:
                     self.assertTrue(entered.wait(2))
                     second = pool.submit(fixture.create, service, replace(fixture.spec(), id="second"))
-                    wait_queued(service._startup_slots, 1)
+                    self.wait_queued(service, "startup", 1)
                     self.assertEqual(calls, ["first"])
                     self.assertEqual(service.activity_snapshot().active_operations, 1)
                     self.assertFalse(second.done())
@@ -142,14 +144,15 @@ class StartupAdmissionTests(unittest.TestCase):
                 self.assertEqual(second.result(3).state, "running")
             self.assertEqual(calls, ["first", "second"])
             self.assertEqual(service.activity_snapshot().active_operations, 0)
-            self.assertTrue(service._startup_slots.acquire(blocking=False))
-            service._startup_slots.release()
+            self.assertEqual(self.slots_available(service, "startup"), 1)
 
     def test_256_requests_queue_and_release_permits_on_failure(self):
+        from ucloud_sandboxes.models import ResourceQuantity
+
         with TemporaryDirectory() as directory:
             fixture = direct_fixtures.DirectProvisionerTests()
             provisioner, *_ = fixture.make(Path(directory).resolve())
-            service = DirectSandboxService(provisioner, max_concurrent_startups=8)
+            service = self.admitted(DirectSandboxService(provisioner, max_concurrent_startups=8))
             release, full = Event(), Event()
             lock = Lock()
             active = peak = 0
@@ -157,14 +160,15 @@ class StartupAdmissionTests(unittest.TestCase):
             def work(index):
                 nonlocal active, peak
                 try:
-                    with service.startup_admission():
+                    with service.admission.startup((f"request-{index}", 1), ResourceQuantity(), managed=False):
                         with lock:
                             active += 1
                             peak = max(peak, active)
                             if active == 8:
                                 full.set()
                         try:
-                            with service.startup_admission():
+                            # The agent's reentrant helpers reuse the outer slot.
+                            with nullcontext() if self.noded else service.startup_admission():
                                 if not release.wait(3):
                                     raise TimeoutError("test gate")
                             if index == 0:
@@ -187,8 +191,7 @@ class StartupAdmissionTests(unittest.TestCase):
             self.assertEqual(outcomes.count("done"), 255)
             self.assertEqual(outcomes.count("failed"), 1)
             self.assertEqual(active, 0)
-            self.assertTrue(service._startup_slots.acquire(weight=8, blocking=False))
-            service._startup_slots.release(weight=8)
+            self.assertEqual(self.slots_available(service, "startup"), 8)
 
     def test_gateway_queues_create_but_wake_read_and_health_progress(self):
         with TemporaryDirectory() as directory:
@@ -253,6 +256,12 @@ class StartupAdmissionTests(unittest.TestCase):
                 finally:
                     connection.close()
                     uploads.release(weight=uploads.capacity)
+
+
+class NodedStartupAdmissionTests(StartupAdmissionTests):
+    """The same tests with runtime/noded's admission service (NodedAdmission)."""
+
+    noded = True
 
 
 class WarmDemandTests(unittest.TestCase):

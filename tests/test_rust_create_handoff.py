@@ -21,6 +21,7 @@ from unittest.mock import DEFAULT, patch
 
 from tests import test_direct_provisioner as fixtures
 from tests import test_vm_init as vm_init_fixtures
+from tests.admission_backends import AdmissionBackendCase
 from ucloud_sandboxes.cli import vm_init_options_to_dict
 from ucloud_sandboxes.config import DeploymentConfig
 from ucloud_sandboxes.direct_registry import DirectSandboxRegistry
@@ -117,7 +118,7 @@ class ForeignRegistryIndexTests(unittest.TestCase):
         self.assertEqual(foreign.snapshot().activity_revision, 1)
 
 
-class CreateHandoffTests(unittest.TestCase):
+class CreateHandoffTests(AdmissionBackendCase, unittest.TestCase):
     fixture = fixtures.DirectProvisionerTests()
 
     def setUp(self) -> None:
@@ -133,12 +134,13 @@ class CreateHandoffTests(unittest.TestCase):
         path = provisioner.registry.path
         provisioner.registry = DirectSandboxRegistry(path, cached_reads=True)
         self.provisioner = provisioner
-        self.service = DirectSandboxService(provisioner, max_concurrent_startups=2)
+        self.service = self.admitted(DirectSandboxService(provisioner, max_concurrent_startups=2))
         self.adopted = []
         self.warden.adopt_created = self.adopted.append
-        # noded: the registry owner, creating through the same fakes.
+        # noded: the registry owner, creating through the same fakes. With
+        # noded's admission the admission service's process owns the file.
         self.daemon = copy.copy(provisioner)
-        self.daemon.registry = DirectSandboxRegistry(path, owner=True)
+        self.daemon.registry = DirectSandboxRegistry(path, owner=not self.noded)
         self.addCleanup(self.daemon.registry.close)
         self.socket = str(self.root / "agent.sock")
         self.server = fixtures.build_direct_node_agent_server(
@@ -219,6 +221,44 @@ class CreateHandoffTests(unittest.TestCase):
         _, _, config = self.call("GET", "/internal/v1/creates/config")
         self.assertEqual((admitted["config_sha256"], again["config_sha256"]), (config["config_sha256"],) * 2)
 
+    def test_a_create_noded_admitted_holds_only_the_lifecycle_lock(self) -> None:
+        spec = self.fixture.spec()
+        if self.noded:
+            # noded's own claim for this create, as its create front takes it (3c.4).
+            claim = self.service.admission.client.call("POST", "/internal/v1/admission/startup", {
+                "owner": {"sandbox_id": spec.id, "generation": 7},
+                "requested": {"vcpu": 0.0, "memory_mb": 1024}, "managed": False, "wait_seconds": 1.0})
+            token = claim["token"]
+        else:
+            token = "0" * 32  # Without noded's ledger the agent admits it itself.
+        status, _, admitted = self.call("POST", "/internal/v1/creates/admit",
+                                        self.admission(spec, admitted={"token": token}))
+        self.assertEqual(status, 200, admitted)
+        # One in-flight create: noded's claim, or (locally) the agent's own.
+        self.assertEqual((self.creates_in_flight(), self.handoff.held_count), (1, 1))
+        # The lifecycle lock is held: the same incarnation is busy.
+        status, headers, busy = self.call("POST", "/internal/v1/creates/admit",
+                                          self.admission(spec, admitted={"token": token}))
+        self.assertEqual((status, busy["error_code"], headers["Retry-After"]),
+                         (503, "node_active_admission_deferred", "1"))
+        self.daemon_create(spec)
+        status, _, finished = self.call("POST", f"/internal/v1/creates/{admitted['token']}/finish",
+                                        {"outcome": "created"})
+        self.assertEqual((status, finished["status"]), (200, 201), finished)
+        self.assertIn("request_lock_ms", finished["phases"])
+        if self.noded:
+            # noded reports its own admission phases; it releases its claim
+            # after finish returns, once the row is visible (I18).
+            self.assertNotIn("startup_admission_ms", finished["phases"])
+            self.assertEqual(self.creates_in_flight(), 1)
+            self.service.admission.client.call("POST", f"/internal/v1/admission/{token}/release", {})
+        self.assertEqual((self.creates_in_flight(), self.handoff.held_count), (0, 0))
+        for bad in ({"token": "short"}, {"token": "0" * 32, "extra": 1}, "token", {"token": "A" * 32}):
+            with self.subTest(admitted=bad):
+                status, _, error = self.call("POST", "/internal/v1/creates/admit",
+                                             self.admission(spec, admitted=bad))
+                self.assertEqual(status, 400, error)
+
     def test_refusals_and_rollbacks_match_the_create_endpoint(self) -> None:
         spec = self.fixture.spec()
         status, _, error = self.call("POST", "/internal/v1/creates/admit", self.admission(spec, spec_hash="0" * 64))
@@ -290,6 +330,12 @@ class CreateHandoffTests(unittest.TestCase):
             fixtures.build_direct_node_agent_server(
                 "127.0.0.1", 0, service=self.service, image_file=self.root / "images.json", job_id="job",
                 node_id="node", rust_creates=True)
+
+
+class NodedCreateHandoffTests(CreateHandoffTests):
+    """The same handoff with runtime/noded's admission service (NodedAdmission)."""
+
+    noded = True
 
 
 class RustCreateFlagTests(unittest.TestCase):

@@ -10,6 +10,7 @@
 //! - upstream failed after the request was written: the client connection
 //!   closes without a response, as when the agent dies mid-request.
 
+pub mod admission;
 pub mod agent_rpc;
 pub mod create;
 pub mod exec;

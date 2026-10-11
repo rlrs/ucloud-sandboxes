@@ -505,3 +505,50 @@ The rule is to take the simpler option wherever the choice is ours.
   been applied on an idle fleet, so no legacy managed sandbox can exist. This
   drops `growth/launch` and `_management_read_slots` from scope.
 
+
+## Progress
+
+**3c.1, Rust half and property suite (2026-10-11).** Pure ports, nothing wired;
+no existing Python source changed.
+
+- `tests/test_admission_properties.py`: `hypothesis` stateful suites (a declared
+  dev dependency).
+  - FairCapacity: random acquire, release, cancel, timeout and interrupt traces.
+    It checks no barging, FIFO grants, weight conservation, no lost grant, that
+    an interrupt returns a grant, and that cancel never revokes one. A harness
+    gates each waiter's wakeup, so a grant and its waiter's return are separate
+    steps and the grant/timeout race is an ordinary trace.
+  - TransitionLedger: totals equal a recount, the per-owner max, startup
+    projections that leave every queued restore its headroom, next-eligible-owner
+    reclaim, and the snapshots.
+- `runtime/noded/src/admission/`:
+  - `ledger.rs` is an exact `TransitionLedger` port;
+  - `fair.rs` is `FairCapacity` on tokio (`enter` / `Waiter::finish`, with a
+    dropped `Waiter` or `acquire` future returning its grant);
+  - `growth.rs` holds the cost functions, the in-memory intents, provisional
+    claims, credit expiry and per-key `Turns`. Durable writes sit behind the
+    `GrowthStore` trait, which `Registry` implements by delegation;
+  - `decide.rs` is `gate` (the pre-sample section) plus the pure
+    `decide(metrics, ledger, request) -> Grant | Wait | Refuse`, without CPU
+    (decision G).
+- Goldens: `admission/testdata/goldens.py` writes `python_goldens.json` from the
+  Python code itself. It covers 8 FairCapacity traces, 8 ledger traces, 600
+  growth-cost cases, the startup and transition cost grid, 12 forecast traces,
+  the `test_managed_growth.py:319-427` cases, and 800 guard runs.
+  - The guard runs drive `_active_admission_guard` on a `DirectSandboxService`
+    built without `__init__`, with a fake clock, scripted metrics, sample
+    latency and requotes. The Rust tests replay every trace and match exactly.
+- The Rust tests also port `test_fair_capacity.py` (4), `TransitionLedgerTests`
+  (6) and the growth cases, and add random-trace invariant tests.
+- Deviations from §3.1:
+  - `Request` carries the node state (`admission_open`, shape, RAM backing
+    configured) and the retry state (`now`, `previous_error`), so `decide` stays
+    pure. Slot, holder and owner validation belong to the 3c.2 driver.
+  - `refresh_wait_cost` (requote) and the aged-forecast refresh also belong to
+    the driver, applied before `decide`.
+
+**Remaining for 3c.1:** extract a pure `decide()` from
+`DirectSandboxService._active_admission_guard` in Python and delete the CPU
+branch there (decision G). Then point the decide goldens at it instead of the
+guard; the traces should not change. Until then, the goldens drive the guard
+itself with `check_cpu=False`.

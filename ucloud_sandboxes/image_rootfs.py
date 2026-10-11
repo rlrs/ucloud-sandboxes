@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import tempfile
 import time
 from threading import BoundedSemaphore, Lock
@@ -22,6 +23,7 @@ from .direct_warden import (
     DirectWardenError,
     SubprocessCommandRunner,
 )
+from .managed_process import MANAGED_STATE_NAME
 from .mount_status import linux_mount_root
 from .environment_manifest import DOCKER_OVERLAY2_ABI, HOST_EROFS_ABI, EnvironmentManifest
 from .build_deadline import (
@@ -1167,6 +1169,38 @@ class OverlayRootfsManager:
     ) -> dict[str, int]:
         return self.image_store.reconcile_images(image_ids, is_referenced=is_referenced)
 
+    def bundle_path(self, *, sandbox_id: str, sandbox_generation: int) -> Path:
+        """Where ``prepare`` places this incarnation's bundle."""
+        if not _SAFE_ID.fullmatch(sandbox_id) or sandbox_generation < 1:
+            raise ValueError("sandbox incarnation is invalid")
+        return self.bundle_root / f"{sandbox_id}.sandbox-{sandbox_generation}"
+
+    def imported_managed_state(
+        self,
+        *,
+        sandbox_id: str,
+        sandbox_generation: int,
+        workspace_directory: str = "",
+    ) -> bool:
+        """Whether an imported upper carries bound managed-process state.
+
+        The node creates ``.ucloud-managed`` host-side, so in the upper, only
+        for a sandbox whose OCI config binds it. Before that mount existed, the
+        supervisor's directory lived in the Sentry's rootfs filestore and never
+        reached the upper. The shipped upper therefore says which mount table
+        the checkpoint was taken with, which restore has to reproduce.
+        """
+        incarnation = self.bundle_path(
+            sandbox_id=sandbox_id, sandbox_generation=sandbox_generation
+        ).name
+        upper = self.writable_root / (workspace_directory or incarnation) / "upper"
+        _require_real_directory(upper)
+        try:
+            info = (upper / MANAGED_STATE_NAME).lstat()
+        except FileNotFoundError:
+            return False
+        return stat.S_ISDIR(info.st_mode)
+
     def prepare(
         self,
         *,
@@ -1179,16 +1213,14 @@ class OverlayRootfsManager:
         workspace_directory: str = "",
         memory: MemoryBackingRef | None = None,
     ) -> OverlayRootfsLease:
-        if not _SAFE_ID.fullmatch(sandbox_id) or sandbox_generation < 1:
-            raise ValueError("sandbox incarnation is invalid")
-        incarnation = f"{sandbox_id}.sandbox-{sandbox_generation}"
+        bundle = self.bundle_path(sandbox_id=sandbox_id, sandbox_generation=sandbox_generation)
+        incarnation = bundle.name
         container_id = hashlib.sha256(f"{sandbox_id}:{sandbox_generation}".encode("utf-8")).hexdigest()
         if bool(workspace_directory) != (memory is not None):
             raise ValueError("split rootfs requires both component references")
         if workspace_directory and workspace_directory != f"workspace-{incarnation}":
             raise ValueError("workspace directory belongs to another incarnation")
         writable = self.writable_root / (workspace_directory or incarnation)
-        bundle = self.bundle_root / incarnation
         upper = writable / "upper"
         work = writable / "work"
         merged = bundle / "rootfs"

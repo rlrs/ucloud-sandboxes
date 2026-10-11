@@ -100,6 +100,11 @@ For `managed_process` sandboxes, both OCI builders add this mount:
 - The source directory exists, root-owned, mode 0700, before `runsc create` or
   `restore`. A migration import regenerates the OCI config, so the source
   follows the new bundle.
+- An import adds the mount only when the shipped upper has `.ucloud-managed`.
+  The node creates that directory host-side for every sandbox with the mount,
+  and before the mount the supervisor's directory lived in the Sentry's
+  filestore, never the upper. So a sandbox parked before this release moves as
+  legacy, and its restore sees its checkpoint's own mount table.
 - A sandbox whose bundle `config.json` lacks this mount is **legacy**: noded
   forwards its job reads to the Python agent, as today.
 
@@ -154,6 +159,41 @@ served by the gateway").
   and activate.
 - **Not activity.** Reads do not mark sandbox activity. The Python ctl path did
   mark it, which let a status poll hold off idle parking.
+
+#### Exact at park
+
+The gateway serves a parked sandbox's job from its cache, which is only as
+fresh as the last read. A job that wrote or exited after that read and then
+parked (an idle park while the agent waits on stdin) would leave a follower
+waiting for bytes the cache does not know about.
+
+So every park makes the record exact:
+
+- After the checkpoint (the guest is stopped, its files final) and before the
+  overlay is unmounted, the agent derives the record from
+  `<bundle>/rootfs/.ucloud-managed` exactly as noded's record derivation does,
+  through the same `O_NOFOLLOW` opens, and keeps it as
+  `<bundle>/.ucloud-managed-process.json`. That file survives an agent
+  restart. Recovery that finishes an interrupted park does the same.
+- An import derives it again from the shipped upper. It holds the same stopped
+  guest's files, so the record is the same.
+- Parking never depends on guest content. The checkpoint's ledger fingerprint
+  (bound at park, required again at wake) is total: "no job" without a
+  `state.json`, the SHA-256 of the bytes of a regular file up to 1 MiB, and a
+  constant per reason for anything else (symlink, FIFO, directory, oversize),
+  which is never followed or opened. The exact record is skipped, never fatal,
+  when the guest's files cannot be derived.
+- While the sandbox is parked, its node record carries it as
+  `"managed_process"`: the job status body, `cursor` included. That covers
+  `GET /v1/sandboxes`, park responses (`sandbox`), wake failures whose
+  lifecycle the node inspected and found still parked (`sandbox`, beside
+  `lifecycle_state: "parked"`) and the heartbeat inventory
+  (`SandboxInventoryEntry.managed_process`). An admission-busy wake
+  (`node_restore_busy` raised before the wake ran) does not inspect the
+  sandbox, so it carries none.
+- A sandbox has no record when it is legacy (no mount), when no job ever
+  started, or when the guest broke its own state files. The park itself never
+  fails for that.
 
 ### Gateway
 

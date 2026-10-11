@@ -32,6 +32,7 @@ from .direct_registry import (
 from .direct_warden import DirectRunscWarden, DirectWardenError
 from .hibernation import HibernationState
 from .image_rootfs import OverlayRootfsManager
+from .managed_process import record_parked_managed_state
 from .sandbox import SandboxSpec
 from .storage_native_daemon import (
     StorageNativeConflictError,
@@ -289,6 +290,18 @@ class DirectSandboxProvisioner:
                 total_mb=total_mb,
                 quota_path=quota_path,
             )
+        # The config is only used to prepare the rootfs, while importing. The
+        # managed-state mount follows the new bundle, but only for a sandbox
+        # whose checkpoint was taken with it: restore needs the same mounts.
+        bound_managed_state = (
+            registration.phase == "importing"
+            and portable.spec.managed_process
+            and self.overlays.imported_managed_state(
+                sandbox_id=registration.sandbox_id,
+                sandbox_generation=registration.sandbox_generation,
+                workspace_directory=registration.workspace_directory,
+            )
+        )
         config = self.oci.build(
             portable.spec,
             image,
@@ -296,6 +309,14 @@ class DirectSandboxProvisioner:
                 registration,
                 source_guest_ip=portable.source_guest_ip,
                 connection_policy=portable.connection_policy,
+            ),
+            bundle=(
+                self.overlays.bundle_path(
+                    sandbox_id=registration.sandbox_id,
+                    sandbox_generation=registration.sandbox_generation,
+                )
+                if bound_managed_state
+                else None
             ),
         )
         if split:
@@ -401,6 +422,16 @@ class DirectSandboxProvisioner:
                         sandbox_generation=registration.sandbox_generation,
                         hibernation_generation=portable.hibernation_generation,
                     )
+                # The shipped upper is mounted here and its guest was stopped
+                # at the source's park: derive the same exact parked record.
+                try:
+                    record_parked_managed_state(
+                        sandbox.bundle,
+                        sandbox_id=sandbox.sandbox_id,
+                        sandbox_generation=sandbox.sandbox_generation,
+                    )
+                except (OSError, ValueError, TypeError, RecursionError) as exc:
+                    _LOG.warning("no parked managed-process record for %s: %s", sandbox.sandbox_id, exc)
                 record = self.warden.adopt_parked(sandbox, local_manifest)
             if record.state != HibernationState.PARKED:
                 raise DirectRegistryError(
@@ -739,6 +770,10 @@ class DirectSandboxProvisioner:
                     registration.spec,
                     image,
                     network_namespace_path=network_namespace_path,
+                    bundle=self.overlays.bundle_path(
+                        sandbox_id=registration.sandbox_id,
+                        sandbox_generation=registration.sandbox_generation,
+                    ),
                 )
             # A crash can leave a mounted overlay only before rootfs_ready commits.
             # No runsc backend is allowed to exist at this phase.

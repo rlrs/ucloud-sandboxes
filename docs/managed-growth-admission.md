@@ -89,3 +89,25 @@ pre-acknowledgement continuation deadline, with the existing retryable activatio
 response. Supervisor and native-restore failures remain outside that boundary.
 See the [retained trial evidence](benchmarks/architecture-load-2026-09-23/rc15-pressure-memory/README.md);
 a sustained successful rerun remains required.
+
+## Launches dispatched by ucloud-noded
+
+When `ucloud-noded` starts a managed process itself
+([managed-process-reads.md](managed-process-reads.md), "Start and signal in
+noded too"), the agent still owns this ledger. noded calls it over the agent's
+Unix socket, at the same points `start_managed_process` uses it and through
+the same helpers (`_admit_managed_launch`, `_bind_managed_launch`), under the
+same lifecycle fence as the public managed routes:
+
+| Route | Body | Effect and answers |
+| --- | --- | --- |
+| `POST /internal/v1/managed/launch` | `{sandbox_id, generation, job_id, launch_sha256}` | Commits the launch intent and, if queued, admits its growth, before noded's ambiguous dispatch. 200 `{"job_id"}`, empty for an imported primary (noded then binds); 503 `startup_busy` (retryable; the launch stays queued); 409 `primary_owned` with the owner's `job_id`. |
+| `POST /internal/v1/managed/bind` | `{sandbox_id, generation, job_id, launch_sha256}` | Binds an imported primary's identity from the supervisor's answer. 200 `{"job_id"}`; 409 `primary_owned`. |
+| `POST /internal/v1/managed/terminal` | `{sandbox_id, generation, job_id}` | noded's first observation of a terminal record retires the forecast, as `_observe_managed_terminal` does. 200 `{"job_id"}` (empty when there is no intent). |
+
+Every route answers 409 `generation_mismatch` for another incarnation, 409
+`not_managed_process` for a sandbox not created in managed-process mode, and
+400 `invalid_request` for a body without exactly its keys, a sandbox ID or job
+ID the public routes would refuse, a non-positive generation or a malformed
+digest. `launch_sha256` is the SHA-256 of the supervisor `start` request's
+canonical bytes (`control_request_bytes`), as Python computes it.

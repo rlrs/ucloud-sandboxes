@@ -29,13 +29,16 @@ class WakeCapacityTests(unittest.TestCase):
                 handler._read_json_body = lambda: {"generation": 1, "operation_id": "wake:test"}
                 handler.manager = Mock()
                 handler.manager.wake_with_activity_revision.side_effect = SandboxCapacityUnavailableError("device capacity exhausted")
-                handler.manager.get.return_value = SimpleNamespace(state=state)
+                record = {"id": "parked", "state": state, "managed_process": {"cursor": "2.5.0"}}
+                handler.manager.get.return_value = SimpleNamespace(state=state, to_dict=lambda: record)
                 handler._write_json = Mock()
                 handler._wake_sandbox("/v1/sandboxes/parked/wake")
                 payload = handler._write_json.call_args.args[0]
                 if state == "parked":
                     self.assertEqual(payload["error_code"], "node_restore_busy")
                     self.assertTrue(payload["retryable"])
+                    # The parked record, with its exact job record, for the gateway's cache.
+                    self.assertEqual(payload["sandbox"], record)
                 else:
                     self.assertNotIn("retryable", payload)
 

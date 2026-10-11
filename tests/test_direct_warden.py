@@ -1,7 +1,9 @@
 from dataclasses import replace
+import hashlib
 import json
 import os
 import shutil
+import stat
 from concurrent.futures import ThreadPoolExecutor
 import threading
 from pathlib import Path
@@ -27,6 +29,7 @@ from ucloud_sandboxes.hibernation import (
     LocalHibernationArtifactFile,
     classify_hibernation_recovery,
 )
+from ucloud_sandboxes.managed_process import load_parked_managed_state, managed_state_mount
 from ucloud_sandboxes.storage_native_daemon import (
     StorageNativeConflictError,
     StorageVolumeOwner,
@@ -948,6 +951,199 @@ class DirectRunscWardenTests(unittest.TestCase):
             self.warden.inspect(self.sandbox).state,
             HibernationState.PARKED,
         )
+
+    def managed_config(self, *, bound: bool, bundle: Path | None = None) -> None:
+        bundle = bundle or self.sandbox.bundle
+        config = {
+            "annotations": {
+                "dev.gvisor.internal.application-memory-directory": self.memory_directory,
+                "dev.ucloud-sandboxes.managed-process": "v1",
+            },
+            "mounts": [{"destination": "/tmp", "type": "tmpfs", "source": "tmpfs"}],
+        }
+        if bound:
+            config["mounts"].append(managed_state_mount(bundle))
+        (self.bundle / "rootfs").mkdir(exist_ok=True)
+        (self.bundle / "config.json").write_text(json.dumps(config), encoding="utf-8")
+
+    def test_managed_sandbox_parked_without_the_state_mount_still_wakes(self) -> None:
+        # Before the mount the guest's ledger lived in the Sentry's filestore:
+        # the host saw none, so park bound the constant "no job" digest.
+        self.managed_config(bound=False)
+        self.warden.create(self.sandbox, operation_id="create:legacy")
+        self.assertFalse((self.bundle / "rootfs" / ".ucloud-managed").exists())
+        self.warden.park(self.sandbox, operation_id="park:legacy")
+        # Nothing exact to report: the guest's ledger is not host-visible.
+        self.assertIsNone(load_parked_managed_state(self.bundle))
+        manifest = self.warden.load_parked_manifest(self.sandbox)
+        self.assertEqual(
+            manifest.managed_process_sha256,
+            hashlib.sha256(b"managed-primary-v1:no-job").hexdigest(),
+        )
+        self.assertEqual(
+            self.warden.resume(self.sandbox, operation_id="wake:legacy").state,
+            HibernationState.RUNNING,
+        )
+        self.assertFalse((self.bundle / "rootfs" / ".ucloud-managed").exists())
+
+    def test_bound_managed_state_is_created_and_its_ledger_binds_the_checkpoint(self) -> None:
+        self.managed_config(bound=True)
+        self.warden.create(self.sandbox, operation_id="create:bound")
+        managed = self.bundle / "rootfs" / ".ucloud-managed"
+        info = managed.lstat()
+        self.assertTrue(stat.S_ISDIR(info.st_mode))
+        self.assertEqual(stat.S_IMODE(info.st_mode), 0o700)
+        self.assertEqual(info.st_uid, os.geteuid())
+        # The guest supervisor writes through the bind mount.
+        payload = json.dumps({
+            "version": 1, "job_id": "rollout-1", "spec_sha256": DIGEST_A,
+            "state": "running", "sequence": 3, "stdout_truncated": True,
+        }).encode()
+        (managed / "state.json").write_bytes(payload)
+        self.warden.park(self.sandbox, operation_id="park:bound")
+        self.assertEqual(
+            self.warden.load_parked_manifest(self.sandbox).managed_process_sha256,
+            hashlib.sha256(payload).hexdigest(),
+        )
+        # A park drops nothing the guest wrote; the source must exist at restore.
+        shutil.rmtree(managed)
+        managed.mkdir(mode=0o755)
+        (managed / "state.json").write_bytes(payload)
+        self.assertEqual(
+            self.warden.resume(self.sandbox, operation_id="wake:bound").state,
+            HibernationState.RUNNING,
+        )
+        self.assertEqual(stat.S_IMODE(managed.lstat().st_mode), 0o700)
+
+    def test_park_keeps_the_exact_job_record_of_its_stopped_guest(self) -> None:
+        self.managed_config(bound=True)
+        self.warden.create(self.sandbox, operation_id="create:exact")
+        managed = self.bundle / "rootfs" / ".ucloud-managed"
+        self.assertIsNone(load_parked_managed_state(self.bundle))
+        ledger = {"version": 1, "job_id": "rollout-1", "spec_sha256": DIGEST_A, "state": "running",
+                  "pid": 9, "stdout_bytes": 0, "stderr_bytes": 0, "sequence": 2}
+        (managed / "state.json").write_text(json.dumps(ledger))
+        # Written after the last read: a running record counts the files.
+        (managed / "stdout.log").write_bytes(b"x" * 1000)
+        (managed / "stderr.log").write_bytes(b"warn\n")
+        self.warden.park(self.sandbox, operation_id="park:exact-1")
+        record = load_parked_managed_state(self.bundle)
+        self.assertEqual(
+            {key: record[key] for key in ("sandbox_id", "sandbox_generation", "job_id", "state",
+                                         "stdout_bytes", "stderr_bytes", "sequence", "cursor")},
+            {"sandbox_id": "sandbox-1", "sandbox_generation": 1, "job_id": "rollout-1",
+             "state": "running", "stdout_bytes": 1000, "stderr_bytes": 5, "sequence": 2,
+             "cursor": "2.1000.5"})
+        # A terminal record counts what the supervisor persisted.
+        self.warden.resume(self.sandbox, operation_id="wake:exact")
+        (managed / "state.json").write_text(json.dumps(dict(
+            ledger, state="exited", exit_code=0, pid=0, stdout_bytes=900, stderr_bytes=5,
+            stdout_truncated=True, sequence=4, completed_at="2026-10-11T00:00:00Z")))
+        self.warden.park(self.sandbox, operation_id="park:exact-2")
+        record = load_parked_managed_state(self.bundle)
+        self.assertEqual((record["state"], record["exit_code"], record["stdout_bytes"],
+                          record["stdout_truncated"], record["cursor"]), ("exited", 0, 900, True, "4.900.5"))
+        # A guest that broke its own logs loses only the exact record.
+        self.warden.resume(self.sandbox, operation_id="wake:exact-2")
+        (managed / "state.json").write_text(json.dumps(ledger))
+        (managed / "stdout.log").unlink()
+        (managed / "stdout.log").symlink_to(self.root / "elsewhere.log")
+        self.warden.park(self.sandbox, operation_id="park:exact-3")
+        self.assertIsNone(load_parked_managed_state(self.bundle))
+        self.assertEqual(self.warden.inspect(self.sandbox).state, HibernationState.PARKED)
+
+    def test_moved_bound_ledger_has_the_same_digest_and_needs_its_own_bundle(self) -> None:
+        self.managed_config(bound=True)
+        payload = b'{"version":1,"job_id":"j","spec_sha256":"' + DIGEST_A.encode() + b'","sequence":2}'
+        (self.bundle / "rootfs" / ".ucloud-managed").mkdir(mode=0o700)
+        (self.bundle / "rootfs" / ".ucloud-managed" / "state.json").write_bytes(payload)
+        destination = self.bundle_root / "moved"
+        shutil.copytree(self.bundle, destination)
+        moved = replace(self.sandbox, bundle=destination.resolve())
+        self.assertEqual(
+            DirectRunscWarden._managed_process_ledger_digest(moved),
+            DirectRunscWarden._managed_process_ledger_digest(self.sandbox),
+        )
+        # A config still naming the source bundle is refused, never followed.
+        with self.assertRaisesRegex(DirectWardenError, "own bundle rootfs"):
+            DirectRunscWarden._prepare_managed_state_mount(moved)
+        (destination / "config.json").write_text(json.dumps({
+            **json.loads((destination / "config.json").read_text()),
+            "mounts": [managed_state_mount(moved.bundle)],
+        }))
+        DirectRunscWarden._prepare_managed_state_mount(moved)
+
+    def test_every_ledger_the_guest_leaves_parks_and_wakes(self) -> None:
+        # The fingerprint is total over guest content: a guest can never make
+        # its own park or wake fail, and the same files give the same value.
+        def sentinel(reason: str) -> str:
+            return hashlib.sha256(f"managed-primary-v1:{reason}".encode()).hexdigest()
+
+        self.managed_config(bound=True)
+        self.warden.create(self.sandbox, operation_id="create:ledgers")
+        managed = self.bundle / "rootfs" / ".ucloud-managed"
+        ledger = managed / "state.json"
+        secret = self.root / "secret.json"
+        secret.write_text('{"version":1,"secret":true}')
+        valid = {"version": 1, "job_id": "j", "spec_sha256": DIGEST_A, "state": "running", "sequence": 2}
+
+        def regular(payload: bytes):
+            return lambda: ledger.write_bytes(payload), hashlib.sha256(payload).hexdigest()
+
+        def special(make, reason):
+            return make, sentinel(reason)
+
+        cases = {
+            "missing": (lambda: None, sentinel("no-job")),
+            "symlink": special(lambda: ledger.symlink_to(secret), "invalid:symlink"),
+            "fifo": special(lambda: os.mkfifo(ledger), "invalid:not-a-regular-file"),
+            "directory": special(lambda: ledger.mkdir(), "invalid:not-a-regular-file"),
+            "oversize": special(lambda: ledger.write_bytes(b" " * (1024 * 1024 + 1)), "invalid:oversize"),
+            "empty": regular(b""),
+            "invalid json": regular(b"{not json"),
+            "wrong version": regular(json.dumps(dict(valid, version=2)).encode()),
+            "wrong types": regular(json.dumps(dict(valid, sequence=[2], pid={})).encode()),
+            "deeply nested": regular(b"[" * 60000),
+            "past the record cap": regular(json.dumps(dict(valid, pad="x" * 70000)).encode()),
+        }
+        for index, (name, (make, expected)) in enumerate(cases.items()):
+            with self.subTest(ledger=name):
+                for path in managed.iterdir():
+                    shutil.rmtree(path) if path.is_dir() and not path.is_symlink() else path.unlink()
+                make()
+                self.warden.park(self.sandbox, operation_id=f"park:ledger-{index}")
+                self.assertEqual(self.warden.inspect(self.sandbox).state, HibernationState.PARKED)
+                self.assertEqual(self.warden.load_parked_manifest(self.sandbox).managed_process_sha256, expected)
+                # No exact record from content the node refuses to derive.
+                self.assertIsNone(load_parked_managed_state(self.bundle))
+                self.assertEqual(
+                    self.warden.resume(self.sandbox, operation_id=f"wake:ledger-{index}").state,
+                    HibernationState.RUNNING,
+                )
+        self.assertEqual(json.loads(secret.read_text()), {"version": 1, "secret": True})
+
+    def test_managed_state_directory_replaced_by_the_host_side_is_never_followed(self) -> None:
+        # The guest cannot replace its own mount point; only the host side
+        # can. The fingerprint still never follows it, and runsc never binds it.
+        self.managed_config(bound=True)
+        managed = self.bundle / "rootfs" / ".ucloud-managed"
+        target = self.root / "elsewhere"
+        target.mkdir()
+        (target / "state.json").write_text('{"version":1}')
+        managed.symlink_to(target)
+        self.assertEqual(
+            DirectRunscWarden._managed_process_ledger_digest(self.sandbox),
+            hashlib.sha256(b"managed-primary-v1:invalid:directory-symlink").hexdigest(),
+        )
+        with self.assertRaisesRegex(DirectWardenError, "state mount is unavailable"):
+            DirectRunscWarden._prepare_managed_state_mount(self.sandbox)
+        managed.unlink()
+        managed.write_text("a file")
+        self.assertEqual(
+            DirectRunscWarden._managed_process_ledger_digest(self.sandbox),
+            hashlib.sha256(b"managed-primary-v1:invalid:not-a-directory").hexdigest(),
+        )
+        self.assertEqual(sorted(path.name for path in target.iterdir()), ["state.json"])
 
     def test_storage_inventory_snapshot_rejects_duplicate_volume(self) -> None:
         storage, _rootfs, _incarnation = self._use_storage_native()

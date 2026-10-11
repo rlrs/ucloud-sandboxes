@@ -24,7 +24,8 @@ Code facts the rules below rely on:
 | Fact | Where |
 | --- | --- |
 | `/tmp`, `/run`, `/dev` and `/dev/shm` are OCI tmpfs mounts, never in the upper; only a checkpoint captures them | `DirectOciConfigBuilder._mounts` |
-| The node writes `/.ucloud-init`, `/.ucloud-job-init`, the ledger `/.ucloud-managed/state.json`, `etc/resolv.conf` and `etc/hosts` into the rootfs host-side, below the Sentry overlay | `install_init`, `install_managed_init`, `prepare_network_files` |
+| The node writes `/.ucloud-init`, `/.ucloud-job-init`, `etc/resolv.conf` and `etc/hosts` into the rootfs host-side, below the Sentry overlay | `install_init`, `install_managed_init`, `prepare_network_files` |
+| The node creates `/.ucloud-managed` (root, 0700) in the rootfs host-side; for a managed-process sandbox it is bind-mounted at `/.ucloud-managed`, so the guest supervisor's `state.json` and logs land in the host overlay upper, not the Sentry's upper. Sandboxes created before 0.9.72 have no such mount: their ledger stays in the Sentry filestore | `managed_state_mount`, `prepare_managed_state_directory`; [managed-process-reads.md](managed-process-reads.md) |
 | The `linux_host` entrypoint writes `~/.ssh/authorized_keys` from the spec and runs `ssh-keygen -A` | `linux_host_entrypoint_script` |
 | Relay registration tokens match `^[0-9a-f]{32}$`, and guest agents see them | `model_relay.REGISTRATION_TOKEN_RE` |
 | Builders sign EROFS components with Ed25519; workers only verify, against `producers.json`; untrusted OCI diffs are parsed in a keyless subprocess | `environment_artifact.py`, `environment_prepare.py` |
@@ -181,7 +182,7 @@ records `CommitPolicy.sha256`.
 | Malformed | absolute or `..` paths; non-UTF-8 or NUL; paths over 4,096 bytes; device nodes other than char 0:0 whiteouts; hardlinks to dropped or absent targets; `trusted.*` xattrs other than the opaque marker the filter writes | fail `commit_residue_forbidden` |
 | Bounds | more than 1,000,000 members, or more than `commit_max_bytes` (default 8 GiB) after filtering | fail `commit_too_large` |
 | Credentials | a 32-hex token, in a member name, link target, kept xattr or regular-file body, whose SHA-256 is in `secret_digests` | fail `commit_secret_residue` |
-| Host-written | `.ucloud-init`, `.ucloud-job-init`, `.ucloud-managed/`, `etc/resolv.conf`, `etc/hosts`, `etc/hostname`. The host upper shadows them anyway. | drop, count |
+| Host-written | `.ucloud-init`, `.ucloud-job-init`, `.ucloud-managed/` (written by the node, or by the supervisor through its bind mount), `etc/resolv.conf`, `etc/hosts`, `etc/hostname`. The host upper shadows them anyway. | drop, count |
 | Identity | `etc/ssh/ssh_host_*`, and the SSH user's `.ssh/authorized_keys` when `spec.ssh.enabled` or `linux_host.enable_sshd` is set. The node sends these paths from the new `DirectOciConfigBuilder.platform_written_paths(spec)`. | drop, count |
 | Volatile | other members under `run/`, `tmp/`, `dev/shm/` | drop, count |
 | Build residue | `var/cache/apt/archives/*.deb`, `root/.cache/pip/`, `root/.cache/uv/`, `root/.npm/_cacache/` | drop, count |

@@ -6,7 +6,6 @@ from .memory_backing import MemoryBackingStore, RetainedCheckpointRef
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 import fcntl
-import hashlib
 import json
 import logging
 import math
@@ -51,6 +50,12 @@ from .storage_native_daemon import (
     StorageVolumeRecord,
     StorageVolumeState,
     storage_operation_id,
+)
+from .managed_process import (
+    configured_managed_state_mount,
+    managed_ledger_fingerprint,
+    prepare_managed_state_directory,
+    record_parked_managed_state,
 )
 from .telemetry import Telemetry
 from . import pause_tier
@@ -479,6 +484,7 @@ class DirectRunscWarden:
     def create(self, sandbox: DirectSandbox, *, operation_id: str) -> HibernationRecord:
         with self._locked(sandbox):
             self._validate_bundle(sandbox)
+            self._prepare_managed_state_mount(sandbox)
             self._require_memory_allocation(sandbox)
             active_memory = self._active_memory_root(sandbox)
             active_memory.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -888,6 +894,7 @@ class DirectRunscWarden:
                         expected_revision=hibernating.revision,
                     )
                     self._delete_runtime(sandbox)
+                    self._record_parked_managed_state(sandbox)
                 # runsc delete removes its filestore from the merged rootfs.
                 # Do this before detaching the overlay so that the sealed
                 # layer contains the final, cleaned-up filesystem state.
@@ -1024,6 +1031,7 @@ class DirectRunscWarden:
                 # Bind that exact rootfs ledger to the checkpoint before runsc is
                 # allowed to construct or resume any workload task.
                 self._require_managed_process_ledger(sandbox, manifest)
+                self._prepare_managed_state_mount(sandbox)
                 timings["validate_checkpoint"] = (time.monotonic() - preparation_phase) * 1000
                 preparation_phase = time.monotonic()
                 # Network preparation can overlap storage mounting/validation,
@@ -1218,6 +1226,7 @@ class DirectRunscWarden:
                     expected_revision=record.revision,
                 )
                 self._delete_runtime(sandbox)
+                self._record_parked_managed_state(sandbox)
                 parked = journal.commit_parked(
                     manifest,
                     operation_id=record.operation_id,
@@ -1890,7 +1899,8 @@ class DirectRunscWarden:
             )
 
     @staticmethod
-    def _managed_process_ledger_digest(sandbox: DirectSandbox) -> str:
+    def _managed_process_config(sandbox: DirectSandbox) -> dict | None:
+        """The bundle's OCI config if it runs the managed-process supervisor."""
         try:
             config_payload = (sandbox.bundle / "config.json").read_bytes()
             if len(config_payload) > 1024 * 1024:
@@ -1911,36 +1921,64 @@ class DirectRunscWarden:
                 "could not verify managed-process OCI identity"
             ) from exc
         if managed is None:
-            return ""
+            return None
         if managed != "v1":
             raise DirectWardenError("managed-process OCI identity is invalid")
-        ledger = sandbox.bundle / "rootfs" / ".ucloud-managed" / "state.json"
+        return config
+
+    @classmethod
+    def _prepare_managed_state_mount(cls, sandbox: DirectSandbox) -> None:
+        """Create the bound managed-state source before runsc create or restore.
+
+        Only for a config that binds it, and only from the bundle's own rootfs.
+        A config without the mount (created before it existed) is left alone:
+        its checkpoint's mount table has none.
+        """
+        config = cls._managed_process_config(sandbox)
+        if config is None:
+            return
         try:
-            info = ledger.lstat()
-            if (
-                not stat.S_ISREG(info.st_mode)
-                or stat.S_ISLNK(info.st_mode)
-                or info.st_size < 1
-                or info.st_size > 1024 * 1024
-            ):
-                raise ValueError("managed-process ledger file is invalid")
-            payload = ledger.read_bytes()
-            record = json.loads(payload)
-            if (
-                not isinstance(record, dict)
-                or record.get("version") != 1
-                or not isinstance(record.get("job_id"), str)
-                or not re.fullmatch(
-                    r"[0-9a-f]{64}", str(record.get("spec_sha256") or "")
-                )
-                or int(record.get("sequence") or 0) < 1
-            ):
-                raise ValueError("managed-process ledger contents are invalid")
-        except FileNotFoundError:
-            return hashlib.sha256(b"managed-primary-v1:no-job").hexdigest()
-        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            if configured_managed_state_mount(config, sandbox.bundle):
+                prepare_managed_state_directory(sandbox.bundle / "rootfs")
+        except (OSError, ValueError) as exc:
+            raise DirectWardenError(
+                f"managed-process state mount is unavailable: {exc}"
+            ) from exc
+
+    @staticmethod
+    def _record_parked_managed_state(sandbox: DirectSandbox) -> None:
+        """Keep the parked job record exact (docs/managed-process-reads.md).
+
+        The guest is stopped and its rootfs still mounted. Best effort: a
+        guest that broke its own state files loses only the exact record.
+        """
+        try:
+            record_parked_managed_state(
+                sandbox.bundle,
+                sandbox_id=sandbox.sandbox_id,
+                sandbox_generation=sandbox.sandbox_generation,
+            )
+        except (OSError, ValueError, TypeError, RecursionError) as exc:
+            _LOG.warning("no parked managed-process record for %s: %s", sandbox.sandbox_id, exc)
+
+    @classmethod
+    def _managed_process_ledger_digest(cls, sandbox: DirectSandbox) -> str:
+        """Fingerprint the supervisor's ledger, read as the host sees it.
+
+        With the state mount the guest writes it into the rootfs; the guest is
+        stopped by then (checkpoint), so it is stable. Without the mount the
+        guest's copy is in the Sentry's filestore and the host sees none, so
+        the digest is the constant "no job". A sandbox moved across nodes
+        carries its upper, so both ends compute the same digest.
+        """
+        if cls._managed_process_config(sandbox) is None:
+            return ""
+        try:
+            # Total over guest content (managed_ledger_fingerprint): a guest
+            # cannot make its own park or wake fail through these files.
+            return managed_ledger_fingerprint(sandbox.bundle / "rootfs")
+        except OSError as exc:
             raise DirectWardenError("managed-process ledger is unavailable") from exc
-        return hashlib.sha256(payload).hexdigest()
 
     def _runtime_fingerprint(
         self,

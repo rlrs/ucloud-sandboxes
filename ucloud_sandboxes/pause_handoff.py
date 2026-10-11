@@ -18,11 +18,13 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import threading
 import time
 from typing import Any
 
 from . import pause_tier
+from .managed_process import MANAGED_JOB_ID_RE
 from .sandbox import OPERATION_ID_RE, SANDBOX_ID_RE
 
 _LOG = logging.getLogger(__name__)
@@ -37,6 +39,7 @@ DEMAND_MIN_INTERVAL_SECONDS = 0.05
 STATUS_MAX_AGE_SECONDS = 2.0
 GROWTH_ACTIONS = {"wait": "observe_managed_wait", "activate": "resume_managed_continuation"}
 MAX_GROWTH_EVENTS = 4096
+_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _SAFE = getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
 _FLAGS = os.O_RDONLY | _SAFE
 
@@ -228,6 +231,34 @@ def parse_growth_events(raw: object) -> list[tuple[str, tuple[str, int], str]]:
             raise ValueError("a growth event's request_id is invalid")
         parsed.append((GROWTH_ACTIONS[action], (sandbox_id, generation), request_id))
     return parsed
+
+
+MANAGED_GROWTH_CALLS = {
+    "/internal/v1/managed/launch": ("sandbox_id", "generation", "job_id", "launch_sha256"),
+    "/internal/v1/managed/bind": ("sandbox_id", "generation", "job_id", "launch_sha256"),
+    "/internal/v1/managed/terminal": ("sandbox_id", "generation", "job_id"),
+}
+
+
+def parse_managed_growth_call(path: str, raw: object) -> tuple[Any, ...]:
+    """noded's managed-process growth calls (docs/managed-process-reads.md).
+
+    The body has exactly the route's keys; returns their values in order.
+    """
+    keys = MANAGED_GROWTH_CALLS[path]
+    if not isinstance(raw, dict) or set(raw) != set(keys):
+        raise ValueError("a managed growth call must be {" + ", ".join(keys) + "}")
+    sandbox_id, generation, job_id = raw["sandbox_id"], raw["generation"], raw["job_id"]
+    if not isinstance(sandbox_id, str) or not SANDBOX_ID_RE.fullmatch(sandbox_id):
+        raise ValueError("a managed growth call's sandbox_id is invalid")
+    if type(generation) is not int or generation < 1:
+        raise ValueError("a managed growth call's generation must be a positive integer")
+    if not isinstance(job_id, str) or not MANAGED_JOB_ID_RE.fullmatch(job_id):
+        raise ValueError("a managed growth call's job_id is invalid")
+    if "launch_sha256" in raw and (
+            not isinstance(raw["launch_sha256"], str) or not _SHA256.fullmatch(raw["launch_sha256"])):
+        raise ValueError("a managed growth call's launch_sha256 must be 64 lowercase hex characters")
+    return tuple(raw[key] for key in keys)
 
 
 def pause_config(service: Any, *, rust_pause_enabled: bool) -> dict[str, Any]:

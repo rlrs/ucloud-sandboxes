@@ -176,6 +176,66 @@ class LocalFleetScenarioTests(unittest.TestCase):
             self.assertEqual((result.exit_code, result.stdout), (0, "memoryagaindisk"))
             self.assertNotIn(node.sentry_pid("gamma"), {first, second})
 
+    def test_managed_state_is_bound_from_the_rootfs_and_survives_park_and_wake(self):
+        with LocalFleet() as fleet:
+            fleet.create("delta", parkable=True, managed_process=True)
+            node = fleet.node_for("delta")
+            bundle = node.state_root / "bundles" / "delta.sandbox-1"
+            managed = bundle / "rootfs" / ".ucloud-managed"
+            self.assertEqual(managed.stat().st_mode & 0o777, 0o700)
+            # The guest's writes reach the host directory the node reads.
+            ledger = ('{"version":1,"job_id":"job","spec_sha256":"' + "a" * 64
+                      + '","state":"running","sequence":2}')
+            written = fleet.exec("delta", ["/bin/sh", "-c", f"printf '%s' '{ledger}' > state.json"],
+                                 working_dir="/.ucloud-managed")
+            self.assertEqual(written.exit_code, 0, written.stderr)
+            self.assertEqual((managed / "state.json").read_text(), ledger)
+
+            # Output nobody read yet: the parked record must still count it.
+            self.assertEqual(fleet.exec("delta", ["/bin/sh", "-c", "printf hello > stdout.log; printf e > stderr.log"],
+                                        working_dir="/.ucloud-managed").exit_code, 0)
+            parked = node.request("POST", "/v1/sandboxes/delta/park",
+                                  payload={"operation_id": "park-delta-1"})
+            self.assertEqual(parked.status, 200, parked.body)
+            exact = parked.json()["sandbox"]["managed_process"]
+            self.assertEqual(
+                {key: exact[key] for key in ("sandbox_id", "sandbox_generation", "job_id", "state",
+                                             "sequence", "stdout_bytes", "stderr_bytes", "cursor")},
+                {"sandbox_id": "delta", "sandbox_generation": 1, "job_id": "job", "state": "running",
+                 "sequence": 2, "stdout_bytes": 5, "stderr_bytes": 1, "cursor": "2.5.1"})
+
+            def observed() -> tuple[dict | None, dict | None]:
+                listed = node.request("GET", "/v1/sandboxes?sandbox_id=delta").json()["sandboxes"][0]
+                inventory = node.request("GET", "/v1/heartbeat").json()["heartbeat"]["inventory"]
+                entry = next(item for item in inventory if item["sandbox_id"] == "delta")
+                return listed.get("managed_process"), entry.get("managed_process")
+
+            self.assertEqual(observed(), (exact, exact))
+            node.restart()  # Kept beside the bundle, so it survives the agent.
+            self.assertEqual(observed(), (exact, exact))
+            # A wake that fails and leaves it parked carries it as well.
+            node.arm_fault("restore", "fail", sandbox_id="delta")
+            failed = node.request("POST", "/v1/sandboxes/delta/wake",
+                                  payload={"generation": 1, "operation_id": "wake-delta-failed"})
+            self.assertEqual(failed.status, 503, failed.body)
+            self.assertEqual(failed.json()["lifecycle_state"], "parked")
+            self.assertEqual(failed.json()["sandbox"]["managed_process"], exact)
+
+            woken = fleet.wake("delta", generation=fleet.route("delta").generation)
+            self.assertEqual(woken.status, 200, woken.body)
+            result = fleet.exec("delta", ["cat", "/.ucloud-managed/state.json"])
+            self.assertEqual((result.exit_code, result.stdout), (0, ledger))
+            # Only while parked.
+            self.assertEqual(observed(), (None, None))
+
+            # A sandbox without the state mount, or whose job never started, has none.
+            for sandbox_id, spec in (("legacy", {}), ("idle", {"managed_process": True})):
+                fleet.create(sandbox_id, parkable=True, **spec)
+                response = node.request("POST", f"/v1/sandboxes/{sandbox_id}/park",
+                                        payload={"operation_id": f"park-{sandbox_id}"})
+                self.assertEqual(response.status, 200, response.body)
+                self.assertNotIn("managed_process", response.json()["sandbox"])
+
     def test_lost_runtime_is_quarantined_reported_and_deletable(self):
         with LocalFleet() as fleet:
             fleet.create("delta")

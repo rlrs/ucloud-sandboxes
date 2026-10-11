@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 import base64
 import binascii
+import hashlib
 import json
+import os
+from pathlib import Path
 import re
+import stat
 from typing import Any, Mapping
 
 from .models import parse_iso_datetime
@@ -14,10 +18,14 @@ from .guest_paths import validate_guest_path
 
 MANAGED_PROCESS_BINARY = "/.ucloud-job-init"
 MANAGED_PROCESS_PROTOCOL_VERSION = 1
+# The supervisor's state directory in the guest, and its name in the rootfs.
+MANAGED_STATE_DIRECTORY = "/.ucloud-managed"
+MANAGED_STATE_NAME = ".ucloud-managed"
 DEFAULT_MAX_STDOUT_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_STDERR_BYTES = 16 * 1024 * 1024
 MAX_LOG_READ_BYTES = 1024 * 1024
 _JOB_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
+MANAGED_JOB_ID_RE = _JOB_ID  # What ManagedProcessStart accepts as job_id.
 _ENV_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
@@ -27,6 +35,89 @@ class ManagedProcessError(RuntimeError):
 
 class ManagedProcessReadUnavailable(ManagedProcessError):
     """No authoritative read result was obtained; replaying this read is safe."""
+
+
+class ManagedGenerationMismatchError(ManagedProcessError):
+    """A managed-process call named another incarnation of the sandbox."""
+
+
+def managed_state_mount(bundle: Path) -> dict[str, Any]:
+    """The OCI mount binding the supervisor's state from the sandbox's rootfs.
+
+    The source is the bundle's own ``rootfs/.ucloud-managed``, so guest writes
+    land in the sandbox's host overlay upper, which park seals, moves ship,
+    delete removes and commit drops, and the node reads them without entering
+    the guest (docs/managed-process-reads.md).
+    """
+    if not bundle.is_absolute() or "\0" in str(bundle):
+        raise ValueError("managed-process state mount needs an absolute bundle")
+    return {
+        "destination": MANAGED_STATE_DIRECTORY,
+        "options": ["rbind", "rw", "nosuid", "nodev", "noexec"],
+        "source": str(bundle / "rootfs" / MANAGED_STATE_NAME),
+        "type": "bind",
+    }
+
+
+def configured_managed_state_mount(config: object, bundle: Path) -> bool:
+    """Whether an OCI config binds the managed state; refuse any other source.
+
+    A config without the mount is the legacy layout: the supervisor's state
+    stays in the Sentry's rootfs filestore and only ``ctl`` can read it.
+    """
+    mounts = config.get("mounts") if isinstance(config, dict) else None
+    if not isinstance(mounts, list):
+        return False
+    found = [
+        mount
+        for mount in mounts
+        if isinstance(mount, dict)
+        and mount.get("destination") == MANAGED_STATE_DIRECTORY
+    ]
+    if not found:
+        return False
+    if len(found) != 1 or found[0] != managed_state_mount(bundle):
+        raise ValueError(
+            "managed-process state mount does not bind its own bundle rootfs"
+        )
+    return True
+
+
+def prepare_managed_state_directory(rootfs: Path) -> None:
+    """Create or secure ``<rootfs>/.ucloud-managed`` without following links.
+
+    Owned by the node (root) and mode 0700, as the supervisor keeps it. An
+    existing entry must already be a real directory: a symlink or a file there
+    is refused, never replaced. Raises OSError or ValueError.
+    """
+    if not rootfs.is_absolute():
+        raise ValueError("managed-process state rootfs must be absolute")
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
+    rootfs_fd = os.open(rootfs, flags)
+    directory_fd = -1
+    try:
+        try:
+            directory_fd = os.open(MANAGED_STATE_NAME, flags, dir_fd=rootfs_fd)
+        except FileNotFoundError:
+            try:
+                os.mkdir(MANAGED_STATE_NAME, mode=0o700, dir_fd=rootfs_fd)
+            except FileExistsError:
+                pass
+            directory_fd = os.open(MANAGED_STATE_NAME, flags, dir_fd=rootfs_fd)
+        info = os.fstat(directory_fd)
+        if not stat.S_ISDIR(info.st_mode):
+            raise ValueError("managed-process state path is not a directory")
+        if (info.st_uid, info.st_gid) != (os.geteuid(), os.getegid()):
+            os.fchown(directory_fd, os.geteuid(), os.getegid())
+        # Unconditional: on an overlay rootfs this also copies an image's own
+        # directory up, so the upper always records the bound layout.
+        os.fchmod(directory_fd, 0o700)
+        os.fsync(directory_fd)
+        os.fsync(rootfs_fd)
+    finally:
+        if directory_fd >= 0:
+            os.close(directory_fd)
+        os.close(rootfs_fd)
 
 
 @dataclass(frozen=True)
@@ -308,3 +399,233 @@ def parse_control_response(payload: bytes) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ManagedProcessError("managed process returned a non-object response")
     return raw
+
+
+# Host-side readers of the bound state (docs/managed-process-reads.md).
+MAX_STATE_BYTES = 64 * 1024
+# The parked incarnation's exact record, beside the bundle's config.json.
+PARKED_RECORD_NAME = ".ucloud-managed-process.json"
+_NOFOLLOW_READ = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
+_NOFOLLOW_DIRECTORY = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
+
+
+def _regular_file(directory_fd: int, name: str, *, limit: int | None) -> tuple[int, bytes | None]:
+    """(size, payload or None) of a regular file below ``directory_fd``.
+
+    Never follows a symlink and never opens anything but a regular file (no
+    FIFO, socket or device); ``limit`` None only sizes the file. Raises
+    FileNotFoundError when absent, ValueError when the entry is not a
+    bounded regular file.
+    """
+    if not stat.S_ISREG(os.stat(name, dir_fd=directory_fd, follow_symlinks=False).st_mode):
+        raise ValueError(f"managed-process {name} is not a regular file")
+    descriptor = os.open(name, _NOFOLLOW_READ, dir_fd=directory_fd)
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError(f"managed-process {name} is not a regular file")
+        if limit is None:
+            return info.st_size, None
+        if info.st_size > limit:
+            raise ValueError(f"managed-process {name} exceeds {limit} bytes")
+        with os.fdopen(os.dup(descriptor), "rb") as handle:
+            payload = handle.read(limit + 1)
+        if len(payload) > limit:
+            raise ValueError(f"managed-process {name} exceeds {limit} bytes")
+        return info.st_size, payload
+    finally:
+        os.close(descriptor)
+
+
+def read_managed_state(
+    rootfs: Path, *, sandbox_id: str, sandbox_generation: int
+) -> ManagedProcessRecord | None:
+    """The job record derived from the bound state, as noded serves it.
+
+    ``state.json`` is parsed strictly (version 1, at most 64 KiB). While the
+    job runs its byte counts are the log files' sizes; once terminal they are
+    the persisted values. None when no job ever started. Raises OSError or
+    ValueError for state the guest made unreadable (a symlink, a FIFO).
+    """
+    rootfs_fd = os.open(rootfs, _NOFOLLOW_DIRECTORY)
+    try:
+        try:
+            state_fd = os.open(MANAGED_STATE_NAME, _NOFOLLOW_DIRECTORY, dir_fd=rootfs_fd)
+        except FileNotFoundError:
+            return None
+    finally:
+        os.close(rootfs_fd)
+    try:
+        try:
+            _, payload = _regular_file(state_fd, "state.json", limit=MAX_STATE_BYTES)
+        except FileNotFoundError:
+            return None
+        try:
+            raw = json.loads(payload)
+            if not isinstance(raw, dict) or raw.get("version") != MANAGED_PROCESS_PROTOCOL_VERSION:
+                raise ValueError("managed-process state.json has an unsupported version")
+            record = ManagedProcessRecord.from_control_response(
+                {"ok": True, "job": raw},
+                sandbox_id=sandbox_id,
+                sandbox_generation=sandbox_generation,
+            )
+        except (TypeError, RecursionError, OverflowError) as exc:
+            # Guest-written: any shape it chose is refused as invalid.
+            raise ValueError(f"managed-process state.json is invalid: {exc}") from exc
+        if not record.terminal:
+            sizes = []
+            for name in ("stdout.log", "stderr.log"):
+                try:
+                    sizes.append(_regular_file(state_fd, name, limit=None)[0])
+                except FileNotFoundError:
+                    sizes.append(0)
+            record = replace(record, stdout_bytes=sizes[0], stderr_bytes=sizes[1])
+        return record
+    except ManagedProcessError as exc:
+        raise ValueError(str(exc)) from exc
+    finally:
+        os.close(state_fd)
+
+
+MAX_LEDGER_BYTES = 1024 * 1024
+
+
+def _ledger_sentinel(reason: str) -> str:
+    return hashlib.sha256(f"managed-primary-v1:{reason}".encode("ascii")).hexdigest()
+
+
+def managed_ledger_fingerprint(rootfs: Path) -> str:
+    """A total, deterministic fingerprint of the guest's ``state.json``.
+
+    Park binds it into the checkpoint manifest and wake requires it again; the
+    guest is stopped in between, so the same files give the same value. It
+    never refuses what the guest left there:
+
+    - no ``.ucloud-managed`` or no ``state.json``: the "no job" constant, which
+      is also what every sandbox parked before the state mount recorded;
+    - a regular file of at most 1 MiB: the SHA-256 of its bytes, whatever
+      they are;
+    - anything else: a constant per reason (``invalid:<reason>``).
+
+    Only host faults raise (OSError): opening the rootfs itself, or I/O.
+    """
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
+    rootfs_fd = os.open(rootfs, directory_flags)
+    try:
+        try:
+            info = os.stat(MANAGED_STATE_NAME, dir_fd=rootfs_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return _ledger_sentinel("no-job")
+        if stat.S_ISLNK(info.st_mode):
+            return _ledger_sentinel("invalid:directory-symlink")
+        if not stat.S_ISDIR(info.st_mode):
+            return _ledger_sentinel("invalid:not-a-directory")
+        state_fd = os.open(MANAGED_STATE_NAME, directory_flags, dir_fd=rootfs_fd)
+    finally:
+        os.close(rootfs_fd)
+    try:
+        try:
+            info = os.stat("state.json", dir_fd=state_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return _ledger_sentinel("no-job")
+        if stat.S_ISLNK(info.st_mode):
+            return _ledger_sentinel("invalid:symlink")
+        if not stat.S_ISREG(info.st_mode):
+            return _ledger_sentinel("invalid:not-a-regular-file")
+        if info.st_size > MAX_LEDGER_BYTES:
+            return _ledger_sentinel("invalid:oversize")
+        descriptor = os.open("state.json", _NOFOLLOW_READ, dir_fd=state_fd)
+        try:
+            with os.fdopen(os.dup(descriptor), "rb") as handle:
+                payload = handle.read(MAX_LEDGER_BYTES + 1)
+        finally:
+            os.close(descriptor)
+        if len(payload) > MAX_LEDGER_BYTES:
+            return _ledger_sentinel("invalid:oversize")
+        return hashlib.sha256(payload).hexdigest()
+    finally:
+        os.close(state_fd)
+
+
+def managed_record_payload(record: ManagedProcessRecord) -> dict[str, Any]:
+    """The record as the node serves it, with its wait cursor."""
+    return dict(
+        record.to_dict(),
+        cursor=f"{record.sequence}.{record.stdout_bytes}.{record.stderr_bytes}",
+    )
+
+
+def _bound_config(bundle: Path) -> bool:
+    payload = (bundle / "config.json").read_bytes()
+    if len(payload) > 1024 * 1024:
+        raise ValueError("OCI config is too large")
+    config = json.loads(payload)
+    annotations = config.get("annotations") if isinstance(config, dict) else None
+    return (
+        isinstance(annotations, dict)
+        and annotations.get("dev.ucloud-sandboxes.managed-process") == "v1"
+        and configured_managed_state_mount(config, bundle)
+    )
+
+
+def record_parked_managed_state(
+    bundle: Path, *, sandbox_id: str, sandbox_generation: int
+) -> dict[str, Any] | None:
+    """Make the parked incarnation's job record exact, from its stopped guest.
+
+    Called while the guest cannot change its files (after the checkpoint, or
+    on an import's shipped upper) and while ``<bundle>/rootfs`` is mounted.
+    Writes the record beside the bundle's config.json, where it survives an
+    agent restart, or removes a stale one when there is none: a legacy
+    sandbox (no state mount) or one whose job never started. Raises OSError
+    or ValueError, having removed any stale record first.
+    """
+    target = bundle / PARKED_RECORD_NAME
+    try:
+        os.unlink(target)
+    except FileNotFoundError:
+        pass
+    if not _bound_config(bundle):
+        return None
+    derived = read_managed_state(
+        bundle / "rootfs", sandbox_id=sandbox_id, sandbox_generation=sandbox_generation
+    )
+    if derived is None:
+        return None
+    record = managed_record_payload(derived)
+    payload = json.dumps(record, sort_keys=True, separators=(",", ":")).encode("ascii") + b"\n"
+    temporary = bundle / f".{PARKED_RECORD_NAME}.tmp"
+    descriptor = os.open(
+        temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600
+    )
+    try:
+        os.write(descriptor, payload)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    os.replace(temporary, target)
+    directory = os.open(bundle, _NOFOLLOW_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+    return record
+
+
+def load_parked_managed_state(bundle: Path) -> dict[str, Any] | None:
+    """The record ``record_parked_managed_state`` kept, or None.
+
+    Raises OSError or ValueError when the kept file is unreadable or invalid.
+    """
+    directory = os.open(bundle, _NOFOLLOW_DIRECTORY)
+    try:
+        _, payload = _regular_file(directory, PARKED_RECORD_NAME, limit=MAX_STATE_BYTES)
+    except FileNotFoundError:
+        return None
+    finally:
+        os.close(directory)
+    raw = json.loads(payload)
+    record = managed_record_payload(ManagedProcessRecord.from_dict(raw))
+    if raw != record:
+        raise ValueError("parked managed-process record is not canonical")
+    return record

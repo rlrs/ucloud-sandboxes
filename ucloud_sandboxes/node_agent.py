@@ -84,10 +84,15 @@ from .direct_registry import (
     ManagedPrimaryOwnedError,
 )
 from .memory_backing import MemoryBackingBusyError
-from .managed_process import ManagedProcessError, ManagedProcessReadUnavailable, ManagedProcessStart
+from .managed_process import (
+    ManagedGenerationMismatchError,
+    ManagedProcessError,
+    ManagedProcessReadUnavailable,
+    ManagedProcessStart,
+)
 from .models import NodeHeartbeat, NodeRuntimeMetrics, ResidentWaitMetrics, ResourceQuantity, SandboxInventoryEntry, SandboxMemoryObservation, utc_now
 from .node_commit import CommitExports
-from .pause_handoff import parse_escalation, parse_growth_events
+from .pause_handoff import MANAGED_GROWTH_CALLS, parse_escalation, parse_growth_events, parse_managed_growth_call
 from .node_runtime import BuilderNodeRuntime, DirectNodeRuntime, NodeStateStore
 from .registry import heartbeat_to_dict
 from .runtime_metrics import (
@@ -417,6 +422,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 self.internal_routes_enabled and getattr(self.manager, "rust_pause_tier", False)):
             self._internal_pause_route(parsed.path)
             return
+        if parsed.path in MANAGED_GROWTH_CALLS and self.internal_routes_enabled:
+            self._internal_managed_route(parsed.path)
+            return
         if parsed.path.startswith("/internal/v1/") and self.create_handoff is not None:
             self._internal_create_route(parsed.path)
             return
@@ -694,6 +702,49 @@ class NodeAgentHandler(BuildContextHttpHandler):
             self._write_exception(exc)
         else:
             self._write_json({"state": record.state})
+
+    def _internal_managed_route(self, path: str) -> None:
+        """runtime/noded's managed-process growth calls (docs/managed-process-reads.md).
+
+        noded starts, signals and reads managed processes itself; the growth
+        ledger stays here. launch: 200 {"job_id"} (empty for an imported
+        primary, which noded then binds); 503 startup_busy while queued for
+        memory; 409 primary_owned. bind and terminal: 200 {"job_id"}. All: 409
+        generation_mismatch for another incarnation.
+        """
+        try:
+            sandbox_id, generation, *rest = parse_managed_growth_call(path, self._read_json_body())
+        except ValueError as exc:
+            self._write_json({"error": str(exc), "error_code": "invalid_request", "retryable": False},
+                             status=HTTPStatus.BAD_REQUEST)
+            return
+        method = {
+            "/internal/v1/managed/launch": self.manager.admit_managed_launch,
+            "/internal/v1/managed/bind": self.manager.bind_managed_launch,
+            "/internal/v1/managed/terminal": self.manager.observe_managed_terminal,
+        }[path]
+        try:
+            intent = method(sandbox_id, generation, *rest)
+        except SandboxStartupBusyError as exc:
+            self._write_json({"error": str(exc), "error_code": "startup_busy", "retryable": True},
+                             status=HTTPStatus.SERVICE_UNAVAILABLE,
+                             headers={"Retry-After": "1", "X-UCloud-Sandbox-Retryable": "true"})
+        except ManagedPrimaryOwnedError as exc:
+            self._write_json({"error": str(exc), "error_code": "primary_owned", "job_id": exc.job_id},
+                             status=HTTPStatus.CONFLICT)
+        except (ManagedGenerationMismatchError, DirectRegistryConflictError) as exc:
+            # The registry refuses an intent for a lost or stale incarnation too.
+            self._write_json({"error": str(exc), "error_code": "generation_mismatch", "retryable": False},
+                             status=HTTPStatus.CONFLICT)
+        except ManagedProcessError as exc:
+            self._write_json({"error": str(exc), "error_code": "not_managed_process", "retryable": False},
+                             status=HTTPStatus.CONFLICT)
+        except OSError as exc:
+            self._write_exception(RuntimeError(str(exc)))
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+        else:
+            self._write_json({"job_id": (intent.job_id if intent is not None else "") or ""})
 
     def _internal_create_route(self, path: str) -> None:
         """runtime/noded's create handoff (ucloud_sandboxes/create_handoff.py)."""
@@ -1112,6 +1163,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
             storage_snapshot=(snapshot.to_dict() if snapshot else {}),
             storage_dependency=storage_dependency,
             memory_observation=observation,
+            managed_process=getattr(record, "managed_process", None),
         )
 
     def _wake_sandbox(self, path: str) -> None:
@@ -1141,6 +1193,8 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 **relay_args,
             )
         except (SandboxRestoreBusyError, SandboxStartupBusyError) as exc:
+            # No live inspection here: it could block behind the very work
+            # that made the node busy.
             self._write_exception(exc)
             return
         except SandboxSnapshotPublicationPendingError as exc:
@@ -1167,12 +1221,15 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 current = self.manager.get(sandbox_id)
                 if current is not None:
                     payload["lifecycle_state"] = current.state
+                    if current.state == "parked":
+                        # With the exact job record kept at park, if any.
+                        payload["sandbox"] = current.to_dict()
             except (RuntimeError, ValueError):
                 pass
             if isinstance(exc, SandboxCapacityUnavailableError) and payload.get("lifecycle_state") == "parked":
                 # Wake failed before the caller's upload/exec was dispatched.
                 # Only a positively parked lifecycle makes this safe to replay.
-                self._write_exception(SandboxRestoreBusyError(str(exc)))
+                self._write_exception(SandboxRestoreBusyError(str(exc)), sandbox=payload.get("sandbox"))
             else:
                 self._write_json(payload, status=HTTPStatus.SERVICE_UNAVAILABLE)
             return
@@ -1885,7 +1942,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
         )
         return False
 
-    def _write_exception(self, exc: RuntimeError | ValueError) -> None:
+    def _write_exception(self, exc: RuntimeError | ValueError, *, sandbox: dict[str, Any] | None = None) -> None:
         if isinstance(exc, SandboxArchiveUnsupportedError):
             # Not retryable as is: the SDK uploads the files one by one.
             self._write_json({"error": str(exc), "error_code": "archive_upload_unsupported", "retryable": False},
@@ -1941,6 +1998,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
                     "error_code": "node_restore_busy",
                     "retryable": True,
                     "lifecycle_state": "parked",
+                    **({"sandbox": sandbox} if sandbox is not None else {}),
                 },
                 status=HTTPStatus.SERVICE_UNAVAILABLE,
                 headers={

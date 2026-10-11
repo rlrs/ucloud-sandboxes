@@ -8,11 +8,14 @@ step 3c.1):
 - ledger: TransitionLedger;
 - growth_costs, growth_forecasts: DirectSandboxService's growth cost and
   forecast methods on a service built without __init__, with a fake clock;
-- decide: DirectSandboxService._active_admission_guard (check_cpu=False, as
-  every caller passes) on the same service, with scripted metrics. Each
-  metrics sample may take time; each condition wait times out.
+- decide: admission_decision.gate and decide, driven as the guard drives them
+  (and as tests.rs replays them), with scripted metrics. Each metrics sample
+  may take time; each condition wait times out. Every case also runs
+  DirectSandboxService._active_admission_guard on the same service and must
+  give the same outcome.
 """
 from contextlib import contextmanager
+import copy
 from dataclasses import replace
 import json
 import math
@@ -28,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[5]))
 from tests.test_admission_properties import FairHarness  # noqa: E402
 from ucloud_sandboxes import direct_service  # noqa: E402
 from ucloud_sandboxes.admission import FairCapacity  # noqa: E402
+from ucloud_sandboxes.admission_decision import AdmissionNode, AdmissionRequest, Grant, Wait, decide, gate  # noqa: E402
 from ucloud_sandboxes.direct_registry import ManagedGrowthIntent  # noqa: E402
 from ucloud_sandboxes.direct_service import DirectSandboxService  # noqa: E402
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now  # noqa: E402
@@ -534,6 +538,80 @@ def encode_metrics(metrics):
                 "identity": backing.identity}}
 
 
+def encode_outcome(decision, waits, end):
+    if isinstance(decision, Grant):
+        outcome = {"grant": True}
+    else:
+        outcome = {"refuse": "closed" if decision.closed else "capacity", "error": decision.reason}
+    return {**outcome, "waits": waits, "end": end}
+
+
+def drive_decide(ledger, request, steps, requotes):
+    """The guard's loop around gate and decide, as tests.rs replays it."""
+    now, attempt, waits = request.now, 0, []
+    while True:
+        request = replace(request, now=now)
+        decision = gate(request)
+        if decision is not None:
+            break
+        step = steps[min(attempt, len(steps) - 1)]
+        attempt += 1
+        metrics = None
+        if request.node.capacity is not None:
+            now += step["sample_seconds"]
+            metrics = step["metrics"]
+        if requotes:
+            request = replace(request, cost=step["cost"])
+        request = replace(request, now=now)
+        if requotes and request.node.capacity is not None and metrics is not None:
+            ledger.refresh_wait_cost(request.owner, request.cost)
+        decision = decide(metrics, ledger, request)
+        if not isinstance(decision, Wait):
+            break
+        waits.append(decision.seconds)
+        request = replace(request, previous_error=decision.reason)
+        now += decision.seconds
+    return encode_outcome(decision, waits, now)
+
+
+def drive_guard(svc, clock, request, steps, requotes):
+    """The same case through DirectSandboxService._active_admission_guard."""
+    attempt = {"index": 0}
+
+    def provider():
+        step = steps[min(attempt["index"], len(steps) - 1)]
+        clock.now += step["sample_seconds"]
+        return step["metrics"]
+
+    def cost_provider():
+        step = steps[min(attempt["index"], len(steps) - 1)]
+        attempt["index"] += 1
+        return step["cost"]
+
+    def advance():
+        attempt["index"] += 1
+
+    svc._runtime_metrics_provider = provider
+    if requotes:
+        kwargs = {"transition_cost_provider": cost_provider}
+    else:
+        # Without a requote, the next sample comes from the next step.
+        kwargs = {"validate_owner": advance}
+    log = svc._admission_changed.log
+    with fake_time(clock):
+        try:
+            with svc._active_admission_guard(
+                    request.requested, check_shape=True, check_memory_pressure=request.check_memory_pressure,
+                    transition_cost=request.cost, transition_owner=request.owner, deadline=request.deadline,
+                    **kwargs):
+                outcome = {"grant": True}
+        except SandboxAdmissionClosedError as exc:
+            outcome = {"refuse": "closed", "error": str(exc)}
+        except SandboxCapacityUnavailableError as exc:
+            outcome = {"refuse": "capacity", "error": str(exc)}
+    return {**outcome, "waits": list(log), "end": clock.now}
+
+
 def decide_case(rng):
     clock = Clock()
     ram_root = rng.choice([None, "/ram"])
@@ -575,44 +653,15 @@ def decide_case(rng):
         steps.append(step)
     check_memory_pressure = rng.random() < 0.85
     deadline_seconds = rng.choice([0.0, 0.1, 0.25, 0.5, 1.0, 1.0, 30.0, 30.0])
-    attempt = {"index": 0}
-
-    def provider():
-        step = steps[min(attempt["index"], len(steps) - 1)]
-        clock.now += step["sample_seconds"]
-        return step["metrics"]
-
-    def cost_provider():
-        step = steps[min(attempt["index"], len(steps) - 1)]
-        attempt["index"] += 1
-        return step["cost"]
-
-    def advance():
-        attempt["index"] += 1
-
-    svc._runtime_metrics_provider = provider
     start = clock.now
-    outcome = {}
-    with fake_time(clock):
-        deadline = clock.now + deadline_seconds
-        log = svc._admission_changed.log
-        try:
-            kwargs = {}
-            if requotes:
-                kwargs = {"transition_cost_provider": cost_provider}
-            else:
-                # Without a requote, the next sample comes from the next step.
-                kwargs = {"validate_owner": advance}
-            with svc._active_admission_guard(
-                    requested, check_shape=True, check_cpu=False, check_memory_pressure=check_memory_pressure,
-                    transition_cost=cost, transition_owner=owner, deadline=deadline, **kwargs):
-                outcome = {"grant": True}
-        except SandboxAdmissionClosedError as exc:
-            outcome = {"refuse": "closed", "error": str(exc)}
-        except SandboxCapacityUnavailableError as exc:
-            outcome = {"refuse": "capacity", "error": str(exc)}
-        outcome["waits"] = list(log)
-        outcome["end"] = clock.now
+    ledger = copy.deepcopy(svc._transitions)
+    request = AdmissionRequest(
+        node=AdmissionNode(svc._admission_open, capacity, ram_backing_configured=ram_root is not None), owner=owner,
+        requested=requested, cost=cost, check_shape=True, check_memory_pressure=check_memory_pressure,
+        deadline=start + deadline_seconds, now=start)
+    outcome = drive_decide(ledger, request, steps, requotes)
+    guarded = drive_guard(svc, clock, request, steps, requotes)
+    assert guarded == outcome, (outcome, guarded)
     return {
         "admission_open": svc._admission_open, "capacity": encode_shape(capacity),
         "ram_backing_configured": ram_root is not None, "owner": list(owner), "requested": encode_shape(requested),

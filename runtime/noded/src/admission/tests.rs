@@ -503,10 +503,11 @@ fn decode_metrics(value: &Value) -> Option<Metrics> {
     })
 }
 
-/// The guard's loop around [`gate`] and [`decide`], with the generator's
-/// fake clock: each sample takes its step's time, each wait times out.
+/// The guard's loop around [`gate`] and [`decide`] (goldens.py `drive_decide`),
+/// with the generator's fake clock: each sample takes its step's time, each
+/// wait times out.
 #[test]
-fn admission_decisions_replay_python_guard() {
+fn admission_decisions_replay_python_decide() {
     let cases = goldens()["decide"].as_array().unwrap();
     assert!(cases.len() > 100);
     let (mut grants, mut waited) = (0, 0);

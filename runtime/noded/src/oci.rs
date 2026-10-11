@@ -1013,6 +1013,41 @@ const DEFAULT_CAPABILITIES: [&str; 14] = [
 const DEFAULT_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 pub const MEMORY_DIRECTORY_ANNOTATION: &str = "dev.gvisor.internal.application-memory-directory";
 
+/// The managed supervisor's state directory in the guest (its `--state-dir`).
+pub const MANAGED_STATE_DESTINATION: &str = "/.ucloud-managed";
+/// The same directory's name below the bundle's rootfs on the host: the bind
+/// mount's source (docs/managed-process-reads.md).
+pub const MANAGED_STATE_NAME: &str = ".ucloud-managed";
+const MANAGED_STATE_OPTIONS: [&str; 5] = ["rbind", "rw", "nosuid", "nodev", "noexec"];
+
+/// `<bundle>/rootfs/.ucloud-managed`, the host side of the managed state mount.
+pub fn managed_state_source(bundle: &Path) -> PathBuf {
+    bundle.join("rootfs").join(MANAGED_STATE_NAME)
+}
+
+/// The bind mount that lets the host read the supervisor's state and logs
+/// without entering the guest: guest writes land in the sandbox's own overlay.
+pub fn managed_state_mount(bundle: &Path) -> Result<Value, OciError> {
+    let source = managed_state_source(bundle);
+    let source = source
+        .to_str()
+        .filter(|source| bundle.is_absolute() && !source.contains('\0'))
+        .ok_or_else(|| config("managed-process state mount needs an absolute bundle"))?;
+    Ok(json!({"destination": MANAGED_STATE_DESTINATION, "options": MANAGED_STATE_OPTIONS, "source": source, "type": "bind"}))
+}
+
+/// Whether a bundle's `config.json` binds the managed state, as Python's
+/// `configured_managed_state_mount` decides: one mount at the destination,
+/// exactly this bundle's. Sandboxes created before it (legacy) keep their job
+/// routes in the agent; a config binding anything else is not read either.
+pub fn has_managed_state_mount(config: &Value, bundle: &Path) -> bool {
+    let Ok(expected) = managed_state_mount(bundle) else { return false };
+    let Some(mounts) = config.get("mounts").and_then(Value::as_array) else { return false };
+    let found: Vec<&Value> =
+        mounts.iter().filter(|mount| mount.get("destination").and_then(Value::as_str) == Some(MANAGED_STATE_DESTINATION)).collect();
+    found.len() == 1 && *found[0] == expected
+}
+
 /// The `--network` mode of the node: `none` or `sandbox`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NetworkMode {
@@ -1208,7 +1243,17 @@ impl OciBuilder {
     /// Python does. Deviation: the static file helper's `files ready` probe is
     /// not rerun here; run `validate_management_helper` once before (S2.1,
     /// where Python runs it too). The binary's ownership checks still run.
-    pub fn build(&self, spec: &SandboxSpec, image: &MaterializedRootfs, network_namespace_path: Option<&Path>) -> Result<Value, OciError> {
+    ///
+    /// `bundle` is the bundle the config is for: a managed-process sandbox
+    /// gets its state mount from it, last in `mounts`. `None` builds the
+    /// bundle-independent part only (the cross-language goldens).
+    pub fn build(
+        &self,
+        spec: &SandboxSpec,
+        image: &MaterializedRootfs,
+        network_namespace_path: Option<&Path>,
+        bundle: Option<&Path>,
+    ) -> Result<Value, OciError> {
         spec.validate()?;
         let (Some(memory_mb), Some(_)) = (spec.memory_mb, spec.disk_mb) else {
             return Err(config("direct sandboxes require explicit memory_mb and disk_mb limits"));
@@ -1257,7 +1302,7 @@ impl OciBuilder {
                 .collect();
             environment.extend(linux_host_environment(spec));
         }
-        let mounts = mounts(spec)?;
+        let mut mounts = mounts(spec)?;
         let (mut managed_uid, mut managed_gid) = (0, 0);
         if spec.managed_process {
             let binary = self
@@ -1266,7 +1311,13 @@ impl OciBuilder {
                 .ok_or_else(|| config("managed_process requires a configured managed-process init binary"))?;
             validate_init_binary(binary)?;
             (managed_uid, managed_gid) = (identity.uid, identity.gid);
-            args = ["/.ucloud-job-init", "supervise", "--state-dir", "/.ucloud-managed"].iter().map(|item| item.to_string()).collect();
+            args = ["/.ucloud-job-init", "supervise", "--state-dir", MANAGED_STATE_DESTINATION]
+                .iter()
+                .map(|item| item.to_string())
+                .collect();
+            if let Some(bundle) = bundle {
+                mounts.push(managed_state_mount(bundle)?);
+            }
         } else if spec.security.init {
             let binary =
                 self.init_binary.as_ref().ok_or_else(|| config("security.init requires a configured direct-runtime init binary"))?;

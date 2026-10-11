@@ -697,6 +697,10 @@ impl SandboxSpec {
         self.parkable
     }
 
+    pub fn managed_process(&self) -> bool {
+        self.managed_process
+    }
+
     /// `to_dict()`.
     pub fn to_dict(&self) -> &Value {
         &self.dict

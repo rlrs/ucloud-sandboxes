@@ -9,6 +9,9 @@ Status (2026-10-06):
 - **Image cache, netlink networking and the daemon's network pool:** 0.9.48.
   This push closes here; see "Where this push stopped" for the measured
   result and the follow-ups.
+- **Managed-process jobs (status, logs, start, signal):** moved to the daemon
+  (unreleased, 2026-10-11; [managed-process-reads.md](managed-process-reads.md)).
+  See "Phase 2b: managed-process jobs" below.
 
 Decided: Rust, and the daemon owns the node registry.
 
@@ -511,6 +514,28 @@ is the likely limit.
   - **The warden flock** spans the spawn, and the marker is re-checked under it.
   - **Everything else goes to the agent.**
 - `--rust-exec` needs `--rust-create`, which owns the node state.
+
+### Phase 2b: managed-process jobs
+
+The contract is [managed-process-reads.md](managed-process-reads.md); the code
+is `src/jobs/`.
+
+- **Reads** (`files.rs`, `watch.rs`): status and logs come from the
+  supervisor's files through the `/.ucloud-managed` bind mount, for owned
+  sandboxes whose journal is RUNNING with live authority (a pause marker is
+  fine: a frozen guest changes nothing). No fence, no warden flock, no thaw,
+  no activity mark. Held waits share one inotify instance; a watch pins an
+  inode, not the mount, so a held read never blocks a park's unmount.
+- **Start and signal** (`start.rs`, `mod.rs`): Python's validation and payload
+  bytes, the launch and bind through the agent's growth ledger
+  (`/internal/v1/managed/{launch,bind}`), then the `ctl` under the exec start's
+  fences (A, then the warden flock, thaw with prefetch if paused). They need
+  `--rust-exec`, which shares the fence with the agent; without it they stay
+  the agent's.
+- **Legacy** sandboxes (no mount in `config.json`, cached per incarnation),
+  sandboxes without a `state.json` on the host, and anything parsed differently
+  from Python go to the agent unchanged.
+- The agent keeps the growth ledger (phase 3c) and the legacy handlers.
 
 ### Phase 3: the pause tier and local waits move together
 

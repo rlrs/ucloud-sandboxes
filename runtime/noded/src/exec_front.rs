@@ -307,7 +307,7 @@ impl ExecFront {
 
 /// The journal says RUNNING with live authority and its sentry is the
 /// process it names (`running_snapshot`: pid and start ticks).
-fn running(node: &NodePipeline, sandbox: &Sandbox) -> bool {
+pub(crate) fn running(node: &NodePipeline, sandbox: &Sandbox) -> bool {
     let Ok(Some(journal)) = node.warden().journal().load(&sandbox.sandbox_id, sandbox.generation) else { return false };
     let field = |name: &str| journal.get(name);
     if field("state").and_then(Value::as_str) != Some("running") || field("authority").and_then(Value::as_str) != Some("live") {

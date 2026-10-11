@@ -15,7 +15,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 
-use crate::oci::{OciError, SandboxSpec, parse_ipv4, py_repr, validate_guest_path, validate_init_binary, validate_init_metadata};
+use crate::oci::{MANAGED_STATE_NAME, OciError, SandboxSpec, parse_ipv4, py_repr, validate_guest_path, validate_init_binary, validate_init_metadata};
 
 pub const INIT_NAME: &str = ".ucloud-init";
 pub const MANAGED_INIT_NAME: &str = ".ucloud-job-init";
@@ -269,6 +269,35 @@ pub fn install_managed_init(rootfs: &Path, managed_init_binary: Option<&Path>, e
     install_binary(rootfs, binary, MANAGED_INIT_NAME)
 }
 
+/// The managed supervisor's state directory, the source of its bind mount
+/// (`oci::managed_state_mount`), which must exist before `runsc create`: a
+/// real directory below the rootfs (never a symlink the image placed),
+/// owned by the daemon (root) with mode 0700. A replay re-secures an existing
+/// one. Only `managed_process` sandboxes get the mount, so only they get this.
+pub fn prepare_managed_state(rootfs: &Path, enabled: bool) -> Result<(), OciError> {
+    if !enabled {
+        return Ok(());
+    }
+    if !is_rootfs_directory(rootfs) {
+        return Err(failed("managed process state target must be an absolute rootfs directory"));
+    }
+    let prepare = || -> io::Result<()> {
+        let root = open_directory(rootfs)?;
+        match mkdir_at(&root, MANAGED_STATE_NAME, 0o700) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error),
+        }
+        let directory = open_at(&root, MANAGED_STATE_NAME, libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW, 0)?;
+        // SAFETY: a valid descriptor; our own ids.
+        check(unsafe { libc::fchown(directory.as_raw_fd(), libc::geteuid(), libc::getegid()) })?;
+        fchmod(&directory, 0o700)?;
+        fsync(&directory)?;
+        fsync(&root)
+    };
+    prepare().map_err(|_| failed("failed to prepare the managed process state directory"))
+}
+
 /// `tempfile.mkstemp(prefix=prefix, dir=directory)`: O_EXCL, mode 0600.
 fn mkstemp(directory: &Path, prefix: &str) -> io::Result<(File, std::path::PathBuf)> {
     const LETTERS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789_";
@@ -460,6 +489,31 @@ mod tests {
             let bad = BTreeMap::from([(host.to_string(), address.to_string())]);
             assert!(prepare_network_files(&rootfs, &spec(json!({})), &bad).is_err());
         }
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_managed_state_directory_is_private_and_never_a_symlink() {
+        let root = scratch("managed-state");
+        let rootfs = root.join("rootfs");
+        prepare_managed_state(&rootfs, false).unwrap();
+        assert!(!rootfs.join(MANAGED_STATE_NAME).exists());
+        prepare_managed_state(&rootfs, true).unwrap();
+        let state = rootfs.join(MANAGED_STATE_NAME);
+        assert_eq!(mode(&state), 0o700);
+        assert_eq!(std::fs::metadata(&state).unwrap().uid(), crate::fsutil::euid());
+        // A replay re-secures an existing directory.
+        std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o777)).unwrap();
+        prepare_managed_state(&rootfs, true).unwrap();
+        assert_eq!(mode(&state), 0o700);
+        // An image's symlink there is refused, and its target untouched.
+        std::fs::remove_dir(&state).unwrap();
+        let outside = root.join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::set_permissions(&outside, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::os::unix::fs::symlink(&outside, &state).unwrap();
+        assert!(prepare_managed_state(&rootfs, true).is_err());
+        assert_eq!(mode(&outside), 0o755);
         std::fs::remove_dir_all(&root).unwrap();
     }
 

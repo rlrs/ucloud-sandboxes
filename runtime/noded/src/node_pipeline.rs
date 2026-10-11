@@ -439,7 +439,8 @@ impl NodePipeline {
         let namespace = self.ensure_network(registration, timings).await?;
 
         let started = timings.start();
-        let mut config = self.oci.build(spec, &image.image, namespace.as_deref())?;
+        let bundle = self.overlays.bundle(&id, generation);
+        let mut config = self.oci.build(spec, &image.image, namespace.as_deref(), Some(&bundle))?;
         if split {
             config["annotations"][oci::MEMORY_DIRECTORY_ANNOTATION] = json!(registration.memory_allocation_id);
         }
@@ -453,6 +454,9 @@ impl NodePipeline {
             .prepare(&id, generation, &image.image, &config, &registration.workspace_directory, allocation)
             .await?;
         timings.add("rootfs_prepare", started);
+        if lease.bundle != bundle {
+            return Err(unavailable("rootfs bundle does not match its OCI config"));
+        }
         let quota_path = quota.as_ref().map(|quota| quota.path.clone()).unwrap_or_else(|| registration.quota_path.clone());
         if lease.writable != PathBuf::from(&quota_path) {
             return Err(unavailable("rootfs writable directory does not match its storage quota"));
@@ -539,13 +543,15 @@ impl NodePipeline {
                 timings.add("guest_files", started);
                 let started = timings.start();
                 let (init, managed) = (self.config.init_binary.clone(), self.config.managed_init_binary.clone());
-                let (init_enabled, managed_enabled) = (
+                let (init_enabled, managed_enabled, managed_state) = (
                     spec.security.init && !spec.managed_process,
                     spec.managed_process || spec.filesystem.management_helper == "static",
+                    spec.managed_process,
                 );
                 blocking(move || {
                     guest::install_init(&rootfs, Some(&init), init_enabled)?;
                     guest::install_managed_init(&rootfs, Some(&managed), managed_enabled)?;
+                    guest::prepare_managed_state(&rootfs, managed_state)?;
                     Ok(())
                 })
                 .await?;

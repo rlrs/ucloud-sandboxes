@@ -212,16 +212,40 @@ class CreateHandoff:
             held.done.set()
 
 
+def admission_config(service: Any, *, rust_admission_enabled: bool) -> dict[str, Any]:
+    """Node admission's configuration as the live service holds it
+    (docs/admission-port-3c.md §3.3): what noded needs to admit as this agent
+    does. The RAM backing root is create_config's ``application_memory_root``."""
+    from . import pause_tier
+    from .direct_service import _CPU_ADMISSION_RETRY_SECONDS, _GROWTH_OBSERVATION_MAX_AGE_SECONDS
+    from .resource_admission import PHYSICAL_MEMORY_FLOOR_MB
+
+    capacity = getattr(service, "_active_capacity", None)
+    return {
+        "rust_admission_enabled": bool(rust_admission_enabled),
+        "max_concurrent_startups": service._startup_slots.capacity,
+        "max_concurrent_restores": service._restore_slots.capacity,
+        "admission_wait_seconds": service.admission_wait_seconds,
+        "active_capacity": None if capacity is None else {"vcpu": capacity.vcpu, "memory_mb": capacity.memory_mb},
+        "physical_memory_floor_mb": PHYSICAL_MEMORY_FLOOR_MB,
+        "growth_observation_max_age_seconds": _GROWTH_OBSERVATION_MAX_AGE_SECONDS,
+        "prefetch_max_bytes": pause_tier.PREFETCH_MAX_BYTES,
+        "publication_lanes": service._publication_slots.capacity,
+        "retry_seconds": _CPU_ADMISSION_RETRY_SECONDS,
+    }
+
+
 def create_config(service: Any, *, node_epoch: str, rust_creates_enabled: bool,
                   rust_execs_enabled: bool = False, exec_sessions: Any = None,
-                  rust_pause_enabled: bool = False) -> dict[str, Any]:
+                  rust_pause_enabled: bool = False, rust_admission_enabled: bool = False) -> dict[str, Any]:
     """The agent's effective create configuration, read from the assembled node.
 
     Python stays the single source of truth for flags and assembly checks;
     runtime/noded reads this instead of parsing the agent's command line.
     ``exec`` is phase 2a's: what noded needs to run execs itself, fenced by
     ucloud_sandboxes/exec_fence.py; ``exec_sessions`` is the ExecSessionManager.
-    ``pause`` is phase 3a's (pause_handoff.pause_config).
+    ``pause`` is phase 3a's (pause_handoff.pause_config); ``admission`` is
+    step 3c.0's (admission_config).
     """
     from .direct_network import NETWORK_MTU, NETWORK_POOL_SIZE
     from .environment_manifest import HOST_EROFS_ABI
@@ -299,4 +323,5 @@ def create_config(service: Any, *, node_epoch: str, rust_creates_enabled: bool,
             "rust_execs_enabled": bool(rust_execs_enabled),
         },
         "pause": pause_config(service, rust_pause_enabled=rust_pause_enabled),
+        "admission": admission_config(service, rust_admission_enabled=rust_admission_enabled),
     }

@@ -316,6 +316,10 @@ class SandboxPoolConfig:
     # paused reclaim and escalation decisions (docs/rust-node-daemon-plan.md,
     # phase 3a). Requires the pause tier and Rust execs.
     direct_node_rust_pause: bool = False
+    # Node admission moves to noded (docs/admission-port-3c.md); step 3c.0
+    # only adds noded's internal socket and the agent's hello on it. Requires
+    # the front door, Rust creates, Rust execs and the Rust pause tier.
+    direct_node_rust_admission: bool = False
     # Split workspaces start with an XFS filesystem this large and grow online
     # toward disk_mb (docs/disk-density.md). 0 formats full-size workspaces.
     direct_workspace_initial_grant_mb: int = 512
@@ -345,7 +349,7 @@ class SandboxPoolConfig:
                    "direct_pause_tier": False, "direct_pause_tier_zswap": False,
                    "direct_local_model_waits": False, "direct_node_front_door": False,
                    "direct_node_rust_create": False, "direct_node_rust_exec": False,
-                   "direct_node_rust_pause": False,
+                   "direct_node_rust_pause": False, "direct_node_rust_admission": False,
                    "direct_workspace_initial_grant_mb": cls.direct_workspace_initial_grant_mb,
                    "storage_native_max_concurrent_prepares": 0,
                    **raw}
@@ -442,6 +446,14 @@ class SandboxPoolConfig:
         if result.direct_node_rust_pause and not (result.direct_pause_tier and result.direct_node_rust_exec):
             raise ValueError("sandbox.direct_node_rust_pause requires sandbox.direct_pause_tier "
                              "and sandbox.direct_node_rust_exec")
+        if not isinstance(result.direct_node_rust_admission, bool):
+            raise ValueError("sandbox.direct_node_rust_admission must be a boolean")
+        if result.direct_node_rust_admission and not (
+                result.direct_node_front_door and result.direct_node_rust_create
+                and result.direct_node_rust_exec and result.direct_node_rust_pause):
+            raise ValueError("sandbox.direct_node_rust_admission requires sandbox.direct_node_front_door, "
+                             "sandbox.direct_node_rust_create, sandbox.direct_node_rust_exec "
+                             "and sandbox.direct_node_rust_pause")
         grant = result.direct_workspace_initial_grant_mb
         if isinstance(grant, bool) or not isinstance(grant, int) or (grant and grant < 512):
             raise ValueError("sandbox.direct_workspace_initial_grant_mb must be 0 or at least 512")

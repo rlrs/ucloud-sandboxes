@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### noded
+
+- **Admission port, step 3c.0 (b, c, d): plumbing only ([docs/admission-port-3c.md](docs/admission-port-3c.md)).** Admission behaviour does not change; with the new flag off nothing changes at all.
+  - `sandbox.direct_node_rust_admission` (default off) requires the front door, Rust creates, Rust execs and the Rust pause tier. It renders agent `--rust-admission` and noded `--rust-admission --internal-unix <state>/direct-runtime/noded/noded.sock`.
+  - With the flag, ucloud-noded serves the agent on that Unix socket: 0600 in a 0700 directory, connections from any uid but its own closed unread (`SO_PEERCRED`), and the node control bearer token on every request. Requests carry `X-UCloud-Agent-Session` and answers carry `X-UCloud-Noded-Session`. Only the handshake is served: `POST /internal/v1/admission/hello` answers `{noded_session, admission_open, config_sha256}` (the drain row as noded reads it, and the loaded configuration's digest; null until the node is loaded), and `GET …/ping` answers too. Any other `/internal/v1/admission/` path is a 404 `admission_route_unknown`.
+  - The agent's `NodedClient` (`ucloud_sandboxes/noded_client.py`) keeps pooled connections. It discards a connection noded closed while it was idle, and raises `NodedUnavailable`, `NodedLost`, `NodedRefused` or `NodedProtocolError`. With the flag, the agent says hello at start, retrying in the background while noded is down, and again whenever it sees a new noded session.
+  - noded's pressure sample also reads MemTotal and memory PSI "full" avg10 (unknown when unreadable, as in `runtime_metrics`). No current consumer reads either yet.
+  - `GET /internal/v1/creates/config` gains an `admission` block read from the live service: slots, the wait, the active capacity, the physical floor, growth observation age, prefetch bound, publication lanes and retry interval. It is under the digest, so every node's `config_sha256` changes once. noded parses the block into `AdmissionConfig` and keeps it, with the digest, in its `CreateConfig`.
+
 ## 0.9.72 - 2026-10-11 (gateway; workers)
 
 ### Node

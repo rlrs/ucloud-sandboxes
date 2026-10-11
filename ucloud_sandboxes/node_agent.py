@@ -92,6 +92,7 @@ from .managed_process import (
 )
 from .models import NodeHeartbeat, NodeRuntimeMetrics, ResidentWaitMetrics, ResourceQuantity, SandboxInventoryEntry, SandboxMemoryObservation, utc_now
 from .node_commit import CommitExports
+from .noded_client import NodedClient, NodedLink, noded_socket_path
 from .pause_handoff import MANAGED_GROWTH_CALLS, parse_escalation, parse_growth_events, parse_managed_growth_call
 from .node_runtime import BuilderNodeRuntime, DirectNodeRuntime, NodeStateStore
 from .registry import heartbeat_to_dict
@@ -226,6 +227,8 @@ class NodeAgentHandler(BuildContextHttpHandler):
     # configuration, and with --rust-creates the create handoff.
     internal_routes_enabled = False
     create_handoff: CreateHandoff | None = None
+    # --rust-admission: the handshake with noded's internal socket.
+    noded_link: NodedLink | None = None
     max_file_body_bytes = DEFAULT_MAX_FILE_BODY_BYTES
     server_version = "ucloud-sandboxes-node-agent/0.1"
 
@@ -664,7 +667,8 @@ class NodeAgentHandler(BuildContextHttpHandler):
                                    rust_creates_enabled=self.create_handoff is not None,
                                    rust_execs_enabled=getattr(self.manager, "exec_fence", None) is not None,
                                    exec_sessions=self.exec_manager,
-                                   rust_pause_enabled=getattr(self.manager, "rust_pause_tier", False))
+                                   rust_pause_enabled=getattr(self.manager, "rust_pause_tier", False),
+                                   rust_admission_enabled=self.noded_link is not None)
             digest = hashlib.sha256(json.dumps(config, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
             cached = type(self)._create_config_cache = dict(config, config_sha256=digest)
         return cached
@@ -1934,6 +1938,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
             if self.create_handoff is not None:
                 # A restarted daemon finishes nothing its predecessor admitted.
                 self.create_handoff.observe_session(self.headers.get(NODED_SESSION_HEADER))
+            if self.noded_link is not None:
+                # ... and hears this agent's hello again.
+                self.noded_link.observe_session(self.headers.get(NODED_SESSION_HEADER))
             return True
         self._write_json(
             {"error": "unauthorized"},
@@ -2197,6 +2204,7 @@ def build_direct_node_agent_server(
     rust_creates: bool = False,
     rust_execs: bool = False,
     rust_pause_tier: bool = False,
+    rust_admission: bool = False,
 ) -> NodeAgentHTTPServer:
     """Serve a sandbox node with direct runsc and storage-native ownership.
 
@@ -2206,6 +2214,9 @@ def build_direct_node_agent_server(
     transitions fence them through flock files (exec_fence).
     ``rust_pause_tier``: noded owns the pause tier and local waits; this
     agent runs neither (pause_handoff).
+    ``rust_admission``: node admission moves to noded
+    (docs/admission-port-3c.md). Step 3c.0 only says hello on noded's
+    internal socket (noded_client); admission itself is unchanged.
     """
     if rust_creates and (unix_socket is None or service.provisioner.registry.is_owner):
         raise ValueError("Rust creates need the agent on its Unix socket and a foreign registry")
@@ -2213,6 +2224,8 @@ def build_direct_node_agent_server(
         raise ValueError("Rust execs need the agent on its Unix socket")
     if rust_pause_tier and not (rust_execs and service.warden.config.pause_tier):
         raise ValueError("the Rust pause tier needs Rust execs and the pause tier")
+    if rust_admission and not (rust_creates and rust_execs and rust_pause_tier):
+        raise ValueError("Rust admission needs Rust creates, Rust execs and the Rust pause tier")
     node_control_bearer_token = node_control_bearer_token.strip()
     if not node_control_bearer_token:
         raise ValueError("node control bearer token cannot be empty")
@@ -2452,11 +2465,15 @@ def build_direct_node_agent_server(
     # Only noded reaches the socket; it must not forward /internal/ itself.
     DirectBoundHandler.internal_routes_enabled = unix_socket is not None
     handoff = DirectBoundHandler.create_handoff = CreateHandoff(service) if rust_creates else None
+    link = DirectBoundHandler.noded_link = (
+        NodedLink(NodedClient(noded_socket_path(service), node_control_bearer_token)) if rust_admission else None)
 
     class DirectServiceHTTPServer(NodeAgentHTTPServer):
         def server_close(self) -> None:
             # The sender samples the service; it stops first.
             self.stop_heartbeats()
+            if link is not None:
+                link.stop()
             if handoff is not None:
                 handoff.close()
             try:
@@ -2473,6 +2490,8 @@ def build_direct_node_agent_server(
     else:
         server = DirectServiceHTTPServer((host, port), DirectBoundHandler)
     server.attach_heartbeats(heartbeat)
+    if link is not None:
+        link.start()
     return server
 
 

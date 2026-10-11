@@ -76,6 +76,47 @@ pub struct CreateConfig {
     /// Phase 3a; absent from agents older than it.
     #[serde(default)]
     pub pause: Option<PauseBlock>,
+    /// Step 3c.0; absent from agents older than it.
+    #[serde(default)]
+    pub admission: Option<AdmissionConfig>,
+    /// The agent's digest of this configuration (`config_sha256`).
+    #[serde(default)]
+    pub config_sha256: String,
+}
+
+/// The agent's node admission configuration (docs/admission-port-3c.md §3.3),
+/// read from its live service. The RAM backing root is the top-level
+/// `application_memory_root`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct AdmissionConfig {
+    /// The agent runs with `--rust-admission`.
+    pub rust_admission_enabled: bool,
+    /// Startup slots (`FairCapacity(max_concurrent_startups)`).
+    pub max_concurrent_startups: usize,
+    /// Restore slots (`FairCapacity(max_concurrent_restores)`).
+    pub max_concurrent_restores: usize,
+    /// The default wait for a slot and for capacity.
+    pub admission_wait_seconds: f64,
+    /// The active capacity shape; `None` admits on slots alone.
+    pub active_capacity: Option<ActiveCapacity>,
+    /// Physical headroom no admission may spend (`PHYSICAL_MEMORY_FLOOR_MB`).
+    pub physical_memory_floor_mb: u64,
+    /// How long a resident observation earns growth credit.
+    pub growth_observation_max_age_seconds: f64,
+    /// What a paused continuation's swapped bytes may cost at most
+    /// (`pause_tier.PREFETCH_MAX_BYTES`).
+    pub prefetch_max_bytes: u64,
+    /// Publication lanes (`FairCapacity(16)`).
+    pub publication_lanes: usize,
+    /// The capacity wait's resample interval.
+    pub retry_seconds: f64,
+}
+
+/// `ResourceQuantity(vcpu, memory_mb)` of the node's active capacity.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+pub struct ActiveCapacity {
+    pub vcpu: f64,
+    pub memory_mb: u64,
 }
 
 /// The agent's pause-tier configuration (phase 3a). Only the switch is read
@@ -225,6 +266,63 @@ impl Pipeline for LazyPipeline {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// The admission block as `create_handoff.admission_config` writes it.
+    #[test]
+    fn the_admission_block_is_typed_and_optional() {
+        let block = json!({
+            "rust_admission_enabled": true, "max_concurrent_startups": 32, "max_concurrent_restores": 8,
+            "admission_wait_seconds": 30.0, "active_capacity": {"vcpu": 64, "memory_mb": 262144},
+            "physical_memory_floor_mb": 2048, "growth_observation_max_age_seconds": 30.0,
+            "prefetch_max_bytes": 1073741824u64, "publication_lanes": 16, "retry_seconds": 0.21,
+        });
+        let parsed: AdmissionConfig = serde_json::from_value(block.clone()).unwrap();
+        assert_eq!(parsed, AdmissionConfig {
+            rust_admission_enabled: true,
+            max_concurrent_startups: 32,
+            max_concurrent_restores: 8,
+            admission_wait_seconds: 30.0,
+            active_capacity: Some(ActiveCapacity { vcpu: 64.0, memory_mb: 262144 }),
+            physical_memory_floor_mb: 2048,
+            growth_observation_max_age_seconds: 30.0,
+            prefetch_max_bytes: 1 << 30,
+            publication_lanes: 16,
+            retry_seconds: 0.21,
+        });
+        let mut slots_only = block.clone();
+        slots_only["active_capacity"] = Value::Null;
+        assert_eq!(serde_json::from_value::<AdmissionConfig>(slots_only).unwrap().active_capacity, None);
+        let mut fractional = block.clone();
+        fractional["active_capacity"] = json!({"vcpu": 3.5, "memory_mb": 8192});
+        assert_eq!(serde_json::from_value::<AdmissionConfig>(fractional).unwrap().active_capacity,
+                   Some(ActiveCapacity { vcpu: 3.5, memory_mb: 8192 }));
+        // A missing or mistyped field is an unusable configuration, not a default.
+        let mut missing = block.clone();
+        missing.as_object_mut().unwrap().remove("retry_seconds");
+        assert!(serde_json::from_value::<AdmissionConfig>(missing).is_err());
+        let mut negative = block.clone();
+        negative["physical_memory_floor_mb"] = json!(-1);
+        assert!(serde_json::from_value::<AdmissionConfig>(negative).is_err());
+
+        // Kept with the configuration and its digest; agents older than 3c.0 send neither block nor change.
+        let mut config = json!({
+            "rust_creates_enabled": true, "state_root": "/s", "image_cache_root": "/c", "volume_mount_root": "/v",
+            "storage_native_socket": "/n", "runsc": "/r", "runtime_root": "/rr", "bundle_root": "/b",
+            "journal_root": "/j", "network": "none", "network_mtu": 1420, "direct_network_allow_tcp": [],
+            "dns_named_egress": false, "relays_configured": false, "split_memory_backing": false,
+            "memory_backing_hard_capacity_bytes": 0, "application_memory_root": null,
+            "reflink_memory_restore": false, "workspace_initial_grant_mb": 0, "demonstrated_memory": false,
+            "init_binary": "/i", "managed_init_binary": "/m", "environment": null,
+            "runtime_compatibility_sha256": "a", "node_epoch": "e",
+        });
+        let older: CreateConfig = serde_json::from_value(config.clone()).unwrap();
+        assert_eq!((older.admission, older.config_sha256.as_str()), (None, ""));
+        config["admission"] = block;
+        config["config_sha256"] = json!("d".repeat(64));
+        let current: CreateConfig = serde_json::from_value(config).unwrap();
+        assert_eq!(current.admission, Some(parsed));
+        assert_eq!(current.config_sha256, "d".repeat(64));
+    }
 
     #[test]
     fn only_direct_egress_and_the_shell_helper_are_supported() {

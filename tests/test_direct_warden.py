@@ -1073,29 +1073,76 @@ class DirectRunscWardenTests(unittest.TestCase):
         }))
         DirectRunscWarden._prepare_managed_state_mount(moved)
 
-    def test_managed_ledger_reader_refuses_guest_symlinks_and_fifos(self) -> None:
+    def test_every_ledger_the_guest_leaves_parks_and_wakes(self) -> None:
+        # The fingerprint is total over guest content: a guest can never make
+        # its own park or wake fail, and the same files give the same value.
+        def sentinel(reason: str) -> str:
+            return hashlib.sha256(f"managed-primary-v1:{reason}".encode()).hexdigest()
+
         self.managed_config(bound=True)
-        rootfs = self.bundle / "rootfs"
+        self.warden.create(self.sandbox, operation_id="create:ledgers")
+        managed = self.bundle / "rootfs" / ".ucloud-managed"
+        ledger = managed / "state.json"
         secret = self.root / "secret.json"
-        secret.write_text('{"version":1}')
-        managed = rootfs / ".ucloud-managed"
-        managed.mkdir(mode=0o700)
-        (managed / "state.json").symlink_to(secret)
-        with self.assertRaisesRegex(DirectWardenError, "ledger is unavailable"):
-            DirectRunscWarden._managed_process_ledger_digest(self.sandbox)
-        (managed / "state.json").unlink()
-        os.mkfifo(managed / "state.json")
-        with self.assertRaisesRegex(DirectWardenError, "ledger is unavailable"):
-            DirectRunscWarden._managed_process_ledger_digest(self.sandbox)
-        shutil.rmtree(managed)
+        secret.write_text('{"version":1,"secret":true}')
+        valid = {"version": 1, "job_id": "j", "spec_sha256": DIGEST_A, "state": "running", "sequence": 2}
+
+        def regular(payload: bytes):
+            return lambda: ledger.write_bytes(payload), hashlib.sha256(payload).hexdigest()
+
+        def special(make, reason):
+            return make, sentinel(reason)
+
+        cases = {
+            "missing": (lambda: None, sentinel("no-job")),
+            "symlink": special(lambda: ledger.symlink_to(secret), "invalid:symlink"),
+            "fifo": special(lambda: os.mkfifo(ledger), "invalid:not-a-regular-file"),
+            "directory": special(lambda: ledger.mkdir(), "invalid:not-a-regular-file"),
+            "oversize": special(lambda: ledger.write_bytes(b" " * (1024 * 1024 + 1)), "invalid:oversize"),
+            "empty": regular(b""),
+            "invalid json": regular(b"{not json"),
+            "wrong version": regular(json.dumps(dict(valid, version=2)).encode()),
+            "wrong types": regular(json.dumps(dict(valid, sequence=[2], pid={})).encode()),
+            "deeply nested": regular(b"[" * 60000),
+            "past the record cap": regular(json.dumps(dict(valid, pad="x" * 70000)).encode()),
+        }
+        for index, (name, (make, expected)) in enumerate(cases.items()):
+            with self.subTest(ledger=name):
+                for path in managed.iterdir():
+                    shutil.rmtree(path) if path.is_dir() and not path.is_symlink() else path.unlink()
+                make()
+                self.warden.park(self.sandbox, operation_id=f"park:ledger-{index}")
+                self.assertEqual(self.warden.inspect(self.sandbox).state, HibernationState.PARKED)
+                self.assertEqual(self.warden.load_parked_manifest(self.sandbox).managed_process_sha256, expected)
+                # No exact record from content the node refuses to derive.
+                self.assertIsNone(load_parked_managed_state(self.bundle))
+                self.assertEqual(
+                    self.warden.resume(self.sandbox, operation_id=f"wake:ledger-{index}").state,
+                    HibernationState.RUNNING,
+                )
+        self.assertEqual(json.loads(secret.read_text()), {"version": 1, "secret": True})
+
+    def test_managed_state_directory_replaced_by_the_host_side_is_never_followed(self) -> None:
+        # The guest cannot replace its own mount point; only the host side
+        # can. The fingerprint still never follows it, and runsc never binds it.
+        self.managed_config(bound=True)
+        managed = self.bundle / "rootfs" / ".ucloud-managed"
         target = self.root / "elsewhere"
         target.mkdir()
         (target / "state.json").write_text('{"version":1}')
         managed.symlink_to(target)
-        with self.assertRaisesRegex(DirectWardenError, "ledger is unavailable"):
-            DirectRunscWarden._managed_process_ledger_digest(self.sandbox)
+        self.assertEqual(
+            DirectRunscWarden._managed_process_ledger_digest(self.sandbox),
+            hashlib.sha256(b"managed-primary-v1:invalid:directory-symlink").hexdigest(),
+        )
         with self.assertRaisesRegex(DirectWardenError, "state mount is unavailable"):
             DirectRunscWarden._prepare_managed_state_mount(self.sandbox)
+        managed.unlink()
+        managed.write_text("a file")
+        self.assertEqual(
+            DirectRunscWarden._managed_process_ledger_digest(self.sandbox),
+            hashlib.sha256(b"managed-primary-v1:invalid:not-a-directory").hexdigest(),
+        )
         self.assertEqual(sorted(path.name for path in target.iterdir()), ["state.json"])
 
     def test_storage_inventory_snapshot_rejects_duplicate_volume(self) -> None:

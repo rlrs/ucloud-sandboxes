@@ -108,7 +108,7 @@ def _parked_managed_record(registration: DirectSandboxRegistration) -> dict[str,
         return None
     try:
         record = load_parked_managed_state(Path(registration.bundle))
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, TypeError, RecursionError) as exc:
         _LOG.warning("parked managed-process record of %s is unreadable: %s", registration.sandbox_id, exc)
         return None
     if record is not None and (

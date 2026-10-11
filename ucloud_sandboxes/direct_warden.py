@@ -6,7 +6,6 @@ from .memory_backing import MemoryBackingStore, RetainedCheckpointRef
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 import fcntl
-import hashlib
 import json
 import logging
 import math
@@ -54,6 +53,7 @@ from .storage_native_daemon import (
 )
 from .managed_process import (
     configured_managed_state_mount,
+    managed_ledger_fingerprint,
     prepare_managed_state_directory,
     record_parked_managed_state,
 )
@@ -1958,7 +1958,7 @@ class DirectRunscWarden:
                 sandbox_id=sandbox.sandbox_id,
                 sandbox_generation=sandbox.sandbox_generation,
             )
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, TypeError, RecursionError) as exc:
             _LOG.warning("no parked managed-process record for %s: %s", sandbox.sandbox_id, exc)
 
     @classmethod
@@ -1973,46 +1973,12 @@ class DirectRunscWarden:
         """
         if cls._managed_process_config(sandbox) is None:
             return ""
-        flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
-        descriptor = -1
         try:
-            # openat from the rootfs, never through a symlink: the guest owns
-            # the directory's entries.
-            descriptor = os.open(sandbox.bundle / "rootfs", flags | os.O_DIRECTORY)
-            for component, extra in (
-                (".ucloud-managed", os.O_DIRECTORY),
-                ("state.json", os.O_NONBLOCK),
-            ):
-                child = os.open(component, flags | extra, dir_fd=descriptor)
-                os.close(descriptor)
-                descriptor = child
-            info = os.fstat(descriptor)
-            if (
-                not stat.S_ISREG(info.st_mode)
-                or info.st_size < 1
-                or info.st_size > 1024 * 1024
-            ):
-                raise ValueError("managed-process ledger file is invalid")
-            with os.fdopen(os.dup(descriptor), "rb") as handle:
-                payload = handle.read(1024 * 1024 + 1)
-            if len(payload) > 1024 * 1024:
-                raise ValueError("managed-process ledger file is invalid")
-            record = json.loads(payload)
-            if (
-                not isinstance(record, dict)
-                or record.get("version") != 1
-                or not isinstance(record.get("job_id"), str)
-                or not re.fullmatch(
-                    r"[0-9a-f]{64}", str(record.get("spec_sha256") or "")
-                )
-                or int(record.get("sequence") or 0) < 1
-            ):
-                raise ValueError("managed-process ledger contents are invalid")
-        except FileNotFoundError:
-            return hashlib.sha256(b"managed-primary-v1:no-job").hexdigest()
-        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            # Total over guest content (managed_ledger_fingerprint): a guest
+            # cannot make its own park or wake fail through these files.
+            return managed_ledger_fingerprint(sandbox.bundle / "rootfs")
+        except OSError as exc:
             raise DirectWardenError("managed-process ledger is unavailable") from exc
-        return hashlib.sha256(payload).hexdigest()
 
     def _runtime_fingerprint(
         self,

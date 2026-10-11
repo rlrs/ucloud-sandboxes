@@ -430,7 +430,7 @@ class DirectSandboxProvisioner:
                         sandbox_id=sandbox.sandbox_id,
                         sandbox_generation=sandbox.sandbox_generation,
                     )
-                except (OSError, ValueError) as exc:
+                except (OSError, ValueError, TypeError, RecursionError) as exc:
                     _LOG.warning("no parked managed-process record for %s: %s", sandbox.sandbox_id, exc)
                 record = self.warden.adopt_parked(sandbox, local_manifest)
             if record.state != HibernationState.PARKED:

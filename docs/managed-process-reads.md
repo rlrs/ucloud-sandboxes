@@ -177,6 +177,12 @@ So every park makes the record exact:
   restart. Recovery that finishes an interrupted park does the same.
 - An import derives it again from the shipped upper. It holds the same stopped
   guest's files, so the record is the same.
+- Parking never depends on guest content. The checkpoint's ledger fingerprint
+  (bound at park, required again at wake) is total: "no job" without a
+  `state.json`, the SHA-256 of the bytes of a regular file up to 1 MiB, and a
+  constant per reason for anything else (symlink, FIFO, directory, oversize),
+  which is never followed or opened. The exact record is skipped, never fatal,
+  when the guest's files cannot be derived.
 - While the sandbox is parked, its node record carries it as
   `"managed_process"`: the job status body, `cursor` included. That covers
   `GET /v1/sandboxes`, park responses (`sandbox`), wake failures whose

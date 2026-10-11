@@ -4,6 +4,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 import base64
 import binascii
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -411,10 +412,13 @@ _NOFOLLOW_DIRECTORY = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLO
 def _regular_file(directory_fd: int, name: str, *, limit: int | None) -> tuple[int, bytes | None]:
     """(size, payload or None) of a regular file below ``directory_fd``.
 
-    Never follows a symlink and never blocks on a FIFO; ``limit`` None only
-    sizes the file. Raises FileNotFoundError when absent, ValueError when the
-    entry is not a bounded regular file.
+    Never follows a symlink and never opens anything but a regular file (no
+    FIFO, socket or device); ``limit`` None only sizes the file. Raises
+    FileNotFoundError when absent, ValueError when the entry is not a
+    bounded regular file.
     """
+    if not stat.S_ISREG(os.stat(name, dir_fd=directory_fd, follow_symlinks=False).st_mode):
+        raise ValueError(f"managed-process {name} is not a regular file")
     descriptor = os.open(name, _NOFOLLOW_READ, dir_fd=directory_fd)
     try:
         info = os.fstat(descriptor)
@@ -456,14 +460,18 @@ def read_managed_state(
             _, payload = _regular_file(state_fd, "state.json", limit=MAX_STATE_BYTES)
         except FileNotFoundError:
             return None
-        raw = json.loads(payload)
-        if not isinstance(raw, dict) or raw.get("version") != MANAGED_PROCESS_PROTOCOL_VERSION:
-            raise ValueError("managed-process state.json has an unsupported version")
-        record = ManagedProcessRecord.from_control_response(
-            {"ok": True, "job": raw},
-            sandbox_id=sandbox_id,
-            sandbox_generation=sandbox_generation,
-        )
+        try:
+            raw = json.loads(payload)
+            if not isinstance(raw, dict) or raw.get("version") != MANAGED_PROCESS_PROTOCOL_VERSION:
+                raise ValueError("managed-process state.json has an unsupported version")
+            record = ManagedProcessRecord.from_control_response(
+                {"ok": True, "job": raw},
+                sandbox_id=sandbox_id,
+                sandbox_generation=sandbox_generation,
+            )
+        except (TypeError, RecursionError, OverflowError) as exc:
+            # Guest-written: any shape it chose is refused as invalid.
+            raise ValueError(f"managed-process state.json is invalid: {exc}") from exc
         if not record.terminal:
             sizes = []
             for name in ("stdout.log", "stderr.log"):
@@ -475,6 +483,66 @@ def read_managed_state(
         return record
     except ManagedProcessError as exc:
         raise ValueError(str(exc)) from exc
+    finally:
+        os.close(state_fd)
+
+
+MAX_LEDGER_BYTES = 1024 * 1024
+
+
+def _ledger_sentinel(reason: str) -> str:
+    return hashlib.sha256(f"managed-primary-v1:{reason}".encode("ascii")).hexdigest()
+
+
+def managed_ledger_fingerprint(rootfs: Path) -> str:
+    """A total, deterministic fingerprint of the guest's ``state.json``.
+
+    Park binds it into the checkpoint manifest and wake requires it again; the
+    guest is stopped in between, so the same files give the same value. It
+    never refuses what the guest left there:
+
+    - no ``.ucloud-managed`` or no ``state.json``: the "no job" constant, which
+      is also what every sandbox parked before the state mount recorded;
+    - a regular file of at most 1 MiB: the SHA-256 of its bytes, whatever
+      they are;
+    - anything else: a constant per reason (``invalid:<reason>``).
+
+    Only host faults raise (OSError): opening the rootfs itself, or I/O.
+    """
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
+    rootfs_fd = os.open(rootfs, directory_flags)
+    try:
+        try:
+            info = os.stat(MANAGED_STATE_NAME, dir_fd=rootfs_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return _ledger_sentinel("no-job")
+        if stat.S_ISLNK(info.st_mode):
+            return _ledger_sentinel("invalid:directory-symlink")
+        if not stat.S_ISDIR(info.st_mode):
+            return _ledger_sentinel("invalid:not-a-directory")
+        state_fd = os.open(MANAGED_STATE_NAME, directory_flags, dir_fd=rootfs_fd)
+    finally:
+        os.close(rootfs_fd)
+    try:
+        try:
+            info = os.stat("state.json", dir_fd=state_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return _ledger_sentinel("no-job")
+        if stat.S_ISLNK(info.st_mode):
+            return _ledger_sentinel("invalid:symlink")
+        if not stat.S_ISREG(info.st_mode):
+            return _ledger_sentinel("invalid:not-a-regular-file")
+        if info.st_size > MAX_LEDGER_BYTES:
+            return _ledger_sentinel("invalid:oversize")
+        descriptor = os.open("state.json", _NOFOLLOW_READ, dir_fd=state_fd)
+        try:
+            with os.fdopen(os.dup(descriptor), "rb") as handle:
+                payload = handle.read(MAX_LEDGER_BYTES + 1)
+        finally:
+            os.close(descriptor)
+        if len(payload) > MAX_LEDGER_BYTES:
+            return _ledger_sentinel("invalid:oversize")
+        return hashlib.sha256(payload).hexdigest()
     finally:
         os.close(state_fd)
 

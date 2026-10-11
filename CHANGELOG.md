@@ -2,9 +2,27 @@
 
 ## Unreleased
 
+### Node
+
+- **Node admission's decision is a pure function** ([docs/admission-port-3c.md](docs/admission-port-3c.md), step 3c.1). This changes no behavior.
+  - `ucloud_sandboxes/admission_decision.py` holds `gate` and `decide(metrics, ledger, request) -> Grant | Wait | Refuse`, the same split as noded's `admission/decide.rs`.
+  - `DirectSandboxService._active_admission_guard` now drives them. It keeps the locking, sampling, owner validation, requotes and waits.
+  - The Rust port's goldens are recorded from `decide` and are byte-identical to before. The generator also checks every case against the guard.
+- **CPU is gone from node admission (decision G).** Every caller already passed `check_cpu=False`, so this removes dead code:
+  - the guard's `check_cpu` parameter and its CPU-retry loop;
+  - `_CPU_ADMISSION_RETRY_SECONDS` and `_CPU_ADMISSION_DEADLINE_SECONDS`.
+  - The 0.21 s memory-wait interval is unchanged and is now `admission_decision.RETRY_SECONDS`.
+  - The gateway's CPU checks in `resource_admission.py` are unchanged.
+
 ### noded
 
-- **Phase 3b: ucloud-noded samples managed sandboxes' resident memory** ([docs/admission-port-3c.md](docs/admission-port-3c.md), step 3c.0(a)), behind the new `sandbox.direct_node_rust_admission` (agent `--rust-admission`, noded `--rust-admission`; off by default, requires `sandbox.direct_node_rust_pause`). With the flag off nothing changes.
+- **Admission port, step 3c.0 (b, c, d): plumbing only ([docs/admission-port-3c.md](docs/admission-port-3c.md)).** Admission behaviour does not change; with the new flag off nothing changes at all.
+  - `sandbox.direct_node_rust_admission` (default off) requires the front door, Rust creates, Rust execs and the Rust pause tier. It renders agent `--rust-admission` and noded `--rust-admission --internal-unix <state>/direct-runtime/noded/noded.sock`.
+  - With the flag, ucloud-noded serves the agent on that Unix socket: 0600 in a 0700 directory, connections from any uid but its own closed unread (`SO_PEERCRED`), and the node control bearer token on every request. Requests carry `X-UCloud-Agent-Session` and answers carry `X-UCloud-Noded-Session`. Only the handshake is served: `POST /internal/v1/admission/hello` answers `{noded_session, admission_open, config_sha256}` (the drain row as noded reads it, and the loaded configuration's digest; null until the node is loaded), and `GET …/ping` answers too. Any other `/internal/v1/admission/` path is a 404 `admission_route_unknown`.
+  - The agent's `NodedClient` (`ucloud_sandboxes/noded_client.py`) keeps pooled connections. It discards a connection noded closed while it was idle, and raises `NodedUnavailable`, `NodedLost`, `NodedRefused` or `NodedProtocolError`. With the flag, the agent says hello at start, retrying in the background while noded is down, and again whenever it sees a new noded session.
+  - noded's pressure sample also reads MemTotal and memory PSI "full" avg10 (unknown when unreadable, as in `runtime_metrics`). No current consumer reads either yet.
+  - `GET /internal/v1/creates/config` gains an `admission` block read from the live service: slots, the wait, the active capacity, the physical floor, growth observation age, prefetch bound, publication lanes and retry interval. It is under the digest, so every node's `config_sha256` changes once. noded parses the block into `AdmissionConfig` and keeps it, with the digest, in its `CreateConfig`.
+- **Phase 3b: ucloud-noded samples managed sandboxes' resident memory** ([docs/admission-port-3c.md](docs/admission-port-3c.md), step 3c.0(a)), behind `sandbox.direct_node_rust_admission` (above). With the flag off nothing changes; noded samples managed sandboxes only when its `--rust-admission` and the agent's `admission.rust_admission_enabled` both say so.
   - The pause tier's 1 s sampler pass now also measures every owned, parkable, managed sandbox, running or paused, and after each pass replaces `<state_root>/noded/resident.json` (0600, atomic rename): `{seq, session, samples: [{sandbox_id, generation, <every ResidentMemorySample field>}]}`, `sampled_at` in CLOCK_MONOTONIC seconds. The policy's clock is now CLOCK_MONOTONIC itself rather than an offset from the daemon's start, so the agent can compare it with `time.monotonic()`.
   - The agent stops its own sampling pass. Every resident reader (growth forecasts, resident waits, relay parks, pause decisions, the heartbeat's memory observation) reads noded's observations through `PublishedResidentMemory`, and the forecast refresh that followed each of the agent's passes follows each new `(session, seq)`, polled every 250 ms. Missing, invalid or foreign-writable files and samples are no observation; samples older than the 30 s growth age charge whole bounds, so a stopped noded's credit expires by itself. A park, restore or delete hides older observations until a newer pass. The agent's own reclaims still measure on demand, and the newer observation wins.
   - noded's sampler now gives `peak_bytes` exactly as Python does for a negative `memory.peak` (the current charge, not 0). `runtime/noded/tests/resident_python_parity.rs` samples 26 fake cgroup trees with both samplers and requires equal fields, and requires the agent's reading of `resident.json` to equal noded's samples bit for bit.

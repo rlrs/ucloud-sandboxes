@@ -509,12 +509,11 @@ The rule is to take the simpler option wherever the choice is ours.
 ## Progress
 
 **3c.0(a), 3b: resident sampling in noded (2026-10-11).** Behind
-`sandbox.direct_node_rust_admission` (agent and noded `--rust-admission`,
-default off). It requires `direct_node_rust_pause`, which already requires the
-front door, Rust creates and Rust execs. noded enables it only when the agent's
-`pause` block says `rust_admission_enabled` too, as with `rust_pause_enabled`.
-This step adds the flag to `config.py`, `vm_init.py` and `cli.py`; the 3c.0(d)
-and 3c.2 work should reuse it.
+`sandbox.direct_node_rust_admission`, the flag of 3c.0(b, c, d) below (agent
+and noded `--rust-admission`, default off). noded samples managed sandboxes
+only when its pause tier runs and the agent's `admission` block says
+`rust_admission_enabled` (masked by noded's own flag). The `pause` block only
+gains the informational `resident_path`.
 
 - **noded** (`pause_policy`): with `PolicyConfig::resident_sampling`, the 1 s
   pass (`Engine::sample_residents`) samples owned, parkable sandboxes that are
@@ -606,8 +605,118 @@ no existing Python source changed.
   - `refresh_wait_cost` (requote) and the aged-forecast refresh also belong to
     the driver, applied before `decide`.
 
+**3c.1, Python half (2026-10-11).** 3c.1 is complete.
+
+- `ucloud_sandboxes/admission_decision.py` holds the pure decision, split as in
+  `decide.rs`:
+  - `gate(request)` is the pre-sample lock section;
+  - `decide(metrics, ledger, request) -> Grant | Wait | Refuse` is the
+    post-sample one;
+  - `fences(request)` is the drain and shape check that both start with.
+  - `AdmissionRequest` carries the same node and retry state as the Rust
+    `Request`. `Refuse.error()` gives the exception the guard raises.
+- `_active_admission_guard` is now a thin driver around them. It keeps:
+  - the locking and sampling outside the lock;
+  - owner validation and the requote (`transition_cost_provider`, then
+    `refresh_wait_cost`);
+  - the aged-forecast refresh and the "metrics provider changed" refusal;
+  - the waits on `_admission_changed`.
+- Decision G is applied. Removed: the `check_cpu` parameter, the CPU-retry
+  loop, the `dynamic_cpu_pressure_retryable` call, and both
+  `_CPU_ADMISSION_RETRY_SECONDS` and `_CPU_ADMISSION_DEADLINE_SECONDS`.
+  - `_file_exec`'s retry now uses `admission_decision.RETRY_SECONDS` (0.21 s,
+    unchanged).
+  - A guard called without a deadline (only exec, which carries no cost and so
+    never waits) now has a deadline of "now" instead of now + 1 s. Without a
+    wait, that deadline was never read.
+  - `dynamic_cpu_pressure_retryable` had no caller left and is deleted from
+    `resource_admission.py`; the gateway's `check_cpu` stays.
+- The goldens' `decide` traces now come from `gate` and `decide` through
+  `goldens.py`'s `drive_decide`, the same loop `tests.rs` replays.
+  - Every case also runs the guard and asserts the same outcome.
+  - The regenerated `python_goldens.json` is byte-identical; no field changed,
+    because the old traces already ran with `check_cpu=False`.
+  - The Rust replay test is now `admission_decisions_replay_python_decide`.
+- `tests/test_admission_decision.py` holds focused unit tests of the pure
+  functions.
+
 **Remaining for 3c.1:** extract a pure `decide()` from
 `DirectSandboxService._active_admission_guard` in Python and delete the CPU
 branch there (decision G). Then point the decide goldens at it instead of the
 guard; the traces should not change. Until then, the goldens drive the guard
 itself with `check_cpu=False`.
+
+**3c.0 (b), (c) and (d) (2026-10-11).** Plumbing only; no admission behaviour
+changed. With the flag off, nothing changes.
+
+- **The flag.** `sandbox.direct_node_rust_admission` (default off) requires
+  `front_door`, `rust_create`, `rust_exec` and `rust_pause`, in `config.py` and
+  `vm_init`. It renders:
+  - agent `--rust-admission`, which `build_direct_node_agent_server` refuses
+    without Rust creates, execs and pause tier;
+  - noded `--rust-admission --internal-unix <state>/direct-runtime/noded/noded.sock`.
+    noded refuses `--rust-admission` without `--rust-create --rust-exec --rust-pause`,
+    and either flag without the other.
+- **(b) The listener**, in `runtime/noded/src/internal.rs`:
+  - `bind` creates the directory 0700 and replaces only a stale *socket*
+    (anything else is refused). The socket is 0600.
+  - `serve` closes connections from any uid other than noded's own euid
+    (`SO_PEERCRED`; the agent runs as the same user) before reading them. It
+    checks the bearer token on every request, and every answer carries
+    `X-UCloud-Noded-Session`, the same session as `agent_rpc`.
+  - Every request must carry `X-UCloud-Agent-Session`.
+  - Routes:
+    - `POST hello` takes `{agent_session}`, which must name the header's
+      session, records it, and answers `{noded_session, admission_open,
+      config_sha256}`. `admission_open` comes from the registry's drain row
+      (`drain_since`) and the digest from the loaded `CreateConfig`; both are
+      null until the node is loaded.
+    - `GET ping` answers `{noded_session, hello}`.
+    - Any other path under `/internal/v1/admission/` is `404
+      admission_route_unknown`, and other paths are `404 not_found`.
+  - Errors are `{error, error_code, retryable}`.
+  - Releasing the claims of other sessions waits for 3c.2, when there are
+    claims.
+- **The Python client**, in `ucloud_sandboxes/noded_client.py`:
+  - `NodedClient` keeps pooled HTTP/1 connections. Before reusing one, it
+    makes a non-blocking peek, the equivalent of hyper's `ready()`; it drops
+    connections idle for more than 10 s.
+  - It sends both headers and reports a changed noded session through
+    `on_session`.
+  - Its errors are `NodedUnavailable` (connect failed), `NodedLost` (written,
+    no answer, or timed out), `NodedRefused` (`status`, `error_code`,
+    `retryable`) and `NodedProtocolError`.
+  - `NodedLink` says hello at agent start on a background thread, retrying
+    with backoff while noded is down. It says hello again whenever a new noded
+    session appears, either in an answer or on noded's own requests to the
+    agent (`_check_node_control_authorized`).
+  - The timeout applies per socket operation, not to the whole call.
+- **(c) Pressure.** `Pressure` gains `memory_total_bytes` (0 when unknown) and
+  `memory_full_stall` (`None` when unreadable, as `memory_psi_full_avg10`).
+  No existing consumer reads them.
+- **(d) Configuration.**
+  - `create_handoff.admission_config` adds the `admission` block to
+    `GET /internal/v1/creates/config`, read from the live service:
+    - `rust_admission_enabled`;
+    - the `FairCapacity` capacities of the startup, restore and publication
+      pools;
+    - `admission_wait_seconds`;
+    - `_active_capacity`;
+    - `PHYSICAL_MEMORY_FLOOR_MB`;
+    - `_GROWTH_OBSERVATION_MAX_AGE_SECONDS`;
+    - `PREFETCH_MAX_BYTES`;
+    - `_CPU_ADMISSION_RETRY_SECONDS` as `retry_seconds`.
+  - `application_memory_root` stays top-level.
+  - The block is under `config_sha256`, so the digest changes once.
+  - noded parses it into `pipeline::AdmissionConfig` and keeps it, with
+    `config_sha256`, on `CreateConfig`. It masks `rust_admission_enabled` with
+    its own flag, as it does for `rust_pause_enabled`.
+- **Tests:**
+  - `runtime/noded/tests/internal_admission.rs` covers the handshake,
+    keep-alive, every refusal, the peer-uid close and the socket's modes. It
+    also runs the Python `NodedClient` against the real listener, and parses a
+    Python `create_config` into `CreateConfig`.
+  - There are unit tests in `pressure.rs` and `pipeline.rs`.
+  - `tests/test_noded_client.py` covers the client against a fake listener,
+    `NodedLink`, the agent's hello with and without the flag, the block and its
+    digest, and the flag plumbing.

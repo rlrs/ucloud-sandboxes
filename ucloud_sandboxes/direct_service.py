@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import ExitStack, contextmanager, nullcontext
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 import json
@@ -19,6 +19,16 @@ from typing import Any, BinaryIO, Callable, Iterator, Sequence
 from uuid import uuid4
 
 from .admission import CREATE_ADMISSION_WAIT, FairCapacity
+from .admission_decision import (
+    RETRY_SECONDS as _ADMISSION_RETRY_SECONDS,
+    AdmissionNode,
+    AdmissionRequest,
+    Grant,
+    Refuse,
+    decide,
+    fences,
+    gate,
+)
 from .direct_provisioner import DirectSandboxProvisioner
 from .storage_native_migration import (
     StorageNativeSandboxManifest,
@@ -46,12 +56,6 @@ from .hibernation import HibernationError, HibernationState
 from .memory_backing import MemoryBackingBusyError
 from .models import NodeRuntimeMetrics, ResourceQuantity
 from . import phase_timings
-from .resource_admission import (
-    PHYSICAL_MEMORY_FLOOR_MB,
-    dynamic_cpu_pressure_retryable,
-    dynamic_pressure_error,
-    dynamic_request_fits,
-)
 from .resident_memory import (
     PublishedResidentMemory, ResidentMemorySampler, ResidentMemoryReclaimer, ResidentReclaimResult,
 )
@@ -85,10 +89,6 @@ from . import pause_tier
 
 _LOG = logging.getLogger(__name__)
 
-# A short host spike must expire from the production sampler's 200 ms cache
-# before resampling. Keep a deadline; sustained pressure still rejects work.
-_CPU_ADMISSION_RETRY_SECONDS = 0.21
-_CPU_ADMISSION_DEADLINE_SECONDS = 1.0
 # Leave room in the SDK's default 30-second HTTP deadline for transport and a
 # safe retry response. This bounds one wait, not the number of admitted tools.
 _FILE_ADMISSION_RETRY_WINDOW_SECONDS = 5.0
@@ -2081,7 +2081,7 @@ class DirectSandboxService:
         with self._transition_demand(key, current_cost()):
             with self._active_admission_guard(
                 ResourceQuantity(memory_mb=registration.spec.memory_mb), check_shape=True,
-                check_cpu=False, transition_cost=current_cost(), transition_owner=key,
+                transition_cost=current_cost(), transition_owner=key,
                 transition_cost_provider=current_cost, validate_owner=validate_owner, deadline=deadline):
                 # Charge the admitted bytes before releasing the guard, so a
                 # concurrent admission cannot spend the same headroom while
@@ -2625,7 +2625,7 @@ class DirectSandboxService:
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         raise
-                    self._admission_changed.wait(min(_CPU_ADMISSION_RETRY_SECONDS, remaining))
+                    self._admission_changed.wait(min(_ADMISSION_RETRY_SECONDS, remaining))
                 if time.monotonic() >= deadline:
                     raise
 
@@ -2964,7 +2964,6 @@ class DirectSandboxService:
         requested: ResourceQuantity,
         *,
         check_shape: bool,
-        check_cpu: bool = True,
         check_memory_pressure: bool = True,
         validate_owner: Callable[[], None] | None = None,
         transition_cost: TransitionCost | None = None,
@@ -2974,35 +2973,28 @@ class DirectSandboxService:
     ):
         """Yield the capacity lock only to publish an admitted operation's lease.
 
-        Sampling and condition waits release the lock. A waiting operation owns
-        no reservation yet, so drain may close admission and prove the node
-        empty; every attempt rechecks that fence before it can publish a lease.
-        Existing lifecycle locks/leases keep create, wake and exec owners stable.
+        The decision is admission_decision's ``gate`` and ``decide``; this
+        drives them. Sampling and condition waits release the lock. A waiting
+        operation owns no reservation yet, so drain may close admission and
+        prove the node empty; every attempt rechecks that fence before it can
+        publish a lease. Existing lifecycle locks/leases keep create, wake and
+        exec owners stable. Without a deadline the guard never waits.
         """
 
-        cpu_deadline = time.monotonic() + _CPU_ADMISSION_DEADLINE_SECONDS
-        deadline = deadline if deadline is not None else cpu_deadline
-        previous_error: str | None = None
-        retry_deadline = deadline
-
-        def check_capacity() -> ResourceQuantity | None:
-            if not self._admission_open:
-                raise SandboxAdmissionClosedError("direct node admission is closed")
-            capacity = self._active_capacity
-            if capacity is not None and check_shape:
-                if not dynamic_request_fits(requested, ResourceQuantity(), capacity):
-                    raise SandboxCapacityUnavailableError(
-                        "sandbox CPU or memory request exceeds the physical node shape"
-                    )
-            return capacity
-
+        now = time.monotonic()
+        # Each lock section reads the node again; this one is never decided on.
+        request = AdmissionRequest(
+            node=AdmissionNode(admission_open=False, capacity=None), owner=transition_owner,
+            requested=requested, cost=transition_cost, check_shape=check_shape,
+            check_memory_pressure=check_memory_pressure, deadline=now if deadline is None else deadline, now=now)
         while True:
             with self._capacity_guard:
-                capacity = check_capacity()
-                if previous_error is not None and time.monotonic() >= retry_deadline:
-                    raise SandboxCapacityUnavailableError(previous_error)
+                request = replace(request, node=self._admission_node(), now=time.monotonic())
+                refused = gate(request)
+                if refused is not None:
+                    raise refused.error()
                 metrics_provider = (
-                    self._runtime_metrics_provider if capacity is not None else None
+                    self._runtime_metrics_provider if request.node.capacity is not None else None
                 )
             # Production samples single-flight; never invalidate the shared
             # cache or hold up other sandboxes/drain while /proc is sampled.
@@ -3010,94 +3002,43 @@ class DirectSandboxService:
             if validate_owner is not None:
                 validate_owner()
             if transition_cost_provider is not None:
-                transition_cost = transition_cost_provider()
+                request = replace(request, cost=transition_cost_provider())
             with self._capacity_guard:
-                capacity = check_capacity()
+                request = replace(request, node=self._admission_node())
+                refused = fences(request)
+                if refused is not None:
+                    raise refused.error()
                 if (
-                    capacity is not None
+                    request.node.capacity is not None
                     and metrics_provider is not self._runtime_metrics_provider
                 ):
                     raise SandboxCapacityUnavailableError(
                         "direct node runtime metrics provider changed during admission"
                     )
-                pressure_request = requested
-                if transition_cost is not None and transition_cost.memory_bytes is not None:
-                    pressure_request = ResourceQuantity(vcpu=requested.vcpu,
-                        memory_mb=(transition_cost.memory_bytes + 1024**2 - 1) // 1024**2)
-                pressure_error = (
-                    dynamic_pressure_error(
-                        metrics, pressure_request, check_cpu=check_cpu,
-                        check_memory_pressure=check_memory_pressure,
-                    )
-                    if capacity is not None
-                    else None
-                )
-                projected_error = False
-                if transition_cost is not None and capacity is not None and metrics is not None:
-                    # MemAvailable can be shared by many concurrent requests.
-                    # Reserve each in-flight footprint exactly once before it
-                    # allocates; preserve the existing physical 2 GiB floor.
-                    headroom = (max(0, metrics.memory_available_mb - PHYSICAL_MEMORY_FLOOR_MB) * 1024 ** 2
-                                if metrics.memory_total_mb > 0 else 0)
+                if request.cost is not None and request.node.capacity is not None and metrics is not None:
+                    # The projections charge current forecasts and this
+                    # owner's requoted demand.
                     self._current_growth_forecasts_locked()
                     if transition_cost_provider is not None:
-                        self._transitions.refresh_wait_cost(transition_owner, transition_cost)
-                    projected = self._transitions.projected_memory_bytes(transition_owner, transition_cost)
-                    if metrics.memory_total_mb <= 0 or projected > headroom:
-                        pressure_error = "node memory headroom is reserved by in-flight transitions"
-                        projected_error = True
-                    # File-backed restores spend physical headroom but no tmpfs
-                    # blocks. They still cannot consume physical bytes already
-                    # promised to RAM-backed owners above. The independent RAM
-                    # projection preserves their complete unswappable guarantee.
-                    projected_ram = self._transitions.projected_memory_bytes(
-                        transition_owner, transition_cost, resource="ram_backing_bytes")
-                    backing = metrics.memory_backing
+                        self._transitions.refresh_wait_cost(transition_owner, request.cost)
                     configured_ram = getattr(self.warden.config, "application_memory_root", None) is not None
-                    ram_available = (backing.available_bytes or 0) if backing is not None else (
-                        0 if configured_ram else None)
-                    if ram_available is not None and projected_ram > ram_available:
-                        pressure_error = "node RAM backing headroom is reserved by in-flight transitions"
-                        projected_error = True
-                now = time.monotonic()
-                if previous_error is not None and now >= retry_deadline:
-                    # A slow collector must not grant an operation after its
-                    # pressure retry deadline, even if its late sample is low.
-                    raise SandboxCapacityUnavailableError(previous_error)
-                if pressure_error is None:
+                    request = replace(request, node=replace(request.node, ram_backing_configured=configured_ram))
+                decision = decide(metrics, self._transitions, replace(request, now=time.monotonic()))
+                if isinstance(decision, Grant):
                     yield
                     return
-                memory_wait = bool(
-                    transition_cost is not None
-                    and transition_cost.kind in {TransitionKind.STARTUP, TransitionKind.RESTORE}
-                    and metrics is not None
-                    and metrics.memory_total_mb > 0
-                    and dynamic_pressure_error(
-                        metrics, pressure_request, check_cpu=False,
-                        check_memory_pressure=check_memory_pressure,
-                    ) is not None
-                )
-                demand_wait = projected_error or memory_wait
-                if not demand_wait and not dynamic_cpu_pressure_retryable(metrics, pressure_request):
-                    raise SandboxCapacityUnavailableError(pressure_error)
-                # CPU comes from the background collector; only backoff must
-                # fit. The next sample still checks the actual deadline above.
-                retry_at = now + _CPU_ADMISSION_RETRY_SECONDS
-                retry_deadline = deadline if demand_wait else min(deadline, cpu_deadline)
-                if retry_at >= retry_deadline:
-                    raise SandboxCapacityUnavailableError(pressure_error)
-                previous_error = pressure_error
-                if demand_wait:
-                    # Keep pending demand visible until actual headroom returns.
-                    # Otherwise immediate memory rejection removes the ledger
-                    # entry before resident-wait reclamation can observe it.
-                    # No lifecycle lock is held here during restore admission;
-                    # delete and drain remain able to cancel this operation.
-                    self._admission_changed.wait(min(_CPU_ADMISSION_RETRY_SECONDS, retry_deadline - now))
-                else:
-                    while time.monotonic() < retry_at:
-                        check_capacity()
-                        self._admission_changed.wait(retry_at - time.monotonic())
+                if isinstance(decision, Refuse):
+                    raise decision.error()
+                request = replace(request, previous_error=decision.reason)
+                # Keep pending demand visible until actual headroom returns.
+                # Otherwise immediate memory rejection removes the ledger
+                # entry before resident-wait reclamation can observe it.
+                # No lifecycle lock is held here during restore admission;
+                # delete and drain remain able to cancel this operation.
+                self._admission_changed.wait(decision.seconds)
+
+    def _admission_node(self) -> AdmissionNode:
+        return AdmissionNode(admission_open=self._admission_open, capacity=self._active_capacity)
 
     @contextmanager
     def _reserve_active_capacity(
@@ -3122,7 +3063,7 @@ class DirectSandboxService:
         # through native cgroups; a sampled utilization spike must not reject an
         # otherwise safe queued transition and send the burst to another worker.
         # Physical memory, RAM backing, shape and owner fences remain mandatory.
-        with self._active_admission_guard(active_requested, check_shape=True, check_cpu=False, transition_cost=cost,
+        with self._active_admission_guard(active_requested, check_shape=True, transition_cost=cost,
                                           deadline=deadline, validate_owner=validate_owner, transition_owner=key):
             claim = self._transitions.claim(key, cost, requested=requested)
             self._activity_epoch += 1
@@ -3157,7 +3098,6 @@ class DirectSandboxService:
         with self._active_admission_guard(
             ResourceQuantity(),
             check_shape=False,
-            check_cpu=False,
             check_memory_pressure=False,
             validate_owner=validate_owner,
         ):

@@ -1,6 +1,6 @@
 //! ucloud-noded --listen ADDR --upstream-unix PATH [--max-connections N]
-//!               [--rust-create] [--rust-exec] [--rust-pause] [--rust-admission]
-//!               [--node-control-token-file PATH]
+//!               [--rust-create] [--rust-exec] [--rust-pause] [--node-control-token-file PATH]
+//!               [--rust-admission --internal-unix PATH]
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -13,7 +13,8 @@ fn usage(message: &str) -> ExitCode {
     eprintln!("ucloud-noded: {message}");
     eprintln!(
         "usage: ucloud-noded --listen ADDR --upstream-unix PATH [--max-connections N] \
-         [--rust-create] [--rust-exec] [--rust-pause] [--rust-admission] [--node-control-token-file PATH]"
+         [--rust-create] [--rust-exec] [--rust-pause] [--node-control-token-file PATH] \
+         [--rust-admission --internal-unix PATH]"
     );
     ExitCode::from(2)
 }
@@ -26,6 +27,7 @@ fn main() -> ExitCode {
     let mut rust_exec = false;
     let mut rust_pause = false;
     let mut rust_admission = false;
+    let mut internal_unix: Option<PathBuf> = None;
     let mut token_file: Option<PathBuf> = None;
     let mut args = std::env::args().skip(1);
     while let Some(flag) = args.next() {
@@ -47,6 +49,7 @@ fn main() -> ExitCode {
             },
             "--upstream-unix" => upstream = Some(PathBuf::from(value)),
             "--node-control-token-file" => token_file = Some(PathBuf::from(value)),
+            "--internal-unix" => internal_unix = Some(PathBuf::from(value)),
             "--max-connections" => match value.parse() {
                 Ok(count) if count > 0 => max_connections = Some(count),
                 _ => return usage(&format!("invalid --max-connections {value}")),
@@ -57,6 +60,14 @@ fn main() -> ExitCode {
     let (Some(listen), Some(upstream)) = (listen, upstream) else {
         return usage("--listen and --upstream-unix are required");
     };
+    // The agent's internal socket serves admission, which needs the node the
+    // create, exec and pause fronts own (docs/admission-port-3c.md §4).
+    if rust_admission && !(rust_create && rust_exec && rust_pause) {
+        return usage("--rust-admission needs --rust-create, --rust-exec and --rust-pause");
+    }
+    if rust_admission != internal_unix.is_some() {
+        return usage("--rust-admission and --internal-unix go together");
+    }
     let token = match (rust_create || rust_exec || rust_pause, token_file) {
         (false, _) => None,
         (true, None) => return usage("--rust-create and --rust-exec need --node-control-token-file"),
@@ -101,9 +112,6 @@ fn main() -> ExitCode {
         if (rust_exec || rust_pause) && !rust_create {
             eprintln!("ucloud-noded: --rust-exec and --rust-pause need --rust-create; execs and the pause tier stay with the agent");
         }
-        if rust_admission && !rust_pause {
-            eprintln!("ucloud-noded: --rust-admission needs --rust-pause; resident sampling stays with the agent");
-        }
         let fronts = match token.filter(|_| rust_create) {
             Some(token) => match ucloud_noded::start_fronts(&config.upstream, &token, rust_exec, rust_pause, rust_admission) {
                 Ok(fronts) => fronts,
@@ -114,7 +122,30 @@ fn main() -> ExitCode {
             },
             None => ucloud_noded::Fronts::default(),
         };
+        // The agent's internal socket, served beside the port until it closes.
+        let (stop_internal, internal_stopped) = tokio::sync::watch::channel(());
+        let internal = match (fronts.internal.clone(), internal_unix) {
+            (Some(internal), Some(path)) => match ucloud_noded::internal::bind(&path) {
+                Ok(socket) => {
+                    eprintln!("ucloud-noded: serving the agent on unix:{}", path.display());
+                    let mut stopped = internal_stopped;
+                    let grace = config.shutdown_grace;
+                    Some(tokio::spawn(ucloud_noded::internal::serve(socket, internal, grace, async move {
+                        let _ = stopped.changed().await;
+                    })))
+                }
+                Err(error) => {
+                    eprintln!("ucloud-noded: cannot listen on {}: {error}", path.display());
+                    return ExitCode::FAILURE;
+                }
+            },
+            _ => None,
+        };
         ucloud_noded::serve_with(listener, config, fronts.clone(), shutdown).await;
+        drop(stop_internal);
+        if let Some(task) = internal {
+            let _ = task.await;
+        }
         fronts.shutdown().await;
         ExitCode::SUCCESS
     })

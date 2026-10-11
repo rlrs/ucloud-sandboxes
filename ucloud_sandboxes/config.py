@@ -316,9 +316,10 @@ class SandboxPoolConfig:
     # paused reclaim and escalation decisions (docs/rust-node-daemon-plan.md,
     # phase 3a). Requires the pause tier and Rust execs.
     direct_node_rust_pause: bool = False
-    # noded owns node admission (docs/admission-port-3c.md); so far phase 3b:
-    # it samples managed sandboxes' resident memory and the agent reads its
-    # observations. Requires the front door, Rust creates, execs and pauses.
+    # Node admission moves to noded (docs/admission-port-3c.md); step 3c.0
+    # adds noded's internal socket and the agent's hello on it, and noded's
+    # resident sampling of managed sandboxes for the agent (3b). Requires
+    # the front door, Rust creates, Rust execs and the Rust pause tier.
     direct_node_rust_admission: bool = False
     # Split workspaces start with an XFS filesystem this large and grow online
     # toward disk_mb (docs/disk-density.md). 0 formats full-size workspaces.
@@ -448,8 +449,9 @@ class SandboxPoolConfig:
                              "and sandbox.direct_node_rust_exec")
         if not isinstance(result.direct_node_rust_admission, bool):
             raise ValueError("sandbox.direct_node_rust_admission must be a boolean")
-        if result.direct_node_rust_admission and not result.direct_node_rust_pause:
-            # rust_pause already requires rust_exec, rust_create and the front door.
+        if result.direct_node_rust_admission and not (
+                result.direct_node_front_door and result.direct_node_rust_create
+                and result.direct_node_rust_exec and result.direct_node_rust_pause):
             raise ValueError("sandbox.direct_node_rust_admission requires sandbox.direct_node_front_door, "
                              "sandbox.direct_node_rust_create, sandbox.direct_node_rust_exec "
                              "and sandbox.direct_node_rust_pause")

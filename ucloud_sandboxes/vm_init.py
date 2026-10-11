@@ -691,10 +691,13 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         # (the create handoff, escalations, growth events and the configuration).
         rust_flags = ((" --rust-create" if options.direct_node_rust_create else "")
                       + (" --rust-exec" if options.direct_node_rust_exec else "")
-                      + (" --rust-pause" if options.direct_node_rust_pause else "")
-                      + (" --rust-admission" if options.direct_node_rust_admission else ""))
+                      + (" --rust-pause" if options.direct_node_rust_pause else ""))
         if rust_flags:
             rust_flags += " --node-control-token-file " + shlex.quote(options.node_control_bearer_token_file)
+        if options.direct_node_rust_admission:
+            # The agent's way in: <state_root>/noded/noded.sock (noded_client.py).
+            internal_socket = PurePosixPath(state_dir) / "direct-runtime" / "noded" / "noded.sock"
+            rust_flags += " --rust-admission --internal-unix " + shlex.quote(str(internal_socket))
         noded_setup = f"""echo "Writing node front door systemd service"
 $SUDO tee {shlex.quote(noded_service)} >/dev/null <<'NODED_SERVICE'
 [Unit]
@@ -2211,8 +2214,11 @@ def _validate_pause_tier(options: VmInitOptions) -> None:
         raise ValueError("Rust node execs require a node control bearer token file.")
     if options.direct_node_rust_pause and not (options.direct_pause_tier and options.direct_node_rust_exec):
         raise ValueError("the Rust node pause tier requires the pause tier and Rust node execs.")
-    if options.direct_node_rust_admission and not options.direct_node_rust_pause:
-        raise ValueError("Rust node admission requires the Rust node pause tier.")
+    if options.direct_node_rust_admission and not (
+            options.direct_node_front_door and options.direct_node_rust_create
+            and options.direct_node_rust_exec and options.direct_node_rust_pause):
+        raise ValueError("Rust node admission requires the node front door, Rust node creates, "
+                         "Rust node execs and the Rust node pause tier.")
 
 
 def validate_vm_init_options(options: VmInitOptions) -> None:

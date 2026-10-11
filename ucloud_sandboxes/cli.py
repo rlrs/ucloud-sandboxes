@@ -403,8 +403,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     direct_node_agent.add_argument(
         "--rust-admission", action="store_true",
-        help="runtime/noded samples managed sandboxes' resident memory; read its resident.json "
-             "(needs --rust-pause-tier; docs/admission-port-3c.md)",
+        help="node admission moves to runtime/noded; for now, say hello on its internal socket "
+             "and read its resident samples instead of sampling "
+             "(needs --rust-creates, --rust-execs, --rust-pause-tier)",
     )
     direct_node_agent.add_argument("--job-id")
     direct_node_agent.add_argument("--node-id")
@@ -1494,7 +1495,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
           f"creates: {'runtime/noded' if args.rust_creates else 'this agent'}; "
           f"execs: {'runtime/noded' if args.rust_execs else 'this agent'}; "
           f"pause tier: {'runtime/noded' if args.rust_pause_tier else 'this agent'}; "
-          f"resident sampling: {'runtime/noded' if args.rust_admission else 'this agent'}")
+          f"noded admission handshake: {'on' if args.rust_admission else 'off'}")
     print(
         "Direct image cache root: "
         f"{args.image_cache_root or state_root / 'image-cache'}"

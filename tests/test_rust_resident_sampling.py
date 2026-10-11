@@ -17,16 +17,12 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import time
-from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
 from tests import test_direct_provisioner as fixtures
-from tests import test_vm_init as vm_init_fixtures
 from tests.test_pause_tier import _PausingWarden
 from ucloud_sandboxes import pause_handoff
-from ucloud_sandboxes.cli import build_parser, vm_init_options_to_dict
-from ucloud_sandboxes.config import DeploymentConfig
 from ucloud_sandboxes.direct_service import DirectSandboxService
 from ucloud_sandboxes.managed_process import ManagedProcessStart
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
@@ -34,7 +30,6 @@ from ucloud_sandboxes.node_runtime import DirectNodeRuntime
 from ucloud_sandboxes.resident_memory import (
     PublishedResidentMemory, ResidentMemorySample, ResidentMemorySampler,
 )
-from ucloud_sandboxes.vm_init import render_vm_init_script
 
 TEST_TIER = "contract"
 
@@ -281,51 +276,14 @@ class RustAdmissionRuntimeTests(unittest.TestCase):
                     runtime._relay_parking_loop()
                 self.assertEqual(refresh.call_count, calls)
 
-    def test_the_pause_block_tells_noded_to_sample_and_where_to_publish(self) -> None:
+    def test_the_pause_block_tells_noded_where_to_publish(self) -> None:
+        # Whether noded samples is the admission block's rust_admission_enabled
+        # (tests/test_noded_client.py); the pause block names the file.
         root, service, runtime = self.runtime(rust_pause_tier=True, rust_admission=True)
         service.warden.config.runsc = root / "runsc-binary"
-        pause = pause_handoff.pause_config(service, rust_pause_enabled=True, rust_admission_enabled=True)
-        self.assertTrue(pause["rust_admission_enabled"])
+        pause = pause_handoff.pause_config(service, rust_pause_enabled=True)
         self.assertEqual(pause["resident_path"], str(root / "noded" / "resident.json"))
-        self.assertFalse(pause_handoff.pause_config(service, rust_pause_enabled=True)["rust_admission_enabled"])
-
-    def test_the_server_refuses_the_flag_without_the_rust_pause_tier(self) -> None:
-        service = SimpleNamespace(warden=SimpleNamespace(config=SimpleNamespace(pause_tier=True)))
-        with self.assertRaisesRegex(ValueError, "Rust admission needs the Rust pause tier"):
-            fixtures.build_direct_node_agent_server(
-                "127.0.0.1", 0, service=service, image_file=Path("/nonexistent"), job_id="job", node_id="node",
-                unix_socket=Path("/nonexistent.sock"), rust_execs=True, rust_admission=True)
-
-
-class RustAdmissionFlagTests(unittest.TestCase):
-    def test_the_flag_requires_the_rust_pause_tier_and_renders_both_sides(self) -> None:
-        raw = DeploymentConfig.default(scope_id="project-1").to_dict()
-        self.assertFalse(DeploymentConfig.from_dict(raw).sandbox.direct_node_rust_admission)
-        pause = {**raw["sandbox"], "direct_node_front_door": True, "direct_node_rust_create": True,
-                 "direct_node_rust_exec": True, "direct_pause_tier": True, "swap_gb": 8}
-        with self.assertRaisesRegex(ValueError, "direct_node_rust_admission requires"):
-            DeploymentConfig.from_dict({**raw, "sandbox": {**pause, "direct_node_rust_admission": True}})
-        with self.assertRaisesRegex(ValueError, "direct_node_rust_admission must be a boolean"):
-            DeploymentConfig.from_dict({**raw, "sandbox": {**pause, "direct_node_rust_admission": 1}})
-        enabled = {**pause, "direct_node_rust_pause": True, "direct_node_rust_admission": True}
-        self.assertTrue(DeploymentConfig.from_dict({**raw, "sandbox": enabled}).sandbox.direct_node_rust_admission)
-        options = vm_init_fixtures.VmInitTests._options(
-            direct_node_front_door=True, direct_node_rust_create=True, direct_node_rust_exec=True,
-            direct_pause_tier=True, swap_gb=8, direct_node_rust_pause=True, direct_node_rust_admission=True)
-        self.assertTrue(vm_init_options_to_dict(options)["directNodeRustAdmission"])
-        script = render_vm_init_script(options)
-        self.assertIn("--rust-execs --rust-pause-tier --rust-admission", script)
-        self.assertIn(f"--rust-exec --rust-pause --rust-admission --node-control-token-file "
-                      f"{options.node_control_bearer_token_file}\n", script)
-        self.assertNotIn("--rust-admission", render_vm_init_script(replace(options, direct_node_rust_admission=False)))
-        with self.assertRaisesRegex(ValueError, "admission requires the Rust node pause tier"):
-            render_vm_init_script(replace(options, direct_node_rust_pause=False))
-        required = ["--deployment-id", "d", "--state-root", "/s", "--image-file", "/i", "--volume-mount-root", "/v",
-                    "--storage-native-socket", "/n", "--runsc", "/r", "--runsc-commit", "c",
-                    "--node-control-bearer-token-file", "/t"]
-        parser = build_parser()
-        self.assertTrue(parser.parse_args(["serve-direct-node-agent", *required, "--rust-admission"]).rust_admission)
-        self.assertFalse(parser.parse_args(["serve-direct-node-agent", *required]).rust_admission)
+        self.assertNotIn("rust_admission_enabled", pause)
 
 
 if __name__ == "__main__":

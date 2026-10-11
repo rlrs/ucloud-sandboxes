@@ -264,14 +264,14 @@ def parse_managed_growth_call(path: str, raw: object) -> tuple[Any, ...]:
     return tuple(raw[key] for key in keys)
 
 
-def pause_config(service: Any, *, rust_pause_enabled: bool,
-                 rust_admission_enabled: bool = False) -> dict[str, Any]:
+def pause_config(service: Any, *, rust_pause_enabled: bool) -> dict[str, Any]:
     """The ``pause`` block of GET /internal/v1/creates/config.
 
     ``rust_pause_enabled``: the agent started without its local waits, idle
-    pauses, paused reclaim and paused sampling; noded owns them.
-    ``rust_admission_enabled`` (phase 3b): the agent samples no managed
-    sandbox either; noded samples them and publishes ``resident.json``.
+    pauses, paused reclaim and paused sampling; noded owns them. With the
+    ``admission`` block's ``rust_admission_enabled`` too (phase 3b) the agent
+    samples no managed sandbox either; noded samples them and publishes
+    ``resident_path``.
     """
     from .direct_network import NETWORK_CIDR
     from . import local_wait
@@ -285,7 +285,6 @@ def pause_config(service: Any, *, rust_pause_enabled: bool,
     directory = noded_directory(service)
     return {
         "rust_pause_enabled": bool(rust_pause_enabled),
-        "rust_admission_enabled": bool(rust_admission_enabled),
         "pause_tier": pause,
         "runsc": str(config.runsc),
         "runtime_root": str(config.runtime_root),

@@ -24,6 +24,7 @@ DEFAULT_MAX_STDOUT_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_STDERR_BYTES = 16 * 1024 * 1024
 MAX_LOG_READ_BYTES = 1024 * 1024
 _JOB_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
+MANAGED_JOB_ID_RE = _JOB_ID  # What ManagedProcessStart accepts as job_id.
 _ENV_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
@@ -33,6 +34,10 @@ class ManagedProcessError(RuntimeError):
 
 class ManagedProcessReadUnavailable(ManagedProcessError):
     """No authoritative read result was obtained; replaying this read is safe."""
+
+
+class ManagedGenerationMismatchError(ManagedProcessError):
+    """A managed-process call named another incarnation of the sandbox."""
 
 
 def managed_state_mount(bundle: Path) -> dict[str, Any]:

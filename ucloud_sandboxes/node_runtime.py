@@ -1195,6 +1195,21 @@ class DirectNodeRuntime:
         with self.lifecycle.shared(sandbox_id):
             return self.service.start_managed_process(sandbox_id, spec)
 
+    def admit_managed_launch(self, sandbox_id: str, generation: int, job_id: str, launch_sha256: str):
+        """POST /internal/v1/managed/launch, under the managed routes' fence."""
+        with self.lifecycle.shared(sandbox_id):
+            return self.service.admit_managed_launch(sandbox_id, generation, job_id, launch_sha256)
+
+    def bind_managed_launch(self, sandbox_id: str, generation: int, job_id: str, launch_sha256: str):
+        """POST /internal/v1/managed/bind."""
+        with self.lifecycle.shared(sandbox_id):
+            return self.service.bind_managed_launch(sandbox_id, generation, job_id, launch_sha256)
+
+    def observe_managed_terminal(self, sandbox_id: str, generation: int, job_id: str):
+        """POST /internal/v1/managed/terminal."""
+        with self.lifecycle.shared(sandbox_id):
+            return self.service.observe_managed_terminal(sandbox_id, generation, job_id)
+
     def managed_process_status(
         self,
         sandbox_id: str,

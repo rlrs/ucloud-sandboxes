@@ -30,6 +30,7 @@ from .storage_native_daemon import StorageNativeCapacityError, StorageNativeConf
 from .managed_process import (
     MANAGED_PROCESS_BINARY,
     MAX_LOG_READ_BYTES,
+    ManagedGenerationMismatchError,
     ManagedProcessError,
     ManagedProcessReadUnavailable,
     ManagedProcessLogChunk,
@@ -1708,17 +1709,34 @@ class DirectSandboxService:
                     "managed process default cwd is unavailable"
                 ) from exc
         payload = spec.control_payload(uid=uid, gid=gid, default_cwd=default_cwd)
+        digest = hashlib.sha256(control_request_bytes(payload)).hexdigest()
+        intent = self._admit_managed_launch(registration, spec.job_id, digest)
+        raw = self._managed_control(registration, payload, retry_not_ready=True)
+        result = ManagedProcessRecord.from_control_response(
+            raw, sandbox_id=sandbox_id, sandbox_generation=registration.sandbox_generation)
+        if not intent.job_id:
+            self._bind_managed_launch(registration, result.job_id, digest)
+        self._observe_managed_terminal(result)
+        return result
+
+    def _admit_managed_launch(self, registration, job_id: str, launch_sha256: str):
+        """Commit and admit a primary launch before its ambiguous dispatch.
+
+        Returns the launch intent as first committed: an empty ``job_id`` there
+        (an imported primary) means the dispatcher binds the supervisor's
+        answer afterwards. Raises SandboxStartupBusyError while queued for
+        memory, ManagedPrimaryOwnedError when another launch owns the primary.
+        """
         # Match the supervisor's one-primary-per-generation invariant before
         # reserving future growth. Commit active BEFORE the ambiguous RPC.
-        digest = hashlib.sha256(control_request_bytes(payload)).hexdigest()
         intent = self._record_growth_intent(
-            (sandbox_id, registration.sandbox_generation), action="launch",
-            job_id=spec.job_id, launch_sha256=digest)
+            (registration.sandbox_id, registration.sandbox_generation), action="launch",
+            job_id=job_id, launch_sha256=launch_sha256)
         if intent.phase == "queued":
             try:
                 admitted = self._admit_managed_growth(
                     registration, request_id="", startup=True,
-                    launch=(spec.job_id, digest))
+                    launch=(job_id, launch_sha256))
             except SandboxCapacityUnavailableError as exc:
                 # The primary has not been dispatched. Keep its durable queued
                 # identity and expose the existing bounded safe-retry contract.
@@ -1728,17 +1746,40 @@ class DirectSandboxService:
             # waits. Once this identity is active nothing can replace it, so a
             # committed match here fences the dispatch below.
             if admitted is None or admitted.phase == "queued" or (
-                    (admitted.job_id, admitted.launch_sha256) != (spec.job_id, digest)):
+                    (admitted.job_id, admitted.launch_sha256) != (job_id, launch_sha256)):
                 raise ManagedPrimaryOwnedError(admitted.job_id if admitted else "")
-        raw = self._managed_control(registration, payload, retry_not_ready=True)
-        result = ManagedProcessRecord.from_control_response(
-            raw, sandbox_id=sandbox_id, sandbox_generation=registration.sandbox_generation)
-        if not intent.job_id:
-            self._record_growth_intent(
-                (sandbox_id, registration.sandbox_generation), action="bind",
-                job_id=result.job_id, launch_sha256=digest)
-        self._observe_managed_terminal(result)
-        return result
+        return intent
+
+    def _bind_managed_launch(self, registration, job_id: str, launch_sha256: str):
+        return self._record_growth_intent(
+            (registration.sandbox_id, registration.sandbox_generation), action="bind",
+            job_id=job_id, launch_sha256=launch_sha256)
+
+    def _require_managed_generation(self, sandbox_id: str, generation: int):
+        registration = self._require_managed_registration(sandbox_id)
+        if registration.sandbox_generation != generation:
+            raise ManagedGenerationMismatchError(
+                f"sandbox {sandbox_id} is generation {registration.sandbox_generation}, not {generation}")
+        return registration
+
+    def admit_managed_launch(self, sandbox_id: str, generation: int, job_id: str, launch_sha256: str):
+        """runtime/noded's launch admission (POST /internal/v1/managed/launch).
+
+        The same commit and admission start_managed_process makes before it
+        dispatches; noded dispatches the supervisor ``start`` itself.
+        """
+        registration = self._require_managed_generation(sandbox_id, generation)
+        return self._admit_managed_launch(registration, job_id, launch_sha256)
+
+    def bind_managed_launch(self, sandbox_id: str, generation: int, job_id: str, launch_sha256: str):
+        """noded's bind of an imported primary's identity after its dispatch."""
+        registration = self._require_managed_generation(sandbox_id, generation)
+        return self._bind_managed_launch(registration, job_id, launch_sha256)
+
+    def observe_managed_terminal(self, sandbox_id: str, generation: int, job_id: str):
+        """noded's first observation of a terminal record for this primary."""
+        self._require_managed_generation(sandbox_id, generation)
+        return self._record_growth_intent((sandbox_id, generation), action="terminal", job_id=job_id)
 
     def _growth_sample(self, owner, sample=_FETCH):
         # Park and restore forget samples, so any sample is this runtime's.

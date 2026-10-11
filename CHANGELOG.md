@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Managed-process state is host-visible ([docs/managed-process-reads.md](docs/managed-process-reads.md)).** A new managed-process sandbox binds `/.ucloud-managed` from its bundle's `rootfs/.ucloud-managed` (`rbind,rw,nosuid,nodev,noexec`, the last OCI mount), so the supervisor's `state.json` and logs land in the sandbox's host overlay upper, which park seals, moves ship, delete removes and commit drops. The node creates the directory (root, 0700, never through a symlink) before `runsc create` and `restore`, and refuses a config whose mount names another bundle.
+  - A move regenerates the config with the mount at the new bundle, but only when the shipped upper has `.ucloud-managed`; a sandbox created before this release has none, so it stays legacy (no mount), as its checkpoint's mount table requires.
+  - The park/wake ledger fingerprint reads `state.json` with an `openat` chain (`O_NOFOLLOW` directory then file, regular file, at most 1 MiB): the guest owns that directory now. Before, the host never saw the guest's ledger, so the fingerprint was the constant "no job"; it is now the ledger at park. Sandboxes parked before this release still wake.
+  - The supervisor (`runtime/managed_process`) persists `state.json` the first time a stream truncates (`stdout_truncated`/`stderr_truncated`, `sequence` + 1), so a host reader learns of it before the exit.
+- The local fleet's fake `runsc` honours the `/.ucloud-managed` bind mount, and restore requires the checkpoint's bind destinations.
+
 ## 0.9.71 - 2026-10-11 (gateway)
 
 - **A build that failed in our machinery retries in seconds, not 10 minutes.** A sandbox build that fails with `sandbox build infrastructure:` (the chunk store, S3, the registry: not the recipe) is retried after 30 s, doubling up to 10 minutes, at most 6 times in all; recipe failures keep 3 attempts 10 minutes apart. On 2026-10-11 a TMax image's first build failed so, and its rollouts timed out (`nginx 504`, stream timeouts) during the 10-minute backoff before the second attempt built it in 95 s.

@@ -5,7 +5,10 @@ from datetime import datetime, timezone
 import base64
 import binascii
 import json
+import os
+from pathlib import Path
 import re
+import stat
 from typing import Any, Mapping
 
 from .models import parse_iso_datetime
@@ -14,6 +17,9 @@ from .guest_paths import validate_guest_path
 
 MANAGED_PROCESS_BINARY = "/.ucloud-job-init"
 MANAGED_PROCESS_PROTOCOL_VERSION = 1
+# The supervisor's state directory in the guest, and its name in the rootfs.
+MANAGED_STATE_DIRECTORY = "/.ucloud-managed"
+MANAGED_STATE_NAME = ".ucloud-managed"
 DEFAULT_MAX_STDOUT_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_STDERR_BYTES = 16 * 1024 * 1024
 MAX_LOG_READ_BYTES = 1024 * 1024
@@ -27,6 +33,85 @@ class ManagedProcessError(RuntimeError):
 
 class ManagedProcessReadUnavailable(ManagedProcessError):
     """No authoritative read result was obtained; replaying this read is safe."""
+
+
+def managed_state_mount(bundle: Path) -> dict[str, Any]:
+    """The OCI mount binding the supervisor's state from the sandbox's rootfs.
+
+    The source is the bundle's own ``rootfs/.ucloud-managed``, so guest writes
+    land in the sandbox's host overlay upper, which park seals, moves ship,
+    delete removes and commit drops, and the node reads them without entering
+    the guest (docs/managed-process-reads.md).
+    """
+    if not bundle.is_absolute() or "\0" in str(bundle):
+        raise ValueError("managed-process state mount needs an absolute bundle")
+    return {
+        "destination": MANAGED_STATE_DIRECTORY,
+        "options": ["rbind", "rw", "nosuid", "nodev", "noexec"],
+        "source": str(bundle / "rootfs" / MANAGED_STATE_NAME),
+        "type": "bind",
+    }
+
+
+def configured_managed_state_mount(config: object, bundle: Path) -> bool:
+    """Whether an OCI config binds the managed state; refuse any other source.
+
+    A config without the mount is the legacy layout: the supervisor's state
+    stays in the Sentry's rootfs filestore and only ``ctl`` can read it.
+    """
+    mounts = config.get("mounts") if isinstance(config, dict) else None
+    if not isinstance(mounts, list):
+        return False
+    found = [
+        mount
+        for mount in mounts
+        if isinstance(mount, dict)
+        and mount.get("destination") == MANAGED_STATE_DIRECTORY
+    ]
+    if not found:
+        return False
+    if len(found) != 1 or found[0] != managed_state_mount(bundle):
+        raise ValueError(
+            "managed-process state mount does not bind its own bundle rootfs"
+        )
+    return True
+
+
+def prepare_managed_state_directory(rootfs: Path) -> None:
+    """Create or secure ``<rootfs>/.ucloud-managed`` without following links.
+
+    Owned by the node (root) and mode 0700, as the supervisor keeps it. An
+    existing entry must already be a real directory: a symlink or a file there
+    is refused, never replaced. Raises OSError or ValueError.
+    """
+    if not rootfs.is_absolute():
+        raise ValueError("managed-process state rootfs must be absolute")
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
+    rootfs_fd = os.open(rootfs, flags)
+    directory_fd = -1
+    try:
+        try:
+            directory_fd = os.open(MANAGED_STATE_NAME, flags, dir_fd=rootfs_fd)
+        except FileNotFoundError:
+            try:
+                os.mkdir(MANAGED_STATE_NAME, mode=0o700, dir_fd=rootfs_fd)
+            except FileExistsError:
+                pass
+            directory_fd = os.open(MANAGED_STATE_NAME, flags, dir_fd=rootfs_fd)
+        info = os.fstat(directory_fd)
+        if not stat.S_ISDIR(info.st_mode):
+            raise ValueError("managed-process state path is not a directory")
+        if (info.st_uid, info.st_gid) != (os.geteuid(), os.getegid()):
+            os.fchown(directory_fd, os.geteuid(), os.getegid())
+        # Unconditional: on an overlay rootfs this also copies an image's own
+        # directory up, so the upper always records the bound layout.
+        os.fchmod(directory_fd, 0o700)
+        os.fsync(directory_fd)
+        os.fsync(rootfs_fd)
+    finally:
+        if directory_fd >= 0:
+            os.close(directory_fd)
+        os.close(rootfs_fd)
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,9 @@
 from dataclasses import replace
+import hashlib
 import json
 import os
 import shutil
+import stat
 from concurrent.futures import ThreadPoolExecutor
 import threading
 from pathlib import Path
@@ -27,6 +29,7 @@ from ucloud_sandboxes.hibernation import (
     LocalHibernationArtifactFile,
     classify_hibernation_recovery,
 )
+from ucloud_sandboxes.managed_process import managed_state_mount
 from ucloud_sandboxes.storage_native_daemon import (
     StorageNativeConflictError,
     StorageVolumeOwner,
@@ -948,6 +951,113 @@ class DirectRunscWardenTests(unittest.TestCase):
             self.warden.inspect(self.sandbox).state,
             HibernationState.PARKED,
         )
+
+    def managed_config(self, *, bound: bool, bundle: Path | None = None) -> None:
+        bundle = bundle or self.sandbox.bundle
+        config = {
+            "annotations": {
+                "dev.gvisor.internal.application-memory-directory": self.memory_directory,
+                "dev.ucloud-sandboxes.managed-process": "v1",
+            },
+            "mounts": [{"destination": "/tmp", "type": "tmpfs", "source": "tmpfs"}],
+        }
+        if bound:
+            config["mounts"].append(managed_state_mount(bundle))
+        (self.bundle / "rootfs").mkdir(exist_ok=True)
+        (self.bundle / "config.json").write_text(json.dumps(config), encoding="utf-8")
+
+    def test_managed_sandbox_parked_without_the_state_mount_still_wakes(self) -> None:
+        # Before the mount the guest's ledger lived in the Sentry's filestore:
+        # the host saw none, so park bound the constant "no job" digest.
+        self.managed_config(bound=False)
+        self.warden.create(self.sandbox, operation_id="create:legacy")
+        self.assertFalse((self.bundle / "rootfs" / ".ucloud-managed").exists())
+        self.warden.park(self.sandbox, operation_id="park:legacy")
+        manifest = self.warden.load_parked_manifest(self.sandbox)
+        self.assertEqual(
+            manifest.managed_process_sha256,
+            hashlib.sha256(b"managed-primary-v1:no-job").hexdigest(),
+        )
+        self.assertEqual(
+            self.warden.resume(self.sandbox, operation_id="wake:legacy").state,
+            HibernationState.RUNNING,
+        )
+        self.assertFalse((self.bundle / "rootfs" / ".ucloud-managed").exists())
+
+    def test_bound_managed_state_is_created_and_its_ledger_binds_the_checkpoint(self) -> None:
+        self.managed_config(bound=True)
+        self.warden.create(self.sandbox, operation_id="create:bound")
+        managed = self.bundle / "rootfs" / ".ucloud-managed"
+        info = managed.lstat()
+        self.assertTrue(stat.S_ISDIR(info.st_mode))
+        self.assertEqual(stat.S_IMODE(info.st_mode), 0o700)
+        self.assertEqual(info.st_uid, os.geteuid())
+        # The guest supervisor writes through the bind mount.
+        payload = json.dumps({
+            "version": 1, "job_id": "rollout-1", "spec_sha256": DIGEST_A,
+            "state": "running", "sequence": 3, "stdout_truncated": True,
+        }).encode()
+        (managed / "state.json").write_bytes(payload)
+        self.warden.park(self.sandbox, operation_id="park:bound")
+        self.assertEqual(
+            self.warden.load_parked_manifest(self.sandbox).managed_process_sha256,
+            hashlib.sha256(payload).hexdigest(),
+        )
+        # A park drops nothing the guest wrote; the source must exist at restore.
+        shutil.rmtree(managed)
+        managed.mkdir(mode=0o755)
+        (managed / "state.json").write_bytes(payload)
+        self.assertEqual(
+            self.warden.resume(self.sandbox, operation_id="wake:bound").state,
+            HibernationState.RUNNING,
+        )
+        self.assertEqual(stat.S_IMODE(managed.lstat().st_mode), 0o700)
+
+    def test_moved_bound_ledger_has_the_same_digest_and_needs_its_own_bundle(self) -> None:
+        self.managed_config(bound=True)
+        payload = b'{"version":1,"job_id":"j","spec_sha256":"' + DIGEST_A.encode() + b'","sequence":2}'
+        (self.bundle / "rootfs" / ".ucloud-managed").mkdir(mode=0o700)
+        (self.bundle / "rootfs" / ".ucloud-managed" / "state.json").write_bytes(payload)
+        destination = self.bundle_root / "moved"
+        shutil.copytree(self.bundle, destination)
+        moved = replace(self.sandbox, bundle=destination.resolve())
+        self.assertEqual(
+            DirectRunscWarden._managed_process_ledger_digest(moved),
+            DirectRunscWarden._managed_process_ledger_digest(self.sandbox),
+        )
+        # A config still naming the source bundle is refused, never followed.
+        with self.assertRaisesRegex(DirectWardenError, "own bundle rootfs"):
+            DirectRunscWarden._prepare_managed_state_mount(moved)
+        (destination / "config.json").write_text(json.dumps({
+            **json.loads((destination / "config.json").read_text()),
+            "mounts": [managed_state_mount(moved.bundle)],
+        }))
+        DirectRunscWarden._prepare_managed_state_mount(moved)
+
+    def test_managed_ledger_reader_refuses_guest_symlinks_and_fifos(self) -> None:
+        self.managed_config(bound=True)
+        rootfs = self.bundle / "rootfs"
+        secret = self.root / "secret.json"
+        secret.write_text('{"version":1}')
+        managed = rootfs / ".ucloud-managed"
+        managed.mkdir(mode=0o700)
+        (managed / "state.json").symlink_to(secret)
+        with self.assertRaisesRegex(DirectWardenError, "ledger is unavailable"):
+            DirectRunscWarden._managed_process_ledger_digest(self.sandbox)
+        (managed / "state.json").unlink()
+        os.mkfifo(managed / "state.json")
+        with self.assertRaisesRegex(DirectWardenError, "ledger is unavailable"):
+            DirectRunscWarden._managed_process_ledger_digest(self.sandbox)
+        shutil.rmtree(managed)
+        target = self.root / "elsewhere"
+        target.mkdir()
+        (target / "state.json").write_text('{"version":1}')
+        managed.symlink_to(target)
+        with self.assertRaisesRegex(DirectWardenError, "ledger is unavailable"):
+            DirectRunscWarden._managed_process_ledger_digest(self.sandbox)
+        with self.assertRaisesRegex(DirectWardenError, "state mount is unavailable"):
+            DirectRunscWarden._prepare_managed_state_mount(self.sandbox)
+        self.assertEqual(sorted(path.name for path in target.iterdir()), ["state.json"])
 
     def test_storage_inventory_snapshot_rejects_duplicate_volume(self) -> None:
         storage, _rootfs, _incarnation = self._use_storage_native()

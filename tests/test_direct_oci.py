@@ -444,9 +444,30 @@ class DirectOciConfigTests(unittest.TestCase):
                 security=SandboxSecuritySpec(user=None),
             )
 
+            bundle = root / "bundles" / "managed.sandbox-1"
             with reported_file_uid(managed_init, 0):
-                config = builder.build(spec, image)
+                config = builder.build(spec, image, bundle=bundle)
+                legacy = builder.build(spec, image)
                 builder.install_managed_init(image.rootfs, enabled=True)
+
+            # The supervisor's state is bound from the bundle's own rootfs,
+            # after every other mount; the legacy layout has no such mount.
+            self.assertEqual(
+                config["mounts"][-1],
+                {
+                    "destination": "/.ucloud-managed",
+                    "options": ["rbind", "rw", "nosuid", "nodev", "noexec"],
+                    "source": str(bundle / "rootfs" / ".ucloud-managed"),
+                    "type": "bind",
+                },
+            )
+            self.assertEqual(config["mounts"][:-1], legacy["mounts"])
+            self.assertNotIn(
+                "/.ucloud-managed", [m["destination"] for m in legacy["mounts"]]
+            )
+            with reported_file_uid(managed_init, 0):
+                with self.assertRaisesRegex(DirectOciConfigError, "absolute bundle"):
+                    builder.build(spec, image, bundle=Path("relative"))
 
             self.assertEqual(
                 config["process"]["args"],

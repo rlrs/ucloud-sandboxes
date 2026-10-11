@@ -103,6 +103,10 @@ type boundedWriter struct {
 	max       int64
 	retained  int64
 	truncated bool
+	// onTruncate runs once, outside mu, when the stream first drops bytes.
+	// Write runs on the child's output copying goroutine, so it must not
+	// block on the supervisor.
+	onTruncate func()
 }
 
 func newBoundedWriter(path string, max int64) (*boundedWriter, error) {
@@ -120,7 +124,18 @@ func newBoundedWriter(path string, max int64) (*boundedWriter, error) {
 
 func (writer *boundedWriter) Write(payload []byte) (int, error) {
 	writer.mu.Lock()
-	defer writer.mu.Unlock()
+	wasTruncated := writer.truncated
+	written, err := writer.writeLocked(payload)
+	notify := writer.onTruncate
+	first := !wasTruncated && writer.truncated
+	writer.mu.Unlock()
+	if first && notify != nil {
+		notify()
+	}
+	return written, err
+}
+
+func (writer *boundedWriter) writeLocked(payload []byte) (int, error) {
 	original := len(payload)
 	remaining := writer.max - writer.retained
 	if remaining <= 0 {
@@ -394,6 +409,8 @@ func (s *supervisor) start(req request) response {
 		stderr.close()
 		return response{Version: protocolVersion, Error: "supervisor cannot change workload credentials"}
 	}
+	s.watchTruncation(stdout)
+	s.watchTruncation(stderr)
 	record := &jobRecord{
 		Version:    protocolVersion,
 		JobID:      spec.JobID,
@@ -481,6 +498,40 @@ func (s *supervisor) wait(cmd *exec.Cmd) {
 		s.state.ExitCode = &code
 	}
 	s.command = nil
+	_ = s.persistStateLocked()
+}
+
+// watchTruncation makes a stream's first truncation durable while the job
+// runs, so the host, which reads state.json through the /.ucloud-managed bind
+// mount, learns of it before the exit. The persist runs on its own goroutine:
+// the output copier that noticed the truncation must never wait on s.mu, which
+// start holds across cmd.Wait on its failure path.
+func (s *supervisor) watchTruncation(writer *boundedWriter) {
+	writer.onTruncate = func() { go s.persistTruncation(writer) }
+}
+
+func (s *supervisor) persistTruncation(writer *boundedWriter) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.state == nil || s.state.State != "running" {
+		// A terminal record already carries the writers' final flags.
+		return
+	}
+	switch writer {
+	case s.stdout:
+		if s.state.StdoutTruncated {
+			return
+		}
+		s.state.StdoutTruncated = true
+	case s.stderr:
+		if s.state.StderrTruncated {
+			return
+		}
+		s.state.StderrTruncated = true
+	default:
+		return
+	}
+	s.state.Sequence++
 	_ = s.persistStateLocked()
 }
 

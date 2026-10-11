@@ -398,6 +398,212 @@ func TestLoadTerminalStateFailsProcessesLostWithSupervisor(t *testing.T) {
 	}
 }
 
+func readPersistedState(t *testing.T, stateDir string) jobRecord {
+	t.Helper()
+	payload, err := os.ReadFile(filepath.Join(stateDir, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted jobRecord
+	if err := json.Unmarshal(payload, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	return persisted
+}
+
+func waitForPersistedState(t *testing.T, stateDir string, ready func(jobRecord) bool) jobRecord {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		persisted := readPersistedState(t, stateDir)
+		if ready(persisted) {
+			return persisted
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("persisted state did not reach the expected shape: %#v", persisted)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestFirstTruncationIsPersistedOnceWithoutBlockingTheWriter(t *testing.T) {
+	stateDir := t.TempDir()
+	stdout, err := newBoundedWriter(filepath.Join(stateDir, "stdout.log"), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderr, err := newBoundedWriter(filepath.Join(stateDir, "stderr.log"), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(stdout.close)
+	t.Cleanup(stderr.close)
+	s := &supervisor{
+		stateDir: stateDir,
+		stdout:   stdout,
+		stderr:   stderr,
+		state: &jobRecord{
+			Version:    protocolVersion,
+			JobID:      "job-1",
+			SpecSHA256: strings.Repeat("a", 64),
+			State:      "running",
+			Sequence:   2,
+		},
+	}
+	s.watchTruncation(stdout)
+	s.watchTruncation(stderr)
+	s.mu.Lock()
+	if err := s.persistStateLocked(); err != nil {
+		t.Fatal(err)
+	}
+
+	// The supervisor lock is held, as start holds it across cmd.Wait on its
+	// failure path: the output copier must still complete its write.
+	written := make(chan error, 1)
+	go func() {
+		_, writeErr := stdout.Write([]byte("123456"))
+		written <- writeErr
+	}()
+	select {
+	case writeErr := <-written:
+		if writeErr != nil {
+			t.Fatal(writeErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("truncating write waited on the supervisor lock")
+	}
+	if persisted := readPersistedState(t, stateDir); persisted.StdoutTruncated || persisted.Sequence != 2 {
+		t.Fatalf("truncation persisted under a held supervisor lock: %#v", persisted)
+	}
+	s.mu.Unlock()
+
+	persisted := waitForPersistedState(t, stateDir, func(record jobRecord) bool {
+		return record.StdoutTruncated
+	})
+	if persisted.Sequence != 3 || persisted.StderrTruncated || persisted.State != "running" {
+		t.Fatalf("stdout truncation was not persisted alone: %#v", persisted)
+	}
+
+	if _, err := stdout.Write([]byte("more")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stderr.Write([]byte("abcdef")); err != nil {
+		t.Fatal(err)
+	}
+	persisted = waitForPersistedState(t, stateDir, func(record jobRecord) bool {
+		return record.StderrTruncated
+	})
+	if persisted.Sequence != 4 || !persisted.StdoutTruncated {
+		t.Fatalf("stderr truncation was not persisted once: %#v", persisted)
+	}
+	if _, err := stderr.Write([]byte("again")); err != nil {
+		t.Fatal(err)
+	}
+	// A later write never repeats the notification; a direct call is a no-op.
+	s.persistTruncation(stderr)
+	if persisted := readPersistedState(t, stateDir); persisted.Sequence != 4 {
+		t.Fatalf("repeated truncation advanced the sequence: %#v", persisted)
+	}
+}
+
+func TestTruncationAfterTerminalStateIsNotPersisted(t *testing.T) {
+	stateDir := t.TempDir()
+	stdout, err := newBoundedWriter(filepath.Join(stateDir, "stdout.log"), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(stdout.close)
+	code := 0
+	s := &supervisor{
+		stateDir: stateDir,
+		stdout:   stdout,
+		state: &jobRecord{
+			Version:    protocolVersion,
+			JobID:      "job-1",
+			SpecSHA256: strings.Repeat("a", 64),
+			State:      "exited",
+			ExitCode:   &code,
+			Sequence:   3,
+		},
+	}
+	s.mu.Lock()
+	if err := s.persistStateLocked(); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Unlock()
+	s.persistTruncation(stdout)
+	if persisted := readPersistedState(t, stateDir); persisted.Sequence != 3 || persisted.StdoutTruncated {
+		t.Fatalf("a terminal record was rewritten: %#v", persisted)
+	}
+}
+
+func TestSupervisorPersistsTruncationWhileProcessRuns(t *testing.T) {
+	stateDir, err := os.MkdirTemp("/tmp", "ucmp-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(stateDir) })
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := exec.Command(binary, "supervise", "--state-dir", stateDir)
+	server.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+	if err := server.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = server.Process.Kill()
+		_, _ = server.Process.Wait()
+	})
+	socket := filepath.Join(stateDir, "control.sock")
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(socket); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("supervisor socket did not become ready")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	started := callSupervisor(t, socket, request{
+		Version:        protocolVersion,
+		Action:         "start",
+		JobID:          "job-1",
+		Argv:           []string{"sh", "-c", "printf 123456789; printf more; printf err >&2; exec sleep 30"},
+		Env:            map[string]string{"PATH": "/bin:/usr/bin"},
+		Cwd:            "/",
+		UID:            uint32(os.Getuid()),
+		GID:            uint32(os.Getgid()),
+		MaxStdoutBytes: 5,
+		MaxStderrBytes: 8,
+	})
+	if !started.OK || started.Job == nil {
+		t.Fatalf("unexpected start response: %#v", started)
+	}
+	persisted := waitForPersistedState(t, stateDir, func(record jobRecord) bool {
+		return record.StdoutTruncated
+	})
+	// Admission, running, then exactly one truncation.
+	if persisted.State != "running" || persisted.Sequence != 3 || persisted.StderrTruncated {
+		t.Fatalf("running truncation was not persisted once: %#v", persisted)
+	}
+
+	signaled := callSupervisor(t, socket, request{Version: protocolVersion, Action: "signal", JobID: "job-1", Signal: 15})
+	if !signaled.OK {
+		t.Fatalf("signal failed: %#v", signaled)
+	}
+	persisted = waitForPersistedState(t, stateDir, func(record jobRecord) bool {
+		return record.State != "running"
+	})
+	if persisted.State != "signaled" || persisted.Sequence != 4 || !persisted.StdoutTruncated ||
+		persisted.StderrTruncated || persisted.StdoutBytes != 5 || persisted.StderrBytes != 3 {
+		t.Fatalf("unexpected terminal record: %#v", persisted)
+	}
+}
+
 func callSupervisor(t *testing.T, socket string, req request) response {
 	t.Helper()
 	connection, err := net.DialTimeout("unix", socket, time.Second)

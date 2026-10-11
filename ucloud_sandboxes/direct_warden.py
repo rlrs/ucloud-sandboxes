@@ -52,6 +52,7 @@ from .storage_native_daemon import (
     StorageVolumeState,
     storage_operation_id,
 )
+from .managed_process import configured_managed_state_mount, prepare_managed_state_directory
 from .telemetry import Telemetry
 from . import pause_tier
 from .runtime_process import RuntimeProcessIdentityError, owned_runtime_process_ticks
@@ -479,6 +480,7 @@ class DirectRunscWarden:
     def create(self, sandbox: DirectSandbox, *, operation_id: str) -> HibernationRecord:
         with self._locked(sandbox):
             self._validate_bundle(sandbox)
+            self._prepare_managed_state_mount(sandbox)
             self._require_memory_allocation(sandbox)
             active_memory = self._active_memory_root(sandbox)
             active_memory.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -1024,6 +1026,7 @@ class DirectRunscWarden:
                 # Bind that exact rootfs ledger to the checkpoint before runsc is
                 # allowed to construct or resume any workload task.
                 self._require_managed_process_ledger(sandbox, manifest)
+                self._prepare_managed_state_mount(sandbox)
                 timings["validate_checkpoint"] = (time.monotonic() - preparation_phase) * 1000
                 preparation_phase = time.monotonic()
                 # Network preparation can overlap storage mounting/validation,
@@ -1890,7 +1893,8 @@ class DirectRunscWarden:
             )
 
     @staticmethod
-    def _managed_process_ledger_digest(sandbox: DirectSandbox) -> str:
+    def _managed_process_config(sandbox: DirectSandbox) -> dict | None:
+        """The bundle's OCI config if it runs the managed-process supervisor."""
         try:
             config_payload = (sandbox.bundle / "config.json").read_bytes()
             if len(config_payload) > 1024 * 1024:
@@ -1911,20 +1915,66 @@ class DirectRunscWarden:
                 "could not verify managed-process OCI identity"
             ) from exc
         if managed is None:
-            return ""
+            return None
         if managed != "v1":
             raise DirectWardenError("managed-process OCI identity is invalid")
-        ledger = sandbox.bundle / "rootfs" / ".ucloud-managed" / "state.json"
+        return config
+
+    @classmethod
+    def _prepare_managed_state_mount(cls, sandbox: DirectSandbox) -> None:
+        """Create the bound managed-state source before runsc create or restore.
+
+        Only for a config that binds it, and only from the bundle's own rootfs.
+        A config without the mount (created before it existed) is left alone:
+        its checkpoint's mount table has none.
+        """
+        config = cls._managed_process_config(sandbox)
+        if config is None:
+            return
         try:
-            info = ledger.lstat()
+            if configured_managed_state_mount(config, sandbox.bundle):
+                prepare_managed_state_directory(sandbox.bundle / "rootfs")
+        except (OSError, ValueError) as exc:
+            raise DirectWardenError(
+                f"managed-process state mount is unavailable: {exc}"
+            ) from exc
+
+    @classmethod
+    def _managed_process_ledger_digest(cls, sandbox: DirectSandbox) -> str:
+        """Fingerprint the supervisor's ledger, read as the host sees it.
+
+        With the state mount the guest writes it into the rootfs; the guest is
+        stopped by then (checkpoint), so it is stable. Without the mount the
+        guest's copy is in the Sentry's filestore and the host sees none, so
+        the digest is the constant "no job". A sandbox moved across nodes
+        carries its upper, so both ends compute the same digest.
+        """
+        if cls._managed_process_config(sandbox) is None:
+            return ""
+        flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+        descriptor = -1
+        try:
+            # openat from the rootfs, never through a symlink: the guest owns
+            # the directory's entries.
+            descriptor = os.open(sandbox.bundle / "rootfs", flags | os.O_DIRECTORY)
+            for component, extra in (
+                (".ucloud-managed", os.O_DIRECTORY),
+                ("state.json", os.O_NONBLOCK),
+            ):
+                child = os.open(component, flags | extra, dir_fd=descriptor)
+                os.close(descriptor)
+                descriptor = child
+            info = os.fstat(descriptor)
             if (
                 not stat.S_ISREG(info.st_mode)
-                or stat.S_ISLNK(info.st_mode)
                 or info.st_size < 1
                 or info.st_size > 1024 * 1024
             ):
                 raise ValueError("managed-process ledger file is invalid")
-            payload = ledger.read_bytes()
+            with os.fdopen(os.dup(descriptor), "rb") as handle:
+                payload = handle.read(1024 * 1024 + 1)
+            if len(payload) > 1024 * 1024:
+                raise ValueError("managed-process ledger file is invalid")
             record = json.loads(payload)
             if (
                 not isinstance(record, dict)

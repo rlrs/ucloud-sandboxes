@@ -131,7 +131,10 @@ def assemble_node_agent(config: NodeAgentConfig, *, rootfs_store, fencer, sample
     provisioner = DirectSandboxProvisioner(
         registry=DirectSandboxRegistry(state_root / "direct-registry.sqlite", owner=True),
         overlays=overlays,
-        oci=DirectOciConfigBuilder(init_binary=Path(config.init_binary), network_mode="none"),
+        # The fake runtime never runs either init; the managed one only has to be
+        # a trusted binary for managed_process sandboxes to be created.
+        oci=DirectOciConfigBuilder(init_binary=Path(config.init_binary),
+                                   managed_init_binary=Path(config.init_binary), network_mode="none"),
         warden=warden,
         disk_claim_policy=DiskClaimPolicy(),
     )

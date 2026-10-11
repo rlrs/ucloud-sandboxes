@@ -13,6 +13,7 @@ from typing import Any
 
 from .image_rootfs import DockerImageConfig, MaterializedRootfs
 from .guest_identity import resolve_identity, resolve_groups
+from .managed_process import MANAGED_STATE_DIRECTORY, managed_state_mount
 from .sandbox import SandboxSpec, linux_host_entrypoint_script
 
 
@@ -111,7 +112,16 @@ class DirectOciConfigBuilder:
         image: MaterializedRootfs,
         *,
         network_namespace_path: Path | None = None,
+        bundle: Path | None = None,
     ) -> dict[str, Any]:
+        """Build the sandbox's OCI config.
+
+        ``bundle`` is the sandbox's bundle directory. A managed-process
+        sandbox binds its supervisor state from there, so the node can read it
+        without entering the guest. ``None`` builds the legacy layout without
+        that mount; only an import of a sandbox created that way passes it,
+        because restore must see the checkpoint's own mount table.
+        """
         spec.validate()
         if spec.memory_mb is None or spec.disk_mb is None:
             raise DirectOciConfigError(
@@ -181,8 +191,14 @@ class DirectOciConfigBuilder:
                 "/.ucloud-job-init",
                 "supervise",
                 "--state-dir",
-                "/.ucloud-managed",
+                MANAGED_STATE_DIRECTORY,
             )
+            if bundle is not None:
+                # Last, after the rootfs-relative tmpfs mounts it never nests in.
+                try:
+                    mounts.append(managed_state_mount(bundle))
+                except ValueError as exc:
+                    raise DirectOciConfigError(str(exc)) from exc
         elif spec.security.init:
             if self.init_binary is None:
                 raise DirectOciConfigError(

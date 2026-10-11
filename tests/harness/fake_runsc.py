@@ -15,8 +15,10 @@ Model (see tests/harness/README.md for what is not modeled):
   ``id``, ``sandbox.pid`` and ``goferPid``; the fake's own fields sit in
   ``fake`` and survive the Warden's rewrite.
 - Guest paths: OCI tmpfs mounts (/tmp, /run, /dev/shm) map to runsc-owned
-  "memory" directories; everything else outside host tool directories maps to
-  the bundle rootfs. ``exec`` translates whole absolute argv elements, cwd,
+  "memory" directories; the managed-process state bind mount
+  (/.ucloud-managed) maps to its host source, which must exist at create and
+  restore; everything else outside host tool directories maps to the bundle
+  rootfs. ``exec`` translates whole absolute argv elements, cwd,
   HOME and TMPDIR, then runs the command on the host as the test user. Like
   runsc exec it forwards signals and reports a signalled command as
   128 + signal.
@@ -25,7 +27,10 @@ Model (see tests/harness/README.md for what is not modeled):
 - ``checkpoint --hibernate`` archives the memory directories as the image's
   application memory file and drops the active one, leaving the sentry
   paused. ``restore`` consumes that file again (a rename back to the active
-  file), so tmpfs content survives only through the checkpoint image.
+  file), so tmpfs content survives only through the checkpoint image. The
+  checkpoint records the bind destinations and restore requires the bundle to
+  bind the same ones, as gVisor restores the checkpoint's mount table; the
+  sources may move (a migrated bundle).
 - ``tar rootfs-upper`` writes the rootfs's difference from its mounted lower
   (fake_mount's diff), whiteouts as 0:0 character devices, as runsc exports
   the Sentry overlay upper. The fake rootfs is one merged directory, so the
@@ -59,6 +64,8 @@ KERNEL_IMAGE = "checkpoint.img"
 PAGES_IMAGE = "pages_meta.img"
 MEMORY_ANNOTATION = "dev.gvisor.internal.application-memory-directory"
 # Guest paths below these stay host paths, so host binaries remain usable.
+# The only OCI bind mount the node configures: managed-process state.
+BIND_DESTINATIONS = frozenset({"/.ucloud-managed"})
 HOST_DIRECTORIES = frozenset(
     {"bin", "sbin", "usr", "lib", "lib32", "lib64", "libx32", "proc", "sys", "dev"}
 )
@@ -289,6 +296,22 @@ class _Runtime:
                 layout[destination] = str(self.memory_root(cid) / f"m{index}")
         return layout
 
+    @staticmethod
+    def bind_layout(config: dict) -> dict[str, str]:
+        """OCI bind destinations, each mapped to its existing host source."""
+        layout = {}
+        for mount in config.get("mounts") or ():
+            if mount.get("type") != "bind":
+                continue
+            destination = mount.get("destination", "")
+            source = str(mount.get("source", ""))
+            if destination not in BIND_DESTINATIONS or "rbind" not in (mount.get("options") or ()):
+                raise RunscError(f"bind mount is not modeled: {destination}")
+            if not source.startswith("/") or os.path.islink(source) or not os.path.isdir(source):
+                raise RunscError(f"bind mount source is not a directory: {source}")
+            layout[destination] = source
+        return layout
+
     def application_memory(self, config: dict) -> Path:
         directory = self.flags.get("--application-memory-file-dir", "")
         name = (config.get("annotations") or {}).get(MEMORY_ANNOTATION, "")
@@ -305,9 +328,10 @@ class _Runtime:
         normalized = posixpath.normpath(path)
         if normalized.startswith("//"):
             normalized = "/" + normalized.lstrip("/")
-        for destination in sorted(fake["tmpfs"], key=len, reverse=True):
+        mounts = {**fake["tmpfs"], **fake.get("binds", {})}
+        for destination in sorted(mounts, key=len, reverse=True):
             if normalized == destination or normalized.startswith(destination + "/"):
-                return fake["tmpfs"][destination] + normalized[len(destination) :]
+                return mounts[destination] + normalized[len(destination) :]
         if normalized == "/":
             return fake["rootfs"]
         if normalized.split("/")[1] in HOST_DIRECTORIES:
@@ -388,7 +412,9 @@ class _Runtime:
                 time.sleep(0.005)
 
 
-def _new_state(cid: str, bundle: Path, pid: int, ticks: int, layout: dict, status: str) -> dict:
+def _new_state(
+    cid: str, bundle: Path, pid: int, ticks: int, layout: dict, status: str, binds: dict
+) -> dict:
     return {
         "id": cid,
         "goferPid": 0,
@@ -401,6 +427,7 @@ def _new_state(cid: str, bundle: Path, pid: int, ticks: int, layout: dict, statu
             "sentryPid": pid,
             "sentryTicks": ticks,
             "tmpfs": layout,
+            "binds": binds,
             "execs": [],
             "created": time.time(),
         },
@@ -417,12 +444,13 @@ def _create(runtime: _Runtime, args: list[str]) -> int:
         if runtime.load(cid) is not None:
             raise RunscError(f"container with id {cid} already exists")
         layout = runtime.tmpfs_layout(cid, config)
+        binds = runtime.bind_layout(config)
         shutil.rmtree(runtime.memory_root(cid), ignore_errors=True)
         for directory in layout.values():
             os.makedirs(directory, mode=0o700)
         _write_new(active, b"")
         pid, ticks = runtime.spawn_sentry(cid, bundle, paused=False)
-        runtime.save(cid, _new_state(cid, bundle, pid, ticks, layout, "created"))
+        runtime.save(cid, _new_state(cid, bundle, pid, ticks, layout, "created", binds))
         runtime.publish_proc(cid, pid)
     finally:
         os.close(descriptor)
@@ -590,6 +618,7 @@ def _checkpoint(runtime: _Runtime, args: list[str]) -> int:
             "format": CHECKPOINT_FORMAT,
             "container_id": cid,
             "tmpfs": sorted(fake["tmpfs"]),
+            "binds": sorted(fake.get("binds", {})),
             "application_memory_sha256": hashlib.sha256(payload).hexdigest(),
         }, sort_keys=True).encode("ascii"))
         _write_new(image / PAGES_IMAGE, json.dumps(
@@ -630,6 +659,9 @@ def _restore(runtime: _Runtime, args: list[str]) -> int:
         layout = runtime.tmpfs_layout(cid, config)
         if sorted(layout) != kernel.get("tmpfs"):
             raise RunscError("bundle tmpfs mounts differ from the checkpoint")
+        binds = runtime.bind_layout(config)
+        if sorted(binds) != kernel.get("binds", []):
+            raise RunscError("bundle bind mounts differ from the checkpoint")
         shutil.rmtree(runtime.memory_root(cid), ignore_errors=True)
         runtime.memory_root(cid).mkdir(mode=0o700, parents=True)
         with tarfile.open(fileobj=io.BytesIO(payload), mode="r") as tar:
@@ -646,7 +678,7 @@ def _restore(runtime: _Runtime, args: list[str]) -> int:
         # Restore consumes the single-owner main-memory name from the image.
         os.rename(image / MEMORY_IMAGE, active)
         pid, ticks = runtime.spawn_sentry(cid, bundle, paused=True)
-        state = _new_state(cid, bundle, pid, ticks, layout, "paused")
+        state = _new_state(cid, bundle, pid, ticks, layout, "paused", binds)
         state["fake"]["restoredFrom"] = str(image)
         runtime.save(cid, state)
         runtime.publish_proc(cid, pid)

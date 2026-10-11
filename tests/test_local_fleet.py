@@ -176,6 +176,27 @@ class LocalFleetScenarioTests(unittest.TestCase):
             self.assertEqual((result.exit_code, result.stdout), (0, "memoryagaindisk"))
             self.assertNotIn(node.sentry_pid("gamma"), {first, second})
 
+    def test_managed_state_is_bound_from_the_rootfs_and_survives_park_and_wake(self):
+        with LocalFleet() as fleet:
+            fleet.create("delta", parkable=True, managed_process=True)
+            node = fleet.node_for("delta")
+            bundle = node.state_root / "bundles" / "delta.sandbox-1"
+            managed = bundle / "rootfs" / ".ucloud-managed"
+            self.assertEqual(managed.stat().st_mode & 0o777, 0o700)
+            # The guest's writes reach the host directory the node reads.
+            ledger = ('{"version":1,"job_id":"job","spec_sha256":"' + "a" * 64
+                      + '","state":"running","sequence":2}')
+            written = fleet.exec("delta", ["/bin/sh", "-c", f"printf '%s' '{ledger}' > state.json"],
+                                 working_dir="/.ucloud-managed")
+            self.assertEqual(written.exit_code, 0, written.stderr)
+            self.assertEqual((managed / "state.json").read_text(), ledger)
+
+            self.assertEqual(fleet.park("delta").status, 200)
+            woken = fleet.wake("delta", generation=fleet.route("delta").generation)
+            self.assertEqual(woken.status, 200, woken.body)
+            result = fleet.exec("delta", ["cat", "/.ucloud-managed/state.json"])
+            self.assertEqual((result.exit_code, result.stdout), (0, ledger))
+
     def test_lost_runtime_is_quarantined_reported_and_deletable(self):
         with LocalFleet() as fleet:
             fleet.create("delta")

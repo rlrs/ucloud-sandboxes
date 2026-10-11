@@ -1182,6 +1182,11 @@ class DirectProvisionerTests(unittest.TestCase):
             runner = FakeProcessRunner()
             service = DirectSandboxService(provisioner, process_runner=runner)
             record = self.create(service, replace(self.spec(), parkable=True, managed_process=True))
+            # A create binds the supervisor's state from its own bundle.
+            bundle = provisioner.registry.get(record.spec.id).to_direct_sandbox().bundle
+            mounts = json.loads((bundle / "config.json").read_text(encoding="utf-8"))["mounts"]
+            self.assertEqual(mounts[-1]["destination"], "/.ucloud-managed")
+            self.assertEqual(mounts[-1]["source"], str(bundle / "rootfs" / ".ucloud-managed"))
             service.write_file(record.spec.id, "/workspace/quoted '$ file", b"\0binary")
             self.assertEqual(runner.calls[-1][0][3:],
                 ("/.ucloud-job-init", "files", "write", "/workspace/quoted '$ file", "7"))

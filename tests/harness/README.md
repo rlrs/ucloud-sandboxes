@@ -43,7 +43,10 @@ recorded `sandbox.pid`, as runsc does: a sentry the fence fails to reap
 survives (the fleet still kills it at close). Pause and resume are SIGSTOP and
 SIGCONT. `exec` stays the parent of the guest command, forwards signals to it
 and reports a signalled command as 128 + signal, like `runsc exec`. Guest paths map to the bundle rootfs, except OCI tmpfs mounts
-(`/tmp`, `/run`, `/dev/shm`), which map to runsc-owned memory directories.
+(`/tmp`, `/run`, `/dev/shm`), which map to runsc-owned memory directories,
+and the managed-process state bind mount (`/.ucloud-managed`), which maps to
+its source. A checkpoint records the bind destinations; restore refuses a
+bundle that binds others.
 `checkpoint --hibernate` archives those into `application_memory.img` and
 leaves the sentry paused. `restore` consumes that image by renaming it back.
 tmpfs content therefore survives only through the checkpoint, and disk

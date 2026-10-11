@@ -128,7 +128,8 @@ served by the gateway").
   - With `wait_ms`, it responds when the stream has bytes beyond `O`, when the
     job is terminal, or when `W` elapses. A timeout returns empty data.
   - `limit` is capped at 1 MiB, as today.
-  - `O` beyond the retained size is a 400, as today.
+  - `O` beyond the retained size is a 409 `log offset exceeds retained data`,
+    as today.
 - **Record derivation:**
   - parse `state.json` strictly (version 1, ≤ 64 KiB);
   - while non-terminal, `stdout_bytes` and `stderr_bytes` are the log files'

@@ -26,6 +26,15 @@ class TimestampParsingTests(unittest.TestCase):
         assert parsed is not None
         self.assertEqual(parsed.isoformat(), "2026-08-27T13:05:18.123456+00:00")
 
+    def test_accepts_every_go_fractional_width(self) -> None:
+        # RFC3339Nano drops trailing zeros: one to nine digits all occur.
+        for digits in range(1, 10):
+            fraction = "123456789"[:digits]
+            with self.subTest(digits=digits):
+                parsed = parse_iso_datetime(f"2026-08-27T13:05:18.{fraction}Z")
+                assert parsed is not None
+                self.assertEqual(parsed.microsecond, int(fraction[:6].ljust(6, "0")))
+
     def test_rejects_invalid_high_precision_timestamp(self) -> None:
         self.assertIsNone(parse_iso_datetime("2026-08-27T13:05:18.123456789oops"))
 

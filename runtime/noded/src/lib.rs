@@ -221,17 +221,22 @@ impl Fronts {
     }
 }
 
+/// A new daemon session (`X-UCloud-Noded-Session`): 128 random bits in hex.
+pub fn session_nonce() -> Result<String, String> {
+    let mut nonce = [0u8; 16];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut random| std::io::Read::read_exact(&mut random, &mut nonce))
+        .map_err(|error| format!("cannot read a session nonce: {error}"))?;
+    Ok(nonce.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
 /// The fronts for `--rust-create` and `--rust-exec`: the agent client under a
 /// fresh session, and the node (registry owner, pipeline) once the agent
 /// reports its configuration. Execs need the node, so `--rust-exec` needs
 /// `--rust-create` in this build. `admission` (`--rust-admission`) adds the
 /// agent's routes for the internal socket, under the same session.
 pub fn start_fronts(upstream: &std::path::Path, token: &str, exec: bool, pause: bool, admission: bool) -> Result<Fronts, String> {
-    let mut nonce = [0u8; 16];
-    std::fs::File::open("/dev/urandom")
-        .and_then(|mut random| std::io::Read::read_exact(&mut random, &mut nonce))
-        .map_err(|error| format!("cannot read a session nonce: {error}"))?;
-    let session: String = nonce.iter().map(|byte| format!("{byte:02x}")).collect();
+    let session = session_nonce()?;
     let agent = Arc::new(agent_rpc::AgentClient::new(upstream.to_path_buf(), token, &session).map_err(|e| e.to_string())?);
     let pipeline = pipeline::LazyPipeline::new();
     let node = Arc::new(std::sync::OnceLock::new());
@@ -251,7 +256,9 @@ pub fn start_fronts(upstream: &std::path::Path, token: &str, exec: bool, pause: 
     }));
     // Job routes need the node; until it loads they are the agent's.
     let job_node = Arc::new(jobs::NodeJobs { node: node.clone() });
-    let jobs = jobs::JobFront::new(job_node, agent.clone(), token, jobs::JobLimits::default());
+    // Growth admission is in process once the loaded node runs its own.
+    let job_admission = Arc::new(admission::port::NodeAdmission::new(node.clone(), agent.clone()));
+    let jobs = jobs::JobFront::with_admission(job_node, job_admission, token, jobs::JobLimits::default());
     let internal = if admission {
         Some(internal::Internal::new(&session, token, internal::own_uid(), Arc::new(internal::LoadedNode(node.clone())))?)
     } else {

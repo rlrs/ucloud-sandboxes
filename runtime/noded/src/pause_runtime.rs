@@ -11,10 +11,13 @@ use hyper::{Method, StatusCode};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
+use crate::admission::service::AdmissionService;
+use crate::admission::sources::{LedgerDemandSource, apply_local_growth};
 use crate::agent_rpc::AgentClient;
 use crate::local_wait::{GrowthEvent, LocalWaitConfig, LocalWaitEvents, LocalWaits, RegistryCandidates, WaitFence};
 use crate::pause::PauseTier;
-use crate::pause_policy::{BoxFuture, Escalated, Escalator, PauseFence, PausePolicy, PausePolicyHandle, PolicyConfig};
+use crate::pause_policy::resident::ResidentSampler;
+use crate::pause_policy::{BoxFuture, DemandSource, Escalated, Escalator, Inventory, PauseFence, PausePolicy, PausePolicyHandle, PolicyConfig};
 use crate::registry::Registry;
 use crate::warden::Sandbox;
 
@@ -116,23 +119,41 @@ pub struct PauseInputs {
     pub settings: serde_json::Map<String, Value>,
     /// Phase 3b: sample managed sandboxes and publish `resident.json`.
     pub resident_sampling: bool,
+    /// Step 3c.2 (`--rust-admission`): the node's own admission. Its ledger
+    /// is the reclaim demand (not `agent-demand.json`), local waits' growth
+    /// applies to it in process, and it refreshes its forecasts after each
+    /// sampler pass.
+    pub admission: Option<Arc<AdmissionService>>,
 }
 
 impl PauseRuntime {
     /// Start inside the tokio runtime. Local waits fail closed: without them
     /// the policy still runs and nothing pauses on model calls.
     pub fn start(inputs: PauseInputs) -> PauseRuntime {
-        let PauseInputs { agent, tier, registry, state_root, warden_locks_dir, cgroup_root, settings, resident_sampling } = inputs;
+        let PauseInputs { agent, tier, registry, state_root, warden_locks_dir, cgroup_root, settings, resident_sampling, admission } = inputs;
         let idle = settings.get("idle_park_seconds").and_then(Value::as_f64).unwrap_or(0.0);
         let mut config = PolicyConfig::new(state_root.clone(), agent.session().to_string(), idle, tier.config());
         config.resident_sampling = resident_sampling;
+        let demand = admission.as_ref().map(|service| {
+            let inventory = registry.clone();
+            Arc::new(LedgerDemandSource {
+                service: service.clone(),
+                // An unreadable drain row bills nothing: only measured pressure acts.
+                admission_open: Box::new(move || Inventory::admission_open(&*inventory).unwrap_or(false)),
+            }) as Arc<dyn DemandSource>
+        });
         let policy = Arc::new(PausePolicy::start(
             config,
             tier.clone(),
             PauseFence::new(&warden_locks_dir),
             registry.clone(),
             Arc::new(AgentEscalator { agent: agent.clone() }),
+            demand,
         ));
+        if let Some(service) = &admission {
+            let service = service.clone();
+            policy.set_resident_pass(Arc::new(move || service.after_resident_pass()));
+        }
         let local = settings.get("local_waits").and_then(Value::as_object);
         let waits = local.filter(|local| local.get("enabled").and_then(Value::as_bool).unwrap_or(false)).and_then(|local| {
             let relays: Vec<(String, u16)> = local
@@ -153,7 +174,10 @@ impl PauseRuntime {
                 cgroup_root.clone(),
             ));
             let (growth, queue) = mpsc::unbounded_channel();
-            tokio::spawn(send_growth(agent.clone(), queue));
+            match &admission {
+                Some(service) => tokio::spawn(apply_local_growth(service.clone(), queue)),
+                None => tokio::spawn(send_growth(agent.clone(), queue)),
+            };
             let cell = Arc::new(OnceLock::new());
             let _ = cell.set(Arc::downgrade(&policy));
             let events = Arc::new(AgentEvents { agent: agent.clone(), growth, policy: cell });
@@ -172,6 +196,12 @@ impl PauseRuntime {
         }
         eprintln!("ucloud-noded: pause tier running (local waits {}, managed resident sampling {})", if waits.is_some() { "on" } else { "off" }, if resident_sampling { "on" } else { "off" });
         PauseRuntime { policy: Mutex::new(Some(policy)), waits: Mutex::new(waits) }
+    }
+
+    /// The policy's resident samples (node admission credits them).
+    pub fn sampler(&self) -> Option<Arc<ResidentSampler>> {
+        let policy = self.policy.lock().expect("not poisoned");
+        policy.as_ref().map(|policy| policy.engine().sampler().clone())
     }
 
     /// Stop local waits, then the policy's loops (in-flight reclaims stop at

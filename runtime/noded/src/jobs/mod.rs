@@ -1,8 +1,9 @@
 //! Managed-process job routes in the daemon (docs/managed-process-reads.md):
 //! status and logs read from the supervisor's files through the state mount,
 //! with held waits; start and signal dispatch the supervisor's `ctl` under the
-//! exec fences, with the agent keeping only the growth ledger
-//! (`/internal/v1/managed/{launch,bind,terminal}`).
+//! exec fences. Growth admission (launch, bind, terminal) goes through an
+//! [`AdmissionPort`]: the agent's `/internal/v1/managed/{launch,bind,terminal}`,
+//! or noded's own admission with `--rust-admission` (step 3c.2).
 //!
 //! The daemon answers for owned sandboxes that are running (paused included)
 //! and carry the state mount. Everything else goes to the agent unchanged:
@@ -33,6 +34,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 
 use crate::Body;
+use crate::admission::port::{AdmissionPort, AgentAdmission, BindError, LaunchError};
 use crate::agent_rpc::AgentClient;
 pub use crate::exec_front::Outcome;
 use crate::exec_fence::{ExecFence, Fenced};
@@ -262,26 +264,20 @@ fn read_config(bundle: &std::path::Path) -> io::Result<Option<Value>> {
     Ok(serde_json::from_slice(&bytes).ok())
 }
 
-/// The agent's growth bookkeeping for terminal records: once per
-/// (sandbox, generation, job), sent in order off the request path.
+/// The growth bookkeeping for terminal records: once per (sandbox,
+/// generation, job), sent in order off the request path.
 struct TerminalQueue {
     seen: Mutex<HashSet<(String, u64, String)>>,
-    sender: mpsc::UnboundedSender<Value>,
+    sender: mpsc::UnboundedSender<(String, u64, String)>,
 }
 
 impl TerminalQueue {
-    fn start(agent: Arc<AgentClient>) -> TerminalQueue {
-        let (sender, mut receiver) = mpsc::unbounded_channel::<Value>();
+    fn start(admission: Arc<dyn AdmissionPort>) -> TerminalQueue {
+        let (sender, mut receiver) = mpsc::unbounded_channel::<(String, u64, String)>();
         tokio::spawn(async move {
             let mut failures = 0u64;
-            while let Some(body) = receiver.recv().await {
-                let answer = agent.call_within(Duration::from_secs(30), Method::POST, "/internal/v1/managed/terminal", Some(&body)).await;
-                let problem = match answer {
-                    Ok(reply) if reply.status == StatusCode::OK => None,
-                    Ok(reply) => Some(format!("answered {}: {}", reply.status, String::from_utf8_lossy(&reply.body))),
-                    Err(error) => Some(error.to_string()),
-                };
-                if let Some(problem) = problem {
+            while let Some((sandbox_id, generation, job_id)) = receiver.recv().await {
+                if let Err(problem) = admission.terminal(&sandbox_id, generation, &job_id).await {
                     failures += 1;
                     if failures == 1 || failures % 1000 == 0 {
                         eprintln!("ucloud-noded: terminal job observation not recorded ({failures}): {problem}");
@@ -307,13 +303,9 @@ impl TerminalQueue {
             if seen.len() >= TERMINAL_SEEN_ENTRIES {
                 seen.clear();
             }
-            seen.insert(key);
+            seen.insert(key.clone());
         }
-        let _ = self.sender.send(json!({
-            "sandbox_id": record.sandbox_id,
-            "generation": record.sandbox_generation,
-            "job_id": record.state.job_id,
-        }));
+        let _ = self.sender.send(key);
     }
 }
 
@@ -383,7 +375,7 @@ fn pass_reply(pass: &Pass, stream: Option<&str>) -> Response<Body> {
 
 pub struct JobFront {
     node: Arc<dyn JobNode>,
-    agent: Arc<AgentClient>,
+    admission: Arc<dyn AdmissionPort>,
     terminal: TerminalQueue,
     mounts: Arc<MountCache>,
     watcher: OnceLock<Option<Arc<Watcher>>>,
@@ -401,12 +393,19 @@ async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) 
 }
 
 impl JobFront {
-    /// Inside the tokio runtime (the terminal queue's sender task).
+    /// Inside the tokio runtime (the terminal queue's sender task). Growth
+    /// admission is the agent's.
     pub fn new(node: Arc<dyn JobNode>, agent: Arc<AgentClient>, token: &str, limits: JobLimits) -> Arc<JobFront> {
+        Self::with_admission(node, Arc::new(AgentAdmission::new(agent)), token, limits)
+    }
+
+    /// With growth admission through `admission` (the daemon's
+    /// [`crate::admission::port::NodeAdmission`]).
+    pub fn with_admission(node: Arc<dyn JobNode>, admission: Arc<dyn AdmissionPort>, token: &str, limits: JobLimits) -> Arc<JobFront> {
         Arc::new(JobFront {
             node,
-            terminal: TerminalQueue::start(agent.clone()),
-            agent,
+            terminal: TerminalQueue::start(admission.clone()),
+            admission,
             mounts: Arc::new(MountCache { known: Mutex::new(HashMap::new()) }),
             watcher: OnceLock::new(),
             token: Bytes::copy_from_slice(token.as_bytes()),
@@ -629,31 +628,13 @@ impl JobFront {
             Err(message) => return Outcome::Response(error(400, &message)),
         };
         let digest = start::launch_sha256(&payload);
-        let identity = json!({
-            "sandbox_id": incarnation.sandbox_id,
-            "generation": incarnation.generation,
-            "job_id": spec.job_id,
-            "launch_sha256": digest,
-        });
         // The launch intent commits before the ambiguous dispatch.
-        let Ok(launch) = self.agent.call(Method::POST, "/internal/v1/managed/launch", Some(&identity)).await else {
-            return forward("launch admission unavailable");
-        };
-        let answer = launch.json().unwrap_or(Value::Null);
-        let message = |default: &str| answer.get("error").and_then(Value::as_str).unwrap_or(default).to_string();
-        let intent_job = match (launch.status.as_u16(), answer.get("error_code").and_then(Value::as_str)) {
-            (200, _) => match answer.get("job_id").and_then(Value::as_str) {
-                Some(job_id) => job_id.to_string(),
-                None => return forward("launch answered outside its contract"),
-            },
-            (503, Some("startup_busy")) => {
-                return Outcome::Response(startup_busy(&message("node startup capacity is busy")));
-            }
-            (409, Some("primary_owned")) => {
-                let owner = answer.get("job_id").and_then(Value::as_str).unwrap_or("");
-                return Outcome::Response(primary_owned(&message("sandbox generation already owns another primary process"), owner));
-            }
-            _ => return forward("launch declined"),
+        let launch = self.admission.launch(&incarnation.sandbox_id, incarnation.generation, &spec.job_id, &digest).await;
+        let intent_job = match launch {
+            Ok(job_id) => job_id,
+            Err(LaunchError::StartupBusy(message)) => return Outcome::Response(startup_busy(&message)),
+            Err(LaunchError::PrimaryOwned { message, job_id }) => return Outcome::Response(primary_owned(&message, &job_id)),
+            Err(LaunchError::Forward(reason)) => return forward(reason),
         };
         let request_bytes = start::control_request_bytes(&payload);
         let raw = match self.control(incarnation, request_bytes, true).await {
@@ -667,23 +648,10 @@ impl JobFront {
             Err(ControlAnswerError::Invalid(message)) => return Outcome::Response(error(400, &message)),
         };
         if intent_job.is_empty() {
-            let bind = json!({
-                "sandbox_id": incarnation.sandbox_id,
-                "generation": incarnation.generation,
-                "job_id": record.state.job_id,
-                "launch_sha256": digest,
-            });
-            match self.agent.call(Method::POST, "/internal/v1/managed/bind", Some(&bind)).await {
-                Ok(reply) if reply.status == StatusCode::OK => {}
-                Ok(reply) => {
-                    let answer = reply.json().unwrap_or(Value::Null);
-                    let message = answer.get("error").and_then(Value::as_str).unwrap_or("managed process bind failed").to_string();
-                    if reply.status == StatusCode::CONFLICT && answer.get("error_code").and_then(Value::as_str) == Some("primary_owned") {
-                        return Outcome::Response(primary_owned(&message, answer.get("job_id").and_then(Value::as_str).unwrap_or("")));
-                    }
-                    return Outcome::Response(error(503, &message));
-                }
-                Err(rpc) => return Outcome::Response(error(503, &rpc.to_string())),
+            match self.admission.bind(&incarnation.sandbox_id, incarnation.generation, &record.state.job_id, &digest).await {
+                Ok(()) => {}
+                Err(BindError::PrimaryOwned { message, job_id }) => return Outcome::Response(primary_owned(&message, &job_id)),
+                Err(BindError::Failed(message)) => return Outcome::Response(error(503, &message)),
             }
         }
         self.terminal.observe(&record);

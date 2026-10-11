@@ -775,7 +775,14 @@ fn resident_sampling_measures_managed_incarnations_too_and_publishes_every_sampl
     config.resident_sampling = true;
     let engine = fixture.restart_with(config);
     let read = || serde_json::from_slice::<Value>(&std::fs::read(&published).unwrap()).unwrap();
+    // Node admission refreshes its forecasts after each managed pass.
+    let passes = Arc::new(AtomicUsize::new(0));
+    let counted = passes.clone();
+    *engine.resident_pass.write().unwrap() = Some(Arc::new(move || {
+        counted.fetch_add(1, Ordering::SeqCst);
+    }));
     engine.sample_residents();
+    assert_eq!(passes.load(Ordering::SeqCst), 1);
     // Running and managed: sampled. Running and not managed: not.
     assert!(engine.sampler.get(&key("agent")).is_none());
     let sample = engine.sampler.get(&key("managed")).unwrap();
@@ -802,6 +809,12 @@ fn resident_sampling_measures_managed_incarnations_too_and_publishes_every_sampl
     let ids: Vec<&str> = document["samples"].as_array().unwrap().iter().map(|sample| sample["sandbox_id"].as_str().unwrap()).collect();
     assert_eq!((&document["seq"], ids), (&json!(2), vec!["agent", "managed"]));
     assert_eq!(document["samples"][1]["sampled_at"], json!(101.0));
+    assert_eq!(passes.load(Ordering::SeqCst), 2);
+    // Growth credit reads the last sample whatever its age; `get` is live only.
+    fixture.clock.advance(10.0);
+    assert!(engine.sampler.get(&key("managed")).is_none());
+    assert_eq!(engine.sampler().historical(&key("managed")).unwrap().sampled_at, 101.0);
+    fixture.clock.advance(-10.0);
 
     // A sentry that changed, or a sandbox no longer parkable, is unknown: absent.
     fixture.tier.journals.lock().unwrap().get_mut(&key("managed")).unwrap().insert("sentry_start_time_ticks".into(), json!(778));

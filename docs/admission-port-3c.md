@@ -508,6 +508,124 @@ The rule is to take the simpler option wherever the choice is ours.
 
 ## Progress
 
+**3c.2, the noded admission service, dead behind the flag (2026-10-11).**
+Nothing changes with the flag off. With it on, the agent does not call the
+service yet (3c.3), so it is not deployable on its own.
+
+- **Service** (`admission/service.rs`): `AdmissionService` holds the ledger
+  and `Growth` under one lock; a watch channel is `_admission_changed`. The
+  three pools are `FairCapacity`s (lock order: ledger, then pool). Each held
+  claim is a 128-bit hex token bound to its holder (`Noded` or an agent
+  session), owner and kind, with its demand and slot.
+  - `admit` is the guard's driver: the gate under the lock, metrics (200 ms
+    single-flight cache), owner validation and the growth requote outside
+    it, then `current_forecasts`, `refresh_wait_cost` and `decide`; a `Wait`
+    waits on the watch channel. Startup and restore keep their demand until
+    release, as `create_admission` and `_restore_admission` do.
+  - Growth: the covered check (and a covered continuation's wake fence)
+    under the key's turn; demand; the guard with requotes; the provisional
+    charge under the lock; the durable `activate` (which commits the fence
+    with the grant); then the provisional clear. Every durable write and its
+    in-memory publication run in a detached task, so a disconnect cannot
+    leave a committed row unpublished or release a turn mid-commit.
+  - Quotes re-read the allocation's placement first
+    (`MemoryBackingStore::observe_allocation`, §3.3 "Memory placement").
+  - The transient revision starts at CLOCK_MONOTONIC ns and moves on claims
+    and releases that carry a reservation shape (creates and restores), as
+    `_activity_epoch` does; captures and publications do not move it.
+  - At start the service loads `growth_intents()`, drops rows whose key has
+    no registration in any phase (as `_prune_growth_intents` does), charges
+    whole bounds until the first sampler pass, and is recovering.
+- **Routes** (`admission/routes.rs`, served by `internal.rs` once the loaded
+  node runs admission; `503 admission_recovering` while the node loads, hello
+  included; 404 as before without node admission). Errors are
+  `{error, error_code, retryable}`, with `Retry-After: 1` on retryable 503s.
+  - `startup` `{owner, requested:{vcpu,memory_mb}, managed, wait_seconds?}` →
+    `200 {token, phases:{startup_admission_ms, active_capacity_ms}}`;
+    `503 node_admission_closed`; `503 node_active_admission_deferred` (a
+    capacity refusal, and also a slot wait that ends without a grant:
+    Python's `SandboxStartupBusyError`, which creates report this way).
+  - `restore` `{owner, requested, cost, deadline_ms}` → `200 {token}`;
+    `503 node_restore_busy` (slot or capacity); `503 node_admission_closed`;
+    `409 generation_mismatch` (the owner lost its incarnation while queued).
+  - `observe` `{owner, kind:"capture", cost}` → `200 {token}`, never queued.
+  - `publication` `{owner}` → `200 {token}`; `409 publication_deferred`
+    (retryable) when a foreground transition waits and a publication is
+    active, or every lane is taken.
+  - `{token}/release` `{}` → `200 {}`; `404 admission_token_unknown`, also for
+    another session's token.
+  - `cancel` `{owner}` → `200 {cancelled}`: the owner's queued slot waiters,
+    and a wake for capacity waiters, which revalidate.
+  - `close` / `open` `{drain_token}` → `200 {admission_open,
+    transient_revision}`; close also cancels every queued startup and
+    restore.
+  - `snapshot` → `200 {noded_session, admission_open, transient_revision,
+    resource_reservations:[{owner, vcpu, memory_mb}], active_reservations,
+    transitions:{startup|restore|capture|publication: {active, waiting,
+    memory_bytes, read_bytes, write_bytes}}, resident_demand:{…}}`;
+    `active_reservations` is the number of reservations
+    (`active_sandbox_creates`).
+  - `growth/events` `{items:[{action, owner, request_id?, job_id?}]}` (at
+    most 4,096; actions `park`, `wait`, `activate`, `terminal`, `forget`) →
+    `200 {results:[{intent} | {error, error_code}]}`, `intent` a growth row
+    or null. A missing or unowned registration is `sandbox_unavailable`; a
+    sandbox that is not managed is `{intent: null}`; a registry refusal is
+    `growth_conflict`. One commit, turns in key order; `park` forgets the
+    key's samples first; `forget` is in memory only.
+  - `growth/continuation` `{owner, request_id, deadline_ms}` → `200 {intent}`
+    (null when not managed); `503 node_startup_busy`;
+    `503 node_admission_closed`; `409 generation_mismatch`.
+  - `deadline_ms` is the wait budget from receipt. Every grant answers
+    `503 admission_recovering` while recovering and `503 agent_hello_required`
+    to a session without a hello.
+  - A grant's body carries it: if the connection drops before the body is
+    handed to it, the claim and slot are released; a request dropped while
+    queued leaves the queue (hyper drops it on disconnect).
+- **Sessions and recovery.** `hello` takes `{agent_session, reassert?}` with
+  `reassert: [{owner, kind, cost, requested, agent_token}]` and answers as
+  before. A hello under a new session releases every claim of other agent
+  sessions; their waiters see the change and give up. Reasserted claims are
+  accepted unconditionally, under the agent's tokens, with a slot while the
+  pool has one. Recovery ends with any hello, or when the 2 s grace passes
+  and the agent's socket does not accept a connection; while it does, the
+  hello is awaited (decision F; noded refuses, never forwards).
+- **noded's own callers.** `admission/port.rs`: `AdmissionPort` with
+  `AgentAdmission` (the agent's `/internal/v1/managed/*`, byte for byte as
+  before), `LocalAdmission`, and `NodeAdmission`, which uses the local one
+  only once the loaded node runs admission. The job start's launch and bind
+  and the terminal queue go through it. Creates still use the agent (3c.4).
+- **Pause tier.** With node admission, `LedgerDemandSource` (the ledger, and
+  the drain row) is the reclaim demand instead of `agent-demand.json`; local
+  waits' growth events apply in process (`apply_local_growth`, 50 ms
+  batches, per-item errors logged); after each managed sampler pass the
+  service prunes and refreshes its forecasts. The sampler is shared
+  (`ResidentSampler::historical` serves growth credit).
+- **`--admission-only`** (`admission/standalone.rs`): `--internal-unix`,
+  `--registry`, `--node-control-token-file`, optional `--admission-config`
+  (the `admission` block, optionally with `application_memory_root`; default
+  slots only) and `--metrics-file` (JSON metrics, re-read per sample).
+- **Tests:** `runtime/noded/tests/admission_service.rs` (12): recovery by
+  hello and by grace, session churn, reassert, close while waiting (slot and
+  memory), a disconnected waiter and an undelivered grant, the publication
+  gate, cancel and revalidation, snapshot composition, growth events and
+  continuation (covered and uncovered, the fence with the grant), the ledger
+  as reclaim demand with local-wait growth, in-process launch/bind/terminal,
+  and a restart reloading durable intents, also under `--admission-only`.
+  Plus `observe_allocation` in `tests/memory_backing.rs` and the sampler
+  hook in `pause_policy::tests`.
+- **Deviations:**
+  - No `growth/launch` and no `bind` event (decision J); noded's own launch
+    is in process.
+  - The startup route reports a slot timeout as
+    `node_active_admission_deferred`, as the table says, though the service
+    distinguishes it (`Refusal::Busy`).
+  - `agent_hello_required`, `sandbox_unavailable`, `not_managed_process`,
+    `admission_unavailable` and the events' `growth_conflict` /
+    `registry_unavailable` codes are new.
+  - Recovery refuses rather than queues (decision F over §3.5's "waiters
+    queue"). Release, cancel, close/open and growth events are served while
+    recovering; observe is never refused for recovery.
+
 **3c.0(a), 3b: resident sampling in noded (2026-10-11).** Behind
 `sandbox.direct_node_rust_admission`, the flag of 3c.0(b, c, d) below (agent
 and noded `--rust-admission`, default off). noded samples managed sandboxes

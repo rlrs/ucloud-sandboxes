@@ -33,6 +33,7 @@ pub mod warden;
 pub mod timings;
 pub mod guest;
 pub mod image;
+pub mod jobs;
 pub mod oci;
 pub mod rootfs;
 
@@ -70,7 +71,8 @@ impl Config {
     pub fn new(upstream: PathBuf) -> Self {
         Config {
             upstream,
-            max_connections: 4096,
+            // Held job reads (docs/managed-process-reads.md) are a few thousand.
+            max_connections: 16 * 1024,
             header_read_timeout: Duration::from_secs(30),
             shutdown_grace: Duration::from_secs(20),
         }
@@ -201,6 +203,7 @@ impl Upstream {
 pub struct Fronts {
     pub create: Option<Arc<create::CreateFront>>,
     pub exec: Option<Arc<exec_front::ExecFront>>,
+    pub jobs: Option<Arc<jobs::JobFront>>,
     /// The node, once the agent's configuration loaded it.
     pub node: Option<Arc<std::sync::OnceLock<Arc<node_pipeline::NodePipeline>>>>,
 }
@@ -238,9 +241,13 @@ pub fn start_fronts(upstream: &std::path::Path, token: &str, exec: bool, pause: 
         let _ = cell.set(opened.clone());
         Ok(opened as Arc<dyn create::Pipeline>)
     }));
+    // Job routes need the node; until it loads they are the agent's.
+    let job_node = Arc::new(jobs::NodeJobs { node: node.clone() });
+    let jobs = jobs::JobFront::new(job_node, agent.clone(), token, jobs::JobLimits::default());
     Ok(Fronts {
         create: Some(Arc::new(create::CreateFront::new(agent, pipeline, token))),
         exec: exec.then(|| exec_front::ExecFront::new(node.clone(), token)),
+        jobs: Some(jobs),
         node: Some(node),
     })
 }
@@ -289,6 +296,12 @@ pub async fn serve_with(listener: TcpListener, config: Config, fronts: Fronts, s
                     return Ok(not_found());
                 }
                 request.headers_mut().remove(agent_rpc::SESSION_HEADER);
+                if let Some(front) = fronts.jobs.as_ref().filter(|front| front.intercepts(&request)) {
+                    return match front.handle(request).await {
+                        exec_front::Outcome::Response(response) => Ok(response),
+                        exec_front::Outcome::Forward(request) => upstream.forward(request).await,
+                    };
+                }
                 if let Some(front) = fronts.exec.as_ref().filter(|front| front.intercepts(&request)) {
                     return match front.handle(request).await {
                         exec_front::Outcome::Response(response) => Ok(response),

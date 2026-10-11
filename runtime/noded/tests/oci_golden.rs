@@ -55,7 +55,7 @@ fn check(golden: &Value) {
         let builder = OciBuilder::new(Some(init.clone()), Some(init.clone()), mode).unwrap();
         let netns = case["netns"].as_str().map(PathBuf::from);
         let result = SandboxSpec::from_value(&case["spec"])
-            .and_then(|spec| builder.build(&spec, &image(&rootfs, &case["image_config"]), netns.as_deref()));
+            .and_then(|spec| builder.build(&spec, &image(&rootfs, &case["image_config"]), netns.as_deref(), None));
         match (case.get("config"), result) {
             (Some(expected), Ok(config)) => {
                 assert_eq!(&config, expected, "{name}");
@@ -75,6 +75,42 @@ fn check(golden: &Value) {
 #[test]
 fn configs_match_the_python_builder() {
     check(&serde_json::from_str(GOLDEN).unwrap());
+}
+
+/// With its bundle, a managed-process config gains exactly the state mount,
+/// last in `mounts` (docs/managed-process-reads.md); others are unchanged.
+/// The goldens above are bundle-independent (`build(..., None)`).
+#[test]
+fn managed_configs_mount_their_state_directory_from_the_bundle() {
+    let golden: Value = serde_json::from_str(GOLDEN).unwrap();
+    let root = scratch("managed-mount");
+    let rootfs = root.join("rootfs");
+    std::fs::write(rootfs.join("etc/passwd"), golden["passwd"].as_str().unwrap()).unwrap();
+    std::fs::write(rootfs.join("etc/group"), golden["group"].as_str().unwrap()).unwrap();
+    let init = trusted_binary();
+    let bundle = Path::new("/var/lib/ucloud/bundles/s1.sandbox-1");
+    let mut managed = 0;
+    for case in golden["cases"].as_array().unwrap() {
+        let Some(expected) = case.get("config") else { continue };
+        let mode = if case["network_mode"] == "sandbox" { NetworkMode::Sandbox } else { NetworkMode::None };
+        let builder = OciBuilder::new(Some(init.clone()), Some(init.clone()), mode).unwrap();
+        let netns = case["netns"].as_str().map(PathBuf::from);
+        let spec = SandboxSpec::from_value(&case["spec"]).unwrap();
+        let config = builder.build(&spec, &image(&rootfs, &case["image_config"]), netns.as_deref(), Some(bundle)).unwrap();
+        let mut expected = expected.clone();
+        if spec.managed_process {
+            managed += 1;
+            expected["mounts"].as_array_mut().unwrap().push(serde_json::json!({
+                "destination": "/.ucloud-managed",
+                "options": ["rbind", "rw", "nosuid", "nodev", "noexec"],
+                "source": "/var/lib/ucloud/bundles/s1.sandbox-1/rootfs/.ucloud-managed",
+                "type": "bind",
+            }));
+        }
+        assert_eq!(config, expected, "{}", case["name"]);
+    }
+    assert!(managed > 0);
+    std::fs::remove_dir_all(&root).unwrap();
 }
 
 /// Regenerate with the repository's Python and compare (needs `.venv`).

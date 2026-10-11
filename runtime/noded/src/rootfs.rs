@@ -296,6 +296,12 @@ impl OverlayManager {
         })
     }
 
+    /// The bundle `prepare` makes for this incarnation (its OCI config
+    /// names paths below it).
+    pub fn bundle(&self, sandbox_id: &str, generation: u64) -> PathBuf {
+        self.bundle_root.join(incarnation(sandbox_id, generation))
+    }
+
     async fn command(&self, argv: Vec<String>) -> Result<crate::runsc::CommandResult, RootfsError> {
         crate::runsc::run(&argv, COMMAND_TIMEOUT).await.map_err(|error| warden(error.to_string()))
     }

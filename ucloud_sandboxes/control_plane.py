@@ -91,6 +91,10 @@ from .gateway.create import (
 from .gateway.fleet import _heartbeat_has_image, _node_metadata, _requested_image_cache_keys
 from .gateway.groups import GROUP_PATH, group_id_from_path, parse_group_request
 from .gateway.heartbeats import PULL_TIMEOUT_SECONDS
+from .gateway.job_reads import (
+    cache_parked_job, cached_job_logs_response, cached_job_status_response,
+    job_read_timeout_seconds, job_read_wait_ms, project_job_response, record_job_response,
+)
 from .gateway.image_resolution import (
     TRANSIENT_IMAGE_RESOLUTION_ERROR_CODES, _image_record_available_to_sandboxes,
     _image_reference_kind_from_headers,
@@ -143,7 +147,6 @@ from .managed_registry import (
     normalize_manifest_digest,
     registry_repository_tag_from_image_ref,
 )
-from .managed_process import ManagedProcessRecord
 from .metrics import (
     BufferedMetricsStore,
     GatewayBusySampler,
@@ -2207,6 +2210,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                             confirmed,
                             keep_route=stored_route,
                         )
+                        if stored_route is not None:
+                            self._cache_parked_job(stored_route, record)
                 if stored_route is None:
                     continue
                 sandboxes.append(_enrich_sandbox_record(record, heartbeat))
@@ -4245,6 +4250,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return
             lifecycle_payload = parsed_lifecycle
 
+        job_read_wait = job_read_wait_ms(sandbox_http_route, self.path)
         if (
             sandbox_http_route is not None
             and sandbox_http_route.action == "job_status"
@@ -4256,6 +4262,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 sandbox_http_route,
                 missing_status=HTTPStatus.NOT_FOUND,
             )
+            return
+        if (
+            (route.state or "unknown").lower()
+            in {"parking", "parked", "moving", "restoring", "waking"}
+            and self._serve_cached_job_logs(route, sandbox_http_route)
+        ):
+            # A waiting read at or past the cached bytes needs nothing from
+            # the parked image, so it does not wake the sandbox.
             return
 
         self._prepare_program_lifecycle(route, lifecycle_action, lifecycle_payload)
@@ -4358,14 +4372,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 and self._defer_node_response(route.node_url, self.path, method="PUT",
                                              body=proxy_body, extra_headers=extra_headers)):
             return
+        if job_read_wait is not None and self._defer_job_read(
+            route, sandbox_http_route, job_read_wait,
+        ):
+            return
         response = self._proxy_request(
             route.node_url,
             self.path,
             method=self.command,
             body=proxy_body,
             extra_headers=extra_headers,
+            timeout_seconds=job_read_timeout_seconds(job_read_wait),
         )
-        if self._serve_cached_transition_job_status(
+        if self._serve_cached_transition_job_read(
             route,
             sandbox_http_route,
             response,
@@ -4378,6 +4397,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         ):
             return
         if lifecycle_action == "park" and response.status == HTTPStatus.ACCEPTED:
+            # Publication is pending; the route commits from inventory later.
+            self._cache_parked_job(route, response.json().get("sandbox"))
             self._send_proxied_response(response)
             return
         if lifecycle_action:
@@ -4639,22 +4660,83 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         *,
         missing_status: HTTPStatus | None = None,
     ) -> bool:
-        if http_route is None or http_route.action != "job_status":
-            return False
-        cached = self.routing_store.get_managed_process(
-            route.sandbox_id,
-            http_route.job_id,
-            sandbox_generation=route.generation,
+        cached = cached_job_status_response(
+            self.routing_store,
+            route,
+            http_route,
+            wait_ms=job_read_wait_ms(http_route, self.path),
+            missing_status=missing_status,
         )
         if cached is None:
-            if missing_status is None:
-                return False
-            self._write_json(
-                {"error": "managed process state is not available"},
-                status=missing_status,
+            return False
+        self._send_proxied_response(cached)
+        return True
+
+    def _serve_cached_job_logs(
+        self,
+        route: SandboxRoute,
+        http_route: SandboxHttpRoute | None,
+    ) -> bool:
+        cached = cached_job_logs_response(
+            self.routing_store,
+            route,
+            http_route,
+            self.path,
+            wait_ms=job_read_wait_ms(http_route, self.path),
+        )
+        if cached is None:
+            return False
+        self._send_proxied_response(cached)
+        return True
+
+    def _defer_job_read(
+        self,
+        route: SandboxRoute,
+        http_route: SandboxHttpRoute,
+        wait_ms: int,
+    ) -> bool:
+        """Hand a waiting job read to the asynchronous response owner.
+
+        The worker may hold it for up to wait_ms, so it must not hold a handler
+        thread (docs/managed-process-reads.md). Its record is cached off the
+        I/O loop before the reply, as the synchronous path does.
+        """
+        if self.async_responses is None or (
+            self.headers.get("Transfer-Encoding")
+            or self.headers.get("Content-Length", "0") != "0"
+        ):
+            # Unread body bytes would remain on the transferred socket.
+            return False
+        routing_store, path = self.routing_store, self.path
+
+        def project(status, headers, body):
+            response = ProxiedResponse(status, headers, body)
+            try:
+                projected = project_job_response(
+                    routing_store, route, http_route, path, response, wait_ms=wait_ms,
+                )
+            except sqlite3.DatabaseError:
+                return (
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"Content-Type": "application/json"},
+                    b'{"error":"routing state unavailable","retryable":true}',
+                )
+            if projected is None:
+                return status, headers, body
+            return projected.status, projected.headers, projected.body
+
+        try:
+            proxied = self._build_proxy_request(route.node_url, path, method="GET")
+            self.server.defer_proxy_response(
+                self.request, url=proxied.full_url, headers=_node_request_headers(proxied),
+                trace_headers=self.telemetry.current_trace_headers(), telemetry=self.telemetry,
+                method="GET", event_poll=False, timeout=job_read_timeout_seconds(wait_ms),
+                held_read=True, project=project,
             )
+        except (OSError, error.URLError, RuntimeError) as exc:
+            self._send_proxied_response(_node_transport_error_response(exc))
             return True
-        self._write_json({"job": cached.to_dict()})
+        self.close_connection = True
         return True
 
     def _perform_implicit_wake(self, route: SandboxRoute) -> SandboxRoute | None:
@@ -4674,11 +4756,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         if response.status < 300:
             return self._commit_lifecycle_response(route, "wake", response)
         if str(response.json().get("lifecycle_state") or "").lower() == "parked":
-            self.routing_store.set_sandbox_state_if_current(
+            rolled_back = self.routing_store.set_sandbox_state_if_current(
                 route,
                 expected_states={"waking"},
                 state="parked",
             )
+            if rolled_back is not None:
+                self._cache_parked_job(rolled_back, response.json().get("sandbox"))
         if response.transport_error_kind:
             # Only the internal wake was attempted. The caller's exec, upload
             # or job mutation has not been dispatched, even if the wake reply
@@ -4698,20 +4782,26 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self._send_proxied_response(response)
         return None
 
-    def _serve_cached_transition_job_status(
+    def _serve_cached_transition_job_read(
         self,
         route: SandboxRoute,
         http_route: SandboxHttpRoute | None,
         response: ProxiedResponse,
     ) -> bool:
-        return bool(
-            http_route is not None
-            and http_route.action == "job_status"
-            and response.status in {HTTPStatus.BAD_REQUEST, HTTPStatus.CONFLICT}
-            and "lifecycle transition is in progress"
-            in str(response.json().get("error") or "").lower()
-            and self._serve_cached_job_status(route, http_route)
+        if not 400 <= response.status < 500:
+            return False
+        cached = project_job_response(
+            self.routing_store,
+            route,
+            http_route,
+            self.path,
+            response,
+            wait_ms=job_read_wait_ms(http_route, self.path),
         )
+        if cached is None:
+            return False
+        self._send_proxied_response(cached)
+        return True
 
     def _record_successful_sandbox_proxy_state(
         self,
@@ -4723,19 +4813,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
         if http_route is None or not 200 <= response.status < 300:
             return True
-        if http_route.action in {"job_create", "job_status", "job_signal"}:
-            try:
-                managed_record = ManagedProcessRecord.from_dict(
-                    response.json().get("job")
-                )
-                if http_route.job_id and managed_record.job_id != http_route.job_id:
-                    raise ValueError("node returned another managed process")
-                self.routing_store.upsert_managed_process(route, managed_record)
-            except (SandboxRouteConflictError, TypeError, ValueError) as exc:
-                self._write_json(
-                    {"error": f"invalid managed process state from node: {exc}"},
-                    status=HTTPStatus.BAD_GATEWAY,
-                )
+        if http_route.action in {"job_create", "job_status", "job_signal", "job_logs"}:
+            invalid = record_job_response(self.routing_store, route, http_route, response)
+            if invalid is not None:
+                self._send_proxied_response(invalid)
                 return False
         if http_route.action == "exec":
             session = response.json().get("session")
@@ -4796,6 +4877,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     )
                     if rolled_back is not None:
                         route = rolled_back
+                        self._cache_parked_job(route, response.json().get("sandbox"))
             self._record_program_request_transition(
                 route,
                 payload,
@@ -4858,11 +4940,17 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         except RegistryImageReferenceUnavailable as exc:
             self._write_registry_lease_unavailable(exc)
             return None
+        if action != "wake":
+            self._cache_parked_job(outcome.route, receipt.get("sandbox"))
         if action == "wake" and lifecycle_payload is not None:
             self._record_completed_program_lifecycle(
                 outcome.route, action, lifecycle_payload,
                 committed=outcome.program_transition)
         return outcome.route
+
+    def _cache_parked_job(self, route: SandboxRoute, sandbox_record: object) -> None:
+        """Cache the exact job record a parked worker sandbox record carries."""
+        cache_parked_job(self.routing_store, route, sandbox_record)
 
     def _record_completed_program_lifecycle(
         self,
@@ -5033,13 +5121,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             timeout_seconds=2.0)
         return response.json() if response.status < 400 else None
 
-    @staticmethod
-    def _decode_wake_publication(route: SandboxRoute, payload: dict[str, Any]) -> SandboxRoute | None:
+    def _decode_wake_publication(self, route: SandboxRoute, payload: dict[str, Any]) -> SandboxRoute | None:
         record = payload.get("sandbox")
         if not isinstance(record, dict) or record.get("state") != "parked":
             return None
         if not _sandbox_record_matches_route(record, route, SandboxSpec.from_dict(route.spec)):
             return None
+        self._cache_parked_job(route, record)
         return _route_with_sandbox_record(route, record)
 
     def _observe_wake_consolidation(self, route, migration) -> None:

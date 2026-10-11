@@ -17,9 +17,12 @@ from ..control_state import QUARANTINE_REASON, ControlStateStore
 from ..metrics import MetricsStore, record_node_epoch_retired, record_node_heartbeat
 from ..models import NodeHeartbeat, SandboxInventoryEntry, utc_now
 from ..registry import HeartbeatIdentityError, heartbeat_from_dict, heartbeat_to_dict
-from ..routing import RoutingStore, SandboxRoute, route_with_inventory_snapshot
+from ..routing import (
+    RoutingStore, SandboxRoute, SandboxRouteConflictError, route_with_inventory_snapshot,
+)
 from ..worker_receipts import _record_generation
 from .image_resolution import RegistryLayerMetadataCache
+from .job_reads import parked_job_record
 from .registry_refs import (
     RegistryImageReferenceUnavailable, RegistryReferences, _portable_snapshot_for_route,
 )
@@ -365,6 +368,55 @@ class HeartbeatIngest:
                 "inventory_received_at": heartbeat.freshness_at.isoformat(),
             })
             self.registry_refs.release_route_reference(route)
+        self._cache_parked_jobs(heartbeat)
+
+    def _cache_parked_jobs(self, heartbeat: NodeHeartbeat) -> None:
+        """Cache the exact job records of this worker's parked sandboxes.
+
+        A sandbox the worker parked by itself (idle, escalation) is known to
+        the gateway only through inventory; its record keeps parked job reads
+        current (docs/managed-process-reads.md). One read finds the changed
+        records, so unchanged parks cost no writes and no per-sandbox reads.
+        """
+        parked = {}
+        for item in heartbeat.inventory:
+            if item.managed_process is None or item.route_state != "parked":
+                continue
+            record = parked_job_record(
+                item.managed_process, sandbox_id=item.sandbox_id, generation=item.generation,
+            )
+            if record is not None:
+                parked[item.sandbox_id] = record
+        if not parked:
+            return
+        try:
+            cached = self.routing_store.managed_processes_readonly(parked)
+            changed = {
+                sandbox_id: record for sandbox_id, record in parked.items()
+                if cached.get(sandbox_id) is None
+                or replace(cached[sandbox_id], updated_at=record.updated_at) != record
+            }
+            if not changed:
+                return
+            routes = self.routing_store.sandbox_routes_by_id_readonly(sorted(changed))
+            for sandbox_id, record in changed.items():
+                route = routes.get(sandbox_id)
+                # Only the owner's observation of this incarnation counts.
+                if (
+                    route is None
+                    or route.job_id != heartbeat.job_id
+                    or route.generation != record.sandbox_generation
+                ):
+                    continue
+                try:
+                    self.routing_store.upsert_managed_process(route, record)
+                except SandboxRouteConflictError:
+                    continue
+        except sqlite3.DatabaseError as exc:
+            # The cache is read evidence; the heartbeat itself is committed.
+            self.metrics_store.append("managed_process_inventory_error", {
+                "job_id": heartbeat.job_id, "error": str(exc),
+            })
 
     def _reap_retired_boots(
         self, heartbeat: NodeHeartbeat, pending_deletes: tuple[SandboxRoute, ...],

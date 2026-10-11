@@ -918,6 +918,26 @@ class RoutingStore:
             return None
         return record
 
+    def managed_processes_readonly(
+        self, sandbox_ids: Iterable[str],
+    ) -> dict[str, ManagedProcessRecord]:
+        """Cached job records by sandbox, in one statement (any generation)."""
+        with self._read() as conn:
+            rows = conn.execute(
+                f"""SELECT sandbox_id, record_json FROM managed_processes
+                WHERE sandbox_id IN ({self._json_values_query})""",
+                (json.dumps(sorted(set(sandbox_ids))),),
+            ).fetchall()
+        records = {}
+        for row in rows:
+            try:
+                records[row["sandbox_id"]] = ManagedProcessRecord.from_dict(
+                    json.loads(row["record_json"])
+                )
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+        return records
+
     def upsert_managed_process(
         self,
         route: SandboxRoute,
@@ -985,6 +1005,16 @@ class RoutingStore:
                 if existing.sandbox_generation == record.sandbox_generation and (
                     existing.sequence > record.sequence
                     or (existing.terminal and not record.terminal)
+                    # Logs only grow within a sequence. Held reads finish out
+                    # of order, so an older read must not shrink the counts a
+                    # parked sandbox's log reads are answered from.
+                    or (
+                        existing.sequence == record.sequence
+                        and (
+                            existing.stdout_bytes > record.stdout_bytes
+                            or existing.stderr_bytes > record.stderr_bytes
+                        )
+                    )
                 ):
                     return existing
             conn.execute(

@@ -29,8 +29,17 @@ class BufferedNodeResponse(BytesIO):
 
 
 class AsyncNodeHttpPool:
-    def __init__(self, *, control_connections: int = 128, poll_connections: int = 256):
-        self._limits = (control_connections, poll_connections)
+    # Connection lanes per worker origin: control RPCs, exec event polls, and
+    # held job reads (docs/managed-process-reads.md). Waiting requests in one
+    # lane never take the connections another lane needs.
+    def __init__(
+        self,
+        *,
+        control_connections: int = 128,
+        poll_connections: int = 256,
+        held_read_connections: int = 1024,
+    ):
+        self._limits = (control_connections, poll_connections, held_read_connections)
         self._guard = Lock()
         self._enqueues_done = Condition(self._guard)
         self._enqueuing = 0
@@ -142,8 +151,9 @@ class AsyncNodeHttpPool:
         connect_timeout,
         response_limit,
         event_poll,
+        held_read=False,
     ):
-        client = self._clients[int(event_poll)]
+        client = self._clients[2 if held_read else int(event_poll)]
         # The public tracing hook fences any library reconnect retry before
         # headers are sent twice, including nominally idempotent PUT/DELETE.
         # An ambiguous failure stays ambiguous to the gateway.
@@ -194,6 +204,7 @@ class AsyncNodeHttpPool:
         connect_timeout: float,
         response_limit: int,
         event_poll: bool = False,
+        held_read: bool = False,
     ) -> BufferedNodeResponse:
         """Run on this pool's loop, preserving the synchronous error contract."""
         if asyncio.get_running_loop() is not self._loop:
@@ -208,6 +219,7 @@ class AsyncNodeHttpPool:
                 connect_timeout,
                 response_limit,
                 event_poll,
+                held_read,
             )
         except (asyncio.TimeoutError, TimeoutError) as exc:
             raise URLError(TimeoutError(str(exc))) from exc
@@ -272,6 +284,7 @@ class AsyncNodeHttpPool:
         connect_timeout: float,
         response_limit: int,
         event_poll: bool = False,
+        held_read: bool = False,
     ) -> BufferedNodeResponse:
         future = self.submit(
             self.request_async(
@@ -283,6 +296,7 @@ class AsyncNodeHttpPool:
                 connect_timeout=connect_timeout,
                 response_limit=response_limit,
                 event_poll=event_poll,
+                held_read=held_read,
             )
         )
         try:

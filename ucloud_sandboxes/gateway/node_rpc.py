@@ -108,12 +108,16 @@ def _open_node_request(
             path = urlparse(req.full_url).path
             if buffer_response_bytes is not None and not isinstance(req.data, RequestBodyStream):
                 from ..node_http_async import node_http_pool
+                from .job_reads import job_read_wait_ms
                 return node_http_pool.request(
                     req.get_method(), req.full_url, headers=headers, body=req.data,
                     timeout=timeout, connect_timeout=min(timeout, NODE_CONNECT_TIMEOUT_SECONDS),
                     response_limit=buffer_response_bytes,
                     event_poll=(req.get_method() == "GET" and path.startswith("/v1/exec/")
                                 and path.endswith("/events")),
+                    held_read=job_read_wait_ms(
+                        match_sandbox_http_route(req.get_method(), path), req.full_url,
+                    ) is not None,
                 )
             pool = (
                 _NODE_FILE_UPLOAD_HTTP_POOL

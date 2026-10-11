@@ -138,6 +138,8 @@ class RegistryTests(unittest.TestCase):
                 entry.pop("storage_dependency", None)
             if entry.get("memory_observation") is None:
                 entry.pop("memory_observation", None)
+            if entry.get("managed_process") is None:
+                entry.pop("managed_process", None)
         self.assertEqual(payload, legacy_payload)
         self.assertEqual(heartbeat_from_dict(payload), heartbeat)
         self.assertEqual(len(payload["cached_images"]), 600)

@@ -508,6 +508,65 @@ The rule is to take the simpler option wherever the choice is ours.
 
 ## Progress
 
+**3c.0(a), 3b: resident sampling in noded (2026-10-11).** Behind
+`sandbox.direct_node_rust_admission` (agent and noded `--rust-admission`,
+default off). It requires `direct_node_rust_pause`, which already requires the
+front door, Rust creates and Rust execs. noded enables it only when the agent's
+`pause` block says `rust_admission_enabled` too, as with `rust_pause_enabled`.
+This step adds the flag to `config.py`, `vm_init.py` and `cli.py`; the 3c.0(d)
+and 3c.2 work should reuse it.
+
+- **noded** (`pause_policy`): with `PolicyConfig::resident_sampling`, the 1 s
+  pass (`Engine::sample_residents`) samples owned, parkable sandboxes that are
+  managed or paused, then replaces `<state_root>/noded/resident.json`
+  (`files::ResidentFile`):
+  `{seq, session, samples: [{sandbox_id, generation, <every ResidentMemorySample field>}]}`.
+  `seq` starts at 1 in each session. Samples are sorted by key, and a sandbox
+  the pass cannot measure is absent. `SystemClock::monotonic` is now
+  CLOCK_MONOTONIC itself, so `sampled_at` is the agent's `time.monotonic()`.
+- **Agent:** `DirectNodeRuntime(rust_admission=True)` swaps the service's
+  sampler for `PublishedResidentMemory`, so every reader in §1.4 reads noded's
+  observations through the same `get`/`historical` calls:
+  - growth (`_growth_sample`);
+  - `reclaim_resident_wait`, `park_with_activity_revision` and
+    `_recheck_relay_parks` (`resident_memory_sample`);
+  - the heartbeat's calibration (`cached_resident_memory_sample`).
+
+  `_relay_parking_loop` polls the file every tick (250 ms).
+  `refresh_published_resident_memory` runs the rest of
+  `refresh_resident_memory` only when `(session, seq)` moves: it prunes stale
+  intents and refreshes the forecasts.
+  - Missing data: a missing, invalid or group/world-writable file is no
+    observation, and so is an invalid sample. Age fences stay with the
+    readers (2.5 s live, 30 s growth credit), so a stopped noded's samples
+    age out through `_current_growth_forecasts_locked` and charge whole
+    bounds (§5 risk 6).
+  - `forget` (park, restore, delete) fences out observations taken before it,
+    until a newer pass arrives.
+  - The agent's reclaims still measure on demand (`sample()`), and the newer
+    of that measurement and noded's wins.
+- **Parity gate:** `runtime/noded/tests/resident_python_parity.rs` builds 26
+  fake cgroup trees and samples each with noded's sampler and with
+  `ResidentMemorySampler`. The trees cover:
+  - peak and swap present, absent, zero and negative;
+  - tmpfs, values up to `i64::MAX`, whitespace and duplicate counters;
+  - negative or missing counters, garbage values, PID reuse;
+  - the wrong OCI cgroup, legacy container-ID cgroups, a shared parent,
+    `..`, two unified lines, and a symlink out of the root.
+
+  Accepted and refused trees must match, and fields must be equal except for
+  the instant of the read. noded writes `resident.json`, and Python's
+  `PublishedResidentMemory` must read back noded's samples exactly, with
+  `sampled_at` bit-equal. The gate found one divergence, now fixed: Rust
+  reported `peak_bytes` 0 for a negative `memory.peak`, where Python reports
+  the current charge.
+- **Tests:** `tests/test_rust_resident_sampling.py` covers the reader, the
+  forecasts following passes, staleness, forget, the flag's validation and
+  rendering, and the parking loop's cadence. `pause_policy::tests` covers
+  managed sampling and the file.
+- **Not done here:** the spec's "one worker" parity run on real cgroups. The
+  fake trees use the same reads.
+
 **3c.1, Rust half and property suite (2026-10-11).** Pure ports, nothing wired;
 no existing Python source changed.
 

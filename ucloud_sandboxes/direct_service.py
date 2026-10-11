@@ -52,7 +52,9 @@ from .resource_admission import (
     dynamic_pressure_error,
     dynamic_request_fits,
 )
-from .resident_memory import ResidentMemorySampler, ResidentMemoryReclaimer, ResidentReclaimResult
+from .resident_memory import (
+    PublishedResidentMemory, ResidentMemorySampler, ResidentMemoryReclaimer, ResidentReclaimResult,
+)
 from .sandbox import (
     OPERATION_ID_RE,
     SandboxAdmissionClosedError,
@@ -313,6 +315,9 @@ class DirectSandboxService:
     exec_fence = None
     # --rust-pause-tier: noded samples paused sandboxes for its own reclaim.
     rust_pause_tier = False
+    # --rust-admission (phase 3b): noded samples managed sandboxes too and
+    # publishes resident.json; use_published_resident_memory installs it.
+    rust_admission = False
 
     def __init__(
         self,
@@ -2304,8 +2309,13 @@ class DirectSandboxService:
         """Historical calibration evidence; not an active admission measurement."""
         return self._resident_memory.historical((sandbox_id, generation))
 
-    def refresh_resident_memory(self, keys=None) -> None:
-        """Sample managed candidates before their first pressure wait, and paused ones."""
+    def use_published_resident_memory(self, path: Path) -> None:
+        """--rust-admission: read noded's observations instead of sampling (phase 3b)."""
+        self.rust_admission = True
+        self._resident_memory = PublishedResidentMemory(path, self._resident_memory)
+
+    def _prune_growth_intents(self):
+        """Drop intents without a registration; returns the registrations by key."""
         registrations = {
             (item.sandbox_id, item.sandbox_generation): item
             for item in self.provisioner.registry.snapshot().records
@@ -2314,6 +2324,31 @@ class DirectSandboxService:
             for stale in self._growth_intents.keys() - registrations.keys():
                 self._growth_intents.pop(stale, None)
                 self._update_growth_forecast_locked(stale)
+        return registrations
+
+    def refresh_published_resident_memory(self) -> bool:
+        """--rust-admission: credit noded's next sampler pass, once.
+
+        Called each relay parking tick (250 ms); does refresh_resident_memory's
+        pruning and forecast refresh only when resident.json's (session, seq)
+        moved. If noded stops publishing, its samples age out of growth credit
+        (_current_growth_forecasts_locked) and forecasts charge whole bounds.
+        """
+        if not self._resident_memory.load():
+            return False
+        registrations = self._prune_growth_intents()
+        self._resident_memory.retain(
+            key for key, item in registrations.items() if item.phase == "owned")
+        with self._capacity_guard:
+            self._refresh_growth_forecasts_locked()  # Credit this pass's samples.
+        return True
+
+    def refresh_resident_memory(self, keys=None) -> None:
+        """Sample managed candidates before their first pressure wait, and paused ones."""
+        if self.rust_admission:
+            self.refresh_published_resident_memory()
+            return
+        registrations = self._prune_growth_intents()
         keys = (
             set(keys)
             if keys is not None

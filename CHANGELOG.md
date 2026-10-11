@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### noded
+
+- **Phase 3b: ucloud-noded samples managed sandboxes' resident memory** ([docs/admission-port-3c.md](docs/admission-port-3c.md), step 3c.0(a)), behind the new `sandbox.direct_node_rust_admission` (agent `--rust-admission`, noded `--rust-admission`; off by default, requires `sandbox.direct_node_rust_pause`). With the flag off nothing changes.
+  - The pause tier's 1 s sampler pass now also measures every owned, parkable, managed sandbox, running or paused, and after each pass replaces `<state_root>/noded/resident.json` (0600, atomic rename): `{seq, session, samples: [{sandbox_id, generation, <every ResidentMemorySample field>}]}`, `sampled_at` in CLOCK_MONOTONIC seconds. The policy's clock is now CLOCK_MONOTONIC itself rather than an offset from the daemon's start, so the agent can compare it with `time.monotonic()`.
+  - The agent stops its own sampling pass. Every resident reader (growth forecasts, resident waits, relay parks, pause decisions, the heartbeat's memory observation) reads noded's observations through `PublishedResidentMemory`, and the forecast refresh that followed each of the agent's passes follows each new `(session, seq)`, polled every 250 ms. Missing, invalid or foreign-writable files and samples are no observation; samples older than the 30 s growth age charge whole bounds, so a stopped noded's credit expires by itself. A park, restore or delete hides older observations until a newer pass. The agent's own reclaims still measure on demand, and the newer observation wins.
+  - noded's sampler now gives `peak_bytes` exactly as Python does for a negative `memory.peak` (the current charge, not 0). `runtime/noded/tests/resident_python_parity.rs` samples 26 fake cgroup trees with both samplers and requires equal fields, and requires the agent's reading of `resident.json` to equal noded's samples bit for bit.
+
 ## 0.9.72 - 2026-10-11 (gateway; workers)
 
 ### Node

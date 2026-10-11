@@ -1,5 +1,5 @@
-//! The two small files that cross the process boundary in phase 3a (spec
-//! §6.3), both under `<state_root>/noded/` (0700), replaced by atomic rename:
+//! The small files that cross the process boundary in phase 3 (spec §6.3),
+//! all under `<state_root>/noded/` (0700), replaced by atomic rename:
 //!
 //! - `status.json`, written here every tick (250 ms) for the agent's heartbeat:
 //!   ```json
@@ -18,6 +18,16 @@
 //!   A missing, malformed or stale one (older than `DEMAND_MAX_AGE_SECONDS` by
 //!   its mtime, or the same `seq` for that long) is unknown: zero demand, so
 //!   only measured pressure acts, as with closed admission.
+//! - `resident.json` (phase 3b, with `resident_sampling`), written here after
+//!   every sampler pass (1 s) for the agent's growth forecasts and resident
+//!   waits (`resident_memory.PublishedResidentMemory`):
+//!   ```json
+//!   {"seq": 9, "session": "…",
+//!    "samples": [{"sandbox_id": "…", "generation": 1, "current_bytes": 1000, …}]}
+//!   ```
+//!   Each sample carries exactly `ResidentMemorySample`'s fields under its
+//!   names, `sampled_at` in CLOCK_MONOTONIC seconds. Samples are ordered by
+//!   key; a sandbox the pass could not measure is absent (unknown).
 
 use std::io::Write;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
@@ -28,12 +38,14 @@ use serde_json::{Map, Value, json};
 
 use super::Clock;
 use super::decision::{MemoryDemand, REASONS};
+use super::resident::{Key, ResidentSample};
 use crate::fsutil::{ensure_private_dir, read_owned_file};
 use crate::pause::Counter;
 
 pub const DIRECTORY: &str = "noded";
 pub const STATUS_FILE: &str = "status.json";
 pub const DEMAND_FILE: &str = "agent-demand.json";
+pub const RESIDENT_FILE: &str = "resident.json";
 /// The agent writes at least every 250 ms; four missed writes are stale.
 pub const DEMAND_MAX_AGE_SECONDS: f64 = 1.0;
 const MAX_FILE_BYTES: u64 = 64 * 1024;
@@ -92,28 +104,93 @@ impl StatusFile {
         })
     }
 
-    /// Render and replace the file atomically (no fsync: a crash leaves the
-    /// previous or no file, which a reader treats as stale or unknown).
+    /// Render and replace the file atomically.
     pub fn write(&mut self, status: &Status) -> std::io::Result<Value> {
         let document = self.render(status);
-        ensure_private_dir(&self.directory)?;
-        let temporary = self.directory.join(format!(".{STATUS_FILE}.{}.tmp", std::process::id()));
-        let result = (|| {
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .mode(0o600)
-                .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
-                .open(&temporary)?;
-            file.write_all(&serde_json::to_vec(&document).map_err(std::io::Error::other)?)?;
-            drop(file);
-            std::fs::rename(&temporary, &self.path)
-        })();
-        if result.is_err() {
-            let _ = std::fs::remove_file(&temporary);
-        }
-        result.map(|()| document)
+        replace(&self.directory, &self.path, &document).map(|()| document)
+    }
+}
+
+/// Replace `path` by rename from a dot temporary in its private directory (no
+/// fsync: a crash leaves the previous or no file, which a reader treats as
+/// stale or unknown).
+fn replace(directory: &Path, path: &Path, document: &Value) -> std::io::Result<()> {
+    ensure_private_dir(directory)?;
+    let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+    let temporary = directory.join(format!(".{name}.{}.tmp", std::process::id()));
+    let result = (|| {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+            .open(&temporary)?;
+        file.write_all(&serde_json::to_vec(document).map_err(std::io::Error::other)?)?;
+        drop(file);
+        std::fs::rename(&temporary, path)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result
+}
+
+/// `<state_root>/noded/resident.json`, owned by this daemon (phase 3b).
+pub struct ResidentFile {
+    directory: PathBuf,
+    path: PathBuf,
+    session: String,
+    seq: u64,
+}
+
+impl ResidentFile {
+    /// `seq` starts at 0 in each session; the agent refreshes its growth
+    /// forecasts whenever (session, seq) changes.
+    pub fn open(state_root: &Path, session: &str) -> ResidentFile {
+        let directory = state_root.join(DIRECTORY);
+        let path = directory.join(RESIDENT_FILE);
+        ResidentFile { directory, path, session: session.to_string(), seq: 0 }
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// The document for one pass's samples (advancing `seq`).
+    pub fn render(&mut self, samples: &[(Key, ResidentSample)]) -> Value {
+        self.seq += 1;
+        let samples: Vec<Value> = samples
+            .iter()
+            .map(|((sandbox_id, generation), sample)| {
+                json!({
+                    "sandbox_id": sandbox_id,
+                    "generation": generation,
+                    "current_bytes": sample.current_bytes,
+                    "anonymous_bytes": sample.anonymous_bytes,
+                    "file_bytes": sample.file_bytes,
+                    "dirty_bytes": sample.dirty_bytes,
+                    "writeback_bytes": sample.writeback_bytes,
+                    "refault_file_pages": sample.refault_file_pages,
+                    "cgroup_path": sample.cgroup_path,
+                    "cgroup_device": sample.cgroup_device,
+                    "cgroup_inode": sample.cgroup_inode,
+                    "sentry_pid": sample.sentry_pid,
+                    "sentry_start_time_ticks": sample.sentry_start_time_ticks,
+                    "sampled_at": sample.sampled_at,
+                    "shared_memory_bytes": sample.shared_memory_bytes,
+                    "peak_bytes": sample.peak_bytes,
+                    "swap_bytes": sample.swap_bytes,
+                })
+            })
+            .collect();
+        json!({"seq": self.seq, "session": self.session, "samples": samples})
+    }
+
+    /// Render and replace the file atomically.
+    pub fn write(&mut self, samples: &[(Key, ResidentSample)]) -> std::io::Result<Value> {
+        let document = self.render(samples);
+        replace(&self.directory, &self.path, &document).map(|()| document)
     }
 }
 

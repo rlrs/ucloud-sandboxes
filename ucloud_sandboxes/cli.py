@@ -401,6 +401,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="runtime/noded owns pauses, thaws, idle pauses, local waits and paused reclaim "
              "(needs --rust-execs, --pause-tier)",
     )
+    direct_node_agent.add_argument(
+        "--rust-admission", action="store_true",
+        help="runtime/noded samples managed sandboxes' resident memory; read its resident.json "
+             "(needs --rust-pause-tier; docs/admission-port-3c.md)",
+    )
     direct_node_agent.add_argument("--job-id")
     direct_node_agent.add_argument("--node-id")
     direct_node_agent.add_argument("--node-url")
@@ -1476,6 +1481,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         rust_creates=args.rust_creates,
         rust_execs=args.rust_execs,
         rust_pause_tier=args.rust_pause_tier,
+        rust_admission=args.rust_admission,
     )
     if args.unix_socket is not None:
         print(f"Serving direct-runsc node agent on unix:{args.unix_socket}")
@@ -1487,7 +1493,8 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
     print(f"Registry: {'foreign (runtime/noded owns it)' if args.registry_foreign else 'owned'}; "
           f"creates: {'runtime/noded' if args.rust_creates else 'this agent'}; "
           f"execs: {'runtime/noded' if args.rust_execs else 'this agent'}; "
-          f"pause tier: {'runtime/noded' if args.rust_pause_tier else 'this agent'}")
+          f"pause tier: {'runtime/noded' if args.rust_pause_tier else 'this agent'}; "
+          f"resident sampling: {'runtime/noded' if args.rust_admission else 'this agent'}")
     print(
         "Direct image cache root: "
         f"{args.image_cache_root or state_root / 'image-cache'}"
@@ -7225,6 +7232,7 @@ def vm_init_options_for_job(
         direct_node_rust_create=role == "sandbox" and config.sandbox.direct_node_rust_create,
         direct_node_rust_exec=role == "sandbox" and config.sandbox.direct_node_rust_exec,
         direct_node_rust_pause=role == "sandbox" and config.sandbox.direct_node_rust_pause,
+        direct_node_rust_admission=role == "sandbox" and config.sandbox.direct_node_rust_admission,
         direct_workspace_initial_grant_mb=(
             config.sandbox.direct_workspace_initial_grant_mb if role == "sandbox" else 0
         ),
@@ -7286,6 +7294,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "directNodeRustCreate": options.direct_node_rust_create,
         "directNodeRustExec": options.direct_node_rust_exec,
         "directNodeRustPause": options.direct_node_rust_pause,
+        "directNodeRustAdmission": options.direct_node_rust_admission,
         "directWorkspaceInitialGrantMb": options.direct_workspace_initial_grant_mb,
         "storageNativeRegistryUrl": options.storage_native_registry_url,
         "storageNativeRepository": options.storage_native_repository,

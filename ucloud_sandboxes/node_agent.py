@@ -664,7 +664,8 @@ class NodeAgentHandler(BuildContextHttpHandler):
                                    rust_creates_enabled=self.create_handoff is not None,
                                    rust_execs_enabled=getattr(self.manager, "exec_fence", None) is not None,
                                    exec_sessions=self.exec_manager,
-                                   rust_pause_enabled=getattr(self.manager, "rust_pause_tier", False))
+                                   rust_pause_enabled=getattr(self.manager, "rust_pause_tier", False),
+                                   rust_admission_enabled=getattr(self.manager, "rust_admission", False))
             digest = hashlib.sha256(json.dumps(config, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
             cached = type(self)._create_config_cache = dict(config, config_sha256=digest)
         return cached
@@ -2197,6 +2198,7 @@ def build_direct_node_agent_server(
     rust_creates: bool = False,
     rust_execs: bool = False,
     rust_pause_tier: bool = False,
+    rust_admission: bool = False,
 ) -> NodeAgentHTTPServer:
     """Serve a sandbox node with direct runsc and storage-native ownership.
 
@@ -2206,6 +2208,8 @@ def build_direct_node_agent_server(
     transitions fence them through flock files (exec_fence).
     ``rust_pause_tier``: noded owns the pause tier and local waits; this
     agent runs neither (pause_handoff).
+    ``rust_admission`` (so far phase 3b, docs/admission-port-3c.md): noded
+    samples managed sandboxes; this agent reads its resident.json.
     """
     if rust_creates and (unix_socket is None or service.provisioner.registry.is_owner):
         raise ValueError("Rust creates need the agent on its Unix socket and a foreign registry")
@@ -2213,6 +2217,8 @@ def build_direct_node_agent_server(
         raise ValueError("Rust execs need the agent on its Unix socket")
     if rust_pause_tier and not (rust_execs and service.warden.config.pause_tier):
         raise ValueError("the Rust pause tier needs Rust execs and the pause tier")
+    if rust_admission and not rust_pause_tier:
+        raise ValueError("Rust admission needs the Rust pause tier")
     node_control_bearer_token = node_control_bearer_token.strip()
     if not node_control_bearer_token:
         raise ValueError("node control bearer token cannot be empty")
@@ -2234,7 +2240,8 @@ def build_direct_node_agent_server(
             runtime_metrics_provider=host_runtime_metrics,
         )
     service.start()
-    manager = DirectNodeRuntime(service, rust_execs=rust_execs, rust_pause_tier=rust_pause_tier)
+    manager = DirectNodeRuntime(service, rust_execs=rust_execs, rust_pause_tier=rust_pause_tier,
+                                rust_admission=rust_admission)
     manager.start()
     exec_manager = ExecSessionManager(manager, telemetry=resolved_telemetry)
     from .environment_manifest import HOST_EROFS_ABI

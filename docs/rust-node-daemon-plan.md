@@ -375,7 +375,7 @@ images):
 5. **Not yet started:**
    - 2c and 2d: the guest agent as the exec transport, and files over it.
      They are no longer needed for C5.1's exec numbers (next section);
-   - 3b: resident sampling;
+   - 3b: resident sampling (landed since; see "Phase 3" below);
    - phase 4: park, wake, migration, commit and fork, then deleting the
      Python agent.
 
@@ -547,7 +547,15 @@ are managed sandboxes.
 1. **3a:** the whole pause tier, thaw-on-exec (the planned 2b is folded in),
    idle pause, reclaim, the escalation decision and local waits. These are
    separate PRs under one flag.
-2. **3b:** resident sampling.
+2. **3b:** resident sampling. *Landed 2026-10-11, unreleased*, as step
+   3c.0(a) of [admission-port-3c.md](admission-port-3c.md) (see its
+   Progress), behind `sandbox.direct_node_rust_admission` (off by default).
+   - noded's 1 s pass samples managed sandboxes, running or paused, as well
+     as paused ones, and publishes them to `<state_root>/noded/resident.json`.
+   - The agent stops sampling and reads that file for its growth forecasts
+     and resident waits.
+   - The fields equal Python's on the same cgroup
+     (`runtime/noded/tests/resident_python_parity.rs`).
 3. **3c:** one admission function (C5.3), with growth.
 
 **Cross-process mechanisms**, kernel-native, as in phase 2a:

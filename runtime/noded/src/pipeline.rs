@@ -83,6 +83,10 @@ pub struct CreateConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct PauseBlock {
     pub rust_pause_enabled: bool,
+    /// Phase 3b: the agent runs with `--rust-admission` and reads this
+    /// daemon's `resident.json` instead of sampling. Absent from older agents.
+    #[serde(default)]
+    pub rust_admission_enabled: bool,
     #[serde(flatten)]
     pub settings: Map<String, Value>,
 }

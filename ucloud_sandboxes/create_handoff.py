@@ -214,7 +214,8 @@ class CreateHandoff:
 
 def create_config(service: Any, *, node_epoch: str, rust_creates_enabled: bool,
                   rust_execs_enabled: bool = False, exec_sessions: Any = None,
-                  rust_pause_enabled: bool = False) -> dict[str, Any]:
+                  rust_pause_enabled: bool = False,
+                  rust_admission_enabled: bool = False) -> dict[str, Any]:
     """The agent's effective create configuration, read from the assembled node.
 
     Python stays the single source of truth for flags and assembly checks;
@@ -298,5 +299,6 @@ def create_config(service: Any, *, node_epoch: str, rust_creates_enabled: bool,
             "admission_wait_seconds": service.admission_wait_seconds,
             "rust_execs_enabled": bool(rust_execs_enabled),
         },
-        "pause": pause_config(service, rust_pause_enabled=rust_pause_enabled),
+        "pause": pause_config(service, rust_pause_enabled=rust_pause_enabled,
+                              rust_admission_enabled=rust_admission_enabled),
     }

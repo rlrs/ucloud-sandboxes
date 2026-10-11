@@ -1,5 +1,6 @@
 //! ucloud-noded --listen ADDR --upstream-unix PATH [--max-connections N]
-//!               [--rust-create] [--rust-exec] [--rust-pause] [--node-control-token-file PATH]
+//!               [--rust-create] [--rust-exec] [--rust-pause] [--rust-admission]
+//!               [--node-control-token-file PATH]
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -12,7 +13,7 @@ fn usage(message: &str) -> ExitCode {
     eprintln!("ucloud-noded: {message}");
     eprintln!(
         "usage: ucloud-noded --listen ADDR --upstream-unix PATH [--max-connections N] \
-         [--rust-create] [--rust-exec] [--rust-pause] [--node-control-token-file PATH]"
+         [--rust-create] [--rust-exec] [--rust-pause] [--rust-admission] [--node-control-token-file PATH]"
     );
     ExitCode::from(2)
 }
@@ -24,6 +25,7 @@ fn main() -> ExitCode {
     let mut rust_create = false;
     let mut rust_exec = false;
     let mut rust_pause = false;
+    let mut rust_admission = false;
     let mut token_file: Option<PathBuf> = None;
     let mut args = std::env::args().skip(1);
     while let Some(flag) = args.next() {
@@ -31,9 +33,10 @@ fn main() -> ExitCode {
             "--rust-create" => rust_create = true,
             "--rust-exec" => rust_exec = true,
             "--rust-pause" => rust_pause = true,
+            "--rust-admission" => rust_admission = true,
             _ => {}
         }
-        if matches!(flag.as_str(), "--rust-create" | "--rust-exec" | "--rust-pause") {
+        if matches!(flag.as_str(), "--rust-create" | "--rust-exec" | "--rust-pause" | "--rust-admission") {
             continue;
         }
         let Some(value) = args.next() else { return usage(&format!("{flag} needs a value")) };
@@ -98,8 +101,11 @@ fn main() -> ExitCode {
         if (rust_exec || rust_pause) && !rust_create {
             eprintln!("ucloud-noded: --rust-exec and --rust-pause need --rust-create; execs and the pause tier stay with the agent");
         }
+        if rust_admission && !rust_pause {
+            eprintln!("ucloud-noded: --rust-admission needs --rust-pause; resident sampling stays with the agent");
+        }
         let fronts = match token.filter(|_| rust_create) {
-            Some(token) => match ucloud_noded::start_fronts(&config.upstream, &token, rust_exec, rust_pause) {
+            Some(token) => match ucloud_noded::start_fronts(&config.upstream, &token, rust_exec, rust_pause, rust_admission) {
                 Ok(fronts) => fronts,
                 Err(error) => {
                     eprintln!("ucloud-noded: {error}");

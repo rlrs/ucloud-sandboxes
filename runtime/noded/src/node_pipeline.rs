@@ -222,7 +222,9 @@ impl NodePipeline {
         let registry = Arc::new(registry);
         let pause_runtime = pause.as_ref().map(|tier| {
             let settings = config.pause.as_ref().map(|block| block.settings.clone()).unwrap_or_default();
+            let resident_sampling = config.pause.as_ref().is_some_and(|block| block.rust_admission_enabled);
             crate::pause_runtime::PauseRuntime::start(crate::pause_runtime::PauseInputs {
+                resident_sampling,
                 agent: agent.clone(),
                 tier: tier.clone(),
                 registry: registry.clone(),

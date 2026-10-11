@@ -3,15 +3,23 @@
 Sampling runs in maintenance, never on request admission. A configured memory
 limit is not a resident footprint, and summing shared process RSS is not valid.
 Unknown/stale data stays unknown rather than crediting a fictional reclaim.
+With ``--rust-admission`` runtime/noded samples and the agent reads its
+observations (PublishedResidentMemory).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+import json
+import logging
+import math
+import os
 from pathlib import Path
 import stat
 from threading import Lock
 import time
 
 from .hibernation import linux_process_start_time_ticks
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -200,6 +208,156 @@ class ResidentMemorySampler:
         with self._guard:
             self._samples[key] = result
             self._contained[key] = (raw, identity.st_dev, identity.st_ino)
+        return result
+
+
+_SAMPLE_FIELDS = tuple(field.name for field in fields(ResidentMemorySample))
+_PUBLISHED_KEYS = frozenset(("sandbox_id", "generation", *_SAMPLE_FIELDS))
+_PUBLISHED_MAX_BYTES = 16 * 1024 * 1024
+
+
+def _published_sample(raw: object) -> tuple[tuple[str, int], ResidentMemorySample] | None:
+    """One ``resident.json`` sample, or None when it is not exactly valid."""
+    if not isinstance(raw, dict) or raw.keys() != _PUBLISHED_KEYS:
+        return None
+    sandbox_id, generation = raw["sandbox_id"], raw["generation"]
+    if not isinstance(sandbox_id, str) or not sandbox_id or type(generation) is not int or generation < 1:
+        return None
+    values = {}
+    for name in _SAMPLE_FIELDS:
+        value = raw[name]
+        if name == "cgroup_path":
+            if not isinstance(value, str) or not value.startswith("/"):
+                return None
+        elif name == "sampled_at":
+            if type(value) not in (int, float) or not math.isfinite(value):
+                return None
+            value = float(value)
+        elif type(value) is not int or value < 0:
+            return None
+        values[name] = value
+    return (sandbox_id, generation), ResidentMemorySample(**values)
+
+
+class PublishedResidentMemory:
+    """noded's resident observations behind the sampler's interface (phase 3b).
+
+    With ``--rust-admission`` runtime/noded samples every owned, parkable,
+    managed or paused sandbox once a second, with the same fields as
+    ResidentMemorySampler on the same cgroup, and replaces
+    ``<state_root>/noded/resident.json`` after each pass:
+    ``{"seq", "session", "samples": [{sandbox_id, generation, <every
+    ResidentMemorySample field>}]}``, ``sampled_at`` in CLOCK_MONOTONIC
+    seconds (``time.monotonic()``). The agent no longer samples on its own
+    schedule; ``load()`` reads a new pass and the caller credits it.
+
+    - Age fences stay with the consumers, as for the sampler's own samples:
+      ``get()`` at ``max_age_seconds``, growth credit at 30 s. A stopped
+      noded's last samples therefore age out and charge whole bounds.
+    - A missing, unreadable or invalid file, or an invalid sample, is no
+      observation.
+    - ``forget()`` (park, restore, delete) hides every observation taken
+      before it until a newer one arrives: a pass that sampled before the
+      forget may publish after it.
+    - The agent's own reclaims still measure on demand through ``sample()``;
+      ``get()`` and ``historical()`` return the newer of that and noded's.
+    """
+
+    def __init__(self, path: Path, sampler: ResidentMemorySampler):
+        self.path = path
+        self.sampler = sampler
+        self.cgroup_root = sampler.cgroup_root
+        self.proc_root = sampler.proc_root
+        self.max_age_seconds = sampler.max_age_seconds
+        self._published: dict[tuple[str, int], ResidentMemorySample] = {}
+        self._fences: dict[tuple[str, int], float] = {}
+        self._version: tuple[str, int] | None = None
+        self._identity: tuple[int, ...] | None = None
+        self._logged = float("-inf")
+        self._guard = Lock()
+
+    def load(self) -> bool:
+        """Read ``resident.json``; True when its (session, seq) changed."""
+        try:
+            descriptor = os.open(self.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                                 | getattr(os, "O_CLOEXEC", 0))
+        except FileNotFoundError:
+            return self._replace(None, None, {})
+        except OSError as exc:
+            return self._invalid(f"unreadable: {exc}")
+        try:
+            with os.fdopen(descriptor, "rb") as stream:
+                info = os.fstat(stream.fileno())
+                identity = (info.st_dev, info.st_ino, info.st_mtime_ns, info.st_size)
+                if identity == self._identity:
+                    return False
+                if info.st_uid != os.geteuid() or info.st_mode & 0o022:
+                    return self._invalid("others may write it")
+                data = stream.read(_PUBLISHED_MAX_BYTES + 1)
+            raw = json.loads(data)
+        except (OSError, ValueError) as exc:
+            return self._invalid(f"unreadable: {exc}")
+        if len(data) > _PUBLISHED_MAX_BYTES or not isinstance(raw, dict):
+            return self._invalid("not an object")
+        seq, session, samples = raw.get("seq"), raw.get("session"), raw.get("samples")
+        if (type(seq) is not int or seq < 0 or not isinstance(session, str)
+                or not 0 < len(session) <= 128 or not isinstance(samples, list)):
+            return self._invalid("seq, session or samples is invalid")
+        published = {}
+        for item in samples:
+            parsed = _published_sample(item)
+            if parsed is not None:
+                published[parsed[0]] = parsed[1]
+        return self._replace((session, seq), identity, published)
+
+    def _invalid(self, reason: str) -> bool:
+        now = time.monotonic()
+        if now - self._logged >= 60.0:
+            self._logged = now
+            _LOG.warning("noded resident.json ignored (%s): no resident observations", reason)
+        return self._replace(None, None, {})
+
+    def _replace(self, version, identity, published) -> bool:
+        with self._guard:
+            changed = version != self._version
+            self._version, self._identity, self._published = version, identity, published
+            for key, sample in published.items():
+                if self._fences.get(key, sample.sampled_at) < sample.sampled_at:
+                    self._fences.pop(key)  # Superseded by a later observation.
+            return changed
+
+    def historical(self, key: tuple[str, int]) -> ResidentMemorySample | None:
+        own = self.sampler.historical(key)
+        with self._guard:
+            published, fence = self._published.get(key), self._fences.get(key)
+        candidates = [sample for sample in (own, published)
+                      if sample is not None and (fence is None or sample.sampled_at > fence)]
+        return max(candidates, key=lambda sample: sample.sampled_at, default=None)
+
+    def get(self, key: tuple[str, int]) -> ResidentMemorySample | None:
+        sample = self.historical(key)
+        if sample is None or time.monotonic() - sample.sampled_at > self.max_age_seconds:
+            return None
+        return sample
+
+    def forget(self, key) -> None:
+        with self._guard:
+            self._fences[key] = time.monotonic()
+        self.sampler.forget(key)
+
+    def retain(self, keys) -> None:
+        keys = set(keys)
+        with self._guard:
+            self._fences = {key: fence for key, fence in self._fences.items() if key in keys}
+        self.sampler.retain(keys)
+
+    def sample(self, key, **kwargs) -> ResidentMemorySample | None:
+        """Measure now (the agent's reclaims); a failure is no observation."""
+        result = self.sampler.sample(key, **kwargs)
+        if result is None:
+            # As the sampler drops its own: unknown until a later observation.
+            with self._guard:
+                self._fences[key] = time.monotonic()
         return result
 
 

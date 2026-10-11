@@ -10,7 +10,9 @@ loops. What crosses the process boundary:
   bookkeeping (``/internal/v1/pauses/escalate``, ``/internal/v1/growth/events``);
 - small files under ``<state_root>/noded/``, written by atomic rename: the
   agent publishes ``agent-demand.json`` (what paused reclaim bills), and the
-  heartbeat adds noded's pause counters from its ``status.json``.
+  heartbeat adds noded's pause counters from its ``status.json``. With
+  ``--rust-admission`` (phase 3b) noded also samples managed sandboxes and
+  publishes ``resident.json`` (resident_memory.PublishedResidentMemory).
 """
 from __future__ import annotations
 
@@ -31,6 +33,7 @@ _LOG = logging.getLogger(__name__)
 NODED_DIRECTORY = "noded"
 AGENT_DEMAND_FILE = "agent-demand.json"
 STATUS_FILE = "status.json"
+RESIDENT_FILE = "resident.json"
 # agent-demand.json: at least this often, and at most this often when
 # admission changes keep waking the publisher. noded's reclaim tick runs at 4 Hz.
 DEMAND_INTERVAL_SECONDS = 0.25
@@ -261,11 +264,14 @@ def parse_managed_growth_call(path: str, raw: object) -> tuple[Any, ...]:
     return tuple(raw[key] for key in keys)
 
 
-def pause_config(service: Any, *, rust_pause_enabled: bool) -> dict[str, Any]:
+def pause_config(service: Any, *, rust_pause_enabled: bool,
+                 rust_admission_enabled: bool = False) -> dict[str, Any]:
     """The ``pause`` block of GET /internal/v1/creates/config.
 
     ``rust_pause_enabled``: the agent started without its local waits, idle
     pauses, paused reclaim and paused sampling; noded owns them.
+    ``rust_admission_enabled`` (phase 3b): the agent samples no managed
+    sandbox either; noded samples them and publishes ``resident.json``.
     """
     from .direct_network import NETWORK_CIDR
     from . import local_wait
@@ -279,6 +285,7 @@ def pause_config(service: Any, *, rust_pause_enabled: bool) -> dict[str, Any]:
     directory = noded_directory(service)
     return {
         "rust_pause_enabled": bool(rust_pause_enabled),
+        "rust_admission_enabled": bool(rust_admission_enabled),
         "pause_tier": pause,
         "runsc": str(config.runsc),
         "runtime_root": str(config.runtime_root),
@@ -293,6 +300,7 @@ def pause_config(service: Any, *, rust_pause_enabled: bool) -> dict[str, Any]:
         "status_max_age_seconds": STATUS_MAX_AGE_SECONDS,
         "agent_demand_path": str(directory / AGENT_DEMAND_FILE),
         "agent_demand_interval_seconds": DEMAND_INTERVAL_SECONDS,
+        "resident_path": str(directory / RESIDENT_FILE),
         "prefetch": {
             "threads": pause_tier.PREFETCH_THREADS,
             "node_threads": pause_tier.PREFETCH_NODE_THREADS,

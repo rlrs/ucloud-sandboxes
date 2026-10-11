@@ -1031,16 +1031,21 @@ pub fn managed_state_mount(bundle: &Path) -> Result<Value, OciError> {
     let source = managed_state_source(bundle);
     let source = source
         .to_str()
-        .filter(|source| source.starts_with('/') && !source.contains('\0'))
-        .ok_or_else(|| config("managed process state source must be an absolute path"))?;
+        .filter(|source| bundle.is_absolute() && !source.contains('\0'))
+        .ok_or_else(|| config("managed-process state mount needs an absolute bundle"))?;
     Ok(json!({"destination": MANAGED_STATE_DESTINATION, "options": MANAGED_STATE_OPTIONS, "source": source, "type": "bind"}))
 }
 
-/// Whether a bundle's `config.json` carries exactly that mount. Sandboxes
-/// created before it (legacy) keep their job reads in the agent.
+/// Whether a bundle's `config.json` binds the managed state, as Python's
+/// `configured_managed_state_mount` decides: one mount at the destination,
+/// exactly this bundle's. Sandboxes created before it (legacy) keep their job
+/// routes in the agent; a config binding anything else is not read either.
 pub fn has_managed_state_mount(config: &Value, bundle: &Path) -> bool {
     let Ok(expected) = managed_state_mount(bundle) else { return false };
-    config.get("mounts").and_then(Value::as_array).is_some_and(|mounts| mounts.contains(&expected))
+    let Some(mounts) = config.get("mounts").and_then(Value::as_array) else { return false };
+    let found: Vec<&Value> =
+        mounts.iter().filter(|mount| mount.get("destination").and_then(Value::as_str) == Some(MANAGED_STATE_DESTINATION)).collect();
+    found.len() == 1 && *found[0] == expected
 }
 
 /// The `--network` mode of the node: `none` or `sandbox`.

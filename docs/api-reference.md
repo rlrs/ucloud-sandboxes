@@ -477,7 +477,9 @@ sandbox API key.
     ([gateway-async-responses.md](gateway-async-responses.md)).
 - **The gateway's cache.** Every successful status or logs response's record
   is cached, fenced by sandbox generation and sequence. Within one sequence the
-  cached byte counts never shrink.
+  cached byte counts never shrink. So is the exact record a worker adds to a
+  parked sandbox's record (`managed_process`: park responses, listings and
+  heartbeat inventory).
 - **Parked or transitioning sandboxes** are answered from the cache, with
   `Retry-After: 1` when the read waits:
   - A status read returns the cached record; a parked sandbox with none

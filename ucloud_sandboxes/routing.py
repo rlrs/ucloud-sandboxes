@@ -918,6 +918,26 @@ class RoutingStore:
             return None
         return record
 
+    def managed_processes_readonly(
+        self, sandbox_ids: Iterable[str],
+    ) -> dict[str, ManagedProcessRecord]:
+        """Cached job records by sandbox, in one statement (any generation)."""
+        with self._read() as conn:
+            rows = conn.execute(
+                f"""SELECT sandbox_id, record_json FROM managed_processes
+                WHERE sandbox_id IN ({self._json_values_query})""",
+                (json.dumps(sorted(set(sandbox_ids))),),
+            ).fetchall()
+        records = {}
+        for row in rows:
+            try:
+                records[row["sandbox_id"]] = ManagedProcessRecord.from_dict(
+                    json.loads(row["record_json"])
+                )
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+        return records
+
     def upsert_managed_process(
         self,
         route: SandboxRoute,

@@ -166,6 +166,22 @@ served by the gateway").
 - **Cache.** `_record_successful_sandbox_proxy_state` also caches the `job`
   record carried by 2xx log responses, so a parked sandbox's cached status is
   as fresh as the last read.
+  - Fencing: generation, then sequence; within one sequence the cached byte
+    counts never shrink, since held reads finish out of order.
+  - **Parked records are exact.** A worker adds `"managed_process": <record>`
+    (the job status body, cursor included) to a parked managed sandbox's
+    record, read from the host-visible ledger after the checkpoint. The
+    gateway caches it, validated and fenced as above, wherever it applies a
+    parked worker record: park responses (including a background park's
+    `202`), wake failures that leave the sandbox parked, worker sandbox
+    listings, wake-time publication, and heartbeat inventory (a worker's own
+    idle park or escalation). Inventory costs one read per heartbeat, plus
+    writes only for changed records, and counts only from the route's owner.
+  - Without it, a job that wrote or exited after the last read and then
+    parked would look unchanged: a follower at the stale count would wait
+    without waking the sandbox, and an ACP agent idle-parked on stdin would
+    never be seen to finish. An absent, invalid or older record changes
+    nothing.
 - **Parked and transitioning routes** (served from the cache):
   - A status read with `wait_ms` returns the cached record at once, with
     `Retry-After: 1`. Nothing changes while parked, so the client backs off;

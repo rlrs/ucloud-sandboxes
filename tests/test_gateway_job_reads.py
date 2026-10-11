@@ -4,6 +4,7 @@ docs/managed-process-reads.md, "Gateway".
 """
 
 from contextlib import ExitStack, contextmanager
+from dataclasses import replace
 from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -18,7 +19,9 @@ from ucloud_sandboxes.gateway import job_reads
 from ucloud_sandboxes.gateway.node_rpc import DEFAULT_PROXY_TIMEOUT_SECONDS, ProxiedResponse
 from ucloud_sandboxes.http_contract import match_sandbox_http_route
 from ucloud_sandboxes.managed_process import ManagedProcessRecord
-from ucloud_sandboxes.models import NodeHeartbeat, ResourceQuantity, utc_now
+from ucloud_sandboxes.models import (
+    NodeHeartbeat, ResourceQuantity, SandboxInventoryEntry, utc_now,
+)
 from ucloud_sandboxes.routing import SandboxRoute
 
 TEST_TIER = "contract"
@@ -76,12 +79,17 @@ class GatewayJobReadTests(unittest.TestCase):
             def log_message(self, *_args):
                 pass
 
-            def do_GET(self):
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self.do_GET(parent.answers[self.path.rsplit("/", 1)[-1]])
+
+            def do_GET(self, answer=None):
                 with parent.entered:
                     parent.calls.append((self.path, self.headers.get("Authorization")))
                     parent.entered.notify_all()
                 parent.release.wait(5)
-                status, payload = parent.answers.get(self.path) or parent.default_answer(self.path)
+                status, payload = (answer or parent.answers.get(self.path)
+                                   or parent.default_answer(self.path))
                 body = json.dumps(payload).encode()
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
@@ -147,7 +155,6 @@ class GatewayJobReadTests(unittest.TestCase):
             self.route, ManagedProcessRecord.from_dict(job_record(**overrides)))
 
     def park(self):
-        from dataclasses import replace
         self.route = self.handler.routing_store.upsert_sandbox(replace(self.route, state="parked"))
 
     @contextmanager
@@ -346,6 +353,101 @@ class ParkedJobReadTests(GatewayJobReadTests):
                     status, _headers, body = self.read(self.get(path))
                     self.assertEqual((status, body["error"]), (503, "wake attempted"))
         self.assertEqual(len(wakes), 5)
+
+
+class ParkedSandboxRecordTests(GatewayJobReadTests):
+    """A parked worker's sandbox record carries its exact job record."""
+
+    def setUp(self):
+        super().setUp()
+        self.release.set()
+        self.cache(stdout_bytes=20)
+        self.heartbeat = replace(
+            self.handler.services.heartbeats.store.get_heartbeat("job"),
+            node_epoch="boot-1", activity_epoch=3,
+        )
+        self.handler.services.heartbeats.store.receive_heartbeat(self.heartbeat)
+
+    def sandbox_record(self, managed_process):
+        return {"spec": self.route.spec, "generation": 7, "operation_id": "test-create",
+                "spec_hash": "b" * 64, "state": "parked", "managed_process": managed_process}
+
+    def park_through_gateway(self, managed_process):
+        self.answers["park"] = (200, {"sandbox": self.sandbox_record(managed_process),
+                                      "node_epoch": "boot-1", "activity_epoch": 9})
+        connection = HTTPConnection("127.0.0.1", self.gateway.server_port, timeout=10)
+        self.addCleanup(connection.close)
+        connection.request("POST", "/v1/sandboxes/s/park",
+                           body=json.dumps({"operation_id": "park-1", "generation": 7}),
+                           headers={"Authorization": "Bearer operator",
+                                    "Content-Type": "application/json"})
+        return self.read(connection)
+
+    def inventory_heartbeat(self, managed_process):
+        from ucloud_sandboxes.registry import heartbeat_to_dict
+        heartbeat = replace(
+            self.heartbeat, activity_epoch=5, inventory_complete=True,
+            inventory=(SandboxInventoryEntry(
+                sandbox_id="s", generation=7, operation_id="test-create", spec_hash="b" * 64,
+                state="parked", resources=ResourceQuantity(vcpu=1, memory_mb=1024),
+                managed_process=managed_process,
+            ),),
+        )
+        outcome = self.handler.services.heartbeats.receive(heartbeat_to_dict(heartbeat))
+        self.assertEqual(outcome.status, 200, outcome.payload)
+
+    def test_a_park_response_record_refreshes_the_cache_and_reads_wake_for_its_bytes(self):
+        status, _headers, body = self.park_through_gateway(job_record(stdout_bytes=40))
+        self.assertEqual(status, 200, body)
+        self.assertEqual(self.handler.routing_store.get_sandbox("s").state, "parked")
+        self.assertEqual(self.cached().stdout_bytes, 40)
+        with self.recording_wakes() as wakes:
+            # The old cached count no longer answers: bytes 20..40 exist.
+            status, _headers, body = self.read(self.get(
+                "/v1/sandboxes/s/jobs/job-1/logs/stdout?offset=20&wait_ms=20000"))
+            self.assertEqual((status, body["error"]), (503, "wake attempted"))
+            status, headers, body = self.read(self.get(
+                "/v1/sandboxes/s/jobs/job-1/logs/stdout?offset=40&wait_ms=20000"))
+            self.assertEqual((status, headers["Retry-After"], body["next_offset"]), (200, "1", 40))
+        self.assertEqual(len(wakes), 1)
+
+    def test_heartbeat_inventory_record_refreshes_the_cache(self):
+        # The worker parked the sandbox by itself (idle); the gateway learns
+        # both the park and the job's final counts from its inventory.
+        self.route = self.handler.routing_store.upsert_sandbox(replace(self.route, node_epoch="boot-1"))
+        self.inventory_heartbeat(job_record(stdout_bytes=30, stderr_bytes=4))
+        self.assertEqual(self.handler.routing_store.get_sandbox("s").state, "parked")
+        self.assertEqual((self.cached().stdout_bytes, self.cached().stderr_bytes), (30, 4))
+        status, headers, body = self.read(self.get("/v1/sandboxes/s/jobs/job-1?wait_ms=1000"))
+        self.assertEqual((status, body["job"]["cursor"]), (200, "2.30.4"))
+
+    def test_older_foreign_and_invalid_records_are_ignored(self):
+        self.cache(stdout_bytes=40, sequence=3)
+        for managed_process in (
+            job_record(stdout_bytes=50, sequence=2),  # an older sequence
+            job_record(stdout_bytes=60, sandbox_generation=6),  # another incarnation
+            job_record(stdout_bytes=70, sandbox_id="other"),
+            {"job_id": "job-1", "stdout_bytes": 80},  # not a job record
+        ):
+            with self.subTest(managed_process=managed_process):
+                self.inventory_heartbeat(managed_process)
+                self.assertEqual((self.cached().sequence, self.cached().stdout_bytes), (3, 40))
+        status, _headers, body = self.park_through_gateway(job_record(stdout_bytes=90, sequence=2))
+        self.assertEqual(status, 200, body)
+        self.assertEqual((self.cached().sequence, self.cached().stdout_bytes), (3, 40))
+        # Absent: the inventory and the park behave as before.
+        self.inventory_heartbeat(None)
+        self.assertEqual(self.cached().stdout_bytes, 40)
+
+    def test_inventory_entries_carry_the_record_and_survive_a_malformed_one(self):
+        entry = SandboxInventoryEntry(
+            sandbox_id="s", generation=7, operation_id="test-create", spec_hash="b" * 64,
+            state="parked", managed_process=job_record(),
+        )
+        self.assertEqual(SandboxInventoryEntry.from_dict(entry.to_dict()), entry)
+        self.assertNotIn("managed_process", replace(entry, managed_process=None).to_dict())
+        malformed = SandboxInventoryEntry.from_dict({**entry.to_dict(), "managed_process": "x"})
+        self.assertEqual(malformed, replace(entry, managed_process=None))
 
 
 class ManagedProcessCacheOrderTests(GatewayJobReadTests):

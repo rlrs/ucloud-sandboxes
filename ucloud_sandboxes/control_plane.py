@@ -92,8 +92,8 @@ from .gateway.fleet import _heartbeat_has_image, _node_metadata, _requested_imag
 from .gateway.groups import GROUP_PATH, group_id_from_path, parse_group_request
 from .gateway.heartbeats import PULL_TIMEOUT_SECONDS
 from .gateway.job_reads import (
-    cached_job_logs_response, cached_job_status_response, job_read_timeout_seconds,
-    job_read_wait_ms, project_job_response, record_job_response,
+    cache_parked_job, cached_job_logs_response, cached_job_status_response,
+    job_read_timeout_seconds, job_read_wait_ms, project_job_response, record_job_response,
 )
 from .gateway.image_resolution import (
     TRANSIENT_IMAGE_RESOLUTION_ERROR_CODES, _image_record_available_to_sandboxes,
@@ -2210,6 +2210,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                             confirmed,
                             keep_route=stored_route,
                         )
+                        if stored_route is not None:
+                            self._cache_parked_job(stored_route, record)
                 if stored_route is None:
                     continue
                 sandboxes.append(_enrich_sandbox_record(record, heartbeat))
@@ -4395,6 +4397,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         ):
             return
         if lifecycle_action == "park" and response.status == HTTPStatus.ACCEPTED:
+            # Publication is pending; the route commits from inventory later.
+            self._cache_parked_job(route, response.json().get("sandbox"))
             self._send_proxied_response(response)
             return
         if lifecycle_action:
@@ -4752,11 +4756,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         if response.status < 300:
             return self._commit_lifecycle_response(route, "wake", response)
         if str(response.json().get("lifecycle_state") or "").lower() == "parked":
-            self.routing_store.set_sandbox_state_if_current(
+            rolled_back = self.routing_store.set_sandbox_state_if_current(
                 route,
                 expected_states={"waking"},
                 state="parked",
             )
+            if rolled_back is not None:
+                self._cache_parked_job(rolled_back, response.json().get("sandbox"))
         if response.transport_error_kind:
             # Only the internal wake was attempted. The caller's exec, upload
             # or job mutation has not been dispatched, even if the wake reply
@@ -4871,6 +4877,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     )
                     if rolled_back is not None:
                         route = rolled_back
+                        self._cache_parked_job(route, response.json().get("sandbox"))
             self._record_program_request_transition(
                 route,
                 payload,
@@ -4933,11 +4940,17 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         except RegistryImageReferenceUnavailable as exc:
             self._write_registry_lease_unavailable(exc)
             return None
+        if action != "wake":
+            self._cache_parked_job(outcome.route, receipt.get("sandbox"))
         if action == "wake" and lifecycle_payload is not None:
             self._record_completed_program_lifecycle(
                 outcome.route, action, lifecycle_payload,
                 committed=outcome.program_transition)
         return outcome.route
+
+    def _cache_parked_job(self, route: SandboxRoute, sandbox_record: object) -> None:
+        """Cache the exact job record a parked worker sandbox record carries."""
+        cache_parked_job(self.routing_store, route, sandbox_record)
 
     def _record_completed_program_lifecycle(
         self,
@@ -5108,13 +5121,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             timeout_seconds=2.0)
         return response.json() if response.status < 400 else None
 
-    @staticmethod
-    def _decode_wake_publication(route: SandboxRoute, payload: dict[str, Any]) -> SandboxRoute | None:
+    def _decode_wake_publication(self, route: SandboxRoute, payload: dict[str, Any]) -> SandboxRoute | None:
         record = payload.get("sandbox")
         if not isinstance(record, dict) or record.get("state") != "parked":
             return None
         if not _sandbox_record_matches_route(record, route, SandboxSpec.from_dict(route.spec)):
             return None
+        self._cache_parked_job(route, record)
         return _route_with_sandbox_record(route, record)
 
     def _observe_wake_consolidation(self, route, migration) -> None:

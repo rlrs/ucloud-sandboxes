@@ -184,6 +184,9 @@ class SandboxInventoryEntry:
     storage_snapshot: dict[str, Any] = field(default_factory=dict)
     storage_dependency: dict[str, Any] | None = None
     memory_observation: SandboxMemoryObservation | None = None
+    # A parked managed-process sandbox's exact job record, as the job status
+    # body (docs/managed-process-reads.md). The gateway validates and fences it.
+    managed_process: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.storage_dependency is not None and not isinstance(
@@ -245,7 +248,9 @@ class SandboxInventoryEntry:
             "storage_snapshot",
         }
         supplied_snapshot_keys = set(raw) & snapshot_keys
-        allowed_keys = required_keys | snapshot_keys | {"storage_dependency", "memory_observation"}
+        allowed_keys = required_keys | snapshot_keys | {
+            "storage_dependency", "memory_observation", "managed_process",
+        }
         if not required_keys.issubset(raw) or set(raw) - allowed_keys:
             return None
         if supplied_snapshot_keys and supplied_snapshot_keys != snapshot_keys:
@@ -317,6 +322,12 @@ class SandboxInventoryEntry:
                 dict(storage_dependency) if storage_dependency is not None else None
             ),
             memory_observation=SandboxMemoryObservation.from_dict(raw.get("memory_observation")),
+            # Evidence for the gateway's job cache only: a malformed record
+            # never costs the sandbox its inventory entry.
+            managed_process=(
+                dict(raw["managed_process"])
+                if isinstance(raw.get("managed_process"), dict) else None
+            ),
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -332,6 +343,8 @@ class SandboxInventoryEntry:
             payload["storage_dependency"] = dict(self.storage_dependency)
         if self.memory_observation is not None:
             payload["memory_observation"] = asdict(self.memory_observation)
+        if self.managed_process is not None:
+            payload["managed_process"] = dict(self.managed_process)
         if self.storage_snapshot:
             payload.update(
                 {

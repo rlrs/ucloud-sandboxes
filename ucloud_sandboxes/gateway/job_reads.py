@@ -3,8 +3,9 @@
 docs/managed-process-reads.md. Status and log reads pass ``wait_ms``,
 ``after``, ``offset`` and ``limit`` through to the worker unchanged. A read
 with ``wait_ms`` may be held there, so its worker deadline grows by the wait.
-The gateway caches the record carried by successful reads; parked and
-transitioning sandboxes are answered from that cache when the answer cannot
+The gateway caches the record carried by successful reads, and the exact
+record a worker adds to a parked sandbox's record ("managed_process"). Parked
+and transitioning sandboxes are answered from that cache when the answer cannot
 depend on bytes that exist only in the parked image.
 """
 
@@ -176,9 +177,7 @@ def record_job_response(
     if http_route.action == "job_logs" and "job" not in payload:
         return None
     try:
-        managed_record = ManagedProcessRecord.from_dict(payload.get("job"))
-        if http_route.job_id and managed_record.job_id != http_route.job_id:
-            raise ValueError("node returned another managed process")
+        managed_record = validated_job_record(payload.get("job"), job_id=http_route.job_id)
         routing_store.upsert_managed_process(route, managed_record)
     except (SandboxRouteConflictError, TypeError, ValueError) as exc:
         return json_response(
@@ -186,6 +185,60 @@ def record_job_response(
             status=HTTPStatus.BAD_GATEWAY,
         )
     return None
+
+
+def validated_job_record(raw: object, *, job_id: str = "") -> ManagedProcessRecord:
+    """A worker's job record, validated as a job status body is."""
+    record = ManagedProcessRecord.from_dict(raw)
+    if job_id and record.job_id != job_id:
+        raise ValueError("node returned another managed process")
+    return record
+
+
+def parked_job_record(
+    raw: object, *, sandbox_id: str, generation: int,
+) -> ManagedProcessRecord | None:
+    """The job record of a parked sandbox's worker record, if it is this incarnation's.
+
+    A parked worker reads it from the host-visible ledger after the checkpoint,
+    so it is exact. Invalid or foreign records are ignored: the cache is
+    evidence for reads, never a reason to fail the lifecycle that carried it.
+    """
+    if raw is None:
+        return None
+    try:
+        record = validated_job_record(raw)
+    except (TypeError, ValueError):
+        return None
+    if record.sandbox_id != sandbox_id or record.sandbox_generation != generation:
+        return None
+    return record
+
+
+def cache_parked_job(
+    routing_store: Any, route: SandboxRoute, sandbox_record: object,
+) -> ManagedProcessRecord | None:
+    """Cache the "managed_process" a parked worker sandbox record carries.
+
+    The usual fencing applies: generation, sequence and, within a sequence,
+    byte counts that never shrink. Absent, invalid or stale: nothing changes.
+    """
+    if (
+        not isinstance(sandbox_record, dict)
+        or str(sandbox_record.get("state") or "").lower() != "parked"
+    ):
+        return None
+    record = parked_job_record(
+        sandbox_record.get("managed_process"),
+        sandbox_id=route.sandbox_id,
+        generation=route.generation,
+    )
+    if record is None:
+        return None
+    try:
+        return routing_store.upsert_managed_process(route, record)
+    except SandboxRouteConflictError:
+        return None
 
 
 def json_response(

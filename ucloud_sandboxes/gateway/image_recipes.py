@@ -39,6 +39,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import threading
 import time
 
 _LOG = logging.getLogger(__name__)
@@ -54,6 +55,17 @@ MAX_SUBMITS_PER_ENSURE = 32
 # all: network failures pass, recipe rot does not.
 FAILURE_BACKOFF_SECONDS = 600
 FAILURE_ATTEMPTS = 3
+# A failure of the build machinery, not of the recipe (sandbox builds' errors
+# from the chunk store, S3 or the registry): retried soon, 30 s doubling up to
+# FAILURE_BACKOFF_SECONDS, at most INFRASTRUCTURE_ATTEMPTS times in all. An
+# object-store outage window (minutes) then neither keeps a first-use build's
+# rollouts waiting 10 minutes nor uses up the recipe's attempts.
+INFRASTRUCTURE_ERROR = "sandbox build infrastructure:"
+INFRASTRUCTURE_BACKOFF_SECONDS = 30
+INFRASTRUCTURE_ATTEMPTS = 6
+# The index's reads settle builds that finished since their last ensure, at most
+# this often per process.
+SETTLE_INTERVAL_SECONDS = 10.0
 # A submitted build no builder knows about (its builder went away) is
 # resubmitted after this long.
 LOST_BUILD_SECONDS = 180
@@ -90,7 +102,16 @@ def recipe_identity(recipe):
     return digest, f"recipe-{digest[:40]}"
 
 
-def name_state(kind, state, attempts):
+def retry_policy(error, attempts):
+    """(attempt limit, backoff seconds) after a build failed with ``error`` on
+    its ``attempts``-th attempt."""
+    if (error or "").startswith(INFRASTRUCTURE_ERROR):
+        backoff = INFRASTRUCTURE_BACKOFF_SECONDS * 2 ** max(0, attempts - 1)
+        return INFRASTRUCTURE_ATTEMPTS, min(FAILURE_BACKOFF_SECONDS, backoff)
+    return FAILURE_ATTEMPTS, FAILURE_BACKOFF_SECONDS
+
+
+def name_state(kind, state, attempts, error=None):
     """The index's state of a name from its image's row (NAME_STATES)."""
     if kind == "prepared":  # Ready from registration; failed once the chunk store lost it.
         return "failed" if state == "failed" else "ready"
@@ -99,7 +120,7 @@ def name_state(kind, state, attempts):
     if state in ("submitting", "building"):
         return "building"
     if state == "failed":
-        return "failed" if attempts >= FAILURE_ATTEMPTS else "retrying"
+        return "failed" if attempts >= retry_policy(error, attempts)[0] else "retrying"
     return "not_built"
 
 
@@ -318,17 +339,19 @@ class ImageRecipeStore:
         process holds it, it is still backing off, or it failed for good."""
         now = time.time() if now is None else now
         with self._db() as db:
-            row = db.execute("SELECT state, attempts, changed FROM recipe_images WHERE image_id = ?",
+            row = db.execute("SELECT state, attempts, changed, error FROM recipe_images WHERE image_id = ?",
                              (image_id,)).fetchone()
             if row is None:
                 return False
-            state, attempts, changed = row
+            state, attempts, changed, error = row
             if state == "submitting" and now - changed < LOST_BUILD_SECONDS:
                 return False
             if state == "building" and now - changed < LOST_BUILD_SECONDS:
                 return False
-            if state == "failed" and (attempts >= FAILURE_ATTEMPTS or now - changed < FAILURE_BACKOFF_SECONDS):
-                return False
+            if state == "failed":
+                limit, backoff = retry_policy(error, attempts)
+                if attempts >= limit or now - changed < backoff:
+                    return False
             db.execute("UPDATE recipe_images SET state = 'submitting', changed = ? WHERE image_id = ?",
                        (now, image_id))
             return True
@@ -354,6 +377,13 @@ class ImageRecipeStore:
         with self._db(write=False) as db:
             return {row[0] for row in db.execute("SELECT DISTINCT image_id FROM recipes WHERE retention = 'pinned'")}
 
+    def building_names(self, limit=500):
+        """One name per image whose row says its build is running."""
+        with self._db(write=False) as db:
+            return [row[0] for row in db.execute(
+                "SELECT MIN(r.name) FROM recipes r JOIN recipe_images i USING (image_id) "
+                "WHERE i.state = 'building' AND i.build_id IS NOT NULL GROUP BY i.image_id LIMIT ?", (limit,))]
+
     def counts(self):
         with self._db(write=False) as db:
             return {"names": db.execute("SELECT COUNT(*) FROM recipes").fetchone()[0],
@@ -366,14 +396,16 @@ class ImageRecipeStore:
         names registered without an environment count under "(none)"."""
         out = {}
         with self._db(write=False) as db:
-            for environment, kind, state, attempts, names in db.execute(
-                    "SELECT r.environment, i.kind, i.state, i.attempts, COUNT(*) FROM recipes r "
-                    "JOIN recipe_images i USING (image_id) GROUP BY 1, 2, 3, 4"):
+            for environment, kind, state, attempts, infrastructure, names in db.execute(
+                    "SELECT r.environment, i.kind, i.state, i.attempts, "
+                    "COALESCE(i.error, '') LIKE ? || '%', COUNT(*) FROM recipes r "
+                    "JOIN recipe_images i USING (image_id) GROUP BY 1, 2, 3, 4, 5", (INFRASTRUCTURE_ERROR,)):
                 row = out.setdefault(environment or "(none)", {"names": 0, "tasks": 0, "prepared": 0, "recipes": 0,
                                                                "states": dict.fromkeys(NAME_STATES, 0)})
                 row["names"] += names
                 row["prepared" if kind == "prepared" else "recipes"] += names
-                row["states"][name_state(kind, state, attempts)] += names
+                error = INFRASTRUCTURE_ERROR if infrastructure else None
+                row["states"][name_state(kind, state, attempts, error)] += names
             for environment, tasks in db.execute("SELECT environment, COUNT(*) FROM name_tasks GROUP BY 1"):
                 if environment in out:
                     out[environment]["tasks"] = tasks
@@ -385,7 +417,7 @@ class ImageRecipeStore:
         if state is not None and state not in NAME_STATES:
             raise RecipeError(f"state must be one of {NAME_STATES}")
         limit = max(1, min(int(limit), 5000))
-        query = ("SELECT r.name, r.environment, i.kind, i.state, i.attempts FROM recipes r "
+        query = ("SELECT r.name, r.environment, i.kind, i.state, i.attempts, i.error FROM recipes r "
                  "JOIN recipe_images i USING (image_id) WHERE r.name > ?")
         args = [after or ""]
         if environment is not None:
@@ -394,8 +426,8 @@ class ImageRecipeStore:
         query += " ORDER BY r.name"
         rows, cursor = [], None
         with self._db(write=False) as db:
-            for name, env, kind, image_state, attempts in db.execute(query, args):
-                current = name_state(kind, image_state, attempts)
+            for name, env, kind, image_state, attempts, error in db.execute(query, args):
+                current = name_state(kind, image_state, attempts, error)
                 if state is not None and current != state:
                     continue
                 if len(rows) == limit:
@@ -420,7 +452,7 @@ class ImageRecipeStore:
                                                                          "context_archive_size", "dockerfile",
                                                                          "build_args")}})
         return {"name": name, "environment": recipe["environment"], "source": recipe["source"],
-                "kind": recipe["kind"], "state": name_state(recipe["kind"], recipe["state"], recipe["attempts"]),
+                "kind": recipe["kind"], "state": name_state(recipe["kind"], recipe["state"], recipe["attempts"], recipe["error"]),
                 "image_id": recipe["image_id"], **made, "build_id": recipe["build_id"], "error": recipe["error"],
                 "attempts": recipe["attempts"], "retention": recipe["retention"], "tasks": total,
                 "task_ids": tasks[:100], "other_names": aliases}
@@ -431,11 +463,11 @@ class ImageRecipeStore:
         (task ids, {excluded state: tasks})."""
         keep, excluded = [], {}
         with self._db(write=False) as db:
-            for task, kind, state, attempts in db.execute(
-                    "SELECT t.task_id, i.kind, i.state, i.attempts FROM name_tasks t JOIN recipes r USING (name) "
+            for task, kind, state, attempts, error in db.execute(
+                    "SELECT t.task_id, i.kind, i.state, i.attempts, i.error FROM name_tasks t JOIN recipes r USING (name) "
                     "JOIN recipe_images i USING (image_id) WHERE t.environment = ? ORDER BY t.task_id",
                     (environment,)):
-                current = name_state(kind, state, attempts)
+                current = name_state(kind, state, attempts, error)
                 if current == "failed":
                     excluded[current] = excluded.get(current, 0) + 1
                 else:
@@ -449,6 +481,10 @@ class Submission:
     state: str  # building | queued | failed
     build_id: str | None = None
     error: str | None = None
+
+
+_settle_guard = threading.Lock()
+_last_settle = float("-inf")
 
 
 class RecipeEnsurer:
@@ -485,6 +521,23 @@ class RecipeEnsurer:
             out[name] = {"image_id": recipe["image_id"], **by_image[recipe["image_id"]]}
         self._release(recipes, by_image)
         return out
+
+    def settle(self):
+        """Bring rows still marked building up to date: a build that finished
+        since its last ensure becomes ready (or failed) now, not when a create
+        or ensure next asks, so what the index reports is current. Submits
+        nothing; at most every SETTLE_INTERVAL_SECONDS per process. Returns
+        the rows that changed."""
+        global _last_settle
+        with _settle_guard:
+            if 0 <= self.now() - _last_settle < SETTLE_INTERVAL_SECONDS:
+                return 0
+            _last_settle = self.now()
+        settled = 0
+        for recipe in self.store.lookup(self.store.building_names()).values():
+            if recipe["state"] == "building" and recipe["build_id"]:
+                settled += self._one(recipe, [0]).get("state") != "building"
+        return settled
 
     def _release(self, recipes, by_image):
         """Ready images built into the chunk store lose their OCI copy (a recipe

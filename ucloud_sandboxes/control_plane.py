@@ -3578,6 +3578,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             return
         query = {key: values[-1] for key, values in parse_qs(urlparse(self.path).query).items()}
         try:
+            # Builds that finished since their last ensure read as ready, not building.
+            self._recipe_ensurer().settle()
+        except Exception:  # noqa: BLE001 - the index still answers from its rows.
+            import logging
+            logging.getLogger(__name__).warning("image index: settling finished builds failed", exc_info=True)
+        try:
             if path == "/v1/image-index":
                 summary = self.image_recipes.summary()
                 totals: dict[str, int] = {}

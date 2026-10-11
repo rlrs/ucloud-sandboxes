@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.71 - 2026-10-11 (gateway)
+
+- **A build that failed in our machinery retries in seconds, not 10 minutes.** A sandbox build that fails with `sandbox build infrastructure:` (the chunk store, S3, the registry: not the recipe) is retried after 30 s, doubling up to 10 minutes, at most 6 times in all; recipe failures keep 3 attempts 10 minutes apart. On 2026-10-11 a TMax image's first build failed so, and its rollouts timed out (`nginx 504`, stream timeouts) during the 10-minute backoff before the second attempt built it in 95 s.
+- **The image index reports finished builds as ready.** A recipe's row became ready only when a create or `ensure` next asked for it, so the index (summary, names, `task-ids`) showed 70 built images as `building`. The index's reads first settle rows whose builds finished (as `ensure` does, submitting nothing), at most every 10 s per process.
+
 ## 0.9.70 - 2026-10-11 (gateway; workers; store node)
 
 - **Production names its machines, not their addresses.** UCloud restarted the gateway and store-node VMs at 04:24 UTC on 2026-10-11, and both came back with new private addresses (gateway 10.36.101.16 to 10.36.102.75, store node 10.36.78.225 to 10.36.76.210). Every address in the configuration was a literal, so new workers could not heartbeat, the store node's services could not bind, and images stored under the old registry address could not be imported. The configuration now names the VMs by their UCloud DNS names (`sandbox-gateway-gateway-1`, `sandboxes-store-1`), which every VM in the project resolves, and services bind `0.0.0.0` (docs/operations-runbook.md).

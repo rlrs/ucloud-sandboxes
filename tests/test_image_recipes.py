@@ -3,9 +3,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from ucloud_sandboxes.gateway.image_recipes import (FAILURE_ATTEMPTS, FAILURE_BACKOFF_SECONDS, LOST_BUILD_SECONDS,
-                                                    ImageRecipeStore, RecipeEnsurer, RecipeError, Submission,
-                                                    build_payload, validate_recipe)
+from ucloud_sandboxes.gateway import image_recipes
+from ucloud_sandboxes.gateway.image_recipes import (FAILURE_ATTEMPTS, FAILURE_BACKOFF_SECONDS, INFRASTRUCTURE_ATTEMPTS,
+                                                    INFRASTRUCTURE_BACKOFF_SECONDS, LOST_BUILD_SECONDS,
+                                                    SETTLE_INTERVAL_SECONDS, ImageRecipeStore, RecipeEnsurer,
+                                                    RecipeError, Submission, build_payload, validate_recipe)
 
 DIGEST = "sha256:" + "a" * 64
 
@@ -109,6 +111,60 @@ class ImageRecipeTests(unittest.TestCase):
             self.clock[0] += FAILURE_BACKOFF_SECONDS + 1
         self.assertEqual(self.ensurer.ensure(["t:1"])["t:1"]["state"], "failed")  # For good.
         self.assertEqual(len(self.builders.submitted), FAILURE_ATTEMPTS)
+
+    def test_infrastructure_failures_retry_soon_and_longer(self):
+        # An object-store outage is not recipe rot: 30 s, doubling, and more attempts.
+        self.store.register([recipe("t:1", environment="tmax", tasks=["task_1"])])
+        error = "sandbox build infrastructure: OSError: chunk store request failed: ReadTimeoutError"
+        for attempt in range(1, INFRASTRUCTURE_ATTEMPTS + 1):
+            self.ensurer.ensure(["t:1"])
+            self.builders.finish(f"b{attempt}", "failed", error=error)
+            self.assertEqual(self.ensurer.ensure(["t:1"])["t:1"]["state"], "failed")
+            backoff = min(FAILURE_BACKOFF_SECONDS, INFRASTRUCTURE_BACKOFF_SECONDS * 2 ** (attempt - 1))
+            self.clock[0] += backoff - 1
+            self.assertEqual(self.ensurer.ensure(["t:1"])["t:1"]["state"], "failed")  # Still backing off.
+            self.assertEqual(len(self.builders.submitted), attempt)
+            expected = "failed" if attempt == INFRASTRUCTURE_ATTEMPTS else "retrying"
+            self.assertEqual(self.store.detail("t:1")["state"], expected)
+            self.assertEqual(self.store.summary()["tmax"]["states"][expected], 1)
+            self.assertEqual(self.store.task_ids("tmax")[0], [] if expected == "failed" else ["task_1"])
+            self.clock[0] += 2
+        self.assertEqual(len(self.builders.submitted), INFRASTRUCTURE_ATTEMPTS)
+        self.assertGreater(INFRASTRUCTURE_ATTEMPTS, FAILURE_ATTEMPTS)
+        self.assertEqual(INFRASTRUCTURE_BACKOFF_SECONDS, 30)
+
+    def test_a_recipe_failure_after_infrastructure_ones_keeps_the_recipe_limit(self):
+        self.store.register([recipe("t:1")])
+        self.ensurer.ensure(["t:1"])
+        self.builders.finish("b1", "failed", error="sandbox build infrastructure: RegistryRequestError: 502")
+        self.ensurer.ensure(["t:1"])
+        self.clock[0] += INFRASTRUCTURE_BACKOFF_SECONDS + 1
+        for attempt in (2, 3):
+            self.ensurer.ensure(["t:1"])
+            self.builders.finish(f"b{attempt}", "failed", error="step 3 exited 1: pip: no matching distribution")
+            self.ensurer.ensure(["t:1"])
+            self.clock[0] += FAILURE_BACKOFF_SECONDS + 1
+        self.assertEqual(self.store.detail("t:1")["state"], "failed")  # Three attempts in all.
+        self.assertEqual(self.ensurer.ensure(["t:1"])["t:1"]["state"], "failed")
+        self.assertEqual(len(self.builders.submitted), FAILURE_ATTEMPTS)
+
+    def test_index_reads_settle_builds_that_finished_since_their_last_ensure(self):
+        image_recipes._last_settle = float("-inf")
+        self.store.register([recipe("t:1", environment="tmax", tasks=["task_1"]),
+                             recipe("t:2", digest="sha256:" + "c" * 64, environment="tmax", tasks=["task_2"])])
+        self.ensurer.ensure(["t:1", "t:2"])
+        self.builders.finish("b1", "succeeded")
+        self.builders.finish("b2", "failed", error="step 2 exited 1")
+        self.assertEqual(self.store.detail("t:1")["state"], "building")  # Nobody asked since.
+        self.assertEqual(self.ensurer.settle(), 2)
+        self.assertEqual((self.store.detail("t:1")["state"], self.store.detail("t:2")["state"]), ("ready", "retrying"))
+        self.assertEqual(len(self.builders.submitted), 2)  # Settling submits nothing.
+        self.store.register([recipe("t:3", digest="sha256:" + "d" * 64)])
+        self.ensurer.ensure(["t:3"])
+        self.builders.finish("b3", "succeeded")
+        self.assertEqual(self.ensurer.settle(), 0)  # At most every SETTLE_INTERVAL_SECONDS.
+        self.clock[0] += SETTLE_INTERVAL_SECONDS
+        self.assertEqual(self.ensurer.settle(), 1)
 
     def test_no_builder_slot_is_queued_and_resubmitted_next_time(self):
         self.store.register([recipe("t:1")])

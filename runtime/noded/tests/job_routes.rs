@@ -169,7 +169,7 @@ async fn harness_with(limits: JobLimits, mounted: bool) -> Harness {
     let front = JobFront::new(node.clone(), client, TOKEN, limits);
     let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = tcp.local_addr().unwrap();
-    let fronts = ucloud_noded::Fronts { create: None, exec: None, jobs: Some(front.clone()), node: None };
+    let fronts = ucloud_noded::Fronts { create: None, exec: None, jobs: Some(front.clone()), node: None, internal: None };
     tokio::spawn(ucloud_noded::serve_with(tcp, ucloud_noded::Config::new(socket), fronts, std::future::pending()));
     Harness { address, agent: state, node, front, bundle, _dir: dir }
 }

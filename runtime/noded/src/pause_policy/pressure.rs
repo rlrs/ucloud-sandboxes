@@ -1,7 +1,9 @@
 //! `background_io.PressureSampler` and the `resource_evidence` reads under it:
 //! `/proc/meminfo`, memory and IO PSI, and the RAM backing's capacity
 //! (`sample_memory_backing`: statfs of a verified tmpfs mount). One sample
-//! serves every caller for 100 ms.
+//! serves every caller for 100 ms. MemTotal and memory PSI "full" are read
+//! for node admission (`runtime_metrics.collect_runtime_metrics`); the pause
+//! policy does not use them.
 
 use std::fs::File;
 use std::os::fd::AsRawFd;
@@ -177,7 +179,9 @@ impl PressureSampler {
                 _ => 0.0,
             },
             memory_stall: get(&memory_psi, "some").unwrap_or(100.0),
+            memory_full_stall: get(&memory_psi, "full"),
             io_stall: get(&io_psi, "some").unwrap_or(0.0),
+            memory_total_bytes: total.map_or(0, |kib| kib.saturating_mul(1024)),
             memory_available_bytes: available.map_or(0, |kib| kib.saturating_mul(1024)),
             memory_backing: sample_memory_backing(self.memory_backing_root.as_deref(), &self.proc_root, &self.verified),
             swap_total_bytes: get(&memory, "SwapTotal").map(|kib| kib.saturating_mul(1024)),
@@ -222,8 +226,9 @@ mod tests {
         let sample = sampler.sample();
         assert_eq!((sample.memory_fraction, sample.memory_available_bytes), (0.5, 512 * MIB));
         assert_eq!((sample.swap_total_bytes, sample.swap_free_bytes), (Some(2 * MIB), Some(MIB)));
-        // io avg10 out of range is unreadable: 0; memory reads 12.5.
+        // io avg10 out of range is unreadable: 0; memory reads 12.5, and 3.0 full.
         assert_eq!((sample.memory_stall, sample.io_stall, &sample.memory_backing), (12.5, 0.0, &None));
+        assert_eq!((sample.memory_total_bytes, sample.memory_full_stall), (1024 * MIB, Some(3.0)));
 
         // Cached for 100 ms, then re-read.
         std::fs::write(proc.join("meminfo"), "MemTotal: 1048576 kB\nMemFree: 262144 kB\n").unwrap();
@@ -234,10 +239,40 @@ mod tests {
         let fresh = sampler.sample();
         assert_eq!((fresh.memory_fraction, fresh.memory_stall), (0.25, 100.0)); // MemFree stands in.
         assert_eq!((fresh.swap_total_bytes, fresh.swap_free_bytes), (None, None));
+        // Unreadable PSI: "some" is 100 (the pause policy's worst case), "full" unknown.
+        assert_eq!((fresh.memory_total_bytes, fresh.memory_full_stall), (1024 * MIB, None));
 
         std::fs::remove_file(proc.join("meminfo")).unwrap();
         clock.advance(1.0);
-        assert_eq!((sampler.sample().memory_fraction, sampler.sample().memory_available_bytes), (0.0, 0));
+        let gone = sampler.sample();
+        assert_eq!((gone.memory_fraction, gone.memory_available_bytes, gone.memory_total_bytes), (0.0, 0, 0));
+    }
+
+    #[test]
+    fn memory_psi_full_is_read_as_runtime_metrics_reads_it() {
+        // read_proc_pressure: each line's avg10 within 0-100; a missing or
+        // out-of-range "full" line is None, and "some" is unaffected.
+        let dir = TempDir::new("pressure-full");
+        let proc = dir.0.clone();
+        std::fs::create_dir_all(proc.join("pressure")).unwrap();
+        std::fs::write(proc.join("meminfo"), "MemTotal: 2048 kB
+MemAvailable: 1024 kB
+").unwrap();
+        let clock = FakeClock::new();
+        let sampler = PressureSampler::new(proc.clone(), None, clock.clone());
+        for (psi, some, full) in [
+            ("some avg10=0.00 avg60=0 avg300=0 total=0\nfull avg10=10.00 avg60=0 avg300=0 total=0\n", 0.0, Some(10.0)),
+            ("some avg10=1.50 avg60=0 avg300=0 total=0\n", 1.5, None),
+            ("some avg10=1.50 avg60=0 avg300=0 total=0\nfull avg10=101.00 avg60=0 avg300=0 total=0\n", 1.5, None),
+            ("full avg10=99.99 avg60=0 avg300=0 total=0\n", 100.0, Some(99.99)),
+            ("some avg10=x\nfull avg60=1.00 avg10=0.25\n", 100.0, Some(0.25)),
+        ] {
+            std::fs::write(proc.join("pressure/memory"), psi).unwrap();
+            clock.advance(1.0);
+            let sample = sampler.sample();
+            assert_eq!((sample.memory_stall, sample.memory_full_stall), (some, full), "{psi}");
+            assert_eq!(sample.memory_total_bytes, 2 * MIB);
+        }
     }
 
     #[test]

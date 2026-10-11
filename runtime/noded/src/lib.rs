@@ -17,6 +17,7 @@ pub mod exec;
 pub mod exec_fence;
 pub mod exec_front;
 pub mod fsutil;
+pub mod internal;
 pub mod journal;
 pub mod local_wait;
 pub mod memory_backing;
@@ -207,6 +208,8 @@ pub struct Fronts {
     pub jobs: Option<Arc<jobs::JobFront>>,
     /// The node, once the agent's configuration loaded it.
     pub node: Option<Arc<std::sync::OnceLock<Arc<node_pipeline::NodePipeline>>>>,
+    /// The agent's routes on the internal socket (`--rust-admission`).
+    pub internal: Option<Arc<internal::Internal>>,
 }
 
 impl Fronts {
@@ -221,8 +224,9 @@ impl Fronts {
 /// The fronts for `--rust-create` and `--rust-exec`: the agent client under a
 /// fresh session, and the node (registry owner, pipeline) once the agent
 /// reports its configuration. Execs need the node, so `--rust-exec` needs
-/// `--rust-create` in this build.
-pub fn start_fronts(upstream: &std::path::Path, token: &str, exec: bool, pause: bool) -> Result<Fronts, String> {
+/// `--rust-create` in this build. `admission` (`--rust-admission`) adds the
+/// agent's routes for the internal socket, under the same session.
+pub fn start_fronts(upstream: &std::path::Path, token: &str, exec: bool, pause: bool, admission: bool) -> Result<Fronts, String> {
     let mut nonce = [0u8; 16];
     std::fs::File::open("/dev/urandom")
         .and_then(|mut random| std::io::Read::read_exact(&mut random, &mut nonce))
@@ -238,6 +242,9 @@ pub fn start_fronts(upstream: &std::path::Path, token: &str, exec: bool, pause: 
         if let Some(block) = config.pause.as_mut() {
             block.rust_pause_enabled &= pause;
         }
+        if let Some(block) = config.admission.as_mut() {
+            block.rust_admission_enabled &= admission;
+        }
         let opened = Arc::new(node_pipeline::NodePipeline::open(config, pipeline_agent.clone())?);
         let _ = cell.set(opened.clone());
         Ok(opened as Arc<dyn create::Pipeline>)
@@ -245,11 +252,17 @@ pub fn start_fronts(upstream: &std::path::Path, token: &str, exec: bool, pause: 
     // Job routes need the node; until it loads they are the agent's.
     let job_node = Arc::new(jobs::NodeJobs { node: node.clone() });
     let jobs = jobs::JobFront::new(job_node, agent.clone(), token, jobs::JobLimits::default());
+    let internal = if admission {
+        Some(internal::Internal::new(&session, token, internal::own_uid(), Arc::new(internal::LoadedNode(node.clone())))?)
+    } else {
+        None
+    };
     Ok(Fronts {
         create: Some(Arc::new(create::CreateFront::new(agent, pipeline, token))),
         exec: exec.then(|| exec_front::ExecFront::new(node.clone(), token)),
         jobs: Some(jobs),
         node: Some(node),
+        internal,
     })
 }
 

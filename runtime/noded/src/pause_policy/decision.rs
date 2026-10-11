@@ -31,16 +31,23 @@ impl MemoryBackingCapacity {
     }
 }
 
-/// `background_io.Pressure`. The default is Python's: no memory evidence,
-/// memory PSI "100" (unreadable), swap unknown.
+/// `background_io.Pressure`, plus the two readings node admission needs
+/// (`runtime_metrics`'s `memory_total_mb` and `memory_psi_full_avg10`). The
+/// default is Python's: no memory evidence, memory PSI "100" (unreadable),
+/// swap unknown.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pressure {
     /// MemAvailable / MemTotal; 0.0 when either is unknown.
     pub memory_fraction: f64,
     /// Memory PSI "some" avg10 (100.0 when unreadable).
     pub memory_stall: f64,
+    /// Memory PSI "full" avg10; `None` when unreadable (Python's
+    /// `memory_psi_full_avg10`). Admission refuses at 10 or more.
+    pub memory_full_stall: Option<f64>,
     /// IO PSI "some" avg10 (0.0 when unreadable).
     pub io_stall: f64,
+    /// MemTotal; 0 when unknown.
+    pub memory_total_bytes: u64,
     pub memory_available_bytes: u64,
     /// `None`: RAM backing is not configured.
     pub memory_backing: Option<MemoryBackingCapacity>,
@@ -53,7 +60,9 @@ impl Default for Pressure {
         Pressure {
             memory_fraction: 0.0,
             memory_stall: 100.0,
+            memory_full_stall: None,
             io_stall: 0.0,
+            memory_total_bytes: 0,
             memory_available_bytes: 0,
             memory_backing: None,
             swap_total_bytes: None,

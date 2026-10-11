@@ -45,9 +45,9 @@ wait for a change, clients poll.
 4. **Clients follow, not poll.** SDK 0.4.39 adds `follow()` and makes `wait()`
    long-poll. verifiers-ucloud 0.3.7 runs one follower per process.
 
+Start and signal move to noded as well; see "Start and signal in noded too".
+
 **Unchanged:**
-- start and signal: once per process, through `runsc exec … ctl` in the Python
-  agent;
 - parked sandboxes, served by the gateway's cache;
 - the supervisor's control protocol.
 

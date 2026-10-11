@@ -32,6 +32,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from urllib.parse import urlparse
 
 ETC = Path("/etc/ucloud-sandboxes")
 CHUNK_TOKENS = Path("/var/lib/ucloud-chunk-index")
@@ -150,7 +151,8 @@ def backup_chunk_index(args, root: Path, stamp: str) -> dict:
     store = config.immutable_environments.chunk_store if config.immutable_environments else None
     if not isinstance(store, ChunkStoreConfig) or store.store_node is None or not store.store_node.serve_index:
         raise SystemExit("this deployment's chunk index is not on a store node")
-    host = store.store_node.listen.rsplit(":", 1)[0]
+    # The node's URL names it; its listen address may be the wildcard (0.9.70).
+    host = urlparse(store.store_node.url).hostname
     script = REMOTE_INDEX_COPY.replace("INDEX", repr(store.index_database))
     pending = root / f".chunk-index-{stamp}.sqlite.gz.pending"
     with pending.open("wb") as output:

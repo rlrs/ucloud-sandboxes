@@ -1,7 +1,7 @@
 # Managed-process reads without entering the guest
 
-Status: design, 2026-10-11. Replaces the per-read `runsc exec … ctl` for job
-status and logs; start and signal are unchanged.
+Status: design, 2026-10-11. Moves job status, logs, start and signal into
+`ucloud-noded`; reads no longer enter the guest.
 
 ## Why
 
@@ -45,9 +45,9 @@ wait for a change, clients poll.
 4. **Clients follow, not poll.** SDK 0.4.39 adds `follow()` and makes `wait()`
    long-poll. verifiers-ucloud 0.3.7 runs one follower per process.
 
+Start and signal move to noded as well; see "Start and signal in noded too".
+
 **Unchanged:**
-- start and signal: once per process, through `runsc exec … ctl` in the Python
-  agent;
 - parked sandboxes, served by the gateway's cache;
 - the supervisor's control protocol.
 
@@ -149,7 +149,9 @@ served by the gateway").
 - **Terminal observation.** The Python agent records a growth intent when it
   sees a job terminal (`_observe_managed_terminal`). noded preserves this: the
   first time it serves or observes a terminal record per (sandbox, generation,
-  job), it posts the `terminal` growth event through its existing agent RPC.
+  job), it calls the agent's `POST /internal/v1/managed/terminal` (see "Start
+  and signal in noded too"); the existing growth-events route only knows wait
+  and activate.
 - **Not activity.** Reads do not mark sandbox activity. The Python ctl path did
   mark it, which let a status poll hold off idle parking.
 
@@ -219,8 +221,72 @@ handling ("lifecycle transition is in progress" → retry after 2 s) is kept.
      waits: no ctl exec per read, and the node agent's GIL not in job reads.
   3. A park, wake and move of a following sandbox.
 
-## Next (not in this change)
+## Start and signal in noded too
 
-Start and signal move to noded as well. The Python agent then has no
-managed-process path left, which is a step toward phase 4 of
-[rust-node-daemon-plan.md](rust-node-daemon-plan.md).
+The Python agent keeps no managed-process path of its own for non-legacy
+sandboxes. It keeps only the growth ledger
+([managed-growth-admission.md](managed-growth-admission.md)), which noded calls
+for admission, as creates already do. Porting the ledger is phase 3c of
+[rust-node-daemon-plan.md](rust-node-daemon-plan.md) and is not part of this
+change.
+
+### noded: `POST /v1/sandboxes/{id}/jobs` (start)
+
+The ownership and legacy rules are the same as for reads. When noded serves a
+start:
+
+1. **Validate the body exactly as Python does.** That means
+   `ManagedProcessStart.from_dict` in `managed_process.py`, with the same
+   limits, the same error messages, and HTTP 400 with the same body.
+2. **Build the control payload exactly as `spec.control_payload` does.**
+   - uid and gid come from the bundle `config.json` annotations, as
+     `_managed_workload_credentials` reads them.
+   - The default cwd comes from the annotation
+     `dev.ucloud-sandboxes.managed-process.cwd`.
+   - `launch_sha256 = sha256(control_request_bytes(payload))`, byte-identical
+     to Python's encoding. Add a golden test against Python.
+3. **Admit through the agent:** `POST /internal/v1/managed/launch` with
+   `{sandbox_id, generation, job_id, launch_sha256}`. This commits the launch
+   intent before the ambiguous dispatch.
+   - 200 `{"job_id": "<intent job_id or empty>"}`: admitted.
+   - 503 `startup_busy`: the client gets today's retryable
+     `SandboxStartupBusyError` response.
+   - 409 `primary_owned`: today's `ManagedPrimaryOwnedError` response.
+4. **Dispatch.**
+   - If paused, thaw with prefetch, as thaw-on-exec does, and leave the
+     sandbox running.
+   - Then run `runsc exec --user=0:0 <cid> /.ucloud-job-init ctl --timeout …`
+     with the payload on stdin, under the same fences noded's exec start
+     takes.
+   - Retry only on `control_not_connected`, within the 15 s deadline,
+     exactly like `_managed_control(retry_not_ready=True)`.
+   - Mark activity (touch the exec fence `A`), as a successful exec does.
+5. **Bind.** If the admission returned an empty `job_id`, call
+   `POST /internal/v1/managed/bind` with `{sandbox_id, generation, job_id,
+   launch_sha256}`.
+6. **Respond** with the record, in the same shape as the reads.
+
+### noded: `POST /v1/sandboxes/{id}/jobs/{job}/signal`
+
+- Validate as Python does: signal 1..64, excluding KILL and STOP.
+- Thaw if paused, then send the `ctl` `signal` action, with no retry.
+- Mark activity, and respond with the record.
+
+### Python agent: `/internal/v1/managed/{launch,bind,terminal}`
+
+These are on the agent's UDS, enabled like the other internal routes.
+
+- **`launch`:** `_record_growth_intent(action="launch", …)`. If the intent is
+  `queued`, call `_admit_managed_growth(startup=True, launch=…)`, with the
+  same outcomes as `start_managed_process` today.
+- **`bind`:** `_record_growth_intent(action="bind", …)`.
+- **`terminal`:** `{sandbox_id, generation, job_id}` →
+  `_record_growth_intent(action="terminal", …)`. noded sends this when it
+  first serves or observes a terminal record. This replaces the growth-event
+  route mentioned under "Terminal observation" above.
+- **Fences:** each endpoint checks the registration's generation, and answers
+  409 `generation_mismatch` when it differs.
+
+The Python handlers for start, signal, status and logs stay for legacy and
+forwarded sandboxes. Delete them once no legacy sandbox can exist, that is,
+after one release with an idle-fleet apply.

@@ -47,8 +47,15 @@ def publish(path: Path, seq: int, samples: dict, *, session: str = "session-a", 
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     document = {"seq": seq, "session": session, "samples": [
         {"sandbox_id": key[0], "generation": key[1], **asdict(item)} for key, item in samples.items()]}
+    replace_text(path, json.dumps(document), mode=mode)
+
+
+def replace_text(path: Path, text: str, *, mode: int = 0o600) -> None:
+    """Replace by rename, as noded does: the new file is never the old inode, so a
+    rewrite within one timestamp tick is still a change (an in-place rewrite of
+    the same size would not be)."""
     temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(json.dumps(document))
+    temporary.write_text(text)
     os.chmod(temporary, mode)
     os.replace(temporary, path)
 
@@ -98,7 +105,7 @@ class PublishedResidentMemoryTests(unittest.TestCase):
                              {"seq": 1, "session": "s"}, {"seq": True, "session": "s", "samples": []}):
                 publish(self.path, 1, {self.key: sample()})
                 self.published.load()
-                self.path.write_text(json.dumps(document))
+                replace_text(self.path, json.dumps(document))
                 self.assertTrue(self.published.load(), document)
                 self.assertIsNone(self.published.historical(self.key), document)
         # One invalid sample is unknown; the rest of the pass stands.
@@ -107,7 +114,7 @@ class PublishedResidentMemoryTests(unittest.TestCase):
                 {**good, "generation": 0}, {**good, "cgroup_path": "relative"},
                 {**good, "sampled_at": "now"}, {k: v for k, v in good.items() if k != "swap_bytes"}), start=10):
             other = {"sandbox_id": "two", "generation": 1, **asdict(sample())}
-            self.path.write_text(json.dumps({"seq": seq, "session": "s", "samples": [broken, other]}))
+            replace_text(self.path, json.dumps({"seq": seq, "session": "s", "samples": [broken, other]}))
             self.assertTrue(self.published.load())
             self.assertIsNone(self.published.historical(self.key), broken)
             self.assertIsNotNone(self.published.historical(("two", 1)))

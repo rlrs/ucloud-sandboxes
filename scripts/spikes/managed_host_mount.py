@@ -11,7 +11,14 @@ docs/managed-process-reads.md records the results. Questions:
   Q5 a guest-made symlink in the mount is a host symlink (readers must refuse it);
   Q6 log offsets after restore: no gap, no duplicate.
 """
-import ctypes, json, os, shutil, struct, subprocess, sys, time
+import ctypes
+import json
+import os
+import shutil
+import struct
+import subprocess
+import sys
+import time
 from pathlib import Path
 
 RUNSC = str(Path(sys.argv[1]).resolve())
@@ -29,7 +36,8 @@ def run(*args, check=True, input=None, timeout=60):
     with tempfile.TemporaryFile() as o, tempfile.TemporaryFile() as e:
         p = subprocess.run(args, stdout=o, stderr=e, input=input, timeout=timeout,
                            stdin=None if input is not None else subprocess.DEVNULL)
-        o.seek(0); e.seek(0)
+        o.seek(0)
+        e.seek(0)
         r = R(p.returncode, o.read(), e.read())
     if check and r.returncode:
         raise SystemExit(f"FAILED {' '.join(map(str, args))}\n{r.stdout.decode()[-2000:]}\n{r.stderr.decode()[-3000:]}")
@@ -102,7 +110,11 @@ def main():
         subprocess.run([RUNSC, f"--root={ROOT}", "delete", "--force", CID], capture_output=True)
         shutil.rmtree(WORK)
     (WORK / "bundle/rootfs").mkdir(parents=True)
-    ROOT.mkdir(); (WORK / "logs").mkdir(); (WORK / "mem").mkdir(); (WORK / "mem/alloc-bundle").mkdir(); (WORK / "mem/alloc-moved").mkdir()
+    ROOT.mkdir()
+    (WORK / "logs").mkdir()
+    (WORK / "mem").mkdir()
+    (WORK / "mem/alloc-bundle").mkdir()
+    (WORK / "mem/alloc-moved").mkdir()
     cid = run("docker", "create", "alpine:latest").stdout.decode().strip()
     exp = subprocess.Popen(["docker", "export", cid], stdout=subprocess.PIPE)
     run("tar", "-x", "-C", str(WORK / "bundle/rootfs"), input=exp.stdout.read())
@@ -136,7 +148,9 @@ def main():
 
     # Q2: pause; host reads; nothing grows; no events.
     runsc("pause", CID)
-    s0 = size(m1 / "stdout.log"); drain(fd); time.sleep(1.0)
+    s0 = size(m1 / "stdout.log")
+    drain(fd)
+    time.sleep(1.0)
     results["Q2.paused_stable"] = (s0, size(m1 / "stdout.log"), len(drain(fd)))
     results["Q2.paused_host_read_ok"] = (m1 / "stdout.log").read_bytes()[-20:].decode(errors="replace")
     runsc("resume", CID)
@@ -150,8 +164,8 @@ def main():
     os.unlink(m1 / "evil") if os.path.lexists(m1 / "evil") else None
 
     # Q3: checkpoint --hibernate, delete, restore (same source).
-    img = WORK / "img1"; img.mkdir()
-    before = size(m1 / "stdout.log")
+    img = WORK / "img1"
+    img.mkdir()
     r = runsc("checkpoint", "--hibernate", f"--image-path={img}", CID, check=False, timeout=120)
     results["Q3.checkpoint_rc"] = r.returncode, r.stderr.decode()[-800:]
     if r.returncode == 0:
@@ -166,11 +180,12 @@ def main():
         results["Q3.status_after_restore"] = {k: st.get("job", {}).get(k) for k in ("state", "stdout_bytes", "sequence")} if st.get("ok") else st
         results["Q3.host_grows_after_restore"] = (at_ckpt, size(m1 / "stdout.log"))
         lines = (m1 / "stdout.log").read_text().split("\n")
-        nums = [int(l.split()[1]) for l in lines if l.startswith("line ")]
+        nums = [int(line.split()[1]) for line in lines if line.startswith("line ")]
         results["Q6.contiguous"] = nums == list(range(nums[0], nums[0] + len(nums))), len(nums)
 
         # Q4: checkpoint again, copy the managed dir to a new path, restore with a regenerated bundle.
-        img2 = WORK / "img2"; img2.mkdir()
+        img2 = WORK / "img2"
+        img2.mkdir()
         r = runsc("checkpoint", "--hibernate", f"--image-path={img2}", CID, check=False, timeout=120)
         results["Q4.checkpoint_rc"] = r.returncode, r.stderr.decode()[-500:]
         runsc("delete", "--force", CID, check=False)

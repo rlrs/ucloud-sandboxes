@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.72 - 2026-10-11 (gateway; workers)
 
 ### Node
 
@@ -14,6 +14,7 @@
 
 ### Gateway
 
+- **The chunk-index backup reaches the store node by name again.** Since 0.9.70 the store node listens on `0.0.0.0`, and `backup_gateway_state.py` took its ssh host from that address; it now uses the host in the store node's URL (`sandboxes-store-1`).
 - **Job reads can wait at the gateway without holding a thread** ([docs/managed-process-reads.md](docs/managed-process-reads.md)). On 2026-10-11 verifiers-ucloud's job polling, about 3 reads/s per sandbox, kept the node agents busy; reads that wait for a change replace it.
   - `wait_ms`, `after`, `offset` and `limit` reach the worker unchanged. The gateway allows a read with `wait_ms` the wait (at most 25 s) plus the usual 60 s.
   - Waiting reads go through the asynchronous response owner, as exec event polls do, on their own connection lane (1,024 per worker), so about 1,000 held reads hold no handler thread. Qualified with two handler threads, 64 held reads and a health request served meanwhile.

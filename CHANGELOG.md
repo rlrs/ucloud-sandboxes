@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.70 - 2026-10-11 (gateway; workers; store node)
+
+- **Production names its machines, not their addresses.** UCloud restarted the gateway and store-node VMs at 04:24 UTC on 2026-10-11, and both came back with new private addresses (gateway 10.36.101.16 to 10.36.102.75, store node 10.36.78.225 to 10.36.76.210). Every address in the configuration was a literal, so new workers could not heartbeat, the store node's services could not bind, and images stored under the old registry address could not be imported. The configuration now names the VMs by their UCloud DNS names (`sandbox-gateway-gateway-1`, `sandboxes-store-1`), which every VM in the project resolves, and services bind `0.0.0.0` (docs/operations-runbook.md).
+- **Sandboxes reach a relay named by DNS at a stable virtual address, whatever their egress.** Relay-only sandboxes already did (198.18.0.0/15, from the relay's name; `default` is 198.19.38.106). Direct-egress sandboxes now do too: the worker's relay table translates that address to the relay's current one (`bridge_nat`), re-resolved every 2 s like a relay-only sandbox's, and marks exactly those flows past the private-destination denies (`bridge_forward`). A client's `guest_relay_url` is then one address that survives the relay host's address changes (docs/network-policy.md).
+- **Node-local model waits follow a relay named by DNS.** A relay whose name resolves only to private addresses takes the plaintext path, matched at those addresses after translation (resolved when the node agent starts). Before, only IPv4-literal relays did, and naming the relay would have silently turned pausing through model calls off.
+- `scripts/install_ucloud_observability_stack.sh` takes `--private-bind-ip 0.0.0.0` with `--endpoint-host <name>`.
+
 ## 0.9.69 - 2026-10-10 (gateway; store node's package cache)
 
 - **Builds fetch GitHub repositories with a token, through the package cache.** GitHub limits anonymous git downloads from UCloud's address ("temporarily limiting some unauthenticated downloads ... authenticate", a 401 partway through a clone, on and off within minutes; 2026-10-10), and every OpenSWE recipe clones from GitHub.

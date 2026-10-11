@@ -5,19 +5,26 @@ usage() {
   cat >&2 <<'EOF'
 usage: install_ucloud_observability_stack.sh \
   --private-bind-ip <ipv4> \
+  [--endpoint-host <host>] \
   [--data-root <absolute-path>]
 
 Installs a bounded single-gateway observability stack for UCloud. OTLP/HTTP is
-exposed only on the supplied private IP. Grafana, Tempo, and VictoriaMetrics
-query ports remain loopback-only and are intended to be reached through SSH.
+exposed only on the supplied private IP, or with 0.0.0.0 on every interface of
+a gateway whose only non-loopback network is the private one (UCloud VMs: the
+private address changes when the VM restarts; workers then reach the collector
+at --endpoint-host, the gateway's DNS name). Grafana, Tempo, and
+VictoriaMetrics query ports remain loopback-only and are intended to be
+reached through SSH.
 EOF
 }
 
 private_bind_ip=""
+endpoint_host=""
 data_root=/var/lib/ucloud-sandboxes/telemetry
 while (($#)); do
   case "$1" in
     --private-bind-ip) private_bind_ip="${2:-}"; shift 2 ;;
+    --endpoint-host) endpoint_host="${2:-}"; shift 2 ;;
     --data-root) data_root="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) usage; exit 2 ;;
@@ -32,8 +39,13 @@ if [[ ! "$private_bind_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "--private-bind-ip must be an IPv4 address" >&2
   exit 2
 fi
-if ! ip -4 address show | grep -Fq " $private_bind_ip/"; then
+if [[ "$private_bind_ip" != 0.0.0.0 ]] && ! ip -4 address show | grep -Fq " $private_bind_ip/"; then
   echo "--private-bind-ip is not assigned to this gateway" >&2
+  exit 2
+fi
+endpoint_host="${endpoint_host:-$private_bind_ip}"
+if [[ "$endpoint_host" == 0.0.0.0 || ! "$endpoint_host" =~ ^[A-Za-z0-9.-]+$ ]]; then
+  echo "--endpoint-host must name this gateway when binding 0.0.0.0" >&2
   exit 2
 fi
 if [[ "$data_root" != /* ]]; then
@@ -434,7 +446,7 @@ for url in \
   done
 done
 
-printf 'otlp_endpoint=http://%s:4318\n' "$private_bind_ip"
+printf 'otlp_endpoint=http://%s:4318\n' "$endpoint_host"
 printf 'grafana_tunnel=ssh -L 3000:127.0.0.1:3000 <gateway>\n'
 printf 'grafana_url=http://127.0.0.1:3000/d/ucloud-platform-hot-paths\n'
 printf 'grafana_admin_credentials=%s\n' "$grafana_env"

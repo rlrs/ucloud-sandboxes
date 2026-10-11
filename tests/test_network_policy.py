@@ -194,6 +194,47 @@ class RelayNetworkLifecycleTests(unittest.TestCase):
         self.manager.refresh_tcp_egress()
         self.assertIn("dnat ip to 10.36.0.4:443", self.nft.call_args.args[0])
 
+    def test_direct_egress_reaches_a_named_relay_at_its_virtual_address(self):
+        relay = self.manager.relays["default"]
+        self.manager._refresh_relay_policies(force=True)
+        rebuild = self.nft.call_args.args[0]
+        self.assertIn("iifname vmap @nat_by_iif\n  jump bridge_nat\n", rebuild)
+        self.assertIn("oifname vmap @ingress_by_oif\n  jump bridge_forward\n", rebuild)
+        self.assertIn(
+            f"add rule inet ucloud_relay bridge_nat ip saddr 100.96.0.0/16 ip daddr {relay.virtual_ip} "
+            "tcp dport 443 dnat ip to 10.36.0.2:443", rebuild)
+        # Every packet of a translated flow carries the relay forward mark, so
+        # the one mark exception passes it; nothing else is opened.
+        self.assertIn(
+            f"add rule inet ucloud_relay bridge_forward ip saddr 100.96.0.0/16 ct original ip daddr "
+            f"{relay.virtual_ip} ip daddr {{ 10.36.0.2 }} tcp dport 443 meta mark set meta mark or "
+            "0x1000000 accept", rebuild)
+        self.assertEqual(self.manager.allowed_tcp_egress, ())
+        self.addresses = ["10.36.0.3"]
+        self.nft.reset_mock()
+        self.manager.refresh_tcp_egress()
+        updated = self.nft.call_args.args[0]
+        self.assertIn("flush chain inet ucloud_relay bridge_nat", updated)
+        self.assertIn("dnat ip to 10.36.0.3:443", updated)
+        self.assertNotIn("table inet ucloud_relay {", updated)
+        self.nft.reset_mock()
+        self.manager.refresh_tcp_egress()
+        self.nft.assert_not_called()
+        self.addresses = []
+        self.manager.refresh_tcp_egress()
+        self.assertNotIn("dnat ip to", self.nft.call_args.args[0])
+
+    def test_a_literal_relay_needs_no_bridge(self):
+        manager = DirectNetworkManager(
+            self.root / "literal.json",
+            namespace_root=self.root / "netns",
+            network_relays={"default": "10.36.0.2:8092"},
+            nft_runner=self.nft,
+            runner=Mock(),
+        )
+        manager._refresh_relay_policies(force=True)
+        self.assertNotIn("add rule inet ucloud_relay bridge", self.nft.call_args.args[0])
+
     def test_restart_restores_guards_before_legacy_accepts(self):
         self.create()
         manager = DirectNetworkManager(

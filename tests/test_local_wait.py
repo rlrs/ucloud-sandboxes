@@ -55,6 +55,22 @@ class RelayFlowTests(unittest.TestCase):
         self.assertIn("ip saddr 10.42.0.2 tcp sport 8092 ip daddr 100.96.0.0/16 log group", script)
         self.assertNotIn("77.42.92.27", script)
 
+    def test_a_relay_named_for_private_addresses_takes_the_local_path(self):
+        relays = {"default": NetworkRelay.parse("default", "sandbox-gateway-gateway-1:8092"),
+                  "ingress": NetworkRelay("ingress", "relay.example.org", 443),
+                  "gone": NetworkRelay("gone", "gone.internal", 8092)}
+        answers = {"default": ["10.36.102.75"], "ingress": ["10.36.0.9", "77.42.92.27"]}
+
+        def resolve(name):
+            if name not in answers:
+                raise OSError("no such name")
+            return answers[name]
+
+        # A name answered only by private addresses is matched at those
+        # addresses; one with any public answer is a TLS ingress.
+        self.assertEqual(relay_endpoints(relays, resolve), (("10.36.102.75", 8092),))
+        self.assertEqual(relay_endpoints(relays), ())
+
     def test_headers_give_direction_payload_and_wake(self):
         request = parse_packet(tcp(GUEST, RELAY, payload=300, flags=0x18), NETWORK)
         self.assertEqual((request.guest, request.outbound, request.payload, request.wakes), (GUEST, True, 300, False))
@@ -237,6 +253,7 @@ class RuntimeTests(unittest.TestCase):
             parks.append((operation_id.split("-")[0], pause))
             warden.paused.add((sandbox_id, 1))
         network = SimpleNamespace(relays={"default": NetworkRelay.parse("default", "10.42.0.2:8092")},
+                                  relay_addresses=lambda name: ("10.42.0.2",),
                                   leases=lambda: {("agent", 1): SimpleNamespace(guest_ip=GUEST)})
         service = SimpleNamespace(
             warden=warden, provisioner=SimpleNamespace(registry=registry, network_manager=network),

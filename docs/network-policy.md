@@ -26,8 +26,10 @@ Add the optional `network_relays` map inside the deployment's existing
 ```
 
 Use the hostname and port that sandbox clients use, including the hostname
-required by the relay's TLS certificate. An IPv4 literal and port also work
-for a fixed endpoint. The relay must run on a different host from the worker;
+required by the relay's TLS certificate. A private relay on UCloud is named by
+the relay VM's DNS name (`sandbox-gateway-gateway-1:8092`): its private address
+changes whenever the VM restarts. An IPv4 literal and port also work for an
+endpoint whose address never changes. The relay must run on a different host from the worker;
 worker-local services remain blocked. Use a dedicated endpoint: this is TCP
 isolation, not HTTP path, virtual-host, or application authorization.
 
@@ -55,6 +57,25 @@ Use the same named relay definition throughout a worker pool. Names are stable
 policy identities: introduce a new name when changing the service hostname or
 port. Changing that hostname's IPv4 DNS answers is supported without changing
 the policy. Migration preserves the policy in the existing sandbox manifest.
+
+### The relay's address inside a sandbox
+
+A relay named by DNS has a **virtual address** in 198.18.0.0/15, derived from
+its name (`NetworkRelay.virtual_ip`; `default` is 198.19.38.106). Every
+sandbox reaches the relay there, whatever its egress, and the worker
+translates it to the name's current address, re-resolved every 2 s:
+
+- A **relay-only** sandbox's `/etc/hosts` maps the relay's hostname to the
+  virtual address; it has no DNS, so it dials the hostname or the address.
+- A **direct-egress** sandbox resolves names with public DNS, which does not
+  know private names, so it dials the virtual address. The worker's shared
+  `bridge_nat` chain translates it, and `bridge_forward` lets exactly those
+  flows past the private-destination denies.
+
+Point guests at `http://<virtual address>:<port>` (verifiers-ucloud:
+`guest_relay_url`). It survives the relay host's address changes, such as a
+UCloud VM restart. A relay given as an IPv4 literal is its own virtual address
+and gets no translation.
 
 ## Use the SDK
 

@@ -19,9 +19,10 @@ on top of the request itself, and 38 ms from answer to agent.
 
 **With node-local waits:**
 - The agent calls the relay over **plaintext HTTP/1.1 on the private network**:
-  `OPENAI_BASE_URL=http://10.42.0.2:8092/rollouts/<id>/v1`, a
-  `sandbox.network_relays` IPv4 literal. Workers already allow this
-  destination.
+  `OPENAI_BASE_URL=http://198.19.38.106:8092/rollouts/<id>/v1`, the virtual
+  address of the `sandbox.network_relays` entry `default`
+  (`sandbox-gateway-gateway-1:8092`; docs/network-policy.md), which the worker
+  translates to the relay's private address.
 - **The node watches only TCP headers.** nftables logs both directions of
   every private-relay flow to one NFLOG group (`local_wait.py`). It never
   reads payloads.
@@ -68,9 +69,13 @@ sandbox cannot observe another sandbox's traffic.
 - **Relay:** a request from a non-loopback peer while the switch is on. The
   TLS ingress proxies from loopback, so ingress callers keep today's
   relay-driven park and wake.
-- **Node:** flows to the IPv4-literal private relays in `network_relays`.
-  Sandboxes must be owned, parkable, managed-process sandboxes with a network
-  lease. A DNS-named relay is a TLS ingress, and the node ignores it.
+- **Node:** flows to the private relays in `network_relays`: IPv4 literals,
+  and names whose addresses are all private, resolved when the node agent
+  starts (flows are matched after translation, at those addresses). Sandboxes
+  must be owned, parkable, managed-process sandboxes with a network lease. A
+  name with a public address is a TLS ingress, and the node ignores it. A node
+  that outlives a change of the relay's address keeps routing to it but stops
+  pausing on its waits until the node agent restarts.
 
 **Mixed fleets.** With the switch on, the relay sends no park for a private
 caller. On a worker without the node side, such a sandbox stays resident for

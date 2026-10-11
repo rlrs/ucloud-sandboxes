@@ -242,7 +242,8 @@ def pause_config(service: Any, *, rust_pause_enabled: bool) -> dict[str, Any]:
     config = service.warden.config
     pause, waits = bool(getattr(config, "pause_tier", False)), bool(getattr(config, "local_model_waits", False))
     network = getattr(service.provisioner, "network_manager", None)
-    endpoints = local_wait.relay_endpoints(network.relays) if network is not None else ()
+    endpoints = (local_wait.relay_endpoints(network.relays, network.relay_addresses)
+                 if network is not None else ())
     idle = float(service.idle_park_seconds)
     directory = noded_directory(service)
     return {

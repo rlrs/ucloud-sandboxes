@@ -395,7 +395,8 @@ class DemandAndStatusTests(unittest.TestCase):
 class LoopTests(unittest.TestCase):
     def relay_network(self, service) -> None:
         relay = SimpleNamespace(host="10.0.0.5", port=8092)
-        service.provisioner.network_manager = SimpleNamespace(relays={"relay": relay}, leases=lambda: {})
+        service.provisioner.network_manager = SimpleNamespace(
+            relays={"relay": relay}, relay_addresses=lambda name: (), leases=lambda: {})
 
     def test_the_agent_starts_none_of_the_pause_tiers_loops(self) -> None:
         _, service, runtime, key = runtime_fixture(self, local_model_waits=True)

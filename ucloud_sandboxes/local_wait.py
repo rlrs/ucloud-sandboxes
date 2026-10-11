@@ -1,7 +1,8 @@
 """Node-local model waits (pause-reclaim item 6; docs/node-local-model-waits.md).
 
 The node sees a sandbox's plaintext HTTP/1.1 calls to a private relay
-endpoint (``sandbox.network_relays`` IPv4 literals) at the TCP level. A call is
+endpoint (``sandbox.network_relays``: private IPv4 literals, or names for
+private addresses, resolved when the node starts) at the TCP level. A call is
 outstanding when the last relay payload went out; its answer is the next
 inbound payload. The node pauses a sandbox whose call is outstanding and whose
 cgroup has been idle, and thaws it on the answer's first packet, which a
@@ -49,16 +50,29 @@ _NFGEN = struct.Struct("=BBH")  # family, version, res_id (big endian)
 _NLATTR = struct.Struct("=HH")
 
 
-def relay_endpoints(relays):
-    """(IPv4, port) of each relay with a literal private address: the plaintext path."""
+def relay_endpoints(relays, resolve=None):
+    """(IPv4, port) of each relay at a private address: the plaintext path.
+
+    A relay is a literal address, or a DNS name that ``resolve(name)`` answers
+    with its current addresses (the network manager's ``relay_addresses``); a
+    name counts when every answer is private. A name for public addresses is a
+    TLS ingress: its waits keep the relay's park. Relay flows are matched after
+    destination NAT, so a guest dialing a relay's virtual address is seen at
+    the address it is translated to.
+    """
     endpoints = set()
-    for relay in relays.values():
+    for name, relay in relays.items():
         try:
-            address = ipaddress.IPv4Address(relay.host)
+            addresses = (ipaddress.IPv4Address(relay.host),)
         except ValueError:
-            continue  # A DNS name is a TLS ingress; its waits keep the relay's park.
-        if address.is_private:
-            endpoints.add((str(address), int(relay.port)))
+            if resolve is None:
+                continue
+            try:
+                addresses = tuple(ipaddress.IPv4Address(address) for address in resolve(name))
+            except (OSError, ValueError):
+                continue
+        if addresses and all(address.is_private for address in addresses):
+            endpoints.update((str(address), int(relay.port)) for address in addresses)
     return tuple(sorted(endpoints))
 
 

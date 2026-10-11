@@ -81,6 +81,11 @@ _RELAY_MAPS = (
 )
 
 
+# The sandbox network (direct_network.NETWORK_CIDR); kept literal here so the
+# wire contract does not import host code.
+SANDBOX_NETWORK = "100.96.0.0/16"
+
+
 def legacy_relay_policy_table(slot: int) -> str:
     """Per-sandbox table name used before the shared table."""
     return f"ucloud_relay_{int(slot)}"
@@ -102,16 +107,53 @@ def relay_table_rules() -> str:
         + " chain guard {\n  type filter hook prerouting priority -150; policy accept;\n"
         "  iifname vmap @guard_by_iif\n }\n"
         " chain destination {\n  type nat hook prerouting priority -110; policy accept;\n"
-        "  iifname vmap @nat_by_iif\n }\n"
+        "  iifname vmap @nat_by_iif\n  jump bridge_nat\n }\n"
+        " chain bridge_nat {\n }\n"
         " chain local {\n  type filter hook input priority -150; policy accept;\n"
         "  iifname @relay_interfaces drop\n }\n"
         " chain transit {\n  type filter hook forward priority -150; policy accept;\n"
         "  iifname vmap @egress_by_iif\n"
-        "  oifname vmap @ingress_by_oif\n }\n"
+        "  oifname vmap @ingress_by_oif\n"
+        "  jump bridge_forward\n }\n"
+        " chain bridge_forward {\n }\n"
         " chain host_output {\n  type filter hook output priority -150; policy accept;\n"
         "  oifname @relay_interfaces drop\n }\n"
         "}\n"
     )
+
+
+def relay_bridge_rules(
+    relays: Mapping[str, NetworkRelay],
+    resolved: Mapping[str, Sequence[str]],
+) -> str:
+    """Replace the shared bridge chains: direct-egress sandboxes reach a relay
+    named by DNS at its virtual address too, translated to its current address
+    like a relay-only sandbox's. A guest then dials one address for a relay
+    whatever its egress, and it outlasts the relay's address changes.
+
+    ``bridge_nat`` translates; ``bridge_forward`` marks every packet of a
+    translated flow (its original destination is the virtual address) so the
+    relay forward exception lets it past the private-destination denies, as for
+    relay-only traffic. A relay-only sandbox's own chains decide first (NAT and
+    its egress verdicts are final), and its guard has already dropped any other
+    destination. A relay with a literal address needs no rules: its virtual
+    address is that address.
+    """
+    t = RELAY_TABLE
+    rules = [f"flush chain inet {t} bridge_nat\nflush chain inet {t} bridge_forward\n"]
+    for name, relay in sorted(relays.items()):
+        addresses = relay_ipv4_addresses(resolved.get(name) or ())
+        if relay.virtual_ip == relay.host or not addresses:
+            continue
+        port = int(relay.port)
+        rules.append(
+            f"add rule inet {t} bridge_nat ip saddr {SANDBOX_NETWORK} "
+            f"ip daddr {relay.virtual_ip} tcp dport {port} dnat ip to {addresses[0]}:{port}\n"
+            f"add rule inet {t} bridge_forward ip saddr {SANDBOX_NETWORK} "
+            f"ct original ip daddr {relay.virtual_ip} ip daddr {{ {', '.join(addresses)} }} "
+            f"tcp dport {port} meta mark set meta mark or {RELAY_FORWARD_MARK:#x} accept\n"
+        )
+    return "".join(rules)
 
 
 def _relay_chain(lease: DirectNetworkLease, kind: str) -> str:
@@ -140,7 +182,7 @@ def relay_ipv4_addresses(addresses: Sequence[str]) -> tuple[str, ...]:
             or ip.is_reserved
         ):
             raise ValueError("relay must resolve to a remote unicast IPv4 endpoint")
-        if ip in ipaddress.IPv4Network("100.96.0.0/16"):
+        if ip in ipaddress.IPv4Network(SANDBOX_NETWORK):
             raise ValueError("relay cannot resolve to a sandbox network address")
     return resolved
 

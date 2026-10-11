@@ -28,6 +28,7 @@ from .relay_network import (
     apply_nft,
     legacy_relay_policy_table,
     parse_network_relays,
+    relay_bridge_rules,
     relay_hosts,
     relay_ipv4_addresses,
     relay_policy_removal,
@@ -216,6 +217,8 @@ class DirectNetworkManager:
         # Per-sandbox statements last applied by this process, keyed by slot.
         # Deltas are only attempted once this process has rebuilt the table.
         self._relay_applied: dict[int, str] = {}
+        # The bridge chain's statements last applied by this process.
+        self._relay_bridge_applied = ""
         self._relay_table_ready = False
         self.runner = runner or self._run
         self.ip_batch_runner = ip_batch_runner or (
@@ -507,6 +510,10 @@ class DirectNetworkManager:
         self.validate_policy(policy)
         return relay_hosts(self.relays, policy)
 
+    def relay_addresses(self, name: str) -> tuple[str, ...]:
+        """The relay's current IPv4 addresses (cached for the resolve interval)."""
+        return self._resolve_relay(name)
+
     def _resolve_relay(self, name: str, *, force: bool = False) -> tuple[str, ...]:
         cached = self._relay_resolution.get(name)
         if (
@@ -617,9 +624,14 @@ class DirectNetworkManager:
             f"add table inet {table}\ndelete table inet {table}\n"
             for table in (legacy_relay_policy_table(lease.slot) for lease in leases)
         )
+        # The bridge follows the latest resolution (each rebuild path resolves
+        # the relays just before it).
+        bridge = relay_bridge_rules(self.relays, {
+            name: self._relay_resolution.get(name, (0.0, ()))[1] for name in self.relays})
         self._relay_table_ready = False
-        self.nft_runner(relay_table_rules() + "".join(fragments.values()) + legacy)
+        self.nft_runner(relay_table_rules() + bridge + "".join(fragments.values()) + legacy)
         self._relay_applied = dict(fragments)
+        self._relay_bridge_applied = bridge
         self._relay_table_ready = True
         if leases:
             self._ensure_relay_forward_accept()
@@ -641,13 +653,16 @@ class DirectNetworkManager:
                 for slot, script in fragments.items()
                 if self._relay_applied.get(slot) != script
             }
+            bridge = relay_bridge_rules(self.relays, resolved)
             if force or not self._relay_table_ready:
                 self._rebuild_relay_table(fragments, leases)
-            elif changed:
+            elif changed or bridge != self._relay_bridge_applied:
                 try:
-                    # Every changed sandbox in one atomic transaction.
-                    self.nft_runner("".join(changed.values()))
+                    # Every changed sandbox and the bridge in one atomic transaction.
+                    self.nft_runner("".join(changed.values())
+                                    + (bridge if bridge != self._relay_bridge_applied else ""))
                     self._relay_applied.update(changed)
+                    self._relay_bridge_applied = bridge
                 except DirectNetworkError as exc:
                     _LOG.warning("relay firewall refresh failed; rebuilding: %s", exc)
                     self._rebuild_relay_table(fragments, leases)

@@ -449,7 +449,7 @@ class DirectNodeRuntime:
             return
         from .direct_network import NETWORK_CIDR
         from .local_wait import LocalWaitScheduler, relay_endpoints
-        endpoints = relay_endpoints(network.relays)
+        endpoints = relay_endpoints(network.relays, network.relay_addresses)
         if not endpoints:
             return
         self._local_waits = LocalWaitScheduler(

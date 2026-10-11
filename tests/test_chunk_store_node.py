@@ -490,7 +490,10 @@ class StoreNodeConfigTests(unittest.TestCase):
         native = ChunkStoreConfig.from_dict(self.raw(listen="10.42.0.10:5091", native_server_sha256=pin))
         script = render_vm_init_script(vm_fixtures.VmInitTests._options(
             **{**options.__dict__, "chunk_store_config_json": json.dumps(native.to_dict())}))
-        self.assertIn(f"{NATIVE_SERVER} --config /etc/ucloud-sandboxes/chunk-store.json", units(script))
+        self.assertIn(f"{NATIVE_SERVER} --config /etc/ucloud-sandboxes/chunk-store.json --upstream 127.0.0.1:5191",
+                      units(script))
+        # Behind it on a loopback port of its own, so it may hold every address.
+        ChunkStoreConfig.from_dict(self.raw(listen="0.0.0.0:5091", native_server_sha256=pin))
         self.assertIn(f"= {pin} ]", script)
         self.assertLess(script.index("runtime/chunk_serve/ucloud-chunk-serve"), script.index("daemon-reload"))
         # The bundle is unpacked into a root-only mktemp directory; a non-root
@@ -501,8 +504,9 @@ class StoreNodeConfigTests(unittest.TestCase):
                     self.assertRegex(line, r"\$SUDO (sha256sum|install|tar|python3)\b")
         syntax = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
         self.assertEqual(syntax.returncode, 0, syntax.stderr)
-        for bad in ({"native_server_sha256": "short", "listen": "10.42.0.10:5091"}, {"native_server_sha256": pin}):
-            with self.subTest(native=bad), self.assertRaises(ValueError):  # A pin, and an address to hold.
+        for bad in ({"native_server_sha256": "short", "listen": "10.42.0.10:5091"},
+                    {"native_server_sha256": pin, "listen": "127.0.0.1:5091"}):
+            with self.subTest(native=bad), self.assertRaises(ValueError):  # A pin, and an address workers reach.
                 ChunkStoreConfig.from_dict(self.raw(**bad))
 
     def test_the_index_runs_only_where_serve_index_puts_it(self):

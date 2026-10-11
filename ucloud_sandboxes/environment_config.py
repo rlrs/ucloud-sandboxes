@@ -147,8 +147,9 @@ class StoreNodeConfig:
     # refilling from S3. Store init mounts it; it must already be ext4.
     data_device: str | None = None
     # ucloud-chunk-serve (runtime/chunk_serve, Go) pinned by sha256: it holds
-    # ``listen`` and answers reads from resident extents on every core; this
-    # node then answers on 127.0.0.1 at the same port, behind it.
+    # ``listen`` (a specific address or 0.0.0.0) and answers reads from
+    # resident extents on every core; this node then answers behind it on
+    # chunk_store_node.NATIVE_UPSTREAM, a loopback port of its own.
     native_server_sha256: str | None = None
     # The build package cache on this node (ucloud_sandboxes.package_cache): an
     # allowlisted, caching HTTP proxy for package mirrors; builds use it as http_proxy.
@@ -189,9 +190,9 @@ class StoreNodeConfig:
         if result.native_server_sha256 is not None and (
                 not isinstance(result.native_server_sha256, str)
                 or not re.fullmatch(r"[0-9a-f]{64}", result.native_server_sha256)
-                or host in ("0.0.0.0", "::", "[::]", "127.0.0.1", "localhost")):
+                or host in ("127.0.0.1", "localhost")):
             raise ValueError("immutable_environments.chunk_store.store_node.native_server_sha256 must be a sha256, "
-                             "with listen on a specific non-loopback address")
+                             "with listen on a non-loopback address")
         return replace(result, url=result.url.rstrip("/"))
 
 

@@ -1226,7 +1226,7 @@ def serve_chunk_store(args):
         blobs = VirtualBlobs(node, ChunkIndexClient(store.index_url, tokens[1].decode()))
     host, port = store.store_node.listen.rsplit(":", 1)
     if store.store_node.native_server_sha256:  # ucloud-chunk-serve holds the address; misses come here.
-        host = "127.0.0.1"
+        host, port = NATIVE_UPSTREAM.rsplit(":", 1)
     with ChunkStoreServer((host, int(port)), node, read_token=tokens[0], write_token=tokens[1],
                           blobs=blobs) as server:
         server.serve_forever()
@@ -1287,6 +1287,10 @@ STORE_CONFIG = "/etc/ucloud-sandboxes/chunk-store.json"
 STORE_ENV = "/etc/ucloud-sandboxes/chunk-store.env"  # The S3 key; root-only, read by systemd.
 STORE_DATA_MOUNT = "/mnt/store-replica"  # data_device; cache_dir and the index directory bind from it.
 NATIVE_SERVER = "/usr/local/libexec/ucloud-sandboxes/ucloud-chunk-serve"  # From the bundle's runtime/chunk_serve.
+# Where ucloud-chunk-serve sends misses: ucloud-chunk-store on its own loopback
+# port, so chunk-serve may hold store_node.listen on every address (0.0.0.0;
+# Linux refuses a wildcard listener beside 127.0.0.1 on the same port).
+NATIVE_UPSTREAM = "127.0.0.1:5191"
 _SAFE_SECRET = re.compile(r"[A-Za-z0-9+/=_.:-]{8,4096}")
 
 
@@ -1373,7 +1377,8 @@ def store_init_script(options):
                                                     command("serve-chunk-index"), user, mounts)
     if node.native_server_sha256:
         units["ucloud-chunk-serve.service"] = _unit("UCloud chunk store reads (runtime/chunk_serve)",
-                                                    f"{NATIVE_SERVER} --config {STORE_CONFIG}", user, mounts)
+                                                    f"{NATIVE_SERVER} --config {STORE_CONFIG} --upstream {NATIVE_UPSTREAM}",
+                                                 user, mounts)
     if node.package_cache is not None:
         units["ucloud-package-cache.service"] = _unit("UCloud build package cache (store_node.package_cache)",
                                                       command("serve-package-cache"), user)

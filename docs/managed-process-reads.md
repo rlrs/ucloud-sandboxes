@@ -149,7 +149,9 @@ served by the gateway").
 - **Terminal observation.** The Python agent records a growth intent when it
   sees a job terminal (`_observe_managed_terminal`). noded preserves this: the
   first time it serves or observes a terminal record per (sandbox, generation,
-  job), it posts the `terminal` growth event through its existing agent RPC.
+  job), it calls the agent's `POST /internal/v1/managed/terminal` (see "Start
+  and signal in noded too"); the existing growth-events route only knows wait
+  and activate.
 - **Not activity.** Reads do not mark sandbox activity. The Python ctl path did
   mark it, which let a status poll hold off idle parking.
 

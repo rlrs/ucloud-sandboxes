@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Gateway
+
+- **A retryable image-check failure no longer fails a create.** Before dispatching a create, the gateway makes sure the chosen worker has the image. When that check failed with a retryable error (the gateway's own `node_request_timeout`, `node_transport_error`, `node_dns_unavailable`, `http_request_capacity_exhausted`, or any 5xx a worker marks `retryable`), a group create marked every member `failed` and answered a non-retryable 502, and a single create answered 502. On 2026-10-12 this failed a group of 8 during a scale-up. Since no create had been dispatched, such a failure now rejects that worker: the members re-plan on another worker or stay pending with a retryable 503. A non-retryable image error (a missing image, a registry error the worker reports without `retryable`) still fails as before. `_image_check_rejection_reason` in `gateway/create.py` serves the group, single and legacy create paths.
+
 ## 0.9.74 - 2026-10-12 (gateway; workers)
 
 0.9.73 plus one fix: the admission service's claim tokens read randomness with

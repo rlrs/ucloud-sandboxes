@@ -225,7 +225,7 @@ class CreatePlacement:
                 ex._send_proxied_response(image_response)
                 return None
             if image_response.status >= 400:
-                rejected = _node_create_rejection_reason(image_response)
+                rejected = _image_check_rejection_reason(image_response)
                 if rejected is not None:
                     return rejected  # No create was dispatched.
                 self._abandon(spec, route, f"image_pull_http_{image_response.status}")
@@ -352,4 +352,18 @@ def _node_create_rejection_reason(response: ProxiedResponse) -> str | None:
         "node_active_admission_deferred",
     }:
         return error_code
+    return None
+
+
+def _image_check_rejection_reason(response: ProxiedResponse) -> str | None:
+    """The image check runs before any create is dispatched, so a refusal there,
+    explicit or retryable (the worker unreachable, timed out, busy), moves the
+    create to another worker or back to pending. Other errors fail it."""
+
+    reason = _node_create_rejection_reason(response)
+    if reason is not None:
+        return reason
+    payload = response.json()
+    if response.status >= HTTPStatus.INTERNAL_SERVER_ERROR and payload.get("retryable") is True:
+        return str(payload.get("error_code") or payload.get("code") or f"image_pull_http_{response.status}")
     return None

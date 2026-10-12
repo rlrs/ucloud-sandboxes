@@ -84,7 +84,7 @@ from .storage_native_migration import (
 from .gateway import node_rpc
 from .gateway.auth import _is_sdk_api_request, _token_matches
 from .gateway.create import (
-    SANDBOX_CREATE_PROXY_TIMEOUT_SECONDS, _is_duplicate_sandbox_response,
+    SANDBOX_CREATE_PROXY_TIMEOUT_SECONDS, _image_check_rejection_reason, _is_duplicate_sandbox_response,
     _node_create_definitively_rejected, _node_create_may_still_be_running,
     _node_create_rejection_reason,
 )
@@ -2897,7 +2897,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 self._send_proxied_response(image_response)
                 return
             if image_response is not None and image_response.status >= 400:
-                rejection_reason = _node_create_rejection_reason(image_response)
+                rejection_reason = _image_check_rejection_reason(image_response)
                 removed = self.routing_store.delete_sandbox_if_current(
                     spec.id,
                     generation=route.generation,

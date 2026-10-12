@@ -34,7 +34,8 @@ from ..worker_receipts import (
 )
 from .create import (
     SANDBOX_CREATE_PROXY_TIMEOUT_SECONDS, CreateExchange, CreatePlacement, _incarnation,
-    _is_duplicate_sandbox_response, _node_create_may_still_be_running, _node_create_rejection_reason,
+    _image_check_rejection_reason, _is_duplicate_sandbox_response, _node_create_may_still_be_running,
+    _node_create_rejection_reason,
 )
 from .fleet import _heartbeat_has_image
 from .placement import _sandbox_required_capabilities
@@ -326,7 +327,7 @@ class GroupCreate:
             return {m.id: _result(m.id, "creating", m.route, error_code="image_warmup_pending")
                     for m in members}, []
         if image_response is not None and image_response.status >= 400:
-            reason = _node_create_rejection_reason(image_response)
+            reason = _image_check_rejection_reason(image_response)
             for member in members:
                 if reason is not None:
                     self.creates.overlay.release(member.route.job_id, _incarnation(member.route))

@@ -19,6 +19,7 @@ from threading import Barrier
 import time
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 from tests import test_direct_provisioner as direct_fixtures
@@ -85,6 +86,28 @@ class TwoGatewayTests(unittest.TestCase):
                              (2, route.create_operation_id))
             self.assertIn(("POST", "/v1/sandboxes"), first.requests)
             self.assertIsNone(first.registration("moved"))
+
+    def test_an_image_check_the_worker_could_not_answer_moves_the_create(self):
+        # Before any create is dispatched, a retryable image-check failure (here a
+        # gateway timeout) tries the next candidate instead of failing with 502.
+        timed_out = ProxiedResponse(504, {"Content-Type": "application/json"}, b'{"error": '
+                                    b'"sandbox node request timed out", "code": "node_request_timeout", "retryable": true}')
+        with LocalFleet(nodes=2, create_placement="power_of_k") as fleet:
+            first, second = fleet.nodes
+            second.sample_metrics = lambda: replace(fixed_metrics(), cpu_percent=90.0)  # Ranks behind.
+            fleet.heartbeat()
+            handler = fleet.gateway.RequestHandlerClass
+            original = handler._ensure_image_for_create
+
+            def first_times_out(self, heartbeat, image, environment_root=None):
+                if heartbeat.job_id == first.job_id:
+                    return timed_out
+                return original(self, heartbeat, image, environment_root)
+
+            with patch.object(handler, "_ensure_image_for_create", first_times_out):
+                fleet.create("moved")
+            self.assertEqual(fleet.route("moved").job_id, second.job_id)
+            self.assertNotIn(("POST", "/v1/sandboxes"), first.requests)
 
     def test_every_candidate_rejecting_queues_retryable_demand(self):
         with LocalFleet(create_placement="power_of_k") as fleet:

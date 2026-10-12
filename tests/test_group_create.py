@@ -13,11 +13,13 @@ from pathlib import Path
 import random
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 from tests.harness import LocalFleet
 from tests.harness.assembly import fixed_metrics
 from tests.test_placement_choice import SHAPE, FakeClock, heartbeat
+from ucloud_sandboxes.gateway.node_rpc import ProxiedResponse
 from ucloud_sandboxes.models import ResourceQuantity
 from ucloud_sandboxes.placement_choice import FleetView, InflightOverlay, PlacementRequest, PowerOfKChooser
 from ucloud_sandboxes.routing import RoutingStore, SandboxGroup, SandboxGroupDeletedError, SandboxRouteAllocation
@@ -99,6 +101,40 @@ class GroupFleetTests(unittest.TestCase):
                 self.assertEqual((route.job_id, route.generation), (second.job_id, 2))
                 self.assertIsNone(first.registration(route.sandbox_id))
             self.assertEqual(first.requests.count(("POST", "/v1/sandboxes")), 3)
+
+    def test_an_image_check_the_worker_could_not_answer_never_fails_the_members(self):
+        # The image check runs before any create is dispatched (2026-10-12: a gateway
+        # timeout there failed a group of 8 with a non-retryable 502). A retryable
+        # failure re-plans on another worker or leaves the members pending.
+        timed_out = ProxiedResponse(504, {"Content-Type": "application/json"}, b'{"error": '
+                                    b'"sandbox node request timed out", "code": "node_request_timeout", "retryable": true}')
+        with LocalFleet(nodes=2, create_placement="power_of_k") as fleet:
+            first, second = fleet.nodes
+            second.sample_metrics = lambda: replace(fixed_metrics(), cpu_percent=90.0)  # Ranks behind.
+            fleet.heartbeat()
+            handler = fleet.gateway.RequestHandlerClass
+            original = handler._ensure_image_for_create
+
+            def first_times_out(self, heartbeat, image, environment_root=None):
+                if heartbeat.job_id == first.job_id:
+                    return timed_out
+                return original(self, heartbeat, image, environment_root)
+
+            with patch.object(handler, "_ensure_image_for_create", first_times_out):
+                created = post_group(fleet, "moved", 3)
+            self.assertEqual(created.status, 201, created.body)
+            self.assertEqual({fleet.route(f"moved-{i:04d}").job_id for i in range(3)}, {second.job_id})
+            self.assertNotIn(("POST", "/v1/sandboxes"), first.requests)
+            with patch.object(handler, "_ensure_image_for_create", lambda *args, **kwargs: timed_out):
+                refused = post_group(fleet, "later", 2)
+            self.assertEqual(refused.status, 503, refused.body)
+            self.assertEqual((refused.json()["error_code"], refused.json()["retryable"], refused.json()["counts"]),
+                             ("node_request_timeout", True, {"pending": 2}))
+            # An image error the worker does not call retryable still fails them.
+            unavailable = ProxiedResponse(502, {"Content-Type": "application/json"}, b'{"error": "registry unavailable"}')
+            with patch.object(handler, "_ensure_image_for_create", lambda *args, **kwargs: unavailable):
+                failed = post_group(fleet, "bad", 1)
+            self.assertEqual((failed.status, failed.json()["counts"]), (502, {"failed": 1}))
 
     def test_leftovers_become_pending_and_a_repeat_places_them(self):
         with LocalFleet(create_placement="power_of_k") as fleet:

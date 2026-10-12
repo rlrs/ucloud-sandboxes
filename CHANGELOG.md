@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.74 - 2026-10-12 (gateway; workers)
+
+0.9.73 plus one fix: the admission service's claim tokens read randomness with
+the raw `getrandom` syscall (`guest::random_bytes`). 0.9.73 called
+`libc::getrandom`, which a static musl link resolves to address 0 (the 0.9.44
+canary crash); `build_pinned.sh`'s link check refused the build, so 0.9.73 was
+tagged but never built or deployed.
+
 ## 0.9.73 - 2026-10-12 (gateway; workers)
 
 Node admission moves into ucloud-noded ([docs/admission-port-3c.md](docs/admission-port-3c.md), steps 3c.0–3c.4), behind `sandbox.direct_node_rust_admission`, **off by default**: with it off, admission behaves as in 0.9.72. The flag is turned on only after the 3c.5 gates (memory pressure, density, 1,024-rollout readiness and drain) pass on workers.

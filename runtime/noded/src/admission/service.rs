@@ -394,17 +394,9 @@ struct Admit<'a> {
 }
 
 fn new_token() -> String {
-    let mut bytes = [0u8; 16];
-    let mut filled = 0;
-    while filled < bytes.len() {
-        // SAFETY: a valid buffer of the stated length, owned by this call.
-        let read = unsafe { libc::getrandom(bytes[filled..].as_mut_ptr().cast(), bytes.len() - filled, 0) };
-        if read > 0 {
-            filled += read as usize;
-        } else if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
-            panic!("getrandom failed: {}", std::io::Error::last_os_error());
-        }
-    }
+    // guest::random_bytes is the raw getrandom syscall: a static musl link
+    // resolves libc::getrandom to address 0 (build_pinned.sh refuses it).
+    let bytes = crate::guest::random_bytes::<16>().unwrap_or_else(|error| panic!("getrandom failed: {error}"));
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 

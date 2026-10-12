@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.9.73 - 2026-10-12 (gateway; workers)
+
+Node admission moves into ucloud-noded ([docs/admission-port-3c.md](docs/admission-port-3c.md), steps 3c.0–3c.4), behind `sandbox.direct_node_rust_admission`, **off by default**: with it off, admission behaves as in 0.9.72. The flag is turned on only after the 3c.5 gates (memory pressure, density, 1,024-rollout readiness and drain) pass on workers.
 
 ### Node
 

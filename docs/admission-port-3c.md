@@ -957,3 +957,40 @@ changed. With the flag off, nothing changes.
   - `tests/test_noded_client.py` covers the client against a fake listener,
     `NodedLink`, the agent's hello with and without the flag, the block and its
     digest, and the flag plumbing.
+
+### 3c.5: gates on production workers (0.9.74, 2026-10-12)
+
+The harnesses are `scripts/bench_rl_scale.py rollout` (1,024 relay rollouts over the 128-image rehearsal
+selection, cold from zero then warm) and `scripts/live_relay_load_benchmark.py` (memory pressure). They
+ran on production's 3-worker cap, first with `sandbox.direct_node_rust_admission` off, then on. Each worker's
+CPU was benchmarked for every run: the flag-off run had one slow VM (`da94`: 99 ms single-thread, 187 ms
+all-core p50); all three flag-on VMs were fast (70–72 ms, 96–98 ms). That favours the flag-on numbers.
+
+| Warm, 1,024 rollouts | flag on | flag off | 0.9.64 |
+|---|---|---|---|
+| Succeeded (the 40 failures are images without Python, every run) | 984 | 984 | 984 |
+| Ready p50 / p95 / max | 15.3 / 27.4 / **29.2 s** | 18.2 / 39.6 / 41.8 s | 14.5 / 34.3 / 35.9 s |
+| Answer to resume p95 / p99 | 31 / 63 ms | 60 / 163 ms | 43 / 143 ms |
+| Relay overhead p95 / p99 | 107 / 251 ms | 177 / 371 ms | 102 / 218 ms |
+
+Cold from zero, both states: 984/1,024; ready p50 125 s (on) and 148 s (off), dominated by VM provisioning.
+
+**Memory pressure:** 420 managed agents, each 1.5 GiB resident in a 2 GiB limit, 8 natural model-wait
+cycles, rolling startup (the harness's `barrier` startup deadlocks by construction once launch forecasts
+exceed capacity: no agent reaches a safe wait until all have started).
+
+| | flag on | flag off |
+|---|---|---|
+| Cycles / clean exits / errors | 3,360 / 420 / 0 | 3,360 / 420 / 0 |
+| Min physical available per worker (floor 2 GiB) | 2.38–3.31 GiB | 2.32–2.53 GiB |
+| Min RAM backing available | 73 GiB | 70 GiB |
+| Kernel OOM or SIGBUS lines | 0 | 0 |
+| Response ready → guest continuation p95 / p99 | 110 ms / 1.76 s | 109 ms / 2.16 s |
+
+**Not yet run:** the drain-during-burst gate (I18) on a worker, and a growth-admission span measurement at
+the density shape. Both rehearsal runs already held about 330 sandboxes per worker without queueing.
+
+**Incident during the gates (not the flag):** 2026-10-12 06:47–07:14 UTC the gateway crash-looped. The gate's
+flag-flip helper wrote its config backup with mode 0600; the controller's `replace_config` builds the published
+config from that file, so the services could not read it, and an automatic retry loop restarted them every 30 s.
+Fixed by restoring the recorded mode; the helper now copies the live config's owner and mode and asserts it.

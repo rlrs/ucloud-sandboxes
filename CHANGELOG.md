@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.75 - 2026-10-12 (gateway)
 
 ### Gateway
 

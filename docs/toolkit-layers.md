@@ -240,4 +240,9 @@ and gsm8k's verifier prebuilt; `uv_toolkit = "vf-harness"`) and without it:
   a temporary one. Since 2026-10-13 (`vf-agents:20261013`, root `sha256:1f33cb03…`) it
   also holds Prime Agent: its tree, and its Python kernel (the venv and the uv Python it
   was made from) as `vf-prime-kernel`, paths rewritten to it; the toolkit's `links` file
-  asks verifiers-ucloud to link `/root/.prime/agent/kernel-venv` there.
+  asks verifiers-ucloud to link `/root/.prime/agent/kernel-venv` there. Since
+  `vf-agents:20261013-3` (= `:latest`, root `sha256:547d2681…`) the kernel also ships Prime
+  Agent's nine Python skills installed: its install records none, and its first session
+  installs them with uv from PyPI, which a relay-only sandbox cannot do ("uv is required to
+  set up the Python kernel"). The build runs that first session once
+  (`prime_kernel_sync.mjs`) in a container laid out as a sandbox is.

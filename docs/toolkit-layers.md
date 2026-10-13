@@ -237,4 +237,7 @@ and gsm8k's verifier prebuilt; `uv_toolkit = "vf-harness"`) and without it:
   disk growth on a busy node on 2026-10-11). Published on production 2026-10-11 as
   `vf-agents:latest` (root `sha256:70688a5e…`); `publish-environment` needs an
   overlay2 Docker daemon, so on the gateway (containerd image store) it ran through
-  a temporary one.
+  a temporary one. Since 2026-10-13 (`vf-agents:20261013`, root `sha256:1f33cb03…`) it
+  also holds Prime Agent: its tree, and its Python kernel (the venv and the uv Python it
+  was made from) as `vf-prime-kernel`, paths rewritten to it; the toolkit's `links` file
+  asks verifiers-ucloud to link `/root/.prime/agent/kernel-venv` there.
